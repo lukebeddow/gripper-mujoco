@@ -10,4 +10,6 @@ For building on the cluster, use:
 make cluster
 ```
 
+Then to submit a job for example ```qsub array_job.sh```
+
 Before running this code, you need access to the ```gripper_task.xml``` files which are not in this repository.
