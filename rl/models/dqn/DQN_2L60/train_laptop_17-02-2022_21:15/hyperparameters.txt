@@ -1,0 +1,13 @@
+Hyperparameters at training time:
+
+    batch_size = 128
+    gamma = 0.999
+    eps_start = 0.9
+    eps_end = 0.05
+    eps_decay = 2000
+    target_update = 100
+    num_episodes = 10000
+    memory_replay = 10000
+    test_freq = 1000
+    save_freq = 500
+    

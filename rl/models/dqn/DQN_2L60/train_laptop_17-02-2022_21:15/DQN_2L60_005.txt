@@ -1,0 +1,24 @@
+Starting test on 20 objects, with 3 trials each
+Object: sphere_normal_86, avg reward -0.404, avg steps 100.0, avg palm force 26.4, lifted 0, stable 0
+Object: cylinder_11_fillet_45_normal_12, avg reward -0.407, avg steps 98.0, avg palm force 7.7, lifted 0, stable 0
+Object: cylinder_14_fillet_25_normal_7, avg reward -0.325, avg steps 56.3, avg palm force 0.0, lifted 0, stable 0
+Object: cylinder_21_fillet_35_normal_13, avg reward -0.885, avg steps 100.0, avg palm force 2.6, lifted 0, stable 0
+Object: cuboid_321_fillet_25_normal_2, avg reward -0.838, avg steps 100.0, avg palm force 3.2, lifted 0, stable 0
+Object: cylinder_12_fillet_15_upright_2, avg reward 0.046, avg steps 63.0, avg palm force 0.0, lifted 0, stable 0
+Object: cylinder_11_fillet_45_normal_6, avg reward -0.310, avg steps 93.7, avg palm force 0.1, lifted 0, stable 0
+Object: cube_fillet_5_normal_4, avg reward -0.313, avg steps 100.0, avg palm force 49.3, lifted 0, stable 0
+Object: sphere_normal_19, avg reward -0.292, avg steps 100.0, avg palm force 52.7, lifted 0, stable 0
+Object: cylinder_11_fillet_5_normal_6, avg reward -0.342, avg steps 100.0, avg palm force 43.9, lifted 0, stable 0
+Object: cylinder_13_fillet_15_sideways_7, avg reward -0.407, avg steps 97.0, avg palm force 6.4, lifted 0, stable 0
+Object: cuboid_311_fillet_5_thinner_6, avg reward -0.243, avg steps 100.0, avg palm force 14.9, lifted 0, stable 0
+Object: sphere_normal_91, avg reward -0.410, avg steps 99.7, avg palm force 16.3, lifted 0, stable 0
+Object: sphere_normal_35, avg reward -0.327, avg steps 100.0, avg palm force 46.4, lifted 0, stable 0
+Object: cylinder_21_fillet_15_normal_3, avg reward -0.424, avg steps 100.0, avg palm force 22.6, lifted 0, stable 0
+Object: sphere_normal_98, avg reward -0.412, avg steps 100.0, avg palm force 21.7, lifted 0, stable 0
+Object: cuboid_311_fillet_25_thinner_8, avg reward -0.497, avg steps 100.0, avg palm force 12.4, lifted 0, stable 0
+Object: cylinder_14_fillet_5_normal_10, avg reward -0.436, avg steps 96.3, avg palm force 0.0, lifted 0, stable 0
+Object: sphere_normal_117, avg reward -0.402, avg steps 100.0, avg palm force 14.6, lifted 0, stable 0
+Object: cylinder_12_fillet_5_sideways_13, avg reward -0.479, avg steps 99.3, avg palm force 0.0, lifted 0, stable 0
+
+Test mean reward -0.405, mean steps 95.2, lifted 0 / 60, stable 0 / 60
+
