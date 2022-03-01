@@ -4,3 +4,4 @@ rl/models
 rl/models/
 sample
 sample/
+MUJOCO_LOG.TXT
