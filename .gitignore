@@ -5,3 +5,4 @@ MUJOCO_LOG.TXT
 .vscode/
 bin/
 *.so
+*.pickle
