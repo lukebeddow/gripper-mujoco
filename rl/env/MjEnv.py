@@ -218,7 +218,7 @@ class MjEnv(gym.Env):
     Return a string of all the cpp simulation settings
     """
 
-    return self.mj.set.fetch_string()
+    return self.mj.set.get_settings()
 
   def _take_action(self, action):
     """
@@ -455,6 +455,7 @@ if __name__ == "__main__":
   mj = MjEnv()
 
   mj._override_binary(mj.mj.set.step_num, 1.0, 3, 10)
+  mj.mj.set.lifted.set(-0.1, 42, 100)
   mj.mj.set.gauge_read_rate_hz = 100
 
   with open("test_file.pickle", 'wb') as f:
@@ -466,6 +467,10 @@ if __name__ == "__main__":
   mj._load_xml(task_id=0)
 
   mj.step(0)
+
+  print(mj._get_cpp_settings())
+
+  mj.mj.set.wipe_rewards()
 
   print(mj._get_cpp_settings())
 

@@ -102,7 +102,7 @@ struct Forces {
   } gnd;
 
   void print() {
-    if (empty) std::cout << "Cannot print forces - it is empty\n";
+    if (empty) { std::cout << "Cannot print forces - it is empty\n"; return; }
     print_gnd_global();
     print_gnd_local();    
     print_obj_global();
@@ -112,7 +112,7 @@ struct Forces {
   }
 
   void print_obj_global() {
-    if (empty) return;
+    if (empty) { std::cout << "Cannot print forces - it is empty\n"; return; }
     std::cout << "Printing forces on object in global frame:\n";
     std::cout << "net force (mag = " << obj.net.magnitude3() << "):\n"; obj.net.print();
     std::cout << "sum force (mag = " << obj.sum.magnitude3() << "):\n"; obj.sum.print();
@@ -124,7 +124,7 @@ struct Forces {
   }
 
   void print_obj_local() {
-    if (empty) return;
+    if (empty) { std::cout << "Cannot print forces - it is empty\n"; return; }
     std::cout << "Printing forces from object in local frames:\n";
     std::cout << "finger1 local force (mag = " << obj.finger1_local.magnitude3() << "):\n"; obj.finger1_local.print();
     std::cout << "finger2 local force (mag = " << obj.finger2_local.magnitude3() << "):\n"; obj.finger2_local.print();
@@ -133,7 +133,7 @@ struct Forces {
   }
 
   void print_all_global() {
-    if (empty) return;
+    if (empty) { std::cout << "Cannot print forces - it is empty\n"; return; }
     std::cout << "Printing forces from all named geoms in global frame:\n";
     std::cout << "finger1 force (mag = " << all.finger1.magnitude3() << "):\n"; all.finger1.print();
     std::cout << "finger2 force (mag = " << all.finger2.magnitude3() << "):\n"; all.finger2.print();
@@ -142,7 +142,7 @@ struct Forces {
   }
 
   void print_all_local() {
-    if (empty) return;
+    if (empty) { std::cout << "Cannot print forces - it is empty\n"; return; }
     std::cout << "Printing forces from the ground on the gripper fingers:\n";
     std::cout << "finger1 local force (mag = " << all.finger1_local.magnitude3() << "):\n"; all.finger1_local.print();
     std::cout << "finger2 local force (mag = " << all.finger2_local.magnitude3() << "):\n"; all.finger2_local.print();
@@ -151,7 +151,7 @@ struct Forces {
   }
 
   void print_gnd_global() {
-    if (empty) return;
+    if (empty) { std::cout << "Cannot print forces - it is empty\n"; return; }
     std::cout << "Printing forces from gnd named geoms in global frame:\n";
     std::cout << "finger1 force (mag = " << gnd.finger1.magnitude3() << "):\n"; gnd.finger1.print();
     std::cout << "finger2 force (mag = " << gnd.finger2.magnitude3() << "):\n"; gnd.finger2.print();
@@ -159,7 +159,7 @@ struct Forces {
   }
 
   void print_gnd_local() {
-    if (empty) return;
+    if (empty) { std::cout << "Cannot print forces - it is empty\n"; return; }
     std::cout << "Printing forces from gnd named geoms in local frames:\n";
     std::cout << "finger1 local force (mag = " << gnd.finger1_local.magnitude3() << "):\n"; gnd.finger1_local.print();
     std::cout << "finger2 local force (mag = " << gnd.finger2_local.magnitude3() << "):\n"; gnd.finger2_local.print();

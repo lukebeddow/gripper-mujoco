@@ -34,8 +34,8 @@
   X(  lift_distance,            double,   1e-3)     /* distance to consider object lifted*/\
   X(  oob_distance,             double,   75e-3)    /* distance to consider object out of bounds*/\
   X(  height_target,            double,   25e-3)    /* target height to raise the object by*/\
-  X(  stable_finger_force,      double,   1.0)      /* finger force on object to consider stable*/\
-  X(  stable_palm_force,        double,   2.0)      /* palm force on object to consider stable*/\
+  X(  stable_finger_force,      double,   0.4)      /* finger force on object to consider stable*/\
+  X(  stable_palm_force,        double,   1.0)      /* palm force on object to consider stable*/\
   /* 
   is_done() settings */\
   X(  max_timeouts,             int,      10)       /* done=true if unsettled this times in a row*/\
@@ -66,15 +66,18 @@
   BR( target_height,            1.0,      false,    1000) \
   BR( exceed_limits,            -0.1,     false,    1)    \
   BR( object_contact,           0.005,    false,    1)    \
-  BR( object_stable,            1.0,      1,        1)    \
+  BR( object_stable,            1.0,      false,    1)    \
+  BR( stable_height,            0.0,      1,    1)    \
   /*
 
   3. Linear rewards
       name                      reward    done   trigger  min   max   overshoot*/\
+  LR( finger_force,             0.0,      false,    1,    1.0,  2.0,  -1)   \
+  LR( palm_force,               0.05,     false,    1,    1.0,  3.0,  6.0)  \
   LR( exceed_axial,             -0.05,    false,    1,    2.0,  6.0,  -1)   \
   LR( exceed_lateral,           -0.05,    false,    1,    4.0,  6.0,  -1)   \
-  LR( exceed_palm,              -0.05,    false,    1,    6.0,  10.0, -1)   \
-  LR( palm_force,               0.05,     false,    1,    1.0,  3.0,  6.0) 
+  LR( exceed_palm,              -0.05,    false,    1,    6.0,  10.0, -1)
+  
 
 // end of user defined simulation settings
 

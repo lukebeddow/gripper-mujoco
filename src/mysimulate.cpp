@@ -1116,6 +1116,9 @@ void makeObjectUI(int oldstate)
         {mjITEM_BUTTON,    "Reset",         2, NULL,                    " #301"},
         {mjITEM_BUTTON,    "Respawn",       2, NULL,                    " #302"},
         {mjITEM_BUTTON,    "Print forces",  2, NULL,                    " #303"},
+        {mjITEM_BUTTON,    "Ground forces",  2, NULL,                    " #303"},
+        {mjITEM_BUTTON,    "Object forces",  2, NULL,                    " #303"},
+        {mjITEM_BUTTON,    "All forces",     2, NULL,                    " #303"},
         // {mjITEM_BUTTON,    "Copy pose",     2, NULL,                    " #304"},
         {mjITEM_SLIDERINT, "Live Object",   3, &settings.object_int,    "0 20"},
         // {mjITEM_BUTTON,    "Reset to key",  3},
@@ -1851,16 +1854,22 @@ void uiEvent(mjuiState* state)
                 f.print();
                 break;
             }
-            case 3: {            // Copy Pose
-                // std::cout << "case 3\n";
+            case 3: {            // Print ground forces
+                luke::Forces f = luke::get_object_forces(myMjClass.model, myMjClass.data);
+                f.print_gnd_global();
+                f.print_gnd_local(); 
                 break;
             }
-            case 4: {            // Object slider
-                // std::cout << "case 4\n";
+            case 4: {            // Print object forces
+                luke::Forces f = luke::get_object_forces(myMjClass.model, myMjClass.data);
+                f.print_obj_global();
+                f.print_obj_local(); 
                 break;
             }
-            case 5: {            // Reset to key
-                // std::cout << "case 5\n";
+            case 5: {            // Print all forces
+                luke::Forces f = luke::get_object_forces(myMjClass.model, myMjClass.data);
+                f.print_all_global();
+                f.print_all_local(); 
                 break;
             }
             case 6: {            // Set key

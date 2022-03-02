@@ -342,8 +342,18 @@ void MjClass::update_env()
   env_.grp.finger2_force = forces.all.finger2_local;
   env_.grp.finger3_force = forces.all.finger3_local;
 
+  // calculate finger and palm force magnitudes
+  float finger1_force_mag = env_.obj.finger1_force.magnitude3();
+  float finger2_force_mag = env_.obj.finger2_force.magnitude3();
+  float finger3_force_mag = env_.obj.finger3_force.magnitude3();
+  float palm_force_mag = env_.obj.palm_force.magnitude3();
+
   // get palm force on object (x = axial in local frame, +ve for compression)
   env_.obj.palm_axial_force = +1 * env_.obj.palm_force[0];
+
+  // get average finger force on object
+  env_.obj.avg_finger_force = 0.333 * (finger1_force_mag + finger2_force_mag
+    + finger3_force_mag);
 
   // get the highest axial finger force (x = axial in local frame, -ve for comp.)
   env_.grp.peak_finger_axial_force = -1 * std::min({ 
@@ -394,21 +404,30 @@ void MjClass::update_env()
   if (env_.obj.palm_axial_force > s_.exceed_palm.min)
     exceed_palm = true;
 
-  // detect contact with the object
+  // detect any contact with the object
   bool object_contact = false;
-  if (env_.obj.finger1_force.magnitude3() > ftol or
-      env_.obj.finger2_force.magnitude3() > ftol or
-      env_.obj.finger3_force.magnitude3() > ftol or
-      env_.obj.palm_force.magnitude3() > ftol)
+  if (finger1_force_mag > ftol or
+      finger2_force_mag > ftol or
+      finger3_force_mag > ftol or
+      palm_force_mag > ftol)
     object_contact = true;
+
+  // detect finger force on object
+  bool finger_force = false;
+  if (env_.obj.avg_finger_force > s_.finger_force.min)
+    finger_force = true;
 
   // check if object is stable (must also be lifted)
   bool object_stable = false;
-  if (env_.obj.finger1_force.magnitude3() > s_.stable_finger_force and
-      env_.obj.finger2_force.magnitude3() > s_.stable_finger_force and
-      env_.obj.finger3_force.magnitude3() > s_.stable_finger_force and
-      env_.obj.palm_force.magnitude3() > s_.stable_palm_force and lifted)
+  if (finger1_force_mag > s_.stable_finger_force and
+      finger2_force_mag > s_.stable_finger_force and
+      finger3_force_mag > s_.stable_finger_force and
+      palm_force_mag > s_.stable_palm_force and lifted)
     object_stable = true;
+
+  bool stable_height = false;
+  if (object_stable and target_height)
+    stable_height = true;
 
   /* ----- update count of events in a row ----- */
 
@@ -430,13 +449,15 @@ void MjClass::update_env()
   env_.cnt.palm_force = env_.cnt.palm_force * palm_force + palm_force;
   env_.cnt.object_contact = env_.cnt.object_contact * object_contact + object_contact;
   env_.cnt.exceed_palm = env_.cnt.exceed_palm * exceed_palm + exceed_palm;
+  env_.cnt.finger_force = env_.cnt.finger_force * finger_force + finger_force;
+  env_.cnt.stable_height = env_.cnt.stable_height * stable_height + stable_height;
   // env_.cnt.exceed_limits is set in set_action()
 
-
-  if (s_.debug) { std::cout << "cnt "; env_.cnt.print(); }
+  if (s_.debug) { std::cout << "cnt: "; env_.cnt.print(); }
 
   /* ----- update absolute count of events ----- */
 
+  env_.abs_cnt.step_num = env_.cnt.step_num;
   if (env_.cnt.lifted) env_.abs_cnt.lifted += 1;
   if (env_.cnt.oob) env_.abs_cnt.oob += 1;
   if (env_.cnt.dropped) env_.abs_cnt.dropped += 1;
@@ -448,7 +469,8 @@ void MjClass::update_env()
   if (env_.cnt.palm_force) env_.abs_cnt.palm_force += 1;
   if (env_.cnt.object_contact) env_.abs_cnt.object_contact += 1;
   if (env_.cnt.exceed_palm) env_.abs_cnt.exceed_palm += 1;
-  env_.abs_cnt.step_num = env_.cnt.step_num;
+  if (env_.cnt.finger_force) env_.abs_cnt.finger_force += 1;
+  if (env_.cnt.stable_height) env_.abs_cnt.stable_height += 1;
 
   if (s_.debug) { std::cout << "abs_cnt: "; env_.abs_cnt.print(); }
   
@@ -707,9 +729,16 @@ bool MjClass::is_done()
       << " (object_stable limit of " << s_.object_stable.done << " exceeded)\n";
     return true;
   }
+  // if object is stable and at target height
+  if (s_.stable_height.done and env_.cnt.stable_height >= s_.stable_height.done) {
+    if (s_.debug) std::cout << "Object stable and at target height, is_done() = true"
+      << " (stable_height limit of " << s_.stable_height.done << " exceeded)\n";
+    return true;
+  }
 
   // step_num: not implemented, done should never be true
   // object_contact: not implemented, done should never be true
+  // finger_force: not implemented, done should never be true
   // palm_force: not implemented, done should never be true
 
   // if the simulation is unstable (action_step() not settling with use_setting=true)
@@ -791,43 +820,49 @@ float MjClass::reward()
 
   // reward per step
   if (env_.cnt.step_num >= s_.step_num.trigger) {
-    if (s_.debug) std::printf("Step made, reward += %.3f\n", s_.step_num.reward);
+    if (s_.debug) std::printf("Step made, reward += %.4f\n", s_.step_num.reward);
     reward += s_.step_num.reward;
   }
 
   // reward for object contact
   if (env_.cnt.object_contact >= s_.object_contact.trigger) {
-    if (s_.debug) std::printf("Contact made, reward += %.3f\n", s_.object_contact.reward);
+    if (s_.debug) std::printf("Contact made, reward += %.4f\n", s_.object_contact.reward);
     reward += s_.object_contact.reward;
   }
 
   // is the object currently lifted
   if (env_.cnt.lifted >= s_.lifted.trigger) {
-    if (s_.debug) std::printf("Object lifted, reward += %.3f\n", s_.lifted.reward);
+    if (s_.debug) std::printf("Object lifted, reward += %.4f\n", s_.lifted.reward);
     reward += s_.lifted.reward;
   }
   
   // has the object reached the target height for the first time
   if (env_.cnt.target_height >= s_.target_height.trigger) {
-    if (s_.debug) std::printf("Object reached target height, reward += %.3f\n", s_.target_height.reward);
+    if (s_.debug) std::printf("Object reached target height, reward += %.4f\n", s_.target_height.reward);
     reward += s_.target_height.reward;
   }
 
   // is the object grasped stably (do we make sure this can only be applied once?)
   if (env_.cnt.object_stable >= s_.object_stable.trigger) {
-    if (s_.debug) std::printf("Object grasped stably, reward += %.3f\n", s_.object_stable.reward);
+    if (s_.debug) std::printf("Object grasped stably, reward += %.4f\n", s_.object_stable.reward);
     reward += s_.object_stable.reward;
+  }
+
+  // is the object grasped stably and at the target height
+  if (env_.cnt.stable_height >= s_.stable_height.trigger) {
+    if (s_.debug) std::printf("Object stable and at target height, reward += %.4f\n", s_.stable_height.reward);
+    reward += s_.stable_height.reward;
   }
 
   // has the object been dropped
   if (env_.cnt.dropped >= s_.dropped.trigger) {
-    if (s_.debug) std::printf("Object dropped, reward += %.3f\n", s_.dropped.reward);
+    if (s_.debug) std::printf("Object dropped, reward += %.4f\n", s_.dropped.reward);
     reward += s_.dropped.reward;
   }
 
   // has the gripper or base exceeded its limits
   if (env_.cnt.exceed_limits >= s_.exceed_limits.trigger) {
-    if (s_.debug) std::printf("Limits exceeded, reward += %.3f\n", s_.exceed_limits.reward);
+    if (s_.debug) std::printf("Limits exceeded, reward += %.4f\n", s_.exceed_limits.reward);
     reward += s_.exceed_limits.reward;
   }
 
@@ -837,8 +872,19 @@ float MjClass::reward()
     float fraction = linear_reward(env_.obj.palm_axial_force, s_.palm_force.min,
       s_.palm_force.max, s_.palm_force.overshoot);
     float r = s_.palm_force.reward * fraction;
-    if (s_.debug) std::printf("Palm force of %.1f gets reward += %.3f\n",
+    if (s_.debug) std::printf("Palm force of %.1f gets reward += %.4f\n",
       env_.obj.palm_axial_force, r);
+    reward += r;
+  }
+
+  // reward for all fingers exerting force on the object
+  if (env_.cnt.finger_force >= s_.finger_force.trigger) {
+    // linearly scale reward
+    float fraction = linear_reward(env_.obj.avg_finger_force, s_.finger_force.min,
+      s_.finger_force.max, s_.finger_force.overshoot);
+    float r = s_.finger_force.reward * fraction;
+    if (s_.debug) std::printf("Finger force avg of %.1f gets reward += %.4f\n",
+      env_.obj.avg_finger_force, r);
     reward += r;
   }
 
@@ -848,7 +894,7 @@ float MjClass::reward()
     float fraction = linear_reward(env_.obj.palm_axial_force, s_.exceed_palm.min,
       s_.exceed_palm.max, s_.exceed_palm.overshoot);
     float r = s_.exceed_palm.reward * fraction;
-    if (s_.debug) std::printf("Palm force of %.1f gets reward += %.3f\n",
+    if (s_.debug) std::printf("Palm force of %.1f gets reward += %.4f\n",
       env_.obj.palm_axial_force, r);
     reward += r;
   }
@@ -859,7 +905,7 @@ float MjClass::reward()
     float fraction = linear_reward(env_.grp.peak_finger_axial_force,
       s_.exceed_axial.min, s_.exceed_axial.max, s_.exceed_axial.overshoot);
     float r = s_.exceed_axial.reward * fraction;
-    if (s_.debug) std::printf("Max finger axial force of %.1f gets reward += %.3f\n",
+    if (s_.debug) std::printf("Max finger axial force of %.1f gets reward += %.4f\n",
       env_.grp.peak_finger_axial_force, r);
     reward += r;
   }
@@ -869,7 +915,7 @@ float MjClass::reward()
     float fraction = linear_reward(env_.grp.peak_finger_lateral_force,
       s_.exceed_lateral.min, s_.exceed_lateral.max, s_.exceed_lateral.overshoot);
     float r = s_.exceed_lateral.reward * fraction;
-    if (s_.debug) std::printf("Max finger lateral force of %.1f gets reward += %.3f\n",
+    if (s_.debug) std::printf("Max finger lateral force of %.1f gets reward += %.4f\n",
       env_.grp.peak_finger_lateral_force, r);
     reward += r;
   }
@@ -949,7 +995,7 @@ float linear_reward(float val, float min, float max, float overshoot)
   return (val - min) / (max - min);
 }
 
-std::string MjClass::Settings::fetch_string()
+std::string MjClass::Settings::get_settings()
 {
   /* this function returns a string detailing all of the settings */
 
@@ -963,9 +1009,9 @@ std::string MjClass::Settings::fetch_string()
 
   // define spacings so that values all line up
   constexpr int name_chars = 25;
-  constexpr int val_chars = 6;
+  constexpr int val_chars = 5;
   constexpr int type_chars = 14;
-  constexpr int float_bonus = 5;
+  constexpr int float_bonus = 6;
 
   // create the column headers, type first
   type_str = "Type";
@@ -1009,14 +1055,15 @@ std::string MjClass::Settings::fetch_string()
             pad.clear(); pad.resize(name_chars - name_str.size(), ' ');\
             str += name_str + pad;\
             /* now values */\
-            val_str.clear(); val_str += std::to_string((float)NAME.reward); val_str += ", ";\
+            val_str.clear(); val_str += std::to_string((float)NAME.reward);\
             pad.clear(); pad.resize(val_chars + float_bonus - val_str.size(), ' ');\
-            str += "{ " + val_str + pad;\
-            val_str.clear(); val_str += std::to_string((int)NAME.done); val_str += ", ";\
+            str += "{" + pad + val_str + ", ";\
+            val_str.clear(); val_str += std::to_string((int)NAME.done);\
             pad.clear(); pad.resize(val_chars - val_str.size(), ' ');\
-            str += val_str + pad;\
+            str += pad + val_str + ", ";\
             val_str.clear(); val_str += std::to_string((int)NAME.trigger);\
-            str += val_str + " }\n";\
+            pad.clear(); pad.resize(val_chars - val_str.size(), ' ');\
+            str += pad + val_str + " }\n";\
             /* add to output */\
             output_str += str;
 
@@ -1031,23 +1078,24 @@ std::string MjClass::Settings::fetch_string()
             pad.clear(); pad.resize(name_chars - name_str.size(), ' ');\
             str += name_str + pad;\
             /* now values */\
-            val_str.clear(); val_str += std::to_string((float)NAME.reward); val_str += ", ";\
+            val_str.clear(); val_str += std::to_string((float)NAME.reward);\
             pad.clear(); pad.resize(val_chars + float_bonus - val_str.size(), ' ');\
-            str += "{ " + val_str + pad;\
-            val_str.clear(); val_str += std::to_string((int)NAME.done); val_str += ", ";\
+            str += "{" + pad + val_str + ", ";\
+            val_str.clear(); val_str += std::to_string((int)NAME.done);\
             pad.clear(); pad.resize(val_chars - val_str.size(), ' ');\
-            str += val_str + pad;\
-            val_str.clear(); val_str += std::to_string((int)NAME.trigger); val_str += ", ";\
+            str += pad + val_str + ", ";\
+            val_str.clear(); val_str += std::to_string((int)NAME.trigger);\
             pad.clear(); pad.resize(val_chars - val_str.size(), ' ');\
-            str += val_str + pad;\
-            val_str.clear(); val_str += std::to_string((float)NAME.min); val_str += ", ";\
+            str += pad + val_str + ", ";\
+            val_str.clear(); val_str += std::to_string((float)NAME.min);\
             pad.clear(); pad.resize(val_chars + float_bonus - val_str.size(), ' ');\
-            str += val_str + pad;\
-            val_str.clear(); val_str += std::to_string((float)NAME.max); val_str += ", ";\
+            str += pad + val_str + ", ";\
+            val_str.clear(); val_str += std::to_string((float)NAME.max);\
             pad.clear(); pad.resize(val_chars + float_bonus - val_str.size(), ' ');\
-            str += val_str + pad;\
-            val_str.clear(); val_str += std::to_string((float)NAME.overshoot); val_str += ", ";\
-            str += val_str + " }\n";\
+            str += pad + val_str + ", ";\
+            val_str.clear(); val_str += std::to_string((float)NAME.overshoot);\
+            pad.clear(); pad.resize(val_chars + float_bonus - val_str.size(), ' ');\
+            str += pad + val_str + " }\n";\
             /* now add to output */\
             output_str += str;
 
@@ -1058,6 +1106,49 @@ std::string MjClass::Settings::fetch_string()
   #undef LR
 
   return output_str;
+}
+
+void MjClass::Settings::wipe_rewards()
+{
+  /* wipe all the reward settings to defaults which never trigger */
+
+  int never = 10000;
+
+  #define X(NAME, TYPE, VALUE)
+  #define BR(NAME, REWARD, DONE, TRIGGER) \
+            NAME.reward = 0.0;\
+            NAME.done = false;\
+            NAME.trigger = never;
+  #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) \
+            NAME.reward = 0.0;\
+            NAME.done = false;\
+            NAME.trigger = never;\
+            NAME.min = 0.0;\
+            NAME.max = 0.0;\
+            NAME.overshoot = -1;
+  
+    // run the macro and wipe the rewards
+    LUKE_MJSETTINGS
+  
+  #undef X
+  #undef BR
+  #undef LR
+}
+
+void MjClass::EventTrack::print()
+{
+  
+  #define X(name, type, value)
+  #define BR(name, reward, done, trigger) << #name << " = " << name << "; "
+  #define LR(name, reward, done, trigger, min, max, overshoot) \
+            << #name << " = " << name << "; "
+    
+    // run the macro and print all the event track fields
+    std::cout LUKE_MJSETTINGS << "\n";
+
+  #undef X
+  #undef BR
+  #undef LR
 }
 
 // end

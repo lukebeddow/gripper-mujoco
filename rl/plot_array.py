@@ -10,7 +10,7 @@ if __name__ == "__main__":
   # ----- set parameters ----- #
 
   # what network
-  net = networks.DQN_2L60
+  net = networks.DQN_3L60
 
   # what training session
   training = "train_cluster_28-02-2022"

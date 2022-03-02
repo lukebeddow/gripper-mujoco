@@ -9,8 +9,8 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N ArrayTrainDQN_6
-#$ -t 1-15
+#$ -N ArrayTrainDQN_7
+#$ -t 1-10
 
 #The code you want to run now goes here.
 

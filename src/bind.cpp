@@ -84,7 +84,8 @@ PYBIND11_MODULE(bind, m) {
   py::class_<MjClass::Settings>(m, "set")
 
     .def(py::init<>())
-    .def("fetch_string", &MjClass::Settings::fetch_string)
+    .def("get_settings", &MjClass::Settings::get_settings)
+    .def("wipe_rewards", &MjClass::Settings::wipe_rewards)
 
     // use a macro to create code snippets for all of the settings
     #define X(name, type, value) .def_readwrite(#name, &MjClass::Settings::name)

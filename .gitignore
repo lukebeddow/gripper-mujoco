@@ -1,9 +1,7 @@
-build
 build/
-rl/models
 rl/models/
-sample
 sample/
 MUJOCO_LOG.TXT
-.vscode
 .vscode/
+bin/
+*.so

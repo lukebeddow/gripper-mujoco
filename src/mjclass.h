@@ -78,27 +78,17 @@ public:
   // what key events will we keep track of in the simulation
   struct EventTrack {
 
-    int step_num = false;                 // count the number of steps
-    int lifted = false;                   // object lifted off the ground
-    int oob = false;                      // object out of bounds
-    int dropped = false;                  // object dropped
-    int target_height = false;            // reached target height above ground
-    int exceed_limits = false;            // gripper limits exceeded
-    int exceed_axial = false;             // too much axial finger compression force
-    int exceed_lateral = false;           // too much lateral outwards finger force
-    int object_contact = false;           // gripper contact with object
-    int object_stable = false;            // object is stably grasped
-    int palm_force = false;               // palm applying force to object
-    int exceed_palm = false;              // palm applying too much force to object
+    // we keep track of every event related to a reward
+    #define X(name, type, value)
+    #define BR(name, reward, done, trigger) int name { false };
+    #define LR(name, reward, done, trigger, min, max, overshoot) int name { false };
+      // run the macro to create the code
+      LUKE_MJSETTINGS
+    #undef X
+    #undef BR
+    #undef LR
 
-    void print() {
-      std::cout << "track = " << "step: " << step_num
-        << ", lifted: " << lifted << ", oob: " << oob << ", dropped: " << dropped
-        << ", t_height: " << target_height << ", ex.lims: " << exceed_limits
-        << ", ex.axial: " << exceed_axial << ", ex.lateral: " << exceed_lateral
-        << ", contact: " << object_contact << ", stable: " << object_stable 
-        << ", p.force: " << palm_force << ", ex.palm: " << exceed_palm << '\n';
-    }
+    void print();
   };
 
   struct BinaryReward {
@@ -154,7 +144,8 @@ public:
     // never used, added here only for convenience in bind.cpp
     bool dummy = false;
 
-    std::string fetch_string();
+    std::string get_settings();
+    void wipe_rewards();
 
   } s_; // settings
 
@@ -182,6 +173,7 @@ public:
       luke::myNum palm_force;
       luke::myNum ground_force;
       float palm_axial_force;
+      float avg_finger_force;
     } obj;
 
     // track the state of the gripper
