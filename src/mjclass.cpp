@@ -741,6 +741,13 @@ bool MjClass::is_done()
   // finger_force: not implemented, done should never be true
   // palm_force: not implemented, done should never be true
 
+  // if the cumulative reward drops below a given threshold
+  if (env_.cumulative_reward < s_.quit_on_reward_below) {
+    if (s_.debug) std::printf("Reward dropped below limit of %.3f, is_done() = true\n",
+      s_.quit_on_reward_below);
+    return true;
+  }
+
   // if the simulation is unstable (action_step() not settling with use_setting=true)
   if (timeout_count > s_.max_timeouts) {
     if (s_.debug) std::cout << "The max unsettled steps is exceeded, is_done() = true"
