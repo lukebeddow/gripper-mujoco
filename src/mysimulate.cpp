@@ -599,13 +599,16 @@ void gaugefiginit(void)
     // minimum range
     figgauges.range[0][0] = 0;
     figgauges.range[0][1] = 0;
-    figgauges.range[1][0] = -20;
-    figgauges.range[1][1] = 20;
+    figgauges.range[1][0] = -1;
+    figgauges.range[1][1] = 1;
 
     // legend
     strcpy(figgauges.linename[0], "1");
     strcpy(figgauges.linename[1], "2");
     strcpy(figgauges.linename[2], "3");
+
+    if (myMjClass.s_.use_palm_sensor)
+        strcpy(figgauges.linename[3], "P");
 }
 
 // update gauge figure
@@ -624,10 +627,19 @@ void gaugefigupdate(void)
     std::vector<luke::gfloat> f1data = myMjClass.finger1_gauge.read(gnum);
     std::vector<luke::gfloat> f2data = myMjClass.finger2_gauge.read(gnum);
     std::vector<luke::gfloat> f3data = myMjClass.finger3_gauge.read(gnum);
+    std::vector<luke::gfloat> pdata = myMjClass.palm_sensor.read(gnum);
     std::vector<float> tdata = myMjClass.gauge_timestamps.read(gnum);
 
     // package finger data pointers in iterable vector
-    std::vector<std::vector<luke::gfloat>*> fdata = { &f1data, &f2data, &f3data };
+    std::vector<std::vector<luke::gfloat>*> fdata;
+    if (myMjClass.s_.use_palm_sensor) {
+        // plot palm data too
+        fdata = { &f1data, &f2data, &f3data, &pdata };
+    }
+    else {
+        // don't plot palm data
+        fdata = { &f1data, &f2data, &f3data };
+    }
 
     static const int maxline = 10;
 
@@ -635,7 +647,7 @@ void gaugefigupdate(void)
     int lineid = 0;
 
     // loop over each finger gauge
-    for (int n = 0; n < 3; n++)
+    for (int n = 0; n < fdata.size(); n++)
     {
         lineid = n;
     
@@ -650,6 +662,50 @@ void gaugefigupdate(void)
         // update linepnt (index of last data point)
         figgauges.linepnt[lineid] = gnum;
     }
+
+    // if (myMjClass.s_.use_palm_sensor) {
+
+    //     std::vector<luke::gfloat> palmdata = myMjClass.palm_sensor.read(gnum);
+    //     std::vector<float> palm_tdata = myMjClass.palm_timestamps.read(gnum);
+
+    //     myMjClass.palm_sensor.print();
+
+    //     lineid = 3;
+
+    //     int index = 0;
+
+    //     for (int t = 0; t < gnum; t++) {
+
+    //         // // if time data is the same
+    //         // if (abs(float_tdata[index] - tdata[t]) < 1e-6) {
+    //         //     figgauges.linedata[lineid][2 * g] = tdata[g];
+    //         //     figgauges.linedata[lineid][2 * g + 1] = palmdata[index];
+    //         // }
+
+
+    //         // if palm timestamps are behind finger timestamps
+    //         if (
+    //             palm_tdata[index] < tdata[t]) {
+    //             while (palm_tdata[index] < tdata[t] and
+    //                    abs(palm_tdata[index] - tdata[t]) > 1e-6) {
+    //                 index += 1;
+    //                 if (index >= gnum - 1) {
+    //                     index = gnum - 1;
+    //                     break;
+    //                 }
+    //             }
+    //         }
+    //         // if finger timestamps are behind palm timestamps
+    //         else {
+    //             std::cout << "update at " << t << " with data "
+    //                 << palmdata[index] << " at index " << index << '\n';
+    //             figgauges.linedata[lineid][2 * t] = tdata[t];
+    //             figgauges.linedata[lineid][2 * t + 1] = palmdata[index];
+    //         }
+            
+    //     }
+    // }
+
 
     return;
 
@@ -1819,6 +1875,7 @@ void uiEvent(mjuiState* state)
                 bool done = myMjClass.is_done();
 
                 std::cout << "Action taken: " << it->itemid << '\n';
+                luke::print_vec(obs, "Observation");
                 std::cout << "Reward is " << reward << '\n';
                 std::cout << "Cumulative reward is "
                     << myMjClass.env_.cumulative_reward << '\n';

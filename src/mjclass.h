@@ -11,6 +11,7 @@
 #include <string>
 #include <iostream>
 #include <algorithm>
+#include <cmath>
 
 #include "simsettings.h"
 #include "myfunctions.h"
@@ -53,10 +54,13 @@ public:
   std::vector<int> action_options;    // possible action codes
 
   // create storage containers for strain gauge data
-  luke::SlidingWindow<luke::gfloat> finger1_gauge {gauge_buffer_size};
-  luke::SlidingWindow<luke::gfloat> finger2_gauge {gauge_buffer_size};
-  luke::SlidingWindow<luke::gfloat> finger3_gauge {gauge_buffer_size};
-  luke::SlidingWindow<float> gauge_timestamps {gauge_buffer_size};
+  luke::SlidingWindow<luke::gfloat> finger1_gauge { gauge_buffer_size };
+  luke::SlidingWindow<luke::gfloat> finger2_gauge { gauge_buffer_size };
+  luke::SlidingWindow<luke::gfloat> finger3_gauge { gauge_buffer_size };
+  luke::SlidingWindow<float> gauge_timestamps { gauge_buffer_size };
+
+  luke::SlidingWindow<luke::gfloat> palm_sensor { gauge_buffer_size };
+  luke::SlidingWindow<luke::gfloat> palm_timestamps { gauge_buffer_size };
 
   // what are the possible actions (order matters - see configure_settings())
   struct Action {
@@ -246,6 +250,7 @@ public:
   // sensing
   bool monitor_gauges();
   std::vector<luke::gfloat> read_gauges();
+  luke::gfloat read_palm();
   std::vector<luke::gfloat> get_gripper_state();
   bool is_target_reached();
   bool is_settled();
@@ -266,6 +271,7 @@ public:
   void spawn_object(int index);
   void spawn_object(int index, double xpos, double ypos);
   bool is_done();
+  std::vector<luke::gfloat> get_observation();
   std::vector<luke::gfloat> get_observation(int n);
   float reward();
 
@@ -281,5 +287,6 @@ public:
 
 // utility functions
 float linear_reward(float val, float min, float max, float overshoot);
+float normalise_between(float val, float min, float max);
 
 #endif // MJCLASS_H_

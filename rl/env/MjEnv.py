@@ -454,28 +454,28 @@ if __name__ == "__main__":
 
   mj = MjEnv()
 
-  mj._override_binary(mj.mj.set.step_num, 1.0, 3, 10)
-  mj.mj.set.lifted.set(-0.1, 42, 100)
-  mj.mj.set.gauge_read_rate_hz = 100
+  # mj._override_binary(mj.mj.set.step_num, 1.0, 3, 10)
+  # mj.mj.set.lifted.set(-0.1, 42, 100)
+  # mj.mj.set.gauge_read_rate_hz = 100
 
-  with open("test_file.pickle", 'wb') as f:
-    pickle.dump(mj, f)
+  # with open("test_file.pickle", 'wb') as f:
+  #   pickle.dump(mj, f)
 
-  with open("test_file.pickle", 'rb') as f:
-    mj = pickle.load(f)
+  # with open("test_file.pickle", 'rb') as f:
+  #   mj = pickle.load(f)
 
-  mj._load_xml(task_id=0)
+  # mj._load_xml(task_id=0)
 
-  mj.step(0)
+  # mj.step(0)
 
-  print(mj._get_cpp_settings())
+  # print(mj._get_cpp_settings())
 
-  mj.mj.set.wipe_rewards()
+  # mj.mj.set.wipe_rewards()
 
-  print(mj._get_cpp_settings())
+  # print(mj._get_cpp_settings())
 
-  # obs = mj.reset()
+  obs = mj.reset()
 
-  # print(obs)
+  print(obs)
 
   # print(mj._get_cpp_settings())

@@ -33,6 +33,7 @@ extern Target target_;      // accessed by mysimulate.cpp for gripper sliders
 void print_vec(std::vector<bool> v, std::string name);
 void print_vec(std::vector<int> v, std::string name);
 void print_vec(std::vector<mjtNum> v, std::string name);
+void print_vec(std::vector<gfloat> v, std::string name);
 void print_vec(std::vector<QPos> v, std::string name);
 void print_vec(std::vector<std::string> v, std::string name);
 
@@ -82,8 +83,9 @@ void print_target();
 void update_target();
 
 // sensing
-gfloat read_finger_gauge(const mjData* data, int finger);
+gfloat read_armadillo_gauge(const mjData* data, int finger);
 std::vector<gfloat> get_gauge_data(const mjModel* model, mjData* data);
+gfloat get_palm_force(const mjModel* model, mjData* data);
 std::vector<gfloat> get_panda_state(const mjData* data);
 std::vector<gfloat> get_gripper_state(const mjData* data);
 std::vector<gfloat> get_target_state();

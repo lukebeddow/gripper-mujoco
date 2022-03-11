@@ -9,7 +9,7 @@ namespace luke
 template <typename T>
 class SlidingWindow
 {
-  /* This class is a fast sliding window data structure */
+  /* This class is a FIFO sliding window data structure */
 
 public:
 
@@ -40,9 +40,16 @@ public:
     v[i] = element;
   }
 
-  T read() {
+  T read_element() {
     // get the most recently added element
     return v[i];
+  }
+
+  T read_element(int n) {
+    // get the element added n steps ago - beware looping
+    int idx = i - n;
+    while (idx < 0) idx += v.size();
+    return v[idx];
   }
 
   std::vector<T> read(int n) {

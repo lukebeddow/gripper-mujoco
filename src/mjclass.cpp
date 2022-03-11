@@ -265,10 +265,16 @@ bool MjClass::monitor_gauges()
   double time_between_reads = 1.0 / s_.gauge_read_rate_hz;
 
   if (data->time > last_read_time + time_between_reads) {
-    std::vector<luke::gfloat> gauges = luke::get_gauge_data(model, data);
+
+    std::vector<luke::gfloat> gauges = read_gauges();
+
     finger1_gauge.add(gauges[0]);
     finger2_gauge.add(gauges[1]);
     finger3_gauge.add(gauges[2]);
+
+    if (s_.use_palm_sensor) 
+      palm_sensor.add(read_palm());
+
     gauge_timestamps.add(data->time);
     last_read_time = data->time;
 
@@ -282,13 +288,51 @@ std::vector<luke::gfloat> MjClass::read_gauges()
 {
   /* read the strain gauges of each finger, readings only arrive with set Hz */
 
-  std::vector<luke::gfloat> data;
+  std::vector<luke::gfloat> gauges = luke::get_gauge_data(model, data);
 
-  data.push_back(finger1_gauge.read());
-  data.push_back(finger2_gauge.read());
-  data.push_back(finger3_gauge.read());
+  // scale and clip the data to fall between -1 and 1
+  for (int i = 0; i < 3; i++) {
 
-  return data;
+    gauges[i] = gauges[i] / s_.normalising_force;
+
+    if (gauges[i] > 1) gauges[i] = 1;
+    else if (gauges[i] < -1) gauges[i] = -1;
+
+  }
+
+  return gauges;
+}
+
+luke::gfloat MjClass::read_palm()
+{
+  /* read from the palm sensor */
+
+  if (s_.use_palm_sensor) {
+
+    luke::gfloat palm_reading = luke::get_palm_force(model, data);
+
+    // bumper sensor
+    if (s_.palm_force_normalise < 0) {
+      if (env_.obj.palm_axial_force > ftol) {
+        palm_reading = 1;
+      }
+      else {
+        palm_reading = -1;
+      }
+    }
+
+    // force sensor
+    else {
+      palm_reading = env_.obj.palm_axial_force / s_.palm_force_normalise;
+      if (palm_reading > 1) palm_reading = 1;
+      else if (palm_reading < -1) palm_reading = -1;
+    }
+
+    return palm_reading;
+  }
+  else {
+    return 0.0;
+  }
 }
 
 std::vector<luke::gfloat> MjClass::get_gripper_state()
@@ -758,23 +802,98 @@ bool MjClass::is_done()
   return false;
 }
 
+std::vector<luke::gfloat> MjClass::get_observation()
+{
+  /* overload */
+
+  if (s_.obs_raw_data) {
+    throw std::runtime_error("get_observation() needs the number of samples n for raw data");
+  }
+
+  return get_observation(0);
+}
+
 std::vector<luke::gfloat> MjClass::get_observation(int n)
 {
   /* get an observation with n samples from the gauges */
 
-  // get the observations from the gauges and the gripper state
-  std::vector<luke::gfloat> f1 = finger1_gauge.read(n);
-  std::vector<luke::gfloat> f2 = finger2_gauge.read(n);
-  std::vector<luke::gfloat> f3 = finger3_gauge.read(n);
-  std::vector<luke::gfloat> s = get_gripper_state();
+  std::vector<luke::gfloat> sensor_output;
+  std::vector<luke::gfloat> state_output;
+  std::vector<luke::gfloat> observation;
 
-  // concatenate vectors
-  s.reserve(s.size() + 3 * n);
-  s.insert(s.end(), f1.begin(), f1.end());
-  s.insert(s.end(), f2.begin(), f2.end());
-  s.insert(s.end(), f3.begin(), f3.end());
+  if (s_.obs_raw_data) {
 
-  return s;
+    // get the raw observations from the gauges and the gripper state
+    std::vector<luke::gfloat> f1 = finger1_gauge.read(n);
+    std::vector<luke::gfloat> f2 = finger2_gauge.read(n);
+    std::vector<luke::gfloat> f3 = finger3_gauge.read(n);
+
+    sensor_output.reserve(3 * n);
+    sensor_output.insert(sensor_output.end(), f1.begin(), f1.end());
+    sensor_output.insert(sensor_output.end(), f2.begin(), f2.end());
+    sensor_output.insert(sensor_output.end(), f3.begin(), f3.end());
+
+    // get the gripper state
+    state_output = get_gripper_state();
+
+  }
+  else {
+
+    /* the default mujoco timestep is 0.002 seconds */
+    constexpr double mujoco_timestep = 0.002;
+    double time_per_step = mujoco_timestep * s_.max_action_steps;
+    double readings_since_step = time_per_step * s_.gauge_read_rate_hz;
+    // round to int (if between round up) to include the last reading
+    int n_readings = std::ceil(readings_since_step);
+
+    std::cout << "n_readings is " << n_readings << '\n';
+
+    // create vector of pointers to iterate over
+    std::vector<luke::SlidingWindow<luke::gfloat>*> data_ptrs;
+    if (s_.use_palm_sensor) {
+      data_ptrs = { &finger1_gauge, &finger2_gauge, &finger3_gauge, &palm_sensor };
+    }
+    else {
+      data_ptrs = { &finger1_gauge, &finger2_gauge, &finger3_gauge };
+    }
+
+    // create the output vector, 3 elements for each sensor
+    int data_per_sensor = 3;
+    sensor_output.resize(data_per_sensor * data_ptrs.size());
+
+    for (int i = 0; i < data_ptrs.size(); i++) {
+
+      luke::gfloat old_reading = data_ptrs[i]->read_element(n_readings);
+      luke::gfloat new_reading = data_ptrs[i]->read_element();
+      luke::gfloat change = new_reading - old_reading;
+
+      if (change > 1) change = 1;
+      else if (change < -1) change = -1;
+
+      // save the data for this sensor
+      sensor_output[i * data_per_sensor + 0] = old_reading;
+      sensor_output[i * data_per_sensor + 1] = change;
+      sensor_output[i * data_per_sensor + 2] = new_reading;
+    }
+
+    // get the gripper state
+    state_output = get_gripper_state();
+
+    // normalise to the range -1, +1 for each state output
+    for (int i = 0; i < 6; i++) {
+      state_output[i] = normalise_between(
+        state_output[i], luke::Gripper::xy_min, luke::Gripper::xy_max
+      );
+    }
+    state_output[6] = normalise_between(state_output[6], luke::Gripper::z_min, luke::Gripper::z_max);
+  }
+
+  // finally, build the observation as state + sensor data  
+  observation.reserve(sensor_output.size() + state_output.size());
+  observation.insert(observation.end(), state_output.begin(), state_output.end());
+  observation.insert(observation.end(), sensor_output.begin(), sensor_output.end());
+  
+  return observation;
 }
 
 void MjClass::reset_object()
@@ -1000,6 +1119,16 @@ float linear_reward(float val, float min, float max, float overshoot)
   }
 
   return (val - min) / (max - min);
+}
+
+float normalise_between(float val, float min, float max)
+{
+  /* project val to the interval -1 +1 from the interval min max */
+
+  if (val > max) return 1.0;
+  else if (val < min) return -1.0;
+  
+  return 2 * (val - min) / (max - min) - 1;
 }
 
 std::string MjClass::Settings::get_settings()

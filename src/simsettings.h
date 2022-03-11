@@ -27,8 +27,12 @@
   general */\
   X(  debug,                    bool,     true)     /* print debug info to terminal */\
   /*
-  step() settings */\
+  step() and gauge settings */\
   X(  gauge_read_rate_hz,       double,   10.0)     /* frequency of gauge readings */\
+  X(  normalising_force,        double,   100.0)    /* max reading to normalise gauges to -1, 1*/\
+  X(  use_palm_sensor,          bool,     true)     /* use a sensor on the palm */\
+  X(  palm_force_normalise,     double,   8.0)      /* <0:bumper sensor, >0:normalising value*/\
+  X(  obs_raw_data,             bool,     false)    /* use raw sensor data for get_observation()*/\
   /* 
   update_env() settings */\
   X(  lift_distance,            double,   1e-3)     /* distance to consider object lifted */\
@@ -39,10 +43,10 @@
   /* 
   is_done() settings */\
   X(  max_timeouts,             int,      10)       /* done=true if unsettled this times in a row */\
-  X(  quit_on_reward_below,     float,    -100)     /* done=true if reward drops below this value */\
+  X(  quit_on_reward_below,     float,    -1.5)     /* done=true if reward drops below this value */\
   /* 
   set_action() settings */\
-  X(  action_motor_steps,       int,      100)      /* motor steps per action */\
+  X(  action_motor_steps,       int,      100)      /* stepper motor steps per action */\
   X(  action_base_translation,  double,   2e-3)     /* base translation per action */\
   X(  max_action_steps,         int,      200)      /* max sim steps in one action */\
   X(  paired_motor_X_step,      bool,     true)     /* run both X and Y motors for X step */\

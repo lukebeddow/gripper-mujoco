@@ -39,6 +39,18 @@ void print_vec(std::vector<mjtNum> v, std::string name) {
   }
   printf("%.3f }\n", float(v[v.size() - 1]));
 }
+void print_vec(std::vector<gfloat> v, std::string name) {
+  std::cout << name << ": { ";
+  if (v.size() == 0) {
+    std::cout << "}\n";
+    return;
+  }
+  // cast mjtNum to float32 and show to 3dp
+  for (int i = 0; i < v.size() - 1; i++) {
+    printf("%.3f, ", float(v[i]));
+  }
+  printf("%.3f }\n", float(v[v.size() - 1]));
+}
 void print_vec(std::vector<QPos> v, std::string name) {
   std::cout << name << ": { ";
   if (v.size() == 0) {
@@ -111,9 +123,11 @@ struct J {
 
   // strain gauge parameters
   struct {
+    bool use_armadillo_gauges = true;          // whether to use curve fitting for finger bending
     int order = 3;
     double xpos = 50e-3;
     double cbrt_xpos = std::cbrt(xpos);         // runtime depends
+    double xpos_cubed = xpos * xpos * xpos;     // runtime depends
   } gauge;
 
   // control parameters
@@ -1108,7 +1122,7 @@ void update_target()
 
 /* ----- sensing ------ */
 
-gfloat read_finger_gauge(const mjData* data, int finger)
+gfloat read_armadillo_gauge(const mjData* data, int finger)
 {
   /* read the virtual strain gauge for one finger */
 
@@ -1159,7 +1173,17 @@ gfloat read_finger_gauge(const mjData* data, int finger)
   */
 
   // calculate the approximated gauge reading
-  gfloat k = y / j_.gauge.cbrt_xpos;
+  gfloat k = y / j_.gauge.xpos_cubed;
+
+  // transfer to SI units for force (optional)
+  constexpr gfloat E = 200e9;
+  constexpr gfloat I = (28e-3 * std::pow(0.9e-3, 3)) / 12.0;
+  gfloat P = k * (3 * E * I);
+
+  /* the SI result is not accurate because the finger stiffness is not
+  accurate (here we do not have the right E). However, tuning the stiffness
+  to be perfect is not helpful as the simulation can become unstable and the
+  interaction with the simulated 'motors' is already not realistic */
 
   /* Finally, we want to scale this data. To get an idea of the size of k, lets
      take some default values:
@@ -1169,11 +1193,24 @@ gfloat read_finger_gauge(const mjData* data, int finger)
       k = xpos / cbrt(xpos)
       k = 0.136
      Lets scale this to the range -100, +100
+
+     Lets scale the data to the range -1, +1. First, what is the maximum
+     expected force?
+
+     k = P / 3EI
+     E = 200e9 Pa
+     I = 1/12 * hb^3 where h = 28mm and b = 0.9mm
+     I = 1.71e-12 m^4
+
+     hence, with maximum expected force of 20N, we get:
+
+     k = 20 / (3 * 200 * 1.71) * (10e-12 * 10e-9)
+     k = 19.6 m^-2
   */
 
   k *= (100.0 / 0.136);
 
-  return k;
+  return P;
 }
 
 std::vector<gfloat> get_gauge_data(const mjModel* model, mjData* data)
@@ -1187,16 +1224,28 @@ std::vector<gfloat> get_gauge_data(const mjModel* model, mjData* data)
 
   std::vector<gfloat> readings(3);
 
-  // std::cout << "The gauge readings are: ";
-  for (int i = 0; i < 3; i++) {
-    readings[i] = read_finger_gauge(data, i);
-
-    // // for testing
-    // std::cout << readings[i] << ", ";
+  // use armadillo to detect finger bending
+  if (j_.gauge.use_armadillo_gauges) {
+    for (int i = 0; i < 3; i++) {
+      readings[i] = read_armadillo_gauge(data, i);
+    }
   }
-  // std::cout << "\n";
-  
+  // use fingertip forces
+  else {
+    Forces forces = get_object_forces(model, data);
+    readings[0] = (gfloat) forces.all.finger1_local[1];
+    readings[1] = (gfloat) forces.all.finger2_local[1];
+    readings[2] = (gfloat) forces.all.finger3_local[1];
+  }
+
   return readings;  
+}
+
+gfloat get_palm_force(const mjModel* model, mjData* data)
+{
+  /* get the axial force on the palm */
+
+  return (gfloat) oh_.get_palm_force(model, data);
 }
 
 std::vector<gfloat> get_panda_state(const mjData* data)
@@ -1235,10 +1284,10 @@ std::vector<gfloat> get_target_state()
 
   // target_.end.update();
   gfloat x = target_.end.x;
-  gfloat th = target_.end.th;
+  gfloat y = target_.end.y; // or theta?
   gfloat z = target_.end.z;
 
-  std::vector<gfloat> target_joint_values = { x, th, x, th, x, th, z };
+  std::vector<gfloat> target_joint_values = { x, y, x, y, x, y, z };
 
   return target_joint_values;
 }

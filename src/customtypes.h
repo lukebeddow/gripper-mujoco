@@ -143,7 +143,7 @@ struct Forces {
 
   void print_all_local() {
     if (empty) { std::cout << "Cannot print forces - it is empty\n"; return; }
-    std::cout << "Printing forces from the ground on the gripper fingers:\n";
+    std::cout << "Printing forces from all named geoms on the gripper fingers:\n";
     std::cout << "finger1 local force (mag = " << all.finger1_local.magnitude3() << "):\n"; all.finger1_local.print();
     std::cout << "finger2 local force (mag = " << all.finger2_local.magnitude3() << "):\n"; all.finger2_local.print();
     std::cout << "finger3 local force (mag = " << all.finger3_local.magnitude3() << "):\n"; all.finger3_local.print();

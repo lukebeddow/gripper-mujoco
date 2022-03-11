@@ -509,6 +509,28 @@ myNum ObjectHandler::rotate_vector(myNum force_vec, double x_rot, double y_rot,
   return out;
 }
 
+double ObjectHandler::get_palm_force(const mjModel* model, mjData* data)
+{
+  /* get only the axial force on the palm */
+
+  std::vector<Contact> contacts = get_all_contacts(model, data);
+  myNum palm_global(6, 1);
+  myNum palm_local(3, 1);
+
+  for (int i = 0; i < contacts.size(); i++) {
+
+    if (contacts[i].with.palm) {
+      palm_global += contacts[i].global_force_vec;
+    }
+  }
+
+  myNum r4(&data->xmat[pm_idx * 9], 3, 3);
+
+  palm_local = palm_global.rotate3_by(r4.transpose());
+
+  return palm_local[0];
+}
+
 Forces ObjectHandler::extract_forces(const mjModel* model, mjData* data)
 {
   /* extract the forces on the live object */

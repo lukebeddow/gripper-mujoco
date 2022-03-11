@@ -51,7 +51,8 @@ PYBIND11_MODULE(bind, m) {
     .def("spawn_object", static_cast<void (MjClass::*)(int)>(&MjClass::spawn_object)) /* see bottom */
     .def("spawn_object", static_cast<void (MjClass::*)(int, double, double)>(&MjClass::spawn_object))
     .def("is_done", &MjClass::is_done)
-    .def("get_observation", &MjClass::get_observation)
+    .def("get_observation", static_cast<std::vector<luke::gfloat> (MjClass::*)()>(&MjClass::get_observation))
+    .def("get_observation", static_cast<std::vector<luke::gfloat> (MjClass::*)(int)>(&MjClass::get_observation))
     .def("reward", &MjClass::reward)
 
     // misc
