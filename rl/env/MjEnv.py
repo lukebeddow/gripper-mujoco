@@ -62,7 +62,8 @@ class MjEnv(gym.Env):
     self.state_max = [140e-3, max_angle, 140e-3, max_angle, 140e-3, max_angle, 160e-3]
     self.state_min = [0.0, -max_angle, 0.0, -max_angle, 0.0, -max_angle, 0.0]
     self.num_state_readings = 7
-    self.num_gauge_readings = 7
+    self.num_gauge_readings = 3
+    self.num_palm_readings = 3
     self.max_episode_steps = 100
     self.num_actions = 8
     self.object_position_noise_mm = 10
@@ -91,23 +92,25 @@ class MjEnv(gym.Env):
     # self._override_settings()    
 
     # auto generated parameters
-    self.num_observations = self.num_state_readings + 3 * self.num_gauge_readings
+    self._update_n_actions_obs()
 
     # initialise tracking variables
     self.track = MjEnv.Track()
     self.test = MjEnv.Test()
     self.prev_test = MjEnv.Test()
 
-    # limits on gauge readings
-    max_gauge = 50
-    high = np.array(self.state_max 
-      + [max_gauge for i in range(3 * self.num_gauge_readings)], dtype=np.float32)
-    low = np.array(self.state_min
-      + [-max_gauge for i in range(3 * self.num_gauge_readings)], dtype=np.float32)
+    # # limits on gauge readings
+    # max_gauge = 50
+    # high = np.array(self.state_max 
+    #   + [max_gauge for i in range(3 * self.num_gauge_readings)], dtype=np.float32)
+    # low = np.array(self.state_min
+    #   + [-max_gauge for i in range(3 * self.num_gauge_readings)], dtype=np.float32)
 
-    # define key gym variables
-    self.action_space = gym.spaces.Discrete(self.num_actions)
-    self.observation_space = gym.spaces.Box(low=low, high=high)
+    # # define key gym variables
+    # self.action_space = gym.spaces.Discrete(self.num_actions)
+    # self.observation_space = gym.spaces.Box(low=low, high=high)
+
+    return
 
   def _load_xml(self, path=None, task_id=None, random=None, test=None):
     """
@@ -139,6 +142,12 @@ class MjEnv(gym.Env):
     self.num_objects = self.mj.get_number_of_objects()
 
     self.reload_flag = False
+
+  def _update_n_actions_obs(self):
+    # get an updated number of actions and observations
+
+    self.n_actions = self.mj.get_n_actions()
+    self.n_obs = self.mj.get_n_obs()
 
   def _override_binary(self, field, reward, done, trigger):
     """

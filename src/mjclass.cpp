@@ -121,6 +121,8 @@ void MjClass::configure_settings()
     i += 2;
   }
 
+  n_actions = i;
+
 }
 
 /* ----- core functionality ----- */
@@ -846,8 +848,6 @@ std::vector<luke::gfloat> MjClass::get_observation(int n)
     // round to int (if between round up) to include the last reading
     int n_readings = std::ceil(readings_since_step);
 
-    std::cout << "n_readings is " << n_readings << '\n';
-
     // create vector of pointers to iterate over
     std::vector<luke::SlidingWindow<luke::gfloat>*> data_ptrs;
     if (s_.use_palm_sensor) {
@@ -862,7 +862,7 @@ std::vector<luke::gfloat> MjClass::get_observation(int n)
     sensor_output.resize(data_per_sensor * data_ptrs.size());
 
     for (int i = 0; i < data_ptrs.size(); i++) {
-
+      
       luke::gfloat old_reading = data_ptrs[i]->read_element(n_readings);
       luke::gfloat new_reading = data_ptrs[i]->read_element();
       luke::gfloat change = new_reading - old_reading;
@@ -1050,6 +1050,20 @@ float MjClass::reward()
   env_.cumulative_reward += reward;
 
   return reward;
+}
+
+int MjClass::get_n_actions()
+{
+  /* get the number of possible actions */
+  
+  return n_actions;
+}
+
+int MjClass::get_n_obs()
+{
+  /* get the number of observations */
+
+  return get_observation().size();
 }
 
 /* ----- misc ----- */

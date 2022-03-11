@@ -44,7 +44,7 @@ class TrainDQN():
     eps_end: float = 0.05           # initial 0.05
     eps_decay: int = 1000           # initial 200 (steps !not episodes! to get exp(-1)*eps)
     target_update: int = 100        # initial 10
-    num_episodes: int = 15000       # initial 40
+    num_episodes: int = 20000       # initial 40
     memory_replay: int = 10000      # initial 10000
 
     save_freq: int = 1000
@@ -68,7 +68,7 @@ class TrainDQN():
     def __len__(self):
       return len(self.memory)
 
-  def __init__(self, network=None, cluster=True, save_suffix=None, device=None):
+  def __init__(self, cluster=True, save_suffix=None, device=None):
 
     # define key training parameters
     self.params = TrainDQN.Parameters()
@@ -89,32 +89,6 @@ class TrainDQN():
       global plt
       import matplotlib.pyplot as plt
 
-    # create networks
-    if network == None:
-      # default option
-      self.policy_net = networks.DQN_2L60(self.env.num_observations, self.env.num_actions,
-                                          self.device).to(self.device)
-      self.target_net = networks.DQN_2L60(self.env.num_observations, self.env.num_actions,
-                                          self.device).to(self.device)
-    else:
-      # use the network passed as input
-      self.policy_net = network(self.env.num_observations, self.env.num_actions,
-                                self.device).to(self.device)
-      self.target_net = network(self.env.num_observations, self.env.num_actions,
-                                self.device).to(self.device)
-
-
-    self.target_net.load_state_dict(self.policy_net.state_dict())
-
-    # configure optimiser and memory replay
-    self.optimiser = optim.RMSprop(self.policy_net.parameters())
-    self.memory = TrainDQN.ReplayMemory(self.params.memory_replay)
-
-    # print important info
-    print("On cluster:", "TRUE" if self.cluster else "FALSE")
-    print("Using device:", self.device)
-    print("Using model:", self.policy_net.name())
-
     # prepare for plotting
     self.episode_durations = []
     self.episode_rewards = []
@@ -126,8 +100,45 @@ class TrainDQN():
     if not self.no_plot:
       self.fig, self.axs = plt.subplots(2, 1)
 
+    # print important info
+    print("On cluster:", "TRUE" if self.cluster else "FALSE")
+    print("Using device:", self.device)
+
+  def init(self, network):
+    """
+    Create the networks
+    """
+
+    # update the environment with correct numbers of actions and observations
+    self.env._update_n_actions_obs()
+
+    # create networks
+    if network == None:
+      raise RuntimeError("TrainDQN network must be specified")
+      # default option
+      self.policy_net = networks.DQN_2L60(self.env.n_obs, self.env.n_actions,
+                                          self.device).to(self.device)
+      self.target_net = networks.DQN_2L60(self.env.n_obs, self.env.n_actions,
+                                          self.device).to(self.device)
+    else:
+      # use the network passed as input
+      self.policy_net = network(self.env.n_obs, self.env.n_actions,
+                                self.device).to(self.device)
+      self.target_net = network(self.env.n_obs, self.env.n_actions,
+                                self.device).to(self.device)
+
+
+    self.target_net.load_state_dict(self.policy_net.state_dict())
+
+    # configure optimiser and memory replay
+    self.optimiser = optim.RMSprop(self.policy_net.parameters())
+    self.memory = TrainDQN.ReplayMemory(self.params.memory_replay)
+
     # prepare for saving and loading
     self.modelsaver = ModelSaver('models/dqn/' + self.policy_net.name())
+
+    # print important info
+    print("Using model:", self.policy_net.name())
 
   def to_torch(self, data, dtype=None):
     """
@@ -716,9 +727,8 @@ if __name__ == "__main__":
   # ----- prepare ----- #
 
   cluster = False
-  net = networks.DQN_2L60
   force_device = "cpu"
-  model = TrainDQN(cluster=cluster, network=net, device=force_device)
+  model = TrainDQN(cluster=cluster, device=force_device)
 
   # if we want to adjust parameters
   # model.params.num_episodes = 11
@@ -727,22 +737,26 @@ if __name__ == "__main__":
   # model.env.mj.set.max_action_steps = 1000
   # model.env._override_binary(model.env.mj.set.target_height, 1.0, 1, 1)
 
+  # now set up the network, ready for training
+  net = networks.DQN_2L60
+  model.init(network=net)
+
   # ----- load ----- #
 
   # load
-  folderpath = "/home/luke/cluster/rl/models/dqn/DQN_2L60/"
+  # folderpath = "/home/luke/cluster/rl/models/dqn/DQN_2L60/"
   # foldername = "train_cluster_24-02-2022_12:43_array_6"
   # model.load(id=None, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
   # train
-  # model.env.disable_rendering = True
-  # model.env.mj.set.debug = False
-  # model.train()
+  model.env.disable_rendering = True
+  model.env.mj.set.debug = False
+  model.train()
 
   # continue training
-  model.continue_training('train_cluster_24-02-2022_12:43_array_6', folderpath=folderpath)
+  # model.continue_training('train_cluster_24-02-2022_12:43_array_6', folderpath=folderpath)
 
   # ----- visualise ----- #
 

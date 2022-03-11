@@ -13,7 +13,7 @@ if __name__ == "__main__":
   net = networks.DQN_3L60
 
   # what training session
-  training = "train_cluster_28-02-2022"
+  training = "train_cluster_02-03-2022"
 
   # ----- plot ----- #
 

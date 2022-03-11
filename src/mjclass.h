@@ -52,6 +52,7 @@ public:
   int timeout_count = 0;              // number of action_step() timeouts in a row
   double last_read_time = 0;          // last gauge read time in seconds
   std::vector<int> action_options;    // possible action codes
+  int n_actions;                      // number of possible actions
 
   // create storage containers for strain gauge data
   luke::SlidingWindow<luke::gfloat> finger1_gauge { gauge_buffer_size };
@@ -274,6 +275,8 @@ public:
   std::vector<luke::gfloat> get_observation();
   std::vector<luke::gfloat> get_observation(int n);
   float reward();
+  int get_n_actions();
+  int get_n_obs();
 
   // misc
   void forward() { mj_forward(model, data); }

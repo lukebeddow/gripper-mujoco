@@ -54,6 +54,8 @@ PYBIND11_MODULE(bind, m) {
     .def("get_observation", static_cast<std::vector<luke::gfloat> (MjClass::*)()>(&MjClass::get_observation))
     .def("get_observation", static_cast<std::vector<luke::gfloat> (MjClass::*)(int)>(&MjClass::get_observation))
     .def("reward", &MjClass::reward)
+    .def("get_n_actions", &MjClass::get_n_actions)
+    .def("get_n_obs", &MjClass::get_n_obs)
 
     // misc
     .def("forward", &MjClass::forward)
