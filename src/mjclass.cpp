@@ -1,5 +1,7 @@
 #include "mjclass.h"
 
+/* ----- constructors, destructor, and initialisers ----- */
+
 MjClass::MjClass()
 {
   /* constructor */
@@ -28,7 +30,7 @@ MjClass::MjClass(mjModel* m, mjData* d)
   init();
 }
 
-MjClass::MjClass(Settings settings_to_use)
+MjClass::MjClass(MjType::Settings settings_to_use)
 {
   /* initialise with predefined settings */
 
@@ -43,8 +45,8 @@ MjClass::~MjClass()
   /* destructor */
 
   // free any existing data
-  if (model) mj_deleteModel(model);
   if (data) mj_deleteData(data);
+  if (model) mj_deleteModel(model);
 }
 
 void MjClass::init()
@@ -55,16 +57,8 @@ void MjClass::init()
     throw std::runtime_error("init() has been called before loading a model");
   }
 
-  // initialise myfunctions.cpp only once
-  static bool first_init = true;
-  if (first_init) {
-    luke::init(model, data);
-    first_init = false;
-  }
-  else {
-    // we instead want to reload
-    luke::reload(model, data);
-  }
+  // initialise keyframe positions, joint, and object settings
+  luke::init(model, data);
 
   // reset to double check everything is ready
   reset();
@@ -82,6 +76,9 @@ void MjClass::init(mjModel* m, mjData* d)
   // assign new pointers
   model = m;
   data = d;
+
+  // note that no loadpath was used
+  current_load_path = "init(m, d) used - no load path";
   
   init();
 }
@@ -91,33 +88,33 @@ void MjClass::configure_settings()
   /* apply simulation settings */
 
   action_options.clear();
-  action_options.resize(Action::count, -1);
+  action_options.resize(MjType::Action::count, -1);
 
   // what actions are valid - MUST be same order as action enums
   int i = 0;
   if (not s_.paired_motor_X_step) {
-    action_options[i] = Action::x_motor_positive;
-    action_options[i + 1] = Action::x_motor_negative;
+    action_options[i] = MjType::Action::x_motor_positive;
+    action_options[i + 1] = MjType::Action::x_motor_negative;
     i += 2;
   }
   else {
-    action_options[i] = Action::prismatic_positive;
-    action_options[i + 1] = Action::prismatic_negative;
+    action_options[i] = MjType::Action::prismatic_positive;
+    action_options[i + 1] = MjType::Action::prismatic_negative;
     i += 2;
   }
   if (true) {
-    action_options[i] = Action::y_motor_positive;
-    action_options[i + 1] = Action::y_motor_negative;
+    action_options[i] = MjType::Action::y_motor_positive;
+    action_options[i + 1] = MjType::Action::y_motor_negative;
     i += 2;
   }
   if (s_.use_palm_action) {
-    action_options[i] = Action::z_motor_positive;
-    action_options[i + 1] = Action::z_motor_negative;
+    action_options[i] = MjType::Action::z_motor_positive;
+    action_options[i + 1] = MjType::Action::z_motor_negative;
     i += 2;
   }
   if (s_.use_height_action) {
-    action_options[i] = Action::height_positive;
-    action_options[i + 1] = Action::height_negative;
+    action_options[i] = MjType::Action::height_positive;
+    action_options[i + 1] = MjType::Action::height_negative;
     i += 2;
   }
 
@@ -132,8 +129,10 @@ void MjClass::load(std::string model_path)
   /* load a model into the simulation from an xml path */
 
   // free any existing data
-  if (model) mj_deleteModel(model);
   if (data) mj_deleteData(data);
+  if (model) mj_deleteModel(model);
+  data = NULL;
+  model = NULL;
 
   // load the model from an XML file
   char error[500] = "";
@@ -144,6 +143,9 @@ void MjClass::load(std::string model_path)
   }
 
   data = mj_makeData(model);
+
+  // save the loadpath used
+  current_load_path = model_path;
 
   init();
 }
@@ -169,10 +171,11 @@ void MjClass::reset()
   finger2_gauge.reset();
   finger3_gauge.reset();
   gauge_timestamps.reset();
+  palm_sensor.reset();
   env_.reset();
 
   // reset the test report
-  TestReport blank_report;
+  MjType::TestReport blank_report;
   testReport_ = blank_report;
 
   // ensure the simulation settings are all ready to go
@@ -315,7 +318,7 @@ luke::gfloat MjClass::read_palm()
 
     // bumper sensor
     if (s_.palm_force_normalise < 0) {
-      if (env_.obj.palm_axial_force > ftol) {
+      if (palm_reading > ftol) {
         palm_reading = 1;
       }
       else {
@@ -325,7 +328,7 @@ luke::gfloat MjClass::read_palm()
 
     // force sensor
     else {
-      palm_reading = env_.obj.palm_axial_force / s_.palm_force_normalise;
+      palm_reading = palm_reading / s_.palm_force_normalise;
       if (palm_reading > 1) palm_reading = 1;
       else if (palm_reading < -1) palm_reading = -1;
     }
@@ -418,16 +421,17 @@ void MjClass::update_env()
   if (env_.obj.ground_force.magnitude3() < ftol)
     lifted = true;
 
-  // has the object been lifted above the target height
-  bool target_height = false;
-  if (env_.obj.qpos.z > env_.start_qpos.z + s_.height_target)
-    target_height = true;
-
   // check if the object has gone out of bounds
   bool out_of_bounds = false;
   if (env_.obj.qpos.x > s_.oob_distance or env_.obj.qpos.x < -s_.oob_distance or
       env_.obj.qpos.y > s_.oob_distance or env_.obj.qpos.y < -s_.oob_distance)
     out_of_bounds = true;
+
+  // has the object been lifted above the target height and not oob
+  bool target_height = false;
+  if (env_.obj.qpos.z > env_.start_qpos.z + s_.height_target
+      and not out_of_bounds)
+    target_height = true;
 
   // check if the finger limit axial force is exceeded
   bool exceed_axial = false;
@@ -635,38 +639,38 @@ void MjClass::set_action(int action)
 
   switch (action_code) {
 
-    case Action::x_motor_positive:
+    case MjType::Action::x_motor_positive:
       wl = luke::move_gripper_target_step(s_.action_motor_steps, 0, 0);
       break;
-    case Action::x_motor_negative:
+    case MjType::Action::x_motor_negative:
       wl = luke::move_gripper_target_step(-s_.action_motor_steps, 0, 0);
       break;
 
-    case Action::prismatic_positive:
+    case MjType::Action::prismatic_positive:
       wl = luke::move_gripper_target_step(s_.action_motor_steps, s_.action_motor_steps, 0);
       break;
-    case Action::prismatic_negative:
+    case MjType::Action::prismatic_negative:
       wl = luke::move_gripper_target_step(-s_.action_motor_steps, -s_.action_motor_steps, 0);
       break;
 
-    case Action::y_motor_positive:
+    case MjType::Action::y_motor_positive:
       wl = luke::move_gripper_target_step(0, s_.action_motor_steps, 0);
       break;
-    case Action::y_motor_negative:
+    case MjType::Action::y_motor_negative:
       wl = luke::move_gripper_target_step(0, -s_.action_motor_steps, 0);
       break;
 
-    case Action::z_motor_positive:
+    case MjType::Action::z_motor_positive:
       wl = luke::move_gripper_target_step(0, 0, s_.action_motor_steps);
       break;
-    case Action::z_motor_negative:
+    case MjType::Action::z_motor_negative:
       wl = luke::move_gripper_target_step(0, 0, -s_.action_motor_steps);
       break;
 
-    case Action::height_positive:
+    case MjType::Action::height_positive:
       wl = luke::move_base_target_m(0, 0, s_.action_base_translation);
       break;
-    case Action::height_negative:
+    case MjType::Action::height_negative:
       wl = luke::move_base_target_m(0, 0, -s_.action_base_translation);
       break;
 
@@ -1085,7 +1089,7 @@ float MjClass::tock()
   return elapsed;
 }
 
-MjClass::TestReport MjClass::get_test_report()
+MjType::TestReport MjClass::get_test_report()
 {
   /* fills out and returns the test report */
 
@@ -1145,7 +1149,7 @@ float normalise_between(float val, float min, float max)
   return 2 * (val - min) / (max - min) - 1;
 }
 
-std::string MjClass::Settings::get_settings()
+std::string MjType::Settings::get_settings()
 {
   /* this function returns a string detailing all of the settings */
 
@@ -1258,7 +1262,7 @@ std::string MjClass::Settings::get_settings()
   return output_str;
 }
 
-void MjClass::Settings::wipe_rewards()
+void MjType::Settings::wipe_rewards()
 {
   /* wipe all the reward settings to defaults which never trigger */
 
@@ -1285,7 +1289,7 @@ void MjClass::Settings::wipe_rewards()
   #undef LR
 }
 
-void MjClass::EventTrack::print()
+void MjType::EventTrack::print()
 {
   
   #define X(name, type, value)

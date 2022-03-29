@@ -25,43 +25,9 @@
   #define LUKE_FILE_ROOT "/home/luke/gripper_repo_ws/src/gripper_v2/gripper_description/urdf/mujoco/"
 #endif
 
-class MjClass
+namespace MjType
 {
-public:
-
-  /* wrapper class to be exposed to python that manipulates an instance of a
-  mujoco model and data */
-
-  /* class variables */
-
-  mjModel* model;
-  mjData* data;
-
-  // for measuring timings
-  typedef std::chrono::high_resolution_clock time_;
-  std::chrono::time_point<time_> start_time_;
-
-  // parameters set at compile time
-  static constexpr bool debug = false;           // are we in debug mode
-  static constexpr double ftol = 1e-5;          // floating point tolerance
-  static constexpr int gauge_buffer_size = 50;  // buffer to store gauge data 
-  static constexpr int state_buffer_size = 50;  // buffer to store state data
-
-  // standard class variables
-  bool render_init = false;           // have we initialised the render window
-  int timeout_count = 0;              // number of action_step() timeouts in a row
-  double last_read_time = 0;          // last gauge read time in seconds
-  std::vector<int> action_options;    // possible action codes
-  int n_actions;                      // number of possible actions
-
-  // create storage containers for strain gauge data
-  luke::SlidingWindow<luke::gfloat> finger1_gauge { gauge_buffer_size };
-  luke::SlidingWindow<luke::gfloat> finger2_gauge { gauge_buffer_size };
-  luke::SlidingWindow<luke::gfloat> finger3_gauge { gauge_buffer_size };
-  luke::SlidingWindow<float> gauge_timestamps { gauge_buffer_size };
-
-  luke::SlidingWindow<luke::gfloat> palm_sensor { gauge_buffer_size };
-  luke::SlidingWindow<luke::gfloat> palm_timestamps { gauge_buffer_size };
+  /* types used inside the MjClass, including data structures */
 
   // what are the possible actions (order matters - see configure_settings())
   struct Action {
@@ -152,7 +118,7 @@ public:
     std::string get_settings();
     void wipe_rewards();
 
-  } s_; // settings
+  };
 
   // data on the objects and environment
   struct Env {
@@ -207,7 +173,7 @@ public:
       start_qpos.reset();
     }
 
-  } env_; // environment
+  };
 
   // info to give to python about simlulation
   struct TestReport {
@@ -227,16 +193,64 @@ public:
     float final_palm_force = 0;
     float final_finger_force = 0;
 
-  } testReport_;
+  };
+}
 
-  /* member functions */
+class MjClass
+{
+public:
+
+  /* wrapper class to be exposed to python that manipulates an instance of a
+  mujoco model and data */
+
+  /* ----- unchanging constants ----- */
+
+  // for measuring timings
+  typedef std::chrono::high_resolution_clock time_;
+
+  // parameters set at compile time
+  static constexpr bool debug = false;           // are we in debug mode
+  static constexpr double ftol = 1e-5;          // floating point tolerance
+  static constexpr int gauge_buffer_size = 50;  // buffer to store gauge data 
+  static constexpr int state_buffer_size = 50;  // buffer to store state data
+
+  /* ----- parameters that are unchanged with reset() ----- */
+
+  mjModel* model;
+  mjData* data;
+
+  MjType::Settings s_;                          // simulation settings
+  std::string current_load_path;                // xml path of currently loaded model
+  std::chrono::time_point<time_> start_time_;   // time from tick() call
+
+  /* ----- variables that are reset ----- */
+
+  // standard class variables
+  bool render_init = false;           // have we initialised the render window
+  int timeout_count = 0;              // number of action_step() timeouts in a row
+  double last_read_time = 0;          // last gauge read time in seconds
+  std::vector<int> action_options;    // possible action codes
+  int n_actions;                      // number of possible actions
+  
+  // create storage containers for strain gauge data
+  luke::SlidingWindow<luke::gfloat> finger1_gauge { gauge_buffer_size };
+  luke::SlidingWindow<luke::gfloat> finger2_gauge { gauge_buffer_size };
+  luke::SlidingWindow<luke::gfloat> finger3_gauge { gauge_buffer_size };
+  luke::SlidingWindow<luke::gfloat> palm_sensor { gauge_buffer_size };
+  luke::SlidingWindow<float> gauge_timestamps { gauge_buffer_size };
+
+  // data structures
+  MjType::Env env_;
+  MjType::TestReport testReport_;
+
+  /* ----- member functions ----- */
 
   // constructors
   MjClass();
   ~MjClass();
   MjClass(std::string file_path);
   MjClass(mjModel* m, mjData* d);
-  MjClass(Settings settings_to_use);
+  MjClass(MjType::Settings settings_to_use);
   void init();
   void init(mjModel* m, mjData* d);
   void configure_settings();
@@ -282,7 +296,7 @@ public:
   void forward() { mj_forward(model, data); }
   int get_number_of_objects() { return env_.object_names.size(); }
   std::string get_current_object_name() { return env_.obj.name; }
-  MjClass::TestReport get_test_report();
+  MjType::TestReport get_test_report();
   void tick();
   float tock();
 
