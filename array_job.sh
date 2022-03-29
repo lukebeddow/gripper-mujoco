@@ -1,21 +1,20 @@
 # These are flags you must include - Two memory and one runtime.
 # Runtime is either seconds or hours:min:sec
 
-#$ -l tmem=20G
-#$ -l h_vmem=20G
-#$ -l h_rt=73:59:0 
+#$ -l tmem=8G
+#$ -l h_vmem=8G
+#$ -l h_rt=47:59:0 
 
-# These are optional flags but you probably want them in all jobs
-# t X-Y is inclusive of both X and Y
-# tc is total number of concurrent jobs at once
+# Some important notes
+#dollar -t X-Y   -> submit array job inclusive of both X and Y
+#dollar -tc Z    -> Z is max number of concurrent jobs at once
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N ArrayTrainDQN_8
-#$ -t 1-30
-#$ -tc 15
+#$ -N ArrayTrainDQN_9
+#$ -t 1-20
 
-#The code you want to run now goes here.
+# The code you want to run now goes here.
 
 hostname
 date

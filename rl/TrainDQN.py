@@ -42,9 +42,9 @@ class TrainDQN():
     gamma: float = 0.999            # initial 0.999
     eps_start: float = 0.9          # initial 0.9
     eps_end: float = 0.05           # initial 0.05
-    eps_decay: int = 1000           # initial 200 (steps !not episodes! to get exp(-1)*eps)
+    eps_decay: int = 1000           # initial 200 (currently !episodes! to get exp(-1)*eps)
     target_update: int = 100        # initial 10
-    num_episodes: int = 20000       # initial 40
+    num_episodes: int = 10000       # initial 40
     memory_replay: int = 10000      # initial 10000
 
     save_freq: int = 1000
