@@ -239,6 +239,7 @@ class TrainDQN():
     num_lifted = 0
     num_oob = 0
     num_target_height = 0
+    num_stable_height = 0
 
     lifted_vec = []
     contact_vec = []
@@ -252,14 +253,14 @@ class TrainDQN():
     output_str = ""
 
     # define the printing format
-    #              name    reward  steps   palm f  fing.f   Lft     Stb     oob     t.h     pLft   pCon   pPlmFrc  pXLim  pXAxial  pXlaT.  pXPalm
-    header_str = "{:<36} | {:<6} | {:<6} | {:<6} | {:<6} | {:<4} | {:<4} | {:<4} | {:<4} | {:<3} | {:<3} | {:<3} | {:<3} | {:<3} | {:<3} | {:<3}\n"
-    #              name     reward     steps      palm f     fing.f     Lft     Stb     oob     t.h     pLft       pCon       pPlmFrc    pXLim      pXAxial    pXlaT.     pXPalm
-    row_str =    "{:<36} | {:<6.3f} | {:<6.1f} | {:<6.3f} | {:<6.3f} | {:<4} | {:<4} | {:<4} | {:<4} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f}\n"
-    #              name     reward     steps      palm f     fing.f     Lft        Stb        oob        t.h       pLft       pCon       pPlmFrc    pXLim      pXAxial    pXlaT.     pXPalm
-    res_str =    "{:<36} | {:<6.3f} | {:<6.1f} | {:<6.3f} | {:<6.3f} | {:<4.2f} | {:<4.2f} | {:<4.2f} | {:<4.2f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f}\n"
+    #              name    reward  steps   palm f  fing.f   Lft     Stb     oob     t.h     s.h     pLft   pCon   pPlmFrc  pXLim  pXAxial  pXlaT.  pXPalm
+    header_str = "{:<36} | {:<6} | {:<6} | {:<6} | {:<6} | {:<4} | {:<4} | {:<4} | {:<4} | {:<4} | {:<3} | {:<3} | {:<3} | {:<3} | {:<3} | {:<3} | {:<3}\n"
+    #              name     reward     steps      palm f     fing.f     Lft     Stb     oob     t.h     s.h     pLft       pCon       pPlmFrc    pXLim      pXAxial    pXlaT.     pXPalm
+    row_str =    "{:<36} | {:<6.3f} | {:<6.1f} | {:<6.3f} | {:<6.3f} | {:<4} | {:<4} | {:<4} | {:<4} | {:<4} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f}\n"
+    #              name     reward     steps      palm f     fing.f     Lft        Stb        oob        t.h        s.h        pLft       pCon       pPlmFrc    pXLim      pXAxial    pXlaT.     pXPalm
+    res_str =    "{:<36} | {:<6.3f} | {:<6.1f} | {:<6.3f} | {:<6.3f} | {:<4.2f} | {:<4.2f} | {:<4.2f} | {:<4.2f} | {:<4.2f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f}\n"
     first_row = header_str.format(
-      "Object name", "Reward", "Steps", "Palm f", "Fing.f", "Lft", "Stb", "oob", "t.h", "%Lt", "%Cn", "%PF", "%XL", "%XA", "%XT", "%XP"
+      "Object name", "Reward", "Steps", "Palm f", "Fing.f", "lft", "stb", "oob", "t.h", "s.h", "%Lt", "%Cn", "%PF", "%XL", "%XA", "%XT", "%XP"
     )
 
     start_str = f"Starting test on {num_obj} objects, with {num_trials} trials each"
@@ -280,6 +281,7 @@ class TrainDQN():
       total_stable = 0
       total_oob = 0
       total_target_height = 0
+      total_stable_height = 0
       total_palm_force = 0
       total_finger_force = 0
 
@@ -299,6 +301,7 @@ class TrainDQN():
         total_stable += test_data[j + k].stable
         total_oob += test_data[j + k].oob
         total_target_height += test_data[j + k].target_height
+        total_stable_height += test_data[j + k].stable_height
         total_palm_force += test_data[j + k].palm_force
         total_finger_force += test_data[j + k].finger_force
 
@@ -318,6 +321,7 @@ class TrainDQN():
       num_lifted += total_lifted
       num_oob += total_oob
       num_target_height += total_target_height
+      num_stable_height += total_stable_height
 
       p_lifted = 100 * (cnt_lifted / float(total_steps))
       p_object_contact = 100 * (cnt_object_contact / float(total_steps))
@@ -340,11 +344,13 @@ class TrainDQN():
         f"avg steps {avg_steps[-1]:.1f}, "\
         f"avg palm force {avg_palm_force[-1]:.1f}, "\
         f"lifted {total_lifted}, "\
-        f"stable {total_stable}"
+        f"stable {total_stable}, "\
+        f"target height {total_target_height}, "\
+        f"stable height {total_stable_height}"
 
       obj_row = row_str.format(
         names[-1], avg_rewards[-1], avg_steps[-1], avg_palm_force[-1], avg_finger_force[-1],
-        total_lifted, total_stable, total_oob, total_target_height,
+        total_lifted, total_stable, total_oob, total_target_height, total_stable_height,
         p_lifted, p_object_contact, p_palm_force, p_exceed_limits,
         p_exceed_axial, p_exceed_lateral, p_exceed_palm
       )
@@ -363,6 +369,7 @@ class TrainDQN():
     avg_stable = num_stable / float(num_obj)
     avg_oob = num_oob / float(num_obj)
     avg_target_height = num_target_height / float(num_obj)
+    avg_stable_height = num_stable_height / float(num_obj)
 
     lifted_vec.append(p_lifted)
     contact_vec.append(p_object_contact)
@@ -375,6 +382,7 @@ class TrainDQN():
     end_str = res_str.format(
       "Overall averages per object: ", mean_reward, mean_steps, mean_palm_force,
       mean_finger_force, avg_lifted, avg_stable, avg_oob, avg_target_height,
+      avg_stable_height,
       np.mean(np.array(lifted_vec)), np.mean(np.array(contact_vec)),
       np.mean(np.array(palm_force_vec)), np.mean(np.array(exceed_limits_vec)),
       np.mean(np.array(exceed_axial_vec)), np.mean(np.array(exceed_lateral_vec)),
@@ -729,7 +737,7 @@ if __name__ == "__main__":
 
   cluster = False
   force_device = "cpu"
-  model = TrainDQN(cluster=cluster, device=force_device)
+  model = TrainDQN(cluster=cluster)
 
   # if we want to adjust parameters
   # model.params.num_episodes = 11
@@ -748,7 +756,7 @@ if __name__ == "__main__":
   folderpath = "/home/luke/cluster/rl/models/dqn/DQN_2L60/"
   folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"
   foldername = "train_cluster_28-03-2022_16:55_array_17"
-  model.load(id=None, folderpath=folderpath, foldername=foldername)
+  model.load(id=13, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
@@ -763,20 +771,20 @@ if __name__ == "__main__":
   # ----- visualise ----- #
 
   # visualise training performance
-  # plt.ion()
+  plt.ion()
   model.plot()
   plt.show()
 
-  # # test
-  # model.env.disable_rendering = False
-  # model.env.test_trials_per_obj = 1
-  # test_data = model.test()
+  # test
+  model.env.disable_rendering = False
+  model.env.test_trials_per_obj = 1
+  test_data = model.test()
 
-  # # save results
-  # test_report = model.create_test_report(test_data)
-  # model.modelsaver.new_folder(label="DQN_testing")
-  # model.save_hyperparameters(labelstr=f"Loaded model path: {model.modelsaver.last_loadpath}\n")
-  # model.save(txtstring=test_report, txtlabel="test_results_demo")
+  # save results
+  test_report = model.create_test_report(test_data)
+  model.modelsaver.new_folder(label="DQN_testing")
+  model.save_hyperparameters(labelstr=f"Loaded model path: {model.modelsaver.last_loadpath}\n")
+  model.save(txtstring=test_report, txtlabel="test_results_demo")
 
 
  

@@ -38,6 +38,7 @@ class MjEnv(gym.Env):
     stable: bool = False
     oob: bool = False
     target_height: bool = False
+    stable_height: bool = False
     palm_force: float = 0
     finger_force: float = 0
 
@@ -342,6 +343,7 @@ class MjEnv(gym.Env):
     trial_data.stable = bool(test_report.final_cnt.object_stable)
     trial_data.oob = bool(test_report.final_cnt.oob)
     trial_data.target_height = bool(test_report.final_cnt.target_height)
+    trial_data.stable_height = bool(test_report.final_cnt.stable_height)
     trial_data.palm_force = test_report.final_palm_force
     trial_data.finger_force = test_report.final_finger_force
 
