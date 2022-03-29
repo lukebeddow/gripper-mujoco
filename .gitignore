@@ -6,3 +6,4 @@ MUJOCO_LOG.TXT
 bin/
 *.so
 *.pickle
+*.pyc
