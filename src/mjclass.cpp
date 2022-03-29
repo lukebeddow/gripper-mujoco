@@ -948,6 +948,8 @@ float MjClass::reward()
 
   float reward = 0;
 
+  /* ----- binary rewards ----- */
+
   // reward per step
   if (env_.cnt.step_num >= s_.step_num.trigger) {
     if (s_.debug) std::printf("Step made, reward += %.4f\n", s_.step_num.reward);
@@ -964,6 +966,12 @@ float MjClass::reward()
   if (env_.cnt.lifted >= s_.lifted.trigger) {
     if (s_.debug) std::printf("Object lifted, reward += %.4f\n", s_.lifted.reward);
     reward += s_.lifted.reward;
+  }
+
+  // is the object out of bounds
+  if (env_.cnt.oob >= s_.oob.trigger) {
+    if (s_.debug) std::printf("Object oob, reward += %.4f\n", s_.oob.reward);
+    reward += s_.oob.reward;
   }
   
   // has the object reached the target height for the first time
@@ -995,6 +1003,8 @@ float MjClass::reward()
     if (s_.debug) std::printf("Limits exceeded, reward += %.4f\n", s_.exceed_limits.reward);
     reward += s_.exceed_limits.reward;
   }
+
+  /* ----- linear rewards ----- */
 
   // reward based on achieving a target palm force (must be lifted)
   if (env_.cnt.palm_force >= s_.palm_force.trigger) {
@@ -1052,6 +1062,15 @@ float MjClass::reward()
 
   // useful for testing, this value is not used in python
   env_.cumulative_reward += reward;
+
+  // if we are capping the maximum cumulative negative reward
+  if (env_.cumulative_reward < s_.quit_on_reward_below) {
+    if (s_.quit_reward_capped) {
+      // reduce the reward to not put us below the cap
+      reward += s_.quit_on_reward_below - env_.cumulative_reward - ftol;
+      env_.cumulative_reward = s_.quit_on_reward_below - ftol;
+    }
+  }
 
   return reward;
 }

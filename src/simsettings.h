@@ -43,7 +43,8 @@
   /* 
   is_done() settings */\
   X(  max_timeouts,             int,      10)       /* done=true if unsettled this times in a row */\
-  X(  quit_on_reward_below,     float,    -1.5)     /* done=true if reward drops below this value */\
+  X(  quit_on_reward_below,     float,    -1.01)    /* done=true if reward drops below this value */\
+  X(  quit_reward_capped,       bool,     true)     /* cap reward at quit_on_reward_below */\
   /* 
   set_action() settings */\
   X(  action_motor_steps,       int,      100)      /* stepper motor steps per action */\

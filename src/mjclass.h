@@ -17,7 +17,7 @@
 #include "myfunctions.h"
 #include "customtypes.h"
 
-// if we are on the cluster, the render function must immediately return false
+// if we are on the cluster, change the default root and avoid rendering libraries
 #if defined(LUKE_CLUSTER)
   #define LUKE_FILE_ROOT "/home/lbeddow/mjcf/"
 #else

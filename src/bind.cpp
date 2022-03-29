@@ -175,19 +175,23 @@ PYBIND11_MODULE(bind, m) {
   py::class_<MjType::EventTrack>(m, "EventTrack")
 
     .def(py::init<>())
-    .def_readonly("step_num", &MjType::EventTrack::step_num)
-    .def_readonly("lifted", &MjType::EventTrack::lifted)
-    .def_readonly("oob", &MjType::EventTrack::oob)
-    .def_readonly("dropped", &MjType::EventTrack::dropped)
-    .def_readonly("target_height", &MjType::EventTrack::target_height)
-    .def_readonly("exceed_limits", &MjType::EventTrack::exceed_limits)
-    .def_readonly("exceed_axial", &MjType::EventTrack::exceed_axial)
-    .def_readonly("exceed_lateral", &MjType::EventTrack::exceed_lateral)
-    .def_readonly("object_contact", &MjType::EventTrack::object_contact)
-    .def_readonly("object_stable", &MjType::EventTrack::object_stable)
-    .def_readonly("palm_force", &MjType::EventTrack::palm_force)
-    .def_readonly("exceed_palm", &MjType::EventTrack::exceed_palm)
-    ;
+
+    #define X(name, type, value)
+    #define BR(name, reward, done, trigger) .def_readonly(#name, &MjType::EventTrack::name)
+    #define LR(name, reward, done, trigger, min, max, overshoot) \
+              .def_readonly(#name, &MjType::EventTrack::name)
+      // run the macro to create the binding code
+      LUKE_MJSETTINGS
+    #undef X
+    #undef BR
+    #undef LR
+
+    ; // this semicolon is required to finish the py::class definition
+
+    // example snippets from the macro above
+    // .def_readonly("step_num", &MjType::EventTrack::step_num)
+    // .def_readonly("lifted", &MjType::EventTrack::lifted)
+    // .def_readonly("oob", &MjType::EventTrack::oob)
 
   // class for outputing test results and event tracking
   py::class_<MjType::TestReport>(m, "TestReport")
