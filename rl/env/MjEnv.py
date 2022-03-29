@@ -136,8 +136,9 @@ class MjEnv(gym.Env):
 
     if self.log_level > 1: print("loading xml: ", filename)
 
-    # create a brand new mjclass instance preserving the old settings
-    self.mj = MjClass(self.mj.set)
+    # self.mj = MjClass(self.mj.set) # old: create a brand new mjclass instance
+
+    # load the new task xml (old model/data are deleted)
     self.mj.load_relative(filename)
     self.num_objects = self.mj.get_number_of_objects()
 
@@ -459,7 +460,7 @@ class MjEnv(gym.Env):
 
 if __name__ == "__main__":
 
-  import pickle
+  # import pickle
 
   mj = MjEnv()
 
