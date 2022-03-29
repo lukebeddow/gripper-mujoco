@@ -46,7 +46,6 @@ void get_joint_addresses(mjModel* model);
 void keyframe(mjModel* model, mjData* data, std::string keyframe_name);
 void keyframe(mjModel* model, mjData* data, int keyframe_index);
 void reset(mjModel* model, mjData* data);
-void reload(mjModel* model, mjData* data);
 void wipe_settled();
 
 // simulation

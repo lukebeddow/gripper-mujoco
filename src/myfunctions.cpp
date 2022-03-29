@@ -82,7 +82,7 @@ template <typename T> int sign(T val) {
 /* ----- Global variables and settings ----- */
 
 // global settings for joints in the model
-struct J {
+struct JointSettings {
 
   /* ----- user input settings ----- */
 
@@ -220,15 +220,15 @@ struct J {
     std::array<std::array<int, 2>, sim.n_arr> finger2_arr {};
     std::array<std::array<int, 2>, sim.n_arr> finger3_arr {};
     std::array<int, sim.n_arr> palm_arr {};
-    int counter;
-    bool finger1;
-    bool finger2;
-    bool finger3;
-    bool palm;
-    bool all;
-    bool settled;
-    bool target_reached;
-    bool target_step;
+    int counter {};
+    bool finger1 {};
+    bool finger2 {};
+    bool finger3 {};
+    bool palm {};
+    bool all {};
+    bool settled {};
+    bool target_reached {};
+    bool target_step {};
   } settle;
 
   /* ----- Member functions ----- */
@@ -290,7 +290,10 @@ struct J {
       << "\n";
   }
   
-} j_; // global settings for joints in the model
+};
+
+// global joint settings structure
+JointSettings j_;
 
 // create object handler to control graspable objects in simulation
 ObjectHandler oh_;
@@ -328,9 +331,6 @@ void init(mjModel* model, mjData* data)
   // set the model to the inital keyframe
   keyframe(model, data, j_.initial_keyframe);
 
-  // // extract scene information and store it in our global variable oh_
-  // init_S(model, data);
-
   // initialise the object handler
   oh_.init(model, data);
 
@@ -342,6 +342,10 @@ void init(mjModel* model, mjData* data)
 void init_J(mjModel* model, mjData* data)
 {
   /* initialise our global data structure with joint and model information */
+
+  // wipe the global settings structure
+  JointSettings empty;
+  j_ = empty;
 
   // use joint names to get body indexes and qpos/qvel addresses
   get_joint_indexes(model);
@@ -380,17 +384,6 @@ void init_J(mjModel* model, mjData* data)
       (*finger_arrays_[i])[j][1] = fingers_[i]->step.y;
     }
   }
-}
-
-void reload(mjModel* model, mjData* data)
-{
-  /* reload with new model/data - but we assume j_ does not need to change */
-
-  // set the model to the inital keyframe
-  keyframe(model, data, j_.initial_keyframe);
-
-  // reinitialise the object handler
-  oh_.reinit(model, data);
 }
 
 void reset(mjModel* model, mjData* data)
@@ -1094,15 +1087,19 @@ bool move_base_target_m(double x, double y, double z)
 
   /* only z motion currently implemented */
 
+  // old: this wasn't here, we used luke::Target::base_lims_min/max
+  constexpr std::array<double, 6> base_lims_max {0.1, 1, 1, 1, 1, 1};
+  constexpr std::array<double, 6> base_lims_min {-0.1, -1, -1, -1, -1, -1};
+
   target_.base[0] += z;
 
   // check if we have gone outside the limits
-  if (target_.base[0] > target_.base_lims_max[0]) {
-    target_.base[0] = target_.base_lims_max[0];
+  if (target_.base[0] > base_lims_max[0]) {
+    target_.base[0] = base_lims_max[0];
     return false;
   }
-  if (target_.base[0] < target_.base_lims_min[0]) {
-    target_.base[0] = target_.base_lims_min[0];
+  if (target_.base[0] < base_lims_min[0]) {
+    target_.base[0] = base_lims_min[0];
     return false;
   }
 

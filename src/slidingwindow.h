@@ -42,6 +42,7 @@ public:
 
   T read_element() {
     // get the most recently added element
+    if (i == -1) return v[0]; // if the window is empty, return T{}, default value
     return v[i];
   }
 
