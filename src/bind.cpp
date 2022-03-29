@@ -21,7 +21,7 @@ PYBIND11_MODULE(bind, m) {
     // constructors
     .def(py::init<>())
     .def(py::init<std::string>())
-    .def(py::init<MjClass::Settings>())
+    .def(py::init<MjType::Settings>())
 
     // core functionality
     .def("load", &MjClass::load)
@@ -32,6 +32,7 @@ PYBIND11_MODULE(bind, m) {
 
     // sensing
     .def("read_gauges", &MjClass::read_gauges)
+    .def("read_palm", &MjClass::read_palm)
     .def("get_gripper_state", &MjClass::get_gripper_state)
     .def("is_target_reached", &MjClass::is_target_reached)
     .def("is_settled", &MjClass::is_settled)
@@ -63,20 +64,24 @@ PYBIND11_MODULE(bind, m) {
     .def("get_current_object_name", &MjClass::get_current_object_name)
     .def("get_test_report", &MjClass::get_test_report)
     .def_readwrite("set", &MjClass::s_)
+    .def_readonly("current_load_path", &MjClass::current_load_path)
 
     // pickle support
     .def(py::pickle(
       [](const MjClass &mjobj) { // __getstate___
         /* return a tuple that fully encodes the state of the object */
-        return py::make_tuple(mjobj.s_);
+        return py::make_tuple(mjobj.s_, mjobj.current_load_path);
       },
       [](py::tuple t) { // __setstate__
 
-        if (t.size() != 1)
-          throw std::runtime_error("mjclass py::pickle got invalid state");
+        if (t.size() != 2)
+          throw std::runtime_error("mjclass py::pickle got invalid state (tuple size wrong)");
 
         // create new c++ instance with old settings
-        MjClass mjobj(t[0].cast<MjClass::Settings>());
+        MjClass mjobj(t[0].cast<MjType::Settings>());
+
+        // save the old load path
+        mjobj.current_load_path = t[1].cast<std::string>();
 
         return mjobj;
       }
@@ -84,17 +89,17 @@ PYBIND11_MODULE(bind, m) {
     ;
 
   // internal simulation settings class which gets entirely pickled
-  py::class_<MjClass::Settings>(m, "set")
+  py::class_<MjType::Settings>(m, "set")
 
     .def(py::init<>())
-    .def("get_settings", &MjClass::Settings::get_settings)
-    .def("wipe_rewards", &MjClass::Settings::wipe_rewards)
+    .def("get_settings", &MjType::Settings::get_settings)
+    .def("wipe_rewards", &MjType::Settings::wipe_rewards)
 
     // use a macro to create code snippets for all of the settings
-    #define X(name, type, value) .def_readwrite(#name, &MjClass::Settings::name)
-    #define BR(name, reward, done, trigger) .def_readwrite(#name, &MjClass::Settings::name)
+    #define X(name, type, value) .def_readwrite(#name, &MjType::Settings::name)
+    #define BR(name, reward, done, trigger) .def_readwrite(#name, &MjType::Settings::name)
     #define LR(name, reward, done, trigger, min, max, overshoot) \
-              .def_readwrite(#name, &MjClass::Settings::name)
+              .def_readwrite(#name, &MjType::Settings::name)
       // run the macro to create the code
       LUKE_MJSETTINGS
     #undef X
@@ -102,13 +107,13 @@ PYBIND11_MODULE(bind, m) {
     #undef LR
 
     // example snippets produced by the above macro
-    // .def_readwrite("step_num", &MjClass::Settings::step_num)
-    // .def_readwrite("lifted", &MjClass::Settings::lifted)
-    // .def_readwrite("gauge_read_rate_hz", &MjClass::Settings::gauge_read_rate_hz)
+    // .def_readwrite("step_num", &MjType::Settings::step_num)
+    // .def_readwrite("lifted", &MjType::Settings::lifted)
+    // .def_readwrite("gauge_read_rate_hz", &MjType::Settings::gauge_read_rate_hz)
 
     // pickle support
     .def(py::pickle(
-      [](const MjClass::Settings s) { // __getstate___
+      [](const MjType::Settings s) { // __getstate___
         /* return a tuple that fully encodes the state of the object */
         return py::make_tuple(
 
@@ -134,10 +139,10 @@ PYBIND11_MODULE(bind, m) {
       [](py::tuple t) { // __setstate__
         constexpr bool debug = false;
         if (debug)
-          std::cout << "unpickling MjClass::Settings now\n";
+          std::cout << "unpickling MjType::Settings now\n";
 
         // create new c++ instance
-        MjClass::Settings out;
+        MjType::Settings out;
 
         // fill in with the old data
         int i = 0;
@@ -145,9 +150,9 @@ PYBIND11_MODULE(bind, m) {
         // expand the tuple elements and type cast them with a macro
         #define X(name, type, value) out.name = t[i].cast<type>(); ++i;
         #define BR(name, reward, done, trigger) \
-                  out.name = t[i].cast<MjClass::BinaryReward>(); ++i;
+                  out.name = t[i].cast<MjType::BinaryReward>(); ++i;
         #define LR(name, reward, done, trigger, min, max, overshoot) \
-                  out.name = t[i].cast<MjClass::LinearReward>(); ++i;
+                  out.name = t[i].cast<MjType::LinearReward>(); ++i;
           // run the macro to create the code
           LUKE_MJSETTINGS
         #undef X
@@ -158,7 +163,7 @@ PYBIND11_MODULE(bind, m) {
         out.dummy = t[i].cast<bool>(); ++i;
 
         if (debug)
-          std::cout << "unpickling MjClass::Settings finished, i is " << i
+          std::cout << "unpickling MjType::Settings finished, i is " << i
             << ", size of tuple is " << t.size() << '\n';
 
         return out;
@@ -167,90 +172,90 @@ PYBIND11_MODULE(bind, m) {
     ;
 
   // tracking of important events in the simulation
-  py::class_<MjClass::EventTrack>(m, "EventTrack")
+  py::class_<MjType::EventTrack>(m, "EventTrack")
 
     .def(py::init<>())
-    .def_readonly("step_num", &MjClass::EventTrack::step_num)
-    .def_readonly("lifted", &MjClass::EventTrack::lifted)
-    .def_readonly("oob", &MjClass::EventTrack::oob)
-    .def_readonly("dropped", &MjClass::EventTrack::dropped)
-    .def_readonly("target_height", &MjClass::EventTrack::target_height)
-    .def_readonly("exceed_limits", &MjClass::EventTrack::exceed_limits)
-    .def_readonly("exceed_axial", &MjClass::EventTrack::exceed_axial)
-    .def_readonly("exceed_lateral", &MjClass::EventTrack::exceed_lateral)
-    .def_readonly("object_contact", &MjClass::EventTrack::object_contact)
-    .def_readonly("object_stable", &MjClass::EventTrack::object_stable)
-    .def_readonly("palm_force", &MjClass::EventTrack::palm_force)
-    .def_readonly("exceed_palm", &MjClass::EventTrack::exceed_palm)
+    .def_readonly("step_num", &MjType::EventTrack::step_num)
+    .def_readonly("lifted", &MjType::EventTrack::lifted)
+    .def_readonly("oob", &MjType::EventTrack::oob)
+    .def_readonly("dropped", &MjType::EventTrack::dropped)
+    .def_readonly("target_height", &MjType::EventTrack::target_height)
+    .def_readonly("exceed_limits", &MjType::EventTrack::exceed_limits)
+    .def_readonly("exceed_axial", &MjType::EventTrack::exceed_axial)
+    .def_readonly("exceed_lateral", &MjType::EventTrack::exceed_lateral)
+    .def_readonly("object_contact", &MjType::EventTrack::object_contact)
+    .def_readonly("object_stable", &MjType::EventTrack::object_stable)
+    .def_readonly("palm_force", &MjType::EventTrack::palm_force)
+    .def_readonly("exceed_palm", &MjType::EventTrack::exceed_palm)
     ;
 
   // class for outputing test results and event tracking
-  py::class_<MjClass::TestReport>(m, "TestReport")
+  py::class_<MjType::TestReport>(m, "TestReport")
 
     .def(py::init<>())
-    .def_readonly("object_name", &MjClass::TestReport::object_name)
-    .def_readonly("cumulative_reward", &MjClass::TestReport::cumulative_reward)
-    .def_readonly("num_steps", &MjClass::TestReport::num_steps)
-    .def_readonly("abs_cnt", &MjClass::TestReport::abs_cnt)
-    .def_readonly("final_cnt", &MjClass::TestReport::final_cnt)
-    .def_readonly("final_palm_force", &MjClass::TestReport::final_palm_force)
-    .def_readonly("final_finger_force", &MjClass::TestReport::final_finger_force)
+    .def_readonly("object_name", &MjType::TestReport::object_name)
+    .def_readonly("cumulative_reward", &MjType::TestReport::cumulative_reward)
+    .def_readonly("num_steps", &MjType::TestReport::num_steps)
+    .def_readonly("abs_cnt", &MjType::TestReport::abs_cnt)
+    .def_readonly("final_cnt", &MjType::TestReport::final_cnt)
+    .def_readonly("final_palm_force", &MjType::TestReport::final_palm_force)
+    .def_readonly("final_finger_force", &MjType::TestReport::final_finger_force)
     ;
 
   // settings up rewards so python can interact and change them
-  py::class_<MjClass::BinaryReward>(m, "BinaryReward")
+  py::class_<MjType::BinaryReward>(m, "BinaryReward")
 
     .def(py::init<float, bool, int>())
-    .def("set", &MjClass::BinaryReward::set)
+    .def("set", &MjType::BinaryReward::set)
 
-    .def_readwrite("reward", &MjClass::BinaryReward::reward)
-    .def_readwrite("done", &MjClass::BinaryReward::done)
-    .def_readwrite("trigger", &MjClass::BinaryReward::trigger)
+    .def_readwrite("reward", &MjType::BinaryReward::reward)
+    .def_readwrite("done", &MjType::BinaryReward::done)
+    .def_readwrite("trigger", &MjType::BinaryReward::trigger)
 
     // pickle support
     .def(py::pickle(
-      [](const MjClass::BinaryReward r) { // __getstate___
+      [](const MjType::BinaryReward r) { // __getstate___
         /* return a tuple that fully encodes the state of the object */
         return py::make_tuple(r.reward, r.done, r.trigger);
       },
       [](py::tuple t) { // __setstate__
 
         if (t.size() != 3)
-          throw std::runtime_error("MjClass::BinaryReward py::pickle got invalid state");
+          throw std::runtime_error("MjType::BinaryReward py::pickle got invalid state");
 
         // create new c++ instance with old data
-        MjClass::BinaryReward out(t[0].cast<float>(), t[1].cast<int>(), t[2].cast<int>());
+        MjType::BinaryReward out(t[0].cast<float>(), t[1].cast<int>(), t[2].cast<int>());
 
         return out;
       }
     ))
     ;
 
-  py::class_<MjClass::LinearReward>(m, "LinearReward")
+  py::class_<MjType::LinearReward>(m, "LinearReward")
 
     .def(py::init<float, bool, int, float, float, float>())
-    .def("set", &MjClass::LinearReward::set)
+    .def("set", &MjType::LinearReward::set)
 
-    .def_readwrite("reward", &MjClass::LinearReward::reward)
-    .def_readwrite("done", &MjClass::LinearReward::done)
-    .def_readwrite("trigger", &MjClass::LinearReward::trigger)
-    .def_readwrite("min", &MjClass::LinearReward::min)
-    .def_readwrite("max", &MjClass::LinearReward::max)
-    .def_readwrite("overshoot", &MjClass::LinearReward::overshoot)
+    .def_readwrite("reward", &MjType::LinearReward::reward)
+    .def_readwrite("done", &MjType::LinearReward::done)
+    .def_readwrite("trigger", &MjType::LinearReward::trigger)
+    .def_readwrite("min", &MjType::LinearReward::min)
+    .def_readwrite("max", &MjType::LinearReward::max)
+    .def_readwrite("overshoot", &MjType::LinearReward::overshoot)
 
     // pickle support
     .def(py::pickle(
-      [](const MjClass::LinearReward r) { // __getstate___
+      [](const MjType::LinearReward r) { // __getstate___
         /* return a tuple that fully encodes the state of the object */
         return py::make_tuple(r.reward, r.done, r.trigger, r.min, r.max, r.overshoot);
       },
       [](py::tuple t) { // __setstate__
 
         if (t.size() != 6)
-          throw std::runtime_error("MjClass::LinearReward py::pickle got invalid state");
+          throw std::runtime_error("MjType::LinearReward py::pickle got invalid state");
 
         // create new c++ instance with old data
-        MjClass::LinearReward out(t[0].cast<float>(), t[1].cast<int>(), t[2].cast<int>(),
+        MjType::LinearReward out(t[0].cast<float>(), t[1].cast<int>(), t[2].cast<int>(),
           t[3].cast<float>(), t[4].cast<float>(), t[5].cast<float>());
 
         return out;
