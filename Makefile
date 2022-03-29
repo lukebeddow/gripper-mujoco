@@ -30,6 +30,13 @@ OUTPY := rl/env/mjpy
 MODELBASH := generate_models.sh
 MODELDIR := /home/luke/gripper_repo_ws/src/gripper_v2/gripper_description/urdf/mujoco
 
+# are we compiling in debug mode
+ifeq ($(filter debug, $(MAKECMDGOALS)), debug)
+DEBUG = -O0 -g
+else
+DEBUG = -O2
+endif
+
 # different compilation settings for the cluster (run $ make cluster)
 ifeq ($(filter cluster, $(MAKECMDGOALS)), cluster)
 
@@ -54,7 +61,7 @@ export LD_LIBRARY_PATH=$$LD_LIBRARY_PATH:~/.mujoco/mujoco210/bin
 else
 
 # define compiler flags and libraries
-COMMON = -O2 -I/home/luke/.mujoco/mujoco210/include -I/home/luke/pybind11/include \
+COMMON = $(DEBUG) -I/home/luke/.mujoco/mujoco210/include -I/home/luke/pybind11/include \
 	-L/home/luke/.mujoco/mujoco210/bin -std=c++11 -mavx -pthread \
 	-Wl,-rpath,'$$ORIGIN'
 PYBIND = $(COMMON) -fPIC -Wall -shared -I/home/luke/pybind11/include \
@@ -101,6 +108,9 @@ everything: cpp py models
 
 .PHONY: cluster
 cluster: py
+
+.PHONY: debug
+debug: cpp
 
 # compile the uitools object file which is used by both cpp and python targets
 # ADDED -fPIC FOR CLUSTER TO WORK
