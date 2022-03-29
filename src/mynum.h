@@ -38,6 +38,7 @@ public:
   void init(mjtNum* data_, int nr_, int nc_) {
     nr = nr_;
     nc = nc_;
+    if (data != NULL) delete[] data;
     data = new mjtNum[nr * nc];
     for (int i = 0; i < nr * nc; i++) {
       data[i] = data_[i];
@@ -57,7 +58,7 @@ public:
 
   // destructor
   ~myNum() {
-    if (data != NULL) delete data;
+    if (data != NULL) delete[] data;
   }
 
   // swap: https://stackoverflow.com/questions/3279543/what-is-the-copy-and-swap-idiom

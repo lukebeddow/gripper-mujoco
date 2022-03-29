@@ -98,7 +98,6 @@ struct ObjectHandler {
   // constructor and initilisation
   ObjectHandler();
   void init(mjModel* model, mjData* data);
-  void reinit(mjModel* model, mjData* data);
   void resize();
   void remove_collisions(mjModel* model, mjData* data);
   void settle_objects(mjModel* model, mjData* data);

@@ -11,11 +11,11 @@ ObjectHandler::ObjectHandler()
   live_object = -1;
 }
 
-void ObjectHandler::reinit(mjModel* model, mjData* data)
+void ObjectHandler::init(mjModel* model, mjData* data)
 {
-  /* wipe and reinitialise the object handler */
+  /* initialise the objects in the scene, must be done after keyframe */
 
-  // wipe to defaults
+  // wipe to defaults, in case previously init()
   names.clear();
   in_use.clear();
   idx.clear();
@@ -24,14 +24,6 @@ void ObjectHandler::reinit(mjModel* model, mjData* data)
   qposadr.clear();
   qveladr.clear();
   geom_id.clear();
-
-  // now initialise again
-  init(model, data);
-}
-
-void ObjectHandler::init(mjModel* model, mjData* data)
-{
-  /* initialise the objects in the scene, must be done after keyframe */
 
   // we cannot start with an object live
   live_object = -1;
@@ -237,6 +229,7 @@ bool ObjectHandler::check_idx(int idx)
   }
   if (not in_use[idx]) {
     std::cout << "object idx is not in_use - nothing done\n";
+    return false;
   }
   return true;
 }
@@ -528,6 +521,7 @@ double ObjectHandler::get_palm_force(const mjModel* model, mjData* data)
 
   palm_local = palm_global.rotate3_by(r4.transpose());
 
+  // take only the axial load, [0]
   return palm_local[0];
 }
 
