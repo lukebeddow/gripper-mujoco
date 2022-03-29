@@ -7,8 +7,8 @@ import time
 import numpy as np
 from collections import namedtuple, deque
 from itertools import count
-from dataclasses import dataclass, field
-from typing import List
+from dataclasses import dataclass
+from copy import deepcopy
 
 import torch
 import torch.nn as nn
@@ -689,6 +689,7 @@ class TrainDQN():
     self.loaded_test_data = tupledata[1]
 
     # reinitialise to prepare for further training
+    self.target_net = deepcopy(core[0])
     self.target_net.load_state_dict(self.policy_net.state_dict())
 
     # move to the device
@@ -738,22 +739,23 @@ if __name__ == "__main__":
   # model.env._override_binary(model.env.mj.set.target_height, 1.0, 1, 1)
 
   # now set up the network, ready for training
-  net = networks.DQN_2L60
+  net = networks.DQN_3L60
   model.init(network=net)
 
   # ----- load ----- #
 
   # load
-  # folderpath = "/home/luke/cluster/rl/models/dqn/DQN_2L60/"
-  # foldername = "train_cluster_24-02-2022_12:43_array_6"
-  # model.load(id=None, folderpath=folderpath, foldername=foldername)
+  folderpath = "/home/luke/cluster/rl/models/dqn/DQN_2L60/"
+  folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"
+  foldername = "train_cluster_28-03-2022_16:55_array_17"
+  model.load(id=None, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
-  # train
-  model.env.disable_rendering = True
-  model.env.mj.set.debug = False
-  model.train()
+  # # train
+  # model.env.disable_rendering = True
+  # model.env.mj.set.debug = False
+  # model.train()
 
   # continue training
   # model.continue_training('train_cluster_24-02-2022_12:43_array_6', folderpath=folderpath)
@@ -762,8 +764,8 @@ if __name__ == "__main__":
 
   # visualise training performance
   # plt.ion()
-  # model.plot()
-  # plt.show()
+  model.plot()
+  plt.show()
 
   # # test
   # model.env.disable_rendering = False
