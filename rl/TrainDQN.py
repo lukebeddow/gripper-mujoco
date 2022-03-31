@@ -39,6 +39,7 @@ class TrainDQN():
   @dataclass
   class Parameters:
     batch_size: int = 128           # initial 128
+    learning_rate: float = 0.01     # initial 0.01
     gamma: float = 0.999            # initial 0.999
     eps_start: float = 0.9          # initial 0.9
     eps_end: float = 0.05           # initial 0.05
@@ -131,7 +132,8 @@ class TrainDQN():
     self.target_net.load_state_dict(self.policy_net.state_dict())
 
     # configure optimiser and memory replay
-    self.optimiser = optim.RMSprop(self.policy_net.parameters())
+    self.optimiser = optim.RMSprop(self.policy_net.parameters(), 
+                                   lr=self.params.learning_rate)
     self.memory = TrainDQN.ReplayMemory(self.params.memory_replay)
 
     # prepare for saving and loading
@@ -705,7 +707,8 @@ class TrainDQN():
     self.target_net.to(self.device)
 
     # re-initialise optimiser
-    self.optimiser = optim.RMSprop(self.policy_net.parameters())
+    self.optimiser = optim.RMSprop(self.policy_net.parameters(), 
+                                   lr=self.params.learning_rate)
 
     # return the path of the loaded model
     return self.modelsaver.last_loadpath
@@ -747,23 +750,23 @@ if __name__ == "__main__":
   # model.env._override_binary(model.env.mj.set.target_height, 1.0, 1, 1)
 
   # now set up the network, ready for training
-  net = networks.DQN_3L60
+  net = networks.DQN_2L60
   model.init(network=net)
 
   # ----- load ----- #
 
-  # load
-  folderpath = "/home/luke/cluster/rl/models/dqn/DQN_2L60/"
-  folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"
-  foldername = "train_cluster_28-03-2022_16:55_array_17"
-  model.load(id=13, folderpath=folderpath, foldername=foldername)
+  # # load
+  # folderpath = "/home/luke/cluster/rl/models/dqn/DQN_2L60/"
+  # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"
+  # foldername = "train_cluster_28-03-2022_16:55_array_17"
+  # model.load(id=13, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
-  # # train
-  # model.env.disable_rendering = True
-  # model.env.mj.set.debug = False
-  # model.train()
+  # train
+  model.env.disable_rendering = True
+  model.env.mj.set.debug = False
+  model.train()
 
   # continue training
   # model.continue_training('train_cluster_24-02-2022_12:43_array_6', folderpath=folderpath)
@@ -771,20 +774,20 @@ if __name__ == "__main__":
   # ----- visualise ----- #
 
   # visualise training performance
-  plt.ion()
-  model.plot()
-  plt.show()
+  # plt.ion()
+  # model.plot()
+  # plt.show()
 
-  # test
-  model.env.disable_rendering = False
-  model.env.test_trials_per_obj = 1
-  test_data = model.test()
+  # # test
+  # model.env.disable_rendering = False
+  # model.env.test_trials_per_obj = 1
+  # test_data = model.test()
 
-  # save results
-  test_report = model.create_test_report(test_data)
-  model.modelsaver.new_folder(label="DQN_testing")
-  model.save_hyperparameters(labelstr=f"Loaded model path: {model.modelsaver.last_loadpath}\n")
-  model.save(txtstring=test_report, txtlabel="test_results_demo")
+  # # save results
+  # test_report = model.create_test_report(test_data)
+  # model.modelsaver.new_folder(label="DQN_testing")
+  # model.save_hyperparameters(labelstr=f"Loaded model path: {model.modelsaver.last_loadpath}\n")
+  # model.save(txtstring=test_report, txtlabel="test_results_demo")
 
 
  

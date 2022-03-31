@@ -33,19 +33,30 @@ def make_rewards_negative(model):
 
   return model
 
-def no_palm_grasping(model):
-  # remove the palm as an action
+def finger_only_lifting(model):
+  # try only to lift objects with the fingers
 
-  # disable using the palm
   model.env.mj.set.use_palm_action = False
 
-  # switch to negative rewards
-  model = make_rewards_negative(model)
+  # binary rewards                       reward   done   trigger
+  model.env.mj.set.step_num.set          (-0.01,  False,   1)
+  model.env.mj.set.lifted.set            (0.005,  False,   1)
+  
+  # linear rewards                       reward   done   trigger min   max  overshoot
+  model.env.mj.set.finger_force.set      (0.005,  False,   1,    0.2,  1.0,  -1)
 
-  # now overwrite
-  model.env.mj.set.target_height.set     (0.0,    1,      1)
-  model.env.mj.set.object_stable.set     (0.002,  False,  1)
-  model.env.mj.set.stable_height.set     (0.0,    False,  1)
+  # penalties                            reward   done   trigger min   max  overshoot
+  model.env.mj.set.exceed_limits.set     (-0.005, False,   1)
+  model.env.mj.set.exceed_axial.set      (-0.005, False,   1,    3.0,  6.0,  -1)
+  model.env.mj.set.exceed_lateral.set    (-0.005, False,   1,    4.0,  6.0,  -1)
+
+  # end criteria                         reward   done   trigger
+  model.env.mj.set.height_target.set     (0.0,    True,    1)
+  model.env.mj.set.oob.set               (-1.0,   True,    1)
+
+  # terminate episode when reward drops below -1.01, also cap at this value
+  model.env.mj.set.quit_on_reward_below = -1.01
+  model.env.mj.set.quit_reward_capped = True
 
 def add_palm_force_sensor(model):
   # add force sensor to the palm
@@ -96,7 +107,7 @@ if __name__ == "__main__":
   inputarg = int(sys.argv[1])
   print("Input argument: ", inputarg)
 
-  # ----- 1 - 5, default network, default settings, vary eps decay ----- #
+  # ----- 1 - 5, default network, default settings, vary rewards ----- #
   if inputarg <= 5:
 
     # create training instance and apply settings
@@ -108,61 +119,91 @@ if __name__ == "__main__":
     network = networks.DQN_2L60
     model.init(network)
 
-    # ----- adjust the eps_decay ----- #
+    # ----- adjust the rewards and step number ----- #
     if inputarg == 1:
-      model.params.eps_decay = 250
+      model.params.eps_decay = 1000
+      model.env.max_episode_steps = 100
+      model.env.mj.set.quit_on_reward_below = -1.01
+      model.env.mj.set.quit_reward_capped = True
       model.train()
 
     elif inputarg == 2:
-      model.params.eps_decay = 500
+      model.params.eps_decay = 1000
+      model.env.max_episode_steps = 150
+      model.env.mj.set.quit_on_reward_below = -1.51
+      model.env.mj.set.quit_reward_capped = True
       model.train()
 
     elif inputarg == 3:
       model.params.eps_decay = 1000
+      model.env.max_episode_steps = 200
+      model.env.mj.set.quit_on_reward_below = -2.01
+      model.env.mj.set.quit_reward_capped = True
       model.train()
 
     elif inputarg == 4:
-      model.params.eps_decay = 2000
+      model.params.eps_decay = 1000
+      model.env.max_episode_steps = 100
+      model.env.mj.set.quit_on_reward_below = -100
+      model.env.mj.set.quit_reward_capped = False
       model.train()
 
     elif inputarg == 5:
-      model.params.eps_decay = 4000
+      model.params.eps_decay = 1000
+      model.env.max_episode_steps = 150
+      model.env.mj.set.quit_on_reward_below = -100
+      model.env.mj.set.quit_reward_capped = False
       model.train()
 
-  # ----- 6 - 10, deeper network, default settings, vary eps decay ----- #
+  # ----- 6 - 10, default network, no palm, vary rewards ----- #
   elif inputarg > 5 and inputarg <= 10:
 
     # create training instance and apply settings
     model = TrainDQN(cluster=cluster, save_suffix=f"array_{inputarg}")
     model = apply_to_all_models(model)
-    model = make_rewards_negative(model)
+    model = finger_only_lifting(model)
 
     # now form the network
-    network = networks.DQN_3L60
+    network = networks.DQN_2L60
     model.init(network)
 
-    # ----- adjust the eps_decay ----- #
+    # ----- adjust the rewards and step number ----- #
     if inputarg == 6:
-      model.params.eps_decay = 250
+      model.params.eps_decay = 1000
+      model.env.max_episode_steps = 100
+      model.env.mj.set.quit_on_reward_below = -1.01
+      model.env.mj.set.quit_reward_capped = True
       model.train()
 
     elif inputarg == 7:
-      model.params.eps_decay = 500
+      model.params.eps_decay = 1000
+      model.env.max_episode_steps = 150
+      model.env.mj.set.quit_on_reward_below = -1.51
+      model.env.mj.set.quit_reward_capped = True
       model.train()
 
     elif inputarg == 8:
       model.params.eps_decay = 1000
+      model.env.max_episode_steps = 200
+      model.env.mj.set.quit_on_reward_below = -2.01
+      model.env.mj.set.quit_reward_capped = True
       model.train()
 
     elif inputarg == 9:
-      model.params.eps_decay = 2000
+      model.params.eps_decay = 1000
+      model.env.max_episode_steps = 100
+      model.env.mj.set.quit_on_reward_below = -100
+      model.env.mj.set.quit_reward_capped = False
       model.train()
 
     elif inputarg == 10:
-      model.params.eps_decay = 4000
+      model.params.eps_decay = 1000
+      model.env.max_episode_steps = 150
+      model.env.mj.set.quit_on_reward_below = -100
+      model.env.mj.set.quit_reward_capped = False
       model.train()
 
-  # ----- 11 - 15, default network, palm force sensor, vary eps decay ----- #
+  # ----- 11 - 15, default network, palm force sensor, vary rewards ----- #
   elif inputarg > 10 and inputarg <= 15:
 
     # create training instance and apply settings
@@ -176,26 +217,43 @@ if __name__ == "__main__":
     network = networks.DQN_2L60
     model.init(network)
 
-    # ----- adjust the eps_decay ----- #
+    # ----- adjust the rewards and step number ----- #
     if inputarg == 11:
-      model.params.eps_decay = 250
+      model.params.eps_decay = 1000
+      model.env.max_episode_steps = 100
+      model.env.mj.set.quit_on_reward_below = -1.01
+      model.env.mj.set.quit_reward_capped = True
       model.train()
 
     elif inputarg == 12:
-      model.params.eps_decay = 500
+      model.params.eps_decay = 1000
+      model.env.max_episode_steps = 150
+      model.env.mj.set.quit_on_reward_below = -1.51
+      model.env.mj.set.quit_reward_capped = True
       model.train()
 
     elif inputarg == 13:
       model.params.eps_decay = 1000
+      model.env.max_episode_steps = 200
+      model.env.mj.set.quit_on_reward_below = -2.01
+      model.env.mj.set.quit_reward_capped = True
       model.train()
 
     elif inputarg == 14:
-      model.params.eps_decay = 2000
+      model.params.eps_decay = 1000
+      model.env.max_episode_steps = 100
+      model.env.mj.set.quit_on_reward_below = -100
+      model.env.mj.set.quit_reward_capped = False
       model.train()
 
     elif inputarg == 15:
-      model.params.eps_decay = 4000
+      model.params.eps_decay = 1000
+      model.env.max_episode_steps = 150
+      model.env.mj.set.quit_on_reward_below = -100
+      model.env.mj.set.quit_reward_capped = False
       model.train()
+
+  # ----- BELOW NOT USED, array trained 1-15 ----- #
 
   # ----- 16 - 20, deeper network, palm force sensor, vary eps decay ----- #
   elif inputarg > 15 and inputarg <= 20:
@@ -231,8 +289,6 @@ if __name__ == "__main__":
     elif inputarg == 20:
       model.params.eps_decay = 4000
       model.train()
-
-  # ----- BELOW NOT USED, array trained 1-20 ----- #
 
   # ----- 21 - 25, default network, default settings, vary target update ----- #
   elif inputarg > 20 and inputarg <= 25:

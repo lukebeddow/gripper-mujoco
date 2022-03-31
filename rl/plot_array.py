@@ -13,7 +13,7 @@ if __name__ == "__main__":
   net = networks.DQN_3L60
 
   # what training session
-  training = "train_cluster_1"
+  training = "train_cluster_29-03"
 
   # ----- plot ----- #
 

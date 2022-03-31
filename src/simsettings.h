@@ -37,7 +37,7 @@
   update_env() settings */\
   X(  lift_distance,            double,   1e-3)     /* distance to consider object lifted */\
   X(  oob_distance,             double,   75e-3)    /* distance to consider object out of bounds */\
-  X(  height_target,            double,   25e-3)    /* target height to raise the object by */\
+  X(  height_target,            double,   30e-3)    /* target height to raise the object by */\
   X(  stable_finger_force,      double,   0.4)      /* finger force on object to consider stable */\
   X(  stable_palm_force,        double,   1.0)      /* palm force on object to consider stable */\
   /* 

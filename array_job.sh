@@ -1,9 +1,9 @@
 # These are flags you must include - Two memory and one runtime.
 # Runtime is either seconds or hours:min:sec
 
-#$ -l tmem=8G
-#$ -l h_vmem=8G
-#$ -l h_rt=47:59:0 
+#$ -l tmem=16G
+#$ -l h_vmem=16G
+#$ -l h_rt=73:59:0 
 
 # Some important notes
 #dollar -t X-Y   -> submit array job inclusive of both X and Y
@@ -11,8 +11,8 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N ArrayTrainDQN_9
-#$ -t 1-20
+#$ -N ArrayTrainDQN_10
+#$ -t 1-15
 
 # The code you want to run now goes here.
 
