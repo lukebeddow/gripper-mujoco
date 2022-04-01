@@ -65,6 +65,7 @@ PYBIND11_MODULE(bind, m) {
     .def("get_test_report", &MjClass::get_test_report)
     .def_readwrite("set", &MjClass::s_)
     .def_readonly("current_load_path", &MjClass::current_load_path)
+    .def_readwrite("curve_validation_data", &MjClass::curve_validation_data_)
 
     // pickle support
     .def(py::pickle(
@@ -266,6 +267,29 @@ PYBIND11_MODULE(bind, m) {
       }
     ))
     ;
+
+  // three classes to extract detailed curve fit data from the simulation
+  py::class_<MjType::CurveFitData::PoseData::FingerData>(m, "FingerData")
+    .def(py::init<>())
+    .def_readwrite("x", &MjType::CurveFitData::PoseData::FingerData::x)
+    .def_readwrite("y", &MjType::CurveFitData::PoseData::FingerData::y)
+    .def_readwrite("coeff", &MjType::CurveFitData::PoseData::FingerData::coeff)
+    .def_readwrite("errors", &MjType::CurveFitData::PoseData::FingerData::errors)
+    ;
+
+  py::class_<MjType::CurveFitData::PoseData>(m, "PoseData")
+    .def(py::init<>())
+    .def_readwrite("f1", &MjType::CurveFitData::PoseData::f1)
+    .def_readwrite("f2", &MjType::CurveFitData::PoseData::f2)
+    .def_readwrite("f3", &MjType::CurveFitData::PoseData::f3)
+    ;
+
+  py::class_<MjType::CurveFitData>(m, "CurveFitData")
+
+    .def(py::init<>())
+    .def_readwrite("entries", &MjType::CurveFitData::entries)
+    ;
+
 
   /* py::overload_cast requires c++14 */
 

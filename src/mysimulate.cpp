@@ -1175,6 +1175,7 @@ void makeObjectUI(int oldstate)
         {mjITEM_BUTTON,    "Ground forces",  2, NULL,                    " #303"},
         {mjITEM_BUTTON,    "Object forces",  2, NULL,                    " #303"},
         {mjITEM_BUTTON,    "All forces",     2, NULL,                    " #303"},
+        {mjITEM_BUTTON,    "Print curve fit",2, NULL,                    " #304"},
         // {mjITEM_BUTTON,    "Copy pose",     2, NULL,                    " #304"},
         {mjITEM_SLIDERINT, "Live Object",   3, &settings.object_int,    "0 20"},
         // {mjITEM_BUTTON,    "Reset to key",  3},
@@ -1929,8 +1930,10 @@ void uiEvent(mjuiState* state)
                 f.print_all_local(); 
                 break;
             }
-            case 6: {            // Set key
-                // std::cout << "case 6\n";
+            case 6: {            // Print curve fit validation
+                std::cout << "Printing curve validation data\n";
+                myMjClass.curve_validation_data_.print();
+                myMjClass.curve_validation_data_.print_errors();
                 break;
             }
             }

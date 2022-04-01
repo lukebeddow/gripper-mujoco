@@ -178,6 +178,11 @@ void MjClass::reset()
   MjType::TestReport blank_report;
   testReport_ = blank_report;
 
+  // empty any curve validation data
+  if (s_.curve_validation) {
+    curve_validation_data_.entries.clear();
+  }
+
   // ensure the simulation settings are all ready to go
   configure_settings();
 }
@@ -282,6 +287,20 @@ bool MjClass::monitor_gauges()
 
     gauge_timestamps.add(data->time);
     last_read_time = data->time;
+
+    // for testing the curve validation
+    if (s_.curve_validation) {
+      // extract the finger data
+      MjType::CurveFitData::PoseData pose;
+      luke::verify_armadillo_gauge(data, 0,
+        pose.f1.x, pose.f1.y, pose.f1.coeff, pose.f1.errors);
+      luke::verify_armadillo_gauge(data, 1,
+        pose.f2.x, pose.f2.y, pose.f2.coeff, pose.f2.errors);
+      luke::verify_armadillo_gauge(data, 2,
+        pose.f3.x, pose.f3.y, pose.f3.coeff, pose.f3.errors);
+      // save
+      curve_validation_data_.entries.push_back(pose);
+    }
 
     return true;
   }

@@ -99,6 +99,11 @@ void spawn_object(mjModel* model, mjData* data, int idx, QPos pose);
 QPos get_object_qpos();
 Forces get_object_forces(const mjModel* model, mjData* data);
 
+// other
+gfloat verify_armadillo_gauge(const mjData* data, int finger,
+  std::vector<float>& vec_joint_x, std::vector<float>& vec_joint_y,
+  std::vector<float>& vec_coefficients, std::vector<float>& vec_errors);
+
 } // namespace luke
 
 #endif // MYFUNCTIONS_H_

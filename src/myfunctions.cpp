@@ -840,6 +840,9 @@ void update_state(const mjModel* model, mjData* data)
   // // report state for testing
   // j_.print_qpos();
   // j_.print_qvel();
+
+  // for testing, print out one joint motor value
+  std::cout << j_.qpos.gripper[0] << '\n';
   
 }
 
@@ -1209,6 +1212,133 @@ gfloat read_armadillo_gauge(const mjData* data, int finger)
 
   return P;
 }
+
+gfloat verify_armadillo_gauge(const mjData* data, int finger,
+  std::vector<float>& vec_joint_x, std::vector<float>& vec_joint_y,
+  std::vector<float>& vec_coefficients, std::vector<float>& vec_errors)
+{
+  /* read the virtual strain gauge for one finger */
+
+  arma::vec joint_values(j_.num.per_finger, arma::fill::zeros);
+
+  // get the joint values for this finger
+  for (int i = 0; i < j_.num.per_finger; i++) {
+    joint_values(i) = 
+      data->qpos[j_.idx.finger[i + finger * j_.num.per_finger]];
+  }
+
+  // next convert this into X and Y coordinates
+  arma::vec cumulative(j_.num.per_finger, arma::fill::zeros);
+  arma::mat finger_xy(j_.num.per_finger + 1, 2, arma::fill::zeros);
+
+  for (int i = 0; i < j_.num.per_finger; i++) {
+
+    // keep cumulative total of angular sum
+    if (i == 0) {
+      cumulative(i) = joint_values(i);
+    }
+    else {
+      cumulative(i) = cumulative(i - 1) + joint_values(i);
+    }
+
+    // calculate cartesian coordinates of each joint
+    finger_xy(i + 1, 0) = finger_xy(i, 0)
+      + j_.dim.segment_length * std::cos(cumulative(i));
+    finger_xy(i + 1, 1) = finger_xy(i, 1) 
+      + j_.dim.segment_length * std::sin(cumulative(i));
+  }
+
+  // polyfit a cubic curve to these joint positions
+  arma::vec coeff = arma::polyfit(finger_xy.col(0), finger_xy.col(1), j_.gauge.order);
+
+  // evaluate y at the gauge x position
+  gfloat y = 0.0;
+  for (int i = 0; i <= j_.gauge.order; i++) {
+    y += coeff(i) * std::pow(j_.gauge.xpos, j_.gauge.order - i);
+  }
+
+  /* The equation relating the force P to deflection delta is:
+        delta = (P * l^3) / (3 * E * I)
+     We can approximate the P / 3EI as proportional to our strain, k:
+        delta = k * l^3
+            k = delta / l^3
+     Hence we our approximated strain, k, as our gauge reading
+  */
+
+  // calculate the approximated gauge reading
+  gfloat k = y / j_.gauge.xpos_cubed;
+
+  // transfer to SI units for force (optional)
+  constexpr gfloat E = 200e9;
+  constexpr gfloat I = (28e-3 * std::pow(0.9e-3, 3)) / 12.0;
+  gfloat P = k * (3 * E * I);
+
+  /* the SI result is not accurate because the finger stiffness is not
+  accurate (here we do not have the right E). However, tuning the stiffness
+  to be perfect is not helpful as the simulation can become unstable and the
+  interaction with the simulated 'motors' is already not realistic */
+
+  /* Finally, we want to scale this data. To get an idea of the size of k, lets
+     take some default values:
+      xpos = 50mm
+      y_max == xpos -> this is from the finger bending to 45deg
+     Hence, an absolute maximum value would be:
+      k = xpos / cbrt(xpos)
+      k = 0.136
+     Lets scale this to the range -100, +100
+
+     Lets scale the data to the range -1, +1. First, what is the maximum
+     expected force?
+
+     k = P / 3EI
+     E = 200e9 Pa
+     I = 1/12 * hb^3 where h = 28mm and b = 0.9mm
+     I = 1.71e-12 m^4
+
+     hence, with maximum expected force of 20N, we get:
+
+     k = 20 / (3 * 200 * 1.71) * (10e-12 * 10e-9)
+     k = 19.6 m^-2
+  */
+
+  k *= (100.0 / 0.136);
+
+  /* ----- only difference between read/verfiy is as follows ----- */
+
+  int num_points = j_.num.per_finger + 1;
+  int num_coeff = j_.gauge.order + 1;
+
+  vec_joint_x.resize(num_points);
+  vec_joint_y.resize(num_points);
+  vec_errors.resize(num_points);
+  vec_coefficients.resize(num_coeff);
+
+  // save the joint angles
+  for (int i = 0; i < num_points; i++) {
+    vec_joint_x[i] = finger_xy(i, 0);
+    vec_joint_y[i] = finger_xy(i, 1);
+  }
+
+  // save the cubic coefficients
+  for (int i = 0; i < num_coeff; i++) {
+    vec_coefficients[i] = coeff(i);
+  }
+
+  // evaluate the predicted y position and resulting error
+  for (int i = 0; i < num_points; i++) {
+    float y = 0.0;
+    for (int j = 0; j < num_coeff; j++) {
+      y += vec_coefficients[j] * std::pow(vec_joint_x[i], j_.gauge.order - j);
+    }
+    float error = vec_joint_y[i] - y;
+    vec_errors[i] = error;
+  }
+
+  /* ----- end read/verify differences ----- */
+
+  return P;
+}
+
 
 std::vector<gfloat> get_gauge_data(const mjModel* model, mjData* data)
 {

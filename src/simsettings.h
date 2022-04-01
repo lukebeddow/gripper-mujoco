@@ -26,6 +26,7 @@
                                 type      value
   general */\
   X(  debug,                    bool,     true)     /* print debug info to terminal */\
+  X(  curve_validation,         bool,     false)    /* export curve fit data for validation */\
   /*
   step() and gauge settings */\
   X(  gauge_read_rate_hz,       double,   10.0)     /* frequency of gauge readings */\

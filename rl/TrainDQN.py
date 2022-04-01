@@ -18,7 +18,7 @@ import networks
 from env.MjEnv import MjEnv
 from ModelSaver import ModelSaver
 
-# from guppy import hpy; guph = hpy()
+from guppy import hpy; guph = hpy()
 
 class TrainDQN():
   """
@@ -488,6 +488,11 @@ class TrainDQN():
 
       if self.log_level > 0: print("Begin training episode", i_episode)
 
+      # for debugging, show memory usage5.6
+      if i_episode % 10 == 0:
+        theheap = guph.heap()
+        print("Heap total size is", theheap.size, "(", theheap.size / 10e6, "GB)")
+
       # initialise environment and state
       obs = self.env.reset()
       obs = self.to_torch(obs)
@@ -738,9 +743,9 @@ if __name__ == "__main__":
   
   # ----- prepare ----- #
 
-  cluster = False
+  cluster = True
   force_device = "cpu"
-  model = TrainDQN(cluster=cluster)
+  model = TrainDQN(cluster=cluster, device=force_device)
 
   # if we want to adjust parameters
   # model.params.num_episodes = 11

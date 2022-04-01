@@ -194,6 +194,76 @@ namespace MjType
     float final_finger_force = 0;
 
   };
+
+  // data to validate the curve fitting
+  struct CurveFitData {
+    struct PoseData {
+      struct FingerData {
+
+        std::vector<float> x;         // segment end x positions
+        std::vector<float> y;         // segment end y positions
+        std::vector<float> coeff;     // curve fit coefficients
+        std::vector<float> errors;    // curve fit point prediction errors
+
+        void print_vec(std::vector<float> v, std::string name) {
+          std::cout << name << ":\n";
+          if (v.size() == 0) {
+            std::cout << "empty\n";
+            return;
+          }
+          for (int i = 0; i < v.size() - 1; i++) {
+            std::cout << v[i] << "\n";
+          }
+          std::cout << v[v.size() - 1] << "\n\n";
+        }
+        void print() {
+          print_vec(x, "x positions");
+          print_vec(y, "y positions");
+          print_vec(coeff, "coefficients");
+          print_vec(errors, "errors");
+          std::cout << "-----end-----\n\n";
+        }
+      };
+
+      FingerData f1;
+      FingerData f2;
+      FingerData f3;
+
+    };
+
+    // save a series of data points
+    std::vector<PoseData> entries;
+
+    void print() {
+      for (int i = 0; i < entries.size(); i++) {
+        std::cout << "ENTRY " << i << "\n";
+        std::cout << "Finger 1\n";
+        entries[i].f1.print();
+        std::cout << "Finger 2\n";
+        entries[i].f2.print();
+        std::cout << "Finger 3\n";
+        entries[i].f3.print();
+        std::cout << "\n\n";
+      }
+    }
+
+    void print_errors() {
+      float cum_error = 0.0;
+      for (int i = 0; i < entries.size(); i++) {
+        for (int j = 0; j < entries[i].f1.errors.size(); j++) {
+          cum_error += entries[i].f1.errors[j];
+          cum_error += entries[i].f2.errors[j];
+          cum_error += entries[i].f3.errors[j];
+        }
+      }
+      float avg_error = cum_error / (3 * entries.size());
+
+      std::cout << "The average error from " << entries.size()
+        << " entries was " << avg_error << '\n';
+    }
+
+  };
+
 }
 
 class MjClass
@@ -242,6 +312,7 @@ public:
   // data structures
   MjType::Env env_;
   MjType::TestReport testReport_;
+  MjType::CurveFitData curve_validation_data_;
 
   /* ----- member functions ----- */
 
