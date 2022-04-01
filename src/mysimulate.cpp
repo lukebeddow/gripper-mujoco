@@ -1176,6 +1176,7 @@ void makeObjectUI(int oldstate)
         {mjITEM_BUTTON,    "Object forces",  2, NULL,                    " #303"},
         {mjITEM_BUTTON,    "All forces",     2, NULL,                    " #303"},
         {mjITEM_BUTTON,    "Print curve fit",2, NULL,                    " #304"},
+        {mjITEM_BUTTON,    "Wipe curve fit", 2, NULL,                    " #305"},
         // {mjITEM_BUTTON,    "Copy pose",     2, NULL,                    " #304"},
         {mjITEM_SLIDERINT, "Live Object",   3, &settings.object_int,    "0 20"},
         // {mjITEM_BUTTON,    "Reset to key",  3},
@@ -1935,6 +1936,10 @@ void uiEvent(mjuiState* state)
                 myMjClass.curve_validation_data_.print();
                 myMjClass.curve_validation_data_.print_errors();
                 break;
+            }
+            case 7: {
+                std::cout << "Wiping curve validation data\n";
+                myMjClass.curve_validation_data_.entries.clear();
             }
             }
         }

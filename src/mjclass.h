@@ -251,12 +251,12 @@ namespace MjType
       float cum_error = 0.0;
       for (int i = 0; i < entries.size(); i++) {
         for (int j = 0; j < entries[i].f1.errors.size(); j++) {
-          cum_error += entries[i].f1.errors[j];
-          cum_error += entries[i].f2.errors[j];
-          cum_error += entries[i].f3.errors[j];
+          cum_error += abs(entries[i].f1.errors[j]);
+          cum_error += abs(entries[i].f2.errors[j]);
+          cum_error += abs(entries[i].f3.errors[j]);
         }
       }
-      float avg_error = cum_error / (3 * entries.size());
+      float avg_error = cum_error / (3 * entries.size() * entries[0].f1.errors.size());
 
       std::cout << "The average error from " << entries.size()
         << " entries was " << avg_error << '\n';

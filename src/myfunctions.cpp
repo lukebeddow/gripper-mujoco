@@ -841,9 +841,6 @@ void update_state(const mjModel* model, mjData* data)
   // j_.print_qpos();
   // j_.print_qvel();
 
-  // for testing, print out one joint motor value
-  std::cout << j_.qpos.gripper[0] << '\n';
-  
 }
 
 void update_all(const mjModel* model, mjData* data)
