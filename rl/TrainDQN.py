@@ -116,11 +116,6 @@ class TrainDQN():
     # create networks
     if network == None:
       raise RuntimeError("TrainDQN network must be specified")
-      # default option
-      self.policy_net = networks.DQN_2L60(self.env.n_obs, self.env.n_actions,
-                                          self.device).to(self.device)
-      self.target_net = networks.DQN_2L60(self.env.n_obs, self.env.n_actions,
-                                          self.device).to(self.device)
     else:
       # use the network passed as input
       self.policy_net = network(self.env.n_obs, self.env.n_actions,
@@ -167,7 +162,11 @@ class TrainDQN():
         return self.policy_net(state).max(1)[1].view(1, 1)
     # else choose randomly
     else:
-      return torch.tensor([[random.randrange(self.env.num_actions)]], device=self.device,
+      rand_action = random.randrange(self.env.n_actions)
+      print("rand action is ", rand_action)
+      print("env.n_actions is ", self.env.n_actions)
+      print("mj n_actions is ", self.env.mj.get_n_actions())
+      return torch.tensor([[rand_action]], device=self.device,
                           dtype=torch.long)
 
   def plot(self, pltname=None):
@@ -488,7 +487,7 @@ class TrainDQN():
 
       if self.log_level > 0: print("Begin training episode", i_episode)
 
-      # for debugging, show memory usage5.6
+      # for debugging, show memory usage
       if i_episode % 10 == 0:
         theheap = guph.heap()
         print("Heap total size is", theheap.size, "(", theheap.size / 10e6, "GB)")

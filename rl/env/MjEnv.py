@@ -66,7 +66,6 @@ class MjEnv(gym.Env):
     self.num_gauge_readings = 3
     self.num_palm_readings = 3
     self.max_episode_steps = 100
-    self.num_actions = 8
     self.object_position_noise_mm = 10
     self.disable_rendering = True
     self.task_reload_chance = 1 / 40.

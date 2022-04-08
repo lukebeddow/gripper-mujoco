@@ -51,12 +51,14 @@ def finger_only_lifting(model):
   model.env.mj.set.exceed_lateral.set    (-0.005, False,   1,    4.0,  6.0,  -1)
 
   # end criteria                         reward   done   trigger
-  model.env.mj.set.height_target.set     (0.0,    True,    1)
+  model.env.mj.set.target_height.set     (0.0,    True,    1)
   model.env.mj.set.oob.set               (-1.0,   True,    1)
 
   # terminate episode when reward drops below -1.01, also cap at this value
   model.env.mj.set.quit_on_reward_below = -1.01
   model.env.mj.set.quit_reward_capped = True
+
+  return model
 
 def add_palm_force_sensor(model):
   # add force sensor to the palm

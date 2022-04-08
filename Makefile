@@ -23,71 +23,106 @@ SOURCEDIR := src
 BUILDDIR := build
 BUILDPY := $(BUILDDIR)/py
 BUILDCPP := $(BUILDDIR)/cpp
+BUILDDEP := $(BUILDDIR)/depends
 OUTCPP := bin
 OUTPY := rl/env/mjpy
 
-# library locations
-PYBIND_LIB = -I ~/pybind11/include
-ARMA_LIB = -larmadillo
-MUJOCO_LIB = -I ~/.mujoco/mujoco210/include \
-	     -L ~/.mujoco/mujoco210/bin \
-	     -lmujoco210
-PYTHON_LIB = -I /usr/include/python3.6m
-
-# for generating models
+# for generating models, non-essential feature
 MODELBASH := generate_models.sh
 MODELDIR := /home/luke/gripper_repo_ws/src/gripper_v2/gripper_description/urdf/mujoco
 
-# are we compiling in debug mode
+# ----- conditional compilation with user defined options ----- #
+
+# are we compiling in debug mode if so add symbols and turn off optimisations
 ifeq ($(filter debug, $(MAKECMDGOALS)), debug)
-DEBUG = -O0 -g
+OPTIM = -O0 -g
 else
-DEBUG = -O2
+OPTIM = -O2
 endif
 
-# different compilation settings for the cluster (run $ make cluster)
+# library locations, different for on and off the cluster
 ifeq ($(filter cluster, $(MAKECMDGOALS)), cluster)
 
-# testing for cluster compilation
-PYTHON = /share/apps/python-3.6.9# maybe /share/apps/python-3.6.9-tkinter
-COMMON = -O2 -I ~/.mujoco/mujoco210/include \
-	-I ~/clusterlibs/armadillo-code/include -DARMA_DONT_USE_WRAPPER \
-	-I ~/pybind11/include \
-	-L ~/.mujoco/mujoco210/bin \
-	-std=c++11 -mavx -pthread \
-	-DLUKE_CLUSTER \
-	-Wl,-rpath,'$$ORIGIN'
-PYBIND = $(COMMON) -fPIC -Wall -shared \
-	-I $(PYTHON)/include/python3.6m
-RENDER_LIBS = -lGL -lglew	~/.mujoco/mujoco210/bin/libglfw.so.3
-ARMA = -lblas -llapack
-CORE_LIBS = -lmujoco210 $(ARMA)
+# cluster library locations
+PYTHON_PATH = /share/apps/python-3.6.9/include/python3.6m
+PYBIND_PATH = /home/lbeddow/pybind11
+ARMA_PATH = /home/lbeddow/clusterlibs/armadillo-code
+MUJOCO_PATH = /home/lbeddow/.mujoco/mujoco210
+CORE_LIBS = -lmujoco210 -lblas -llapack
+RENDER_LIBS = -lGL -lglew	$(MUJOCO_PATH)/bin/libglfw.so.3
+DEFINE_VAR = -DLUKE_CLUSTER -DARMA_DONT_USE_WRAPPER
 
-export LD_LIBRARY_PATH=$$LD_LIBRARY_PATH:~/.mujoco/mujoco210/bin
-
-# regular laptop compilation settings (all other make targets)
 else
 
-# define compiler flags and libraries
-COMMON = $(DEBUG) -I/home/luke/.mujoco/mujoco210/include -I/home/luke/pybind11/include \
-	-L/home/luke/.mujoco/mujoco210/bin -std=c++11 -mavx -pthread \
-	-Wl,-rpath,'$$ORIGIN'
-PYBIND = $(COMMON) -fPIC -Wall -shared -I/home/luke/pybind11/include \
-	-I/usr/include/python3.6m
-RENDER_LIBS = -lGL -lglew	/home/luke/.mujoco/mujoco210/bin/libglfw.so.3
+# local machine library locations
+PYTHON_PATH = /usr/include/python3.6m
+PYBIND_PATH = /home/luke/pybind11
+ARMA_PATH = # none, use system library
+MUJOCO_PATH = /home/luke/.mujoco/mujoco210
 CORE_LIBS = -lmujoco210 -larmadillo
+RENDER_LIBS = -lGL -lglew	$(MUJOCO_PATH)/bin/libglfw.so.3
+DEFINE_VAR = # none
 
-# extra flags for make -jN => use N parallel cores
-MAKEFLAGS += -j8
+# extras
+MAKEFLAGS += -j8 # jN => use N parallel cores
 
-# end of conditional compilation settings
 endif
+
+# ----- compilation settings ----- #
+
+# define compiler flags and libraries
+COMMON = $(OPTIM) -std=c++11 -mavx -pthread -Wl,-rpath,'$$ORIGIN' $(DEFINE_VAR) \
+         -I$(MUJOCO_PATH)/include \
+         -I$(PYBIND_PATH)/include \
+				 -I$(ARMA_PATH)/include \
+				 -L$(MUJOCO_PATH)/bin
+PYBIND = $(COMMON) -fPIC -Wall -shared -I$(PYTHON_PATH)
+
+# # OLD WORKING CODE
+
+# # different compilation settings for the cluster (run $ make cluster)
+# ifeq ($(filter cluster, $(MAKECMDGOALS)), cluster)
+
+# # testing for cluster compilation
+# PYTHON = /share/apps/python-3.6.9# maybe /share/apps/python-3.6.9-tkinter
+# COMMON = -O2 -I ~/.mujoco/mujoco210/include \
+# 	-I ~/clusterlibs/armadillo-code/include -DARMA_DONT_USE_WRAPPER \
+# 	-I ~/pybind11/include \
+# 	-L ~/.mujoco/mujoco210/bin \
+# 	-std=c++11 -mavx -pthread \
+# 	-DLUKE_CLUSTER \
+# 	-Wl,-rpath,'$$ORIGIN'
+# PYBIND = $(COMMON) -fPIC -Wall -shared \
+# 	-I $(PYTHON)/include/python3.6m
+# RENDER_LIBS = -lGL -lglew	~/.mujoco/mujoco210/bin/libglfw.so.3
+# ARMA = -lblas -llapack
+# CORE_LIBS = -lmujoco210 $(ARMA)
+
+# export LD_LIBRARY_PATH=$$LD_LIBRARY_PATH:~/.mujoco/mujoco210/bin
+
+# # regular laptop compilation settings (all other make targets)
+# else
+
+# # define compiler flags and libraries
+# COMMON = $(DEBUG) -I/home/luke/.mujoco/mujoco210/include -I/home/luke/pybind11/include \
+# 	-L/home/luke/.mujoco/mujoco210/bin -std=c++11 -mavx -pthread \
+# 	-Wl,-rpath,'$$ORIGIN'
+# PYBIND = $(COMMON) -fPIC -Wall -shared -I/home/luke/pybind11/include \
+# 	-I/usr/include/python3.6m
+# RENDER_LIBS = -lGL -lglew	/home/luke/.mujoco/mujoco210/bin/libglfw.so.3
+# CORE_LIBS = -lmujoco210 -larmadillo
+
+# # extra flags for make -jN => use N parallel cores
+# MAKEFLAGS += -j8
+
+# # end of conditional compilation settings
+# endif
 
 # ----- automatically generated variables ----- #
 
 # get every source file and each corresponding dependecy file
 SOURCES := $(wildcard $(SOURCEDIR)/*.cpp)
-DEPENDS := $(patsubst $(SOURCEDIR)/%.cpp, $(BUILDDIR)/depends/%.d, $(SOURCES))
+DEPENDS := $(patsubst $(SOURCEDIR)/%.cpp, $(BUILDDEP)/%.d, $(SOURCES))
 
 # define targets in the output directory
 CPPTARGETS := $(patsubst %, $(OUTCPP)/%, $(TARGET_LIST_CPP))
@@ -148,7 +183,7 @@ include $(DEPENDS)
 endif
 
 # generate dependency files (-M for all, -MM for exclude system dependencies)
-$(BUILDDIR)/depends/%.d: $(SOURCEDIR)/%.cpp
+$(BUILDDEP)/%.d: $(SOURCEDIR)/%.cpp
 	@set -e; rm -f $@; \
 		g++ -MM $(COMMON) $< > $@.$$$$; \
 		sed 's,\($*\)\.o[ :]*,$(BUILDDIR)/\1.o $(BUILDCPP)/\1.o $(BUILDPY)/\1.o $@ : ,g' \
@@ -170,6 +205,6 @@ clean:
 	rm -f $(BUILDDIR)/*.o 
 	rm -f $(BUILDCPP)/*.o 
 	rm -f $(BUILDPY)/*.o 
-	rm -f $(BUILDDIR)/depends/*.d
+	rm -f $(BUILDDEP)/*.d
 	rm -f $(CPPTARGETS)
 	rm -f $(PYTARGETS)
