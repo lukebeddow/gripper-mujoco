@@ -18,13 +18,21 @@
 TARGET_LIST_CPP := test mysimulate
 TARGET_LIST_PY := bind
 
-# define directory structure
+# define directory structure (these folders must exist)
 SOURCEDIR := src
 BUILDDIR := build
 BUILDPY := $(BUILDDIR)/py
 BUILDCPP := $(BUILDDIR)/cpp
 OUTCPP := bin
 OUTPY := rl/env/mjpy
+
+# library locations
+PYBIND_LIB = -I ~/pybind11/include
+ARMA_LIB = -larmadillo
+MUJOCO_LIB = -I ~/.mujoco/mujoco210/include \
+	     -L ~/.mujoco/mujoco210/bin \
+	     -lmujoco210
+PYTHON_LIB = -I /usr/include/python3.6m
 
 # for generating models
 MODELBASH := generate_models.sh
