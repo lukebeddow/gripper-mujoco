@@ -206,7 +206,7 @@ class TrainDQN():
     self.axs[0].set(ylabel="Duration")
     self.axs[1].set(ylabel="Reward")
     self.axs[0].legend(loc="lower left")
-    self.axs[1].legend(loc="lower left")
+    self.axs[1].legend(loc="upper left")
 
     if pltname != None:
       self.fig.suptitle(pltname)

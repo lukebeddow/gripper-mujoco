@@ -138,7 +138,7 @@ PYBIND11_MODULE(bind, m) {
         );
       },
       [](py::tuple t) { // __setstate__
-        constexpr bool debug = false;
+        constexpr bool debug = true;
         if (debug)
           std::cout << "unpickling MjType::Settings now\n";
 
