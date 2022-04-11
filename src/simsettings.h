@@ -34,6 +34,7 @@
   X(  use_palm_sensor,          bool,     true)     /* use a sensor on the palm */\
   X(  palm_force_normalise,     double,   8.0)      /* <0:bumper sensor, >0:normalising value*/\
   X(  obs_raw_data,             bool,     false)    /* use raw sensor data for get_observation()*/\
+  X(  use_wrist_sensor,         bool,     false)    /* get force information from wrist sensor*/\
   /* 
   update_env() settings */\
   X(  lift_distance,            double,   1e-3)     /* distance to consider object lifted */\
