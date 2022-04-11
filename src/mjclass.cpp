@@ -154,7 +154,13 @@ void MjClass::load_relative(std::string relative_path)
 {
   /* load a model with a relative path, using compiled defaults */
 
-  load(LUKE_FILE_ROOT + relative_path);
+  // the default path should be set in the Makefile, check if it has been
+  #if defined(LUKE_MJCF_PATH)
+    load(LUKE_MJCF_PATH + relative_path);
+  #else
+    // no default path for model files has been set, return an error
+    throw std::runtime_error("Cannot use MjClass::load_relative() as LUKE_MJCF_PATH not set");
+  #endif
 }
 
 void MjClass::reset()

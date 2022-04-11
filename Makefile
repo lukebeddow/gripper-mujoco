@@ -43,6 +43,9 @@ endif
 # library locations, different for on and off the cluster
 ifeq ($(filter cluster, $(MAKECMDGOALS)), cluster)
 
+# cluster mjcf files location (model files like gripper/objects)
+MJCF_PATH = '"/home/lbeddow/mjcf/"'
+
 # cluster library locations
 PYTHON_PATH = /share/apps/python-3.6.9/include/python3.6m
 PYBIND_PATH = /home/lbeddow/pybind11
@@ -50,9 +53,12 @@ ARMA_PATH = /home/lbeddow/clusterlibs/armadillo-code
 MUJOCO_PATH = /home/lbeddow/.mujoco/mujoco210
 CORE_LIBS = -lmujoco210 -lblas -llapack
 RENDER_LIBS = -lGL -lglew	$(MUJOCO_PATH)/bin/libglfw.so.3
-DEFINE_VAR = -DLUKE_CLUSTER -DARMA_DONT_USE_WRAPPER
+DEFINE_VAR = -DLUKE_CLUSTER -DARMA_DONT_USE_WRAPPER -DLUKE_MJCF_PATH='"$(MJCF_PATH)"'
 
 else
+
+# cluster mjcf files location (model files like gripper/objects)
+MJCF_PATH = /home/luke/gripper_repo_ws/src/gripper_v2/gripper_description/urdf/mujoco/
 
 # local machine library locations
 PYTHON_PATH = /usr/include/python3.6m
@@ -61,7 +67,7 @@ ARMA_PATH = # none, use system library
 MUJOCO_PATH = /home/luke/.mujoco/mujoco210
 CORE_LIBS = -lmujoco210 -larmadillo
 RENDER_LIBS = -lGL -lglew	$(MUJOCO_PATH)/bin/libglfw.so.3
-DEFINE_VAR = # none
+DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"'
 
 # extras
 MAKEFLAGS += -j8 # jN => use N parallel cores

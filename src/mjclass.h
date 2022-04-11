@@ -17,12 +17,12 @@
 #include "myfunctions.h"
 #include "customtypes.h"
 
-// if we are on the cluster, change the default root and avoid rendering libraries
+// if we are on the cluster, we must not include the rendering libraries
 #if defined(LUKE_CLUSTER)
-  #define LUKE_FILE_ROOT "/home/lbeddow/mjcf/"
+  // #define LUKE_FILE_ROOT "/home/lbeddow/mjcf/"
 #else
   #include "rendering.h"
-  #define LUKE_FILE_ROOT "/home/luke/gripper_repo_ws/src/gripper_v2/gripper_description/urdf/mujoco/"
+  // #define LUKE_FILE_ROOT "/home/luke/gripper_repo_ws/src/gripper_v2/gripper_description/urdf/mujoco/"
 #endif
 
 namespace MjType
@@ -211,7 +211,7 @@ namespace MjType
             std::cout << "empty\n";
             return;
           }
-          for (int i = 0; i < v.size() - 1; i++) {
+          for (unsigned int i = 0; i < v.size() - 1; i++) {
             std::cout << v[i] << "\n";
           }
           std::cout << v[v.size() - 1] << "\n\n";
@@ -235,7 +235,7 @@ namespace MjType
     std::vector<PoseData> entries;
 
     void print() {
-      for (int i = 0; i < entries.size(); i++) {
+      for (unsigned int i = 0; i < entries.size(); i++) {
         std::cout << "ENTRY " << i << "\n";
         std::cout << "Finger 1\n";
         entries[i].f1.print();
@@ -249,8 +249,8 @@ namespace MjType
 
     void print_errors() {
       float cum_error = 0.0;
-      for (int i = 0; i < entries.size(); i++) {
-        for (int j = 0; j < entries[i].f1.errors.size(); j++) {
+      for (unsigned int i = 0; i < entries.size(); i++) {
+        for (unsigned int j = 0; j < entries[i].f1.errors.size(); j++) {
           cum_error += abs(entries[i].f1.errors[j]);
           cum_error += abs(entries[i].f2.errors[j]);
           cum_error += abs(entries[i].f3.errors[j]);
