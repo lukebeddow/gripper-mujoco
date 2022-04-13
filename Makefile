@@ -7,10 +7,10 @@
 # used from within python.
 
 # Useful resources:
-#		https://www.gnu.org/software/make/manual/html_node/Automatic-Variables.html
-# 	https://www.gnu.org/software/make/manual/html_node/Static-Usage.html#Static-Usage
-# 	https://www.hiroom2.com/2016/09/03/makefile-header-dependencies/
-# 	https://stackoverflow.com/questions/16924333/makefile-compiling-from-directory-to-another-directory
+#   https://www.gnu.org/software/make/manual/html_node/Automatic-Variables.html
+#   https://www.gnu.org/software/make/manual/html_node/Static-Usage.html#Static-Usage
+#   https://www.hiroom2.com/2016/09/03/makefile-header-dependencies/
+#   https://stackoverflow.com/questions/16924333/makefile-compiling-from-directory-to-another-directory
 
 # ----- user defined variables ----- #
 
@@ -59,7 +59,6 @@ DEFINE_VAR = -DLUKE_CLUSTER -DARMA_DONT_USE_WRAPPER -DLUKE_MJCF_PATH='"$(MJCF_PA
 else
 
 # mjcf files location (model files like gripper/objects)
-# MJCF_PATH = /home/luke/gripper_repo_ws/src/gripper_v2/gripper_description/urdf/mujoco/
 MJCF_PATH = /home/luke/mymujoco/mjcf/object_set_1
 
 # local machine library locations
@@ -85,46 +84,6 @@ COMMON = $(OPTIM) -std=c++11 -mavx -pthread -Wl,-rpath,'$$ORIGIN' $(DEFINE_VAR) 
 				 -I$(ARMA_PATH)/include \
 				 -L$(MUJOCO_PATH)/bin
 PYBIND = $(COMMON) -fPIC -Wall -shared -I$(PYTHON_PATH)
-
-# # OLD WORKING CODE
-
-# # different compilation settings for the cluster (run $ make cluster)
-# ifeq ($(filter cluster, $(MAKECMDGOALS)), cluster)
-
-# # testing for cluster compilation
-# PYTHON = /share/apps/python-3.6.9# maybe /share/apps/python-3.6.9-tkinter
-# COMMON = -O2 -I ~/.mujoco/mujoco210/include \
-# 	-I ~/clusterlibs/armadillo-code/include -DARMA_DONT_USE_WRAPPER \
-# 	-I ~/pybind11/include \
-# 	-L ~/.mujoco/mujoco210/bin \
-# 	-std=c++11 -mavx -pthread \
-# 	-DLUKE_CLUSTER \
-# 	-Wl,-rpath,'$$ORIGIN'
-# PYBIND = $(COMMON) -fPIC -Wall -shared \
-# 	-I $(PYTHON)/include/python3.6m
-# RENDER_LIBS = -lGL -lglew	~/.mujoco/mujoco210/bin/libglfw.so.3
-# ARMA = -lblas -llapack
-# CORE_LIBS = -lmujoco210 $(ARMA)
-
-# export LD_LIBRARY_PATH=$$LD_LIBRARY_PATH:~/.mujoco/mujoco210/bin
-
-# # regular laptop compilation settings (all other make targets)
-# else
-
-# # define compiler flags and libraries
-# COMMON = $(DEBUG) -I/home/luke/.mujoco/mujoco210/include -I/home/luke/pybind11/include \
-# 	-L/home/luke/.mujoco/mujoco210/bin -std=c++11 -mavx -pthread \
-# 	-Wl,-rpath,'$$ORIGIN'
-# PYBIND = $(COMMON) -fPIC -Wall -shared -I/home/luke/pybind11/include \
-# 	-I/usr/include/python3.6m
-# RENDER_LIBS = -lGL -lglew	/home/luke/.mujoco/mujoco210/bin/libglfw.so.3
-# CORE_LIBS = -lmujoco210 -larmadillo
-
-# # extra flags for make -jN => use N parallel cores
-# MAKEFLAGS += -j8
-
-# # end of conditional compilation settings
-# endif
 
 # ----- automatically generated variables ----- #
 
@@ -207,7 +166,6 @@ models:
 .PHONY: xml
 xml:
 	$(MAKE) -C $(MODELDIR)
-# ./$(MODELBASH) 1
 
 clean:
 	rm -f $(BUILDDIR)/*.o 
