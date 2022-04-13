@@ -1,5 +1,5 @@
 build/
-models/
+rl/models/
 sample/
 MUJOCO_LOG.TXT
 .vscode/
