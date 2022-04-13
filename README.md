@@ -56,21 +56,26 @@ DEFINE_VAR = # none
 
 The choice of python path defines what version of python the module will run on (so in this case Python 3.6 only). In cases where you have installed the libraries on the system, you do not need a path, only the library name in the ```CORE_LIBS``` variable with a -l prefix. From source, if it is a header only library (like pybind11 and armadillo), you only need to put the path.
 
+Finally, define what model files you want to use, giving the full path to the model folder. This repository stores these models in the ```mjcf``` folder because MuJoCo models use their mjcf xml variant.
+
+```make
+# mjcf files location (model files like gripper/objects)
+MJCF_PATH = /home/luke/mymujoco/mjcf/object_set_1
+```
+
 To build the project simply naviage to the root directory and run ```make```.
 
 Other options:
 
 ```make
-make py    # build only the python targets
-make cpp   # build only the cpp targets
-make clean # wipe all build files
+make py      # build only the python targets
+make cpp     # build only the cpp targets
+make clean   # wipe all build files
 ```
 
 ## Run
 
-Before running this code, you need access to the ```gripper_task.xml``` files which are not in this repository.
-
-To run the simluation and play around, use run ```bin/mysimulate task 0```
+To run the simluation and play around, use run ```bin/mysimulate task 0```.
 
 To run the python training, have a look at ```rl/TrainDQN.py```.
 
@@ -82,6 +87,6 @@ For building on the cluster, use:
 make cluster
 ```
 
-Then to submit a job for example ```qsub array_job.sh```. It is important to use ```make cluster``` otherwise it will fail.
+Then to submit a job for example ```qsub mymujoco/array_job.sh```. It is important to have built with ```make cluster``` otherwise it will fail.
 
 
