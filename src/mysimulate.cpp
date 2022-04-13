@@ -1479,8 +1479,10 @@ void loadmodel(void)
     luke::init(m, d);
     */
 
+    std::cout << "Loading model from: " << filename << "\n";
     char error[500] = "";
     m = mj_loadXML(filename, 0, error, 500);
+    if (error[0] != '\0') std::cout << "Load error: " << error << '\n';
     d = mj_makeData(m);
 
     // initialise my simulation class with the pointers
@@ -2527,8 +2529,13 @@ int main(int argc, const char** argv)
     // initialize everything
     init();
 
-    std::string default_path = "/home/luke/gripper_repo_ws/src/gripper_v2/"
-     "gripper_description/urdf/mujoco/";
+    #if defined(LUKE_MJCF_PATH)
+        std::string default_path = LUKE_MJCF_PATH;
+    #else
+        std::string default_path = "/home/luke/gripper_repo_ws/src/gripper_v2/"
+        "gripper_description/urdf/mujoco/mjcf";
+    #endif
+    
     std::string gripper_file = "gripper_mujoco.xml";
     std::string panda_file = "panda_mujoco.xml";
     std::string both_file = "panda_and_gripper_mujoco.xml";
@@ -2564,7 +2571,7 @@ int main(int argc, const char** argv)
     else {
         printf("No command line arguments detected, using default model\n");
     }
-    
+
     // mju_strncpy(filename, argv[1], 1000);
     mju_strncpy(filename, filepath.c_str(), 1000);
     settings.loadrequest = 2;

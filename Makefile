@@ -44,7 +44,8 @@ endif
 ifeq ($(filter cluster, $(MAKECMDGOALS)), cluster)
 
 # cluster mjcf files location (model files like gripper/objects)
-MJCF_PATH = '"/home/lbeddow/mjcf/"'
+# MJCF_PATH = /home/lbeddow/mjcf/
+MJCF_PATH = /home/lbeddow/mymujoco/mjcf/object_set_1
 
 # cluster library locations
 PYTHON_PATH = /share/apps/python-3.6.9/include/python3.6m
@@ -57,8 +58,9 @@ DEFINE_VAR = -DLUKE_CLUSTER -DARMA_DONT_USE_WRAPPER -DLUKE_MJCF_PATH='"$(MJCF_PA
 
 else
 
-# cluster mjcf files location (model files like gripper/objects)
-MJCF_PATH = /home/luke/gripper_repo_ws/src/gripper_v2/gripper_description/urdf/mujoco/
+# mjcf files location (model files like gripper/objects)
+# MJCF_PATH = /home/luke/gripper_repo_ws/src/gripper_v2/gripper_description/urdf/mujoco/
+MJCF_PATH = /home/luke/mymujoco/mjcf/object_set_1
 
 # local machine library locations
 PYTHON_PATH = /usr/include/python3.6m

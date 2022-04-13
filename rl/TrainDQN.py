@@ -742,7 +742,7 @@ if __name__ == "__main__":
   
   # ----- prepare ----- #
 
-  cluster = True
+  cluster = False
   force_device = "cpu"
   model = TrainDQN(cluster=cluster, device=force_device)
 
@@ -759,18 +759,18 @@ if __name__ == "__main__":
 
   # ----- load ----- #
 
-  # # load
-  # folderpath = "/home/luke/cluster/rl/models/dqn/DQN_2L60/"
+  # load
+  folderpath = "/home/luke/cluster/rl/models/dqn/DQN_2L60/"
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"
-  # foldername = "train_cluster_28-03-2022_16:55_array_17"
-  # model.load(id=13, folderpath=folderpath, foldername=foldername)
+  foldername = "train_cluster_04-04-2022_12:47_array_13"
+  model.load(id=None, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
-  # train
-  model.env.disable_rendering = True
-  model.env.mj.set.debug = False
-  model.train()
+  # # train
+  # model.env.disable_rendering = True
+  # model.env.mj.set.debug = False
+  # model.train()
 
   # continue training
   # model.continue_training('train_cluster_24-02-2022_12:43_array_6', folderpath=folderpath)
@@ -782,10 +782,13 @@ if __name__ == "__main__":
   # model.plot()
   # plt.show()
 
-  # # test
-  # model.env.disable_rendering = False
-  # model.env.test_trials_per_obj = 1
-  # test_data = model.test()
+  # test
+  model.env.disable_rendering = False
+  model.env.test_trials_per_obj = 1
+  model.env.mj.set.exceed_limits.set     (-0.005, True,   10)
+  model.env.mj.set.exceed_axial.set      (-0.005, True,   10,    3.0,  6.0,  -1)
+  model.env.mj.set.exceed_lateral.set    (-0.005, True,   10,    4.0,  6.0,  -1)
+  test_data = model.test()
 
   # # save results
   # test_report = model.create_test_report(test_data)
