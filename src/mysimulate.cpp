@@ -2536,10 +2536,10 @@ int main(int argc, const char** argv)
         "gripper_description/urdf/mujoco/mjcf";
     #endif
     
-    std::string gripper_file = "gripper_mujoco.xml";
-    std::string panda_file = "panda_mujoco.xml";
-    std::string both_file = "panda_and_gripper_mujoco.xml";
-    std::string task_file = "gripper_task.xml";
+    std::string gripper_file = "/gripper_mujoco.xml";
+    std::string panda_file = "/panda_mujoco.xml";
+    std::string both_file = "/panda_and_gripper_mujoco.xml";
+    std::string task_file = "/gripper_task.xml";
 
     // default configuration
     std::string filepath = default_path + task_file;

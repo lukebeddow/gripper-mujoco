@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <mujoco model="gripper_task">
-    <compiler angle="radian" meshdir="../meshes_mujoco/"/>
+    <compiler angle="radian" meshdir="./meshes_mujoco/"/>
     <size njmax="3000" nconmax="800"/>
     <asset>
         <mesh name="main body visual" file="main body visual.STL"/>
