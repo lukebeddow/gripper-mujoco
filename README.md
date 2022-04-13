@@ -4,6 +4,8 @@ Code for simulating my gripper with mujoco. The ```src``` folder contains c++ co
 
 To build, run ```make``` in the root of the directory.
 
+To run the simulation, use ```bin/mysimulate task 0```.
+
 ## Installations
 
 This code has three key library dependencies:
