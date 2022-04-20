@@ -3,6 +3,7 @@ rl/models/
 sample/
 MUJOCO_LOG.TXT
 .vscode/
+__pycache__/
 bin/
 *.so
 *.pickle
