@@ -60,7 +60,7 @@ endif
 
 Currently, compilation is set up as well for the old version of mujoco (2.1.0) so for the time being you will also need to move some files. Go to the folder where you have saved your version of mujoco (eg ```mujoco-2.1.5```), then copy across the two uitools files into the include folder:
 
-```
+```bash
 cd /your/path/to/mujoco-2.1.5
 cp sample/uitools.c sample/uitools.h include/
 ```
