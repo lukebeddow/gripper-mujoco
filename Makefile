@@ -40,50 +40,55 @@ else
 OPTIM = -O2
 endif
 
-# library locations, different for on and off the cluster
-ifeq ($(filter cluster, $(MAKECMDGOALS)), cluster)
+# define library locations
+include buildsettings.mk
 
-# cluster mjcf files location (model files like gripper/objects)
-# MJCF_PATH = /home/lbeddow/mjcf/
-MJCF_PATH = /home/lbeddow/mymujoco/mjcf/object_set_1
+# # library locations, different for on and off the cluster
+# ifeq ($(filter cluster, $(MAKECMDGOALS)), cluster)
 
-# cluster library locations
-PYTHON_PATH = /share/apps/python-3.6.9/include/python3.6m
-PYBIND_PATH = /home/lbeddow/pybind11
-ARMA_PATH = /home/lbeddow/clusterlibs/armadillo-code
-MUJOCO_PATH = /home/lbeddow/.mujoco/mujoco210
-CORE_LIBS = -lmujoco210 -lblas -llapack
-RENDER_LIBS = -lGL -lglew	$(MUJOCO_PATH)/bin/libglfw.so.3
-DEFINE_VAR = -DLUKE_CLUSTER -DARMA_DONT_USE_WRAPPER -DLUKE_MJCF_PATH='"$(MJCF_PATH)"'
+# # cluster mjcf files location (model files like gripper/objects)
+# # MJCF_PATH = /home/lbeddow/mjcf/
+# MJCF_PATH = /home/lbeddow/mymujoco/mjcf/object_set_1
 
-else
+# # cluster library locations
+# PYTHON_PATH = /share/apps/python-3.6.9/include/python3.6m
+# PYBIND_PATH = /home/lbeddow/pybind11
+# ARMA_PATH = /home/lbeddow/clusterlibs/armadillo-code
+# MUJOCO_PATH = /home/lbeddow/.mujoco/mujoco210
+# CORE_LIBS = -lmujoco210 -lblas -llapack
+# RENDER_LIBS = -lGL -lglew	$(MUJOCO_PATH)/bin/libglfw.so.3
+# DEFINE_VAR = -DLUKE_CLUSTER -DARMA_DONT_USE_WRAPPER -DLUKE_MJCF_PATH='"$(MJCF_PATH)"'
 
-# mjcf files location (model files like gripper/objects)
-MJCF_PATH = /home/luke/mymujoco/mjcf/object_set_1
+# else
 
-# local machine library locations
-PYTHON_PATH = /usr/include/python3.6m
-PYBIND_PATH = /home/luke/pybind11
-ARMA_PATH = # none, use system library
-MUJOCO_PATH = /home/luke/.mujoco/mujoco210
-CORE_LIBS = -lmujoco210 -larmadillo
-RENDER_LIBS = -lGL -lglew	$(MUJOCO_PATH)/bin/libglfw.so.3
-DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"'
+# # mjcf files location (model files like gripper/objects)
+# MJCF_PATH = /home/luke/luke-gripper-mujoco/mjcf/object_set_1
 
-# extras
-MAKEFLAGS += -j8 # jN => use N parallel cores
+# # local machine library locations
+# PYTHON_PATH = /usr/include/python3.6m
+# PYBIND_PATH = /home/luke/pybind11
+# ARMA_PATH = # none, use system library
+# MUJOCO_PATH = /home/luke/mujoco-2.1.5
+# CORE_LIBS = -larmadillo -L$(MUJOCO_PATH)/lib/ -lmujoco
+# RENDER_LIBS = -lGL -lglfw -lGLU
+# PY_LIBS = #-lpybind11
+# DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"'
 
-endif
+# # extras
+# MAKEFLAGS += -j8 # jN => use N parallel cores
+
+# endif
 
 # ----- compilation settings ----- #
 
 # define compiler flags and libraries
 COMMON = $(OPTIM) -std=c++11 -mavx -pthread -Wl,-rpath,'$$ORIGIN' $(DEFINE_VAR) \
-         -I$(MUJOCO_PATH)/include \
-         -I$(PYBIND_PATH)/include \
-				 -I$(ARMA_PATH)/include \
-				 -L$(MUJOCO_PATH)/bin
-PYBIND = $(COMMON) -fPIC -Wall -shared -I$(PYTHON_PATH)
+		 -I$(MUJOCO_PATH)/include \
+		 -I$(PYBIND_PATH)/include \
+		 -I$(ARMA_PATH)/include \
+		 -L$(MUJOCO_PATH)/bin \
+		 -I$(PYTHON_PATH)
+PYBIND = $(COMMON) -fPIC -Wall -shared #-I$(PYTHON_PATH) $(PY_LIBS)
 
 # ----- automatically generated variables ----- #
 
@@ -116,17 +121,21 @@ py: $(PYTARGETS) $(DEPENDS)
 .PHONY: everything
 everything: cpp py models
 
+.PHONY: debug
+debug: cpp
+
 .PHONY: cluster
 cluster: py
 
-.PHONY: debug
-debug: cpp
+# empty targets to set library variables,  see: buildsettings.mk
+.PHONY: lab
+.PHONY: luke
 
 # compile the uitools object file which is used by both cpp and python targets
 # ADDED -fPIC FOR CLUSTER TO WORK
 $(BUILDDIR)/uitools.o:
-	gcc -c -O2 -mavx -fPIC -I ~/.mujoco/mujoco210/include \
-		~/.mujoco/mujoco210/include/uitools.c -o $@
+	gcc -c -O2 -mavx -fPIC -I $(MUJOCO_PATH)/include \
+		$(MUJOCO_PATH)/include/uitools.c -o $@
 
 # build object files
 $(CPPSHAREDOBJ): $(BUILDCPP)/%.o : $(SOURCEDIR)/%.cpp
