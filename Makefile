@@ -130,6 +130,7 @@ cluster: py
 # empty targets to set library variables,  see: buildsettings.mk
 .PHONY: lab
 .PHONY: luke
+.PHONY: luke-old
 
 # compile the uitools object file which is used by both cpp and python targets
 # ADDED -fPIC FOR CLUSTER TO WORK

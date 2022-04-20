@@ -36,8 +36,8 @@ DEFINE_VAR = -DLUKE_CLUSTER -DARMA_DONT_USE_WRAPPER -DLUKE_MJCF_PATH='"$(MJCF_PA
 
 endif
 
-# ----- compiling on lukes laptop ----- #
-ifeq ($(filter luke, $(MAKECMDGOALS)), luke)
+# ----- compiling on lukes laptop, old mujoco version ----- #
+ifeq ($(filter luke-old, $(MAKECMDGOALS)), luke-old)
 
 # mjcf files location (model files like gripper/objects)
 MJCF_PATH = /home/luke/mymujoco/mjcf/object_set_1
@@ -49,6 +49,26 @@ ARMA_PATH = # none, use system library
 MUJOCO_PATH = /home/luke/.mujoco/mujoco210
 CORE_LIBS = -lmujoco210 -larmadillo
 RENDER_LIBS = -lGL -lglew $(MUJOCO_PATH)/bin/libglfw.so.3
+DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"'
+
+# extras
+MAKEFLAGS += -j8 # jN => use N parallel cores
+
+endif
+
+# ----- compiling on lukes laptop, new mujoco version ----- #
+ifeq ($(filter luke, $(MAKECMDGOALS)), luke)
+
+# mjcf files location (model files like gripper/objects)
+MJCF_PATH = /home/luke/mymujoco/mjcf/object_set_1
+
+# local machine library locations
+PYTHON_PATH = /usr/include/python3.6m
+PYBIND_PATH = /home/luke/pybind11
+ARMA_PATH = # none, use system library
+MUJOCO_PATH = /home/luke/mujoco-2.1.5
+CORE_LIBS = -larmadillo -L$(MUJOCO_PATH)/lib/ -lmujoco
+RENDER_LIBS = -lglfw
 DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"'
 
 # extras
@@ -68,7 +88,7 @@ PYBIND_PATH = /home/luke/pybind11
 ARMA_PATH = # none, use system library
 MUJOCO_PATH = /home/luke/mujoco-2.1.5
 CORE_LIBS = -larmadillo -L$(MUJOCO_PATH)/lib/ -lmujoco
-RENDER_LIBS = -lGL -lglfw -lGLU
+RENDER_LIBS = -lglfw #-lGL -lGLU
 DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"'
 
 # extras
