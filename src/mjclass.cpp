@@ -87,6 +87,7 @@ void MjClass::configure_settings()
 {
   /* apply simulation settings */
 
+  /* check what actions are set */
   action_options.clear();
   action_options.resize(MjType::Action::count, -1);
 
@@ -154,13 +155,23 @@ void MjClass::load_relative(std::string relative_path)
 {
   /* load a model with a relative path, using compiled defaults */
 
-  // the default path should be set in the Makefile, check if it has been
-  #if defined(LUKE_MJCF_PATH)
-    load(LUKE_MJCF_PATH + relative_path);
-  #else
-    // no default path for model files has been set, return an error
-    throw std::runtime_error("Cannot use MjClass::load_relative() as LUKE_MJCF_PATH not set");
-  #endif
+  if (model_folder_path != "" and object_set_name != "") {
+
+    if (model_folder_path.back() != '/') {
+      model_folder_path += "/";
+    }
+
+    if (relative_path[0] != '/') {
+      relative_path = "/" + relative_path;
+    }
+
+    load(model_folder_path + object_set_name + relative_path);
+  }
+  else {
+    throw std::runtime_error(
+      "Cannot use MjClass::load_relative() as LUKE_MJCF_PATH or LUKE_DEFAULTOBJECTS not set"
+    );
+  }
 }
 
 void MjClass::reset()

@@ -2529,11 +2529,15 @@ int main(int argc, const char** argv)
     // initialize everything
     init();
 
-    #if defined(LUKE_MJCF_PATH)
-        std::string default_path = LUKE_MJCF_PATH;
-    #else
-        std::string default_path = "/home/luke/gripper_repo_ws/src/gripper_v2/"
+    std::string default_path = "/home/luke/gripper_repo_ws/src/gripper_v2/"
         "gripper_description/urdf/mujoco/mjcf";
+
+    #if defined(LUKE_MJCF_PATH)
+    #if defined(LUKE_DEFAULTOBJECTS)
+        default_path = LUKE_MJCF_PATH;
+        default_path += '/';
+        default_path += LUKE_DEFAULTOBJECTS;
+    #endif
     #endif
     
     std::string gripper_file = "/gripper_mujoco.xml";

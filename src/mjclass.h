@@ -290,8 +290,23 @@ public:
   mjData* data;
 
   MjType::Settings s_;                          // simulation settings
-  std::string current_load_path;                // xml path of currently loaded model
   std::chrono::time_point<time_> start_time_;   // time from tick() call
+
+  // path information for loading models, have we defined defaults?
+  #if defined(LUKE_MJCF_PATH)
+    std::string model_folder_path = LUKE_MJCF_PATH;
+  #else
+    std::string model_folder_path = "";
+  #endif
+
+  #if defined(LUKE_DEFAULTOBJECTS)
+    std::string object_set_name = LUKE_DEFAULTOBJECTS;
+  #else
+    std::string object_set_name = "";
+  #endif
+
+  std::string current_load_path;                // xml path of currently loaded model
+  
 
   /* ----- variables that are reset ----- */
 

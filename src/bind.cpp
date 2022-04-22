@@ -64,6 +64,8 @@ PYBIND11_MODULE(bind, m) {
     .def("get_current_object_name", &MjClass::get_current_object_name)
     .def("get_test_report", &MjClass::get_test_report)
     .def_readwrite("set", &MjClass::s_)
+    .def_readwrite("model_folder_path", &MjClass::model_folder_path)
+    .def_readwrite("object_set_name", &MjClass::object_set_name)
     .def_readonly("current_load_path", &MjClass::current_load_path)
     .def_readwrite("curve_validation_data", &MjClass::curve_validation_data_)
 

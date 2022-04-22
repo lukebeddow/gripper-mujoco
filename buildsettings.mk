@@ -7,7 +7,7 @@
 # ----- default settings, easily overwritten ----- #
 
 # mjcf files location (model files like gripper/objects)
-MJCF_PATH = /home/luke/mymujoco/mjcf/object_set_1
+MJCF_PATH = /home/luke/mymujoco/mjcf
 
 # local machine library locations
 PYTHON_PATH = /usr/include/python3.6m
@@ -23,7 +23,7 @@ ifeq ($(filter cluster, $(MAKECMDGOALS)), cluster)
 
 # cluster mjcf files location (model files like gripper/objects)
 # MJCF_PATH = /home/lbeddow/mjcf/
-MJCF_PATH = /home/lbeddow/mymujoco/mjcf/object_set_1
+MJCF_PATH = /home/lbeddow/mymujoco/mjcf
 
 # cluster library locations
 PYTHON_PATH = /share/apps/python-3.6.9/include/python3.6m
@@ -40,7 +40,7 @@ endif
 ifeq ($(filter luke-old, $(MAKECMDGOALS)), luke-old)
 
 # mjcf files location (model files like gripper/objects)
-MJCF_PATH = /home/luke/mymujoco/mjcf/object_set_1
+MJCF_PATH = /home/luke/mymujoco/mjcf
 
 # local machine library locations
 PYTHON_PATH = /usr/include/python3.6m
@@ -60,7 +60,7 @@ endif
 ifeq ($(filter luke, $(MAKECMDGOALS)), luke)
 
 # mjcf files location (model files like gripper/objects)
-MJCF_PATH = /home/luke/mymujoco/mjcf/object_set_1
+MJCF_PATH = /home/luke/mymujoco/mjcf
 
 # local machine library locations
 PYTHON_PATH = /usr/include/python3.6m
@@ -80,7 +80,7 @@ endif
 ifeq ($(filter lab, $(MAKECMDGOALS)), lab)
 
 # mjcf files location (model files like gripper/objects)
-MJCF_PATH = /home/luke/luke-gripper-mujoco/mjcf/object_set_1
+MJCF_PATH = /home/luke/luke-gripper-mujoco/mjcf
 
 # local machine library locations
 PYTHON_PATH = /usr/include/python3.6m

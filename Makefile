@@ -27,6 +27,9 @@ BUILDDEP := $(BUILDDIR)/depends
 OUTCPP := bin
 OUTPY := rl/env/mjpy
 
+# object set name
+DEFAULT_OBJECTSET = set1_nocuboid_526
+
 # for generating models, non-essential feature
 MODELBASH := generate_models.sh
 MODELDIR := /home/luke/gripper_repo_ws/src/gripper_v2/gripper_description/urdf/mujoco
@@ -43,46 +46,11 @@ endif
 # define library locations
 include buildsettings.mk
 
-# # library locations, different for on and off the cluster
-# ifeq ($(filter cluster, $(MAKECMDGOALS)), cluster)
-
-# # cluster mjcf files location (model files like gripper/objects)
-# # MJCF_PATH = /home/lbeddow/mjcf/
-# MJCF_PATH = /home/lbeddow/mymujoco/mjcf/object_set_1
-
-# # cluster library locations
-# PYTHON_PATH = /share/apps/python-3.6.9/include/python3.6m
-# PYBIND_PATH = /home/lbeddow/pybind11
-# ARMA_PATH = /home/lbeddow/clusterlibs/armadillo-code
-# MUJOCO_PATH = /home/lbeddow/.mujoco/mujoco210
-# CORE_LIBS = -lmujoco210 -lblas -llapack
-# RENDER_LIBS = -lGL -lglew	$(MUJOCO_PATH)/bin/libglfw.so.3
-# DEFINE_VAR = -DLUKE_CLUSTER -DARMA_DONT_USE_WRAPPER -DLUKE_MJCF_PATH='"$(MJCF_PATH)"'
-
-# else
-
-# # mjcf files location (model files like gripper/objects)
-# MJCF_PATH = /home/luke/luke-gripper-mujoco/mjcf/object_set_1
-
-# # local machine library locations
-# PYTHON_PATH = /usr/include/python3.6m
-# PYBIND_PATH = /home/luke/pybind11
-# ARMA_PATH = # none, use system library
-# MUJOCO_PATH = /home/luke/mujoco-2.1.5
-# CORE_LIBS = -larmadillo -L$(MUJOCO_PATH)/lib/ -lmujoco
-# RENDER_LIBS = -lGL -lglfw -lGLU
-# PY_LIBS = #-lpybind11
-# DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"'
-
-# # extras
-# MAKEFLAGS += -j8 # jN => use N parallel cores
-
-# endif
-
 # ----- compilation settings ----- #
 
 # define compiler flags and libraries
 COMMON = $(OPTIM) -std=c++11 -mavx -pthread -Wl,-rpath,'$$ORIGIN' $(DEFINE_VAR) \
+		 -DLUKE_DEFAULTOBJECTS='"$(DEFAULT_OBJECTSET)"' \
 		 -I$(MUJOCO_PATH)/include \
 		 -I$(PYBIND_PATH)/include \
 		 -I$(ARMA_PATH)/include \

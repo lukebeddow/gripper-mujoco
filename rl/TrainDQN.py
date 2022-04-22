@@ -163,9 +163,6 @@ class TrainDQN():
     # else choose randomly
     else:
       rand_action = random.randrange(self.env.n_actions)
-      print("rand action is ", rand_action)
-      print("env.n_actions is ", self.env.n_actions)
-      print("mj n_actions is ", self.env.mj.get_n_actions())
       return torch.tensor([[rand_action]], device=self.device,
                           dtype=torch.long)
 
