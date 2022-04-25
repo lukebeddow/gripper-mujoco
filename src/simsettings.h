@@ -26,7 +26,7 @@
                                 type      value
   general */\
   X(  debug,                    bool,     true)     /* print debug info to terminal */\
-/*  X(  curve_validation,         bool,     false)    /* save finger curve data for testing */\
+  X(  curve_validation,         bool,     false)    /* save finger curve data for testing */\
   /*
   step() and gauge settings */\
   X(  gauge_read_rate_hz,       double,   10.0)     /* frequency of gauge readings */\
@@ -34,7 +34,10 @@
   X(  use_palm_sensor,          bool,     true)     /* use a sensor on the palm */\
   X(  palm_force_normalise,     double,   8.0)      /* <0:bumper sensor, >0:normalising value*/\
   X(  obs_raw_data,             bool,     false)    /* use raw sensor data for get_observation()*/\
-/*  X(  use_wrist_sensor,         bool,     false)    /* get force information from wrist sensor*/\
+  X(  use_wrist_sensor_X,       bool,     false)    /* get X force information from wrist sensor*/\
+  X(  use_wrist_sensor_Y,       bool,     false)    /* get X force information from wrist sensor*/\
+  X(  use_wrist_sensor_Z,       bool,     false)    /* get X force information from wrist sensor*/\
+  X(  use_axial_strain_gauge,   bool,     false)    /* get axial finger strain information*/\
   /* 
   update_env() settings */\
   X(  lift_distance,            double,   1e-3)     /* distance to consider object lifted */\
