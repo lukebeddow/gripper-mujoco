@@ -80,6 +80,10 @@ PYTARGETOBJ := $(patsubst %, $(BUILDDIR)/%.o, $(TARGET_LIST_PY))
 CPPSHAREDOBJ := $(patsubst $(SOURCEDIR)/%.cpp, $(BUILDCPP)/%.o, $(SOURCES))
 PYSHAREDOBJ := $(patsubst $(SOURCEDIR)/%.cpp, $(BUILDPY)/%.o, $(SOURCES))
 
+# create the directories if they don't exist
+DIRS := $(BUILDPY) $(BUILDCPP) $(BUILDDEP) $(OUTCPP) $(OUTPY)
+$(info $(shell mkdir -p $(DIRS)))
+
 # ----- start of make ----- #
 
 all: cpp py
