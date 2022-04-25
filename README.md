@@ -21,7 +21,6 @@ The c++ outputs will be put into a folder called ```bin```, the python module in
 
 In order to build, the locations of the dependent libraries needs to be specified. This is specified in the ```buildsettings.mk``` file. **You will need to edit ```buildsettings.mk``` in order to build**. This file contains library locations for a variety of compile locations, you will need to add your compile location to this file. The file is structured as an ```if ... else if ... else if ... endif```. Copy the following code to the bottom of the file:
 
-Next, the locations of the library installations should be put into the Makefile. Every machine that compiles this project has slightly different paths and library locations. Open the ```buildsettings.mk``` makefile and you will see a variety of options for different library locations. Add a new one which corresponds to your machine, for example ```mybuild```. You will need to set:
 
 ```make
 ifeq ($(filter mybuild, $(MAKECMDGOALS)), mybuild)
