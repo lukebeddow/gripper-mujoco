@@ -1336,7 +1336,6 @@ gfloat verify_armadillo_gauge(const mjData* data, int finger,
   return P;
 }
 
-
 std::vector<gfloat> get_gauge_data(const mjModel* model, mjData* data)
 {
   /* Get the position of the finger joints */

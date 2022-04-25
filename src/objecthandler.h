@@ -39,7 +39,7 @@ struct ObjectHandler {
   // collision groups
   constexpr static unsigned long COL_none = 0;  // 0...000
   constexpr static unsigned long COL_main = 1;  // 0...001
-  constexpr static unsigned long COL_dead = 2;  // 0..0010
+  constexpr static unsigned long COL_dead = 2;  // 0...010
   constexpr static unsigned long COL_all = 3;   // 0...011
   
   constexpr static bool debug = false;

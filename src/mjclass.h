@@ -63,6 +63,48 @@ namespace MjType
     void set(bool in_use_, float normalise_, float read_rate_) {
       in_use = in_use_; normalise = normalise_; read_rate = read_rate_;
     }
+
+    void reset() {
+      last_read_time = 0.0;
+    }
+
+    float apply_normalisation(float value) {
+      // normalise the given value from [-1 to +1]
+      if (in_use) {
+        // bumper sensor only
+        if (normalise <= 0) {
+          if (value < 0) return -1;
+          else return 1;
+        }
+        // regular normalisation
+        else if (value > normalise) {
+        return 1.0;
+        }
+        if (value < -normalise) {
+          return -1.0;
+        }
+        return value / normalise;
+      }
+      // not in use
+      else {
+        return 0.0;
+      }
+    }
+
+    bool ready_to_read(double current_time_seconds) {
+      // return true if the sensor is ready to read, also saves last read time
+      // as the current time
+
+      if (not in_use) return false;
+
+      double time_between_reads = 1 / read_rate;
+
+      if (current_time_seconds > last_read_time + time_between_reads) {
+        last_read_time = current_time_seconds;
+        return true;
+      }
+      else return false;
+    }
   };
 
   // what key events will we keep track of in the simulation
@@ -340,11 +382,19 @@ public:
   std::vector<int> action_options;    // possible action codes
   int n_actions;                      // number of possible actions
   
-  // create storage containers for strain gauge data
+  // create storage containers for sensor data
   luke::SlidingWindow<luke::gfloat> finger1_gauge { gauge_buffer_size };
   luke::SlidingWindow<luke::gfloat> finger2_gauge { gauge_buffer_size };
   luke::SlidingWindow<luke::gfloat> finger3_gauge { gauge_buffer_size };
   luke::SlidingWindow<luke::gfloat> palm_sensor { gauge_buffer_size };
+  luke::SlidingWindow<luke::gfloat> finger1_axial_gauge { gauge_buffer_size };
+  luke::SlidingWindow<luke::gfloat> finger2_axial_gauge { gauge_buffer_size };
+  luke::SlidingWindow<luke::gfloat> finger3_axial_gauge { gauge_buffer_size };
+  luke::SlidingWindow<luke::gfloat> wrist_X_sensor { gauge_buffer_size };
+  luke::SlidingWindow<luke::gfloat> wrist_Y_sensor { gauge_buffer_size };
+  luke::SlidingWindow<luke::gfloat> wrist_Z_sensor { gauge_buffer_size };
+
+  // track the timestamps of gauges updates, this is for plotting in mysimlulate.cpp
   luke::SlidingWindow<float> gauge_timestamps { gauge_buffer_size };
 
   // data structures
@@ -372,6 +422,7 @@ public:
   bool render();
 
   // sensing
+  void monitor_sensors();
   bool monitor_gauges();
   std::vector<luke::gfloat> read_gauges();
   luke::gfloat read_palm();

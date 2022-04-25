@@ -187,18 +187,31 @@ void MjClass::reset()
   finger1_gauge.reset();
   finger2_gauge.reset();
   finger3_gauge.reset();
-  gauge_timestamps.reset();
   palm_sensor.reset();
+  finger1_axial_gauge.reset();
+  finger2_axial_gauge.reset();
+  finger3_axial_gauge.reset();
+  wrist_X_sensor.reset();
+  wrist_Y_sensor.reset();
+  wrist_Z_sensor.reset();
+  gauge_timestamps.reset();
   env_.reset();
+
+  // reset sensor last read times
+  s_.bending_gauge.reset();
+  s_.axial_gauge.reset();
+  s_.palm_sensor.reset();
+  s_.wrist_sensor_XY.reset();
+  s_.wrist_sensor_Z.reset();
 
   // reset the test report
   MjType::TestReport blank_report;
   testReport_ = blank_report;
 
-  // // empty any curve validation data
-  // if (s_.curve_validation) {
-  //   curve_validation_data_.entries.clear();
-  // }
+  // empty any curve validation data
+  if (s_.curve_validation) {
+    curve_validation_data_.entries.clear();
+  }
 
   // ensure the simulation settings are all ready to go
   configure_settings();
@@ -284,14 +297,101 @@ bool MjClass::render()
 
 /* ----- sensing ----- */
 
+void MjClass::monitor_sensors()
+{
+  /* check all the sensors and take readings if possible */
+
+  bool retrieved_forces = false;
+  luke::Forces forces;
+
+  // check the bending strain gauges
+  if (s_.bending_gauge.ready_to_read(data->time)) {
+
+    // read
+    std::vector<luke::gfloat> gauges = luke::get_gauge_data(model, data);
+
+    // normalise
+    gauges[0] = s_.bending_gauge.apply_normalisation(gauges[0]);
+    gauges[1] = s_.bending_gauge.apply_normalisation(gauges[1]);
+    gauges[2] = s_.bending_gauge.apply_normalisation(gauges[2]);
+
+    // save
+    finger1_gauge.add(gauges[0]);
+    finger2_gauge.add(gauges[1]);
+    finger3_gauge.add(gauges[2]);
+  }
+
+  // check the axial strain gauges
+  if (s_.axial_gauge.ready_to_read(data->time)) {
+
+    if (not retrieved_forces) {
+      forces = luke::get_object_forces(model, data);
+    }
+
+    // read
+    std::vector<luke::gfloat> axial_gauges {
+      (luke::gfloat)forces.all.finger1_local[0],
+      (luke::gfloat)forces.all.finger2_local[0],
+      (luke::gfloat)forces.all.finger3_local[0]
+    };
+
+    // normalise
+    axial_gauges[0] = s_.axial_gauge.apply_normalisation(axial_gauges[0]);
+    axial_gauges[1] = s_.axial_gauge.apply_normalisation(axial_gauges[1]);
+    axial_gauges[2] = s_.axial_gauge.apply_normalisation(axial_gauges[2]);
+
+    // save
+    finger1_axial_gauge.add(axial_gauges[0]);
+    finger2_axial_gauge.add(axial_gauges[1]);
+    finger3_axial_gauge.add(axial_gauges[2]);
+  }
+
+  // check the palm sensor
+  if (s_.palm_sensor.ready_to_read(data->time)) {
+
+    if (not retrieved_forces) {
+      forces = luke::get_object_forces(model, data);
+    }
+    
+    // read
+    // luke::gfloat palm_reading = luke::get_palm_force(model, data);
+    luke::gfloat palm_reading = forces.all.palm_local[0];
+
+    // normalise
+    palm_reading = s_.axial_gauge.apply_normalisation(palm_reading);
+
+    // save
+    palm_sensor.add(palm_reading);
+  }
+
+  // check the wrist sensor XY force
+  if (s_.wrist_sensor_XY.ready_to_read(data->time)) {
+
+    if (not retrieved_forces) {
+      forces = luke::get_object_forces(model, data);
+    }
+
+  }
+
+  // check the wrist sensor Z force
+  if (s_.wrist_sensor_Z.ready_to_read(data->time)) {
+
+    if (not retrieved_forces) {
+      forces = luke::get_object_forces(model, data);
+    }
+
+  }
+}
+
 bool MjClass::monitor_gauges()
 {
   /* check with set rate whether gauges have new data */
 
-  // read and save the gauge data
-  double time_between_reads = 1.0 / s_.gauge_read_rate_hz;
+  // // read and save the gauge data
+  // double time_between_reads = 1.0 / s_.gauge_read_rate_hz;
+  // if (data->time > last_read_time + time_between_reads) {
 
-  if (data->time > last_read_time + time_between_reads) {
+  if (s_.bending_gauge.ready_to_read(data->time)) {
 
     std::vector<luke::gfloat> gauges = read_gauges();
 
@@ -305,19 +405,19 @@ bool MjClass::monitor_gauges()
     gauge_timestamps.add(data->time);
     last_read_time = data->time;
 
-    // // for testing the curve validation
-    // if (s_.curve_validation) {
-    //   // extract the finger data
-    //   MjType::CurveFitData::PoseData pose;
-    //   luke::verify_armadillo_gauge(data, 0,
-    //     pose.f1.x, pose.f1.y, pose.f1.coeff, pose.f1.errors);
-    //   luke::verify_armadillo_gauge(data, 1,
-    //     pose.f2.x, pose.f2.y, pose.f2.coeff, pose.f2.errors);
-    //   luke::verify_armadillo_gauge(data, 2,
-    //     pose.f3.x, pose.f3.y, pose.f3.coeff, pose.f3.errors);
-    //   // save
-    //   curve_validation_data_.entries.push_back(pose);
-    // }
+    // for testing the curve validation
+    if (s_.curve_validation) {
+      // extract the finger data
+      MjType::CurveFitData::PoseData pose;
+      luke::verify_armadillo_gauge(data, 0,
+        pose.f1.x, pose.f1.y, pose.f1.coeff, pose.f1.errors);
+      luke::verify_armadillo_gauge(data, 1,
+        pose.f2.x, pose.f2.y, pose.f2.coeff, pose.f2.errors);
+      luke::verify_armadillo_gauge(data, 2,
+        pose.f3.x, pose.f3.y, pose.f3.coeff, pose.f3.errors);
+      // save
+      curve_validation_data_.entries.push_back(pose);
+    }
 
     return true;
   }

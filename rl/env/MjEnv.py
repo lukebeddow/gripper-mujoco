@@ -485,8 +485,8 @@ if __name__ == "__main__":
 
   # print(mj._get_cpp_settings())
 
-  obs = mj.reset()
+  # obs = mj.reset()
 
-  print(obs)
+  # print(obs)
 
-  # print(mj._get_cpp_settings())
+  print(mj._get_cpp_settings())
