@@ -15,30 +15,12 @@ This code has the following dependencies:
 
 Building the project is done using a Makefile in the root of the directory. The Makefile has two types of target, it compiles an executable only from c++ code as well as compiling a python module which can be imported into python code.
 
-Create the following folders:
+The c++ outputs will be put into a folder called ```bin```, the python module into ```rl/env/mjpy```, and build files into a folder called ```build```. These folders are automatically created when the Makefile is run. This folder structure is specified in the Makefile, and can be adjusted if desired, but this is not needed.
 
-* In the root:
-  * bin
-  * build
-* In build:
-  * py
-  * cpp
-  * depends
+**Define library locations**
 
-Notice that all of these folders are ignored in the projects .gitignore file. The Makefile will output temporaries into ```build```, the executables into ```bin```, and the python module into ```rl/env/mjpy```. In the Makefile this is specified by the following lines:
+In order to build, the locations of the dependent libraries needs to be specified. This is specified in the ```buildsettings.mk``` file. **You will need to edit ```buildsettings.mk``` in order to build**. This file contains library locations for a variety of compile locations, you will need to add your compile location to this file. The file is structured as an ```if ... else if ... else if ... endif```. Copy the following code to the bottom of the file:
 
-```make
-# define directory structure (these folders must exist)
-SOURCEDIR := src
-BUILDDIR := build
-BUILDPY := $(BUILDDIR)/py
-BUILDCPP := $(BUILDDIR)/cpp
-BUILDDEP := $(BUILDDIR)/depends
-OUTCPP := bin
-OUTPY := rl/env/mjpy
-```
-
-Next, the locations of the library installations should be put into the Makefile. Every machine that compiles this project has slightly different paths and library locations. Open the ```buildsettings.mk``` makefile and you will see a variety of options for different library locations. Add a new one which corresponds to your machine, for example ```mybuild```. You will need to set:
 
 ```make
 ifeq ($(filter mybuild, $(MAKECMDGOALS)), mybuild)
@@ -58,14 +40,30 @@ DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' # define c++ macros, you don't ne
 endif
 ```
 
+In the above code, the keyword ```mybuild``` is used to select this path/library locations. So you would run ```make all mybuild``` to have these paths set. Change ```mybuild``` to the command of your choice:
+
+<pre>
+ifeq ($(filter <b>mybuild</b>, $(MAKECMDGOALS)), <b>mybuild</b>)
+</pre>
+
+Next, select the path to the mjcf files in ```$(MJCF_PATH)```. These are the models that are the robot models and object models that will be loaded into mujoco. They are contained in the ```mjcf``` folder of this repository. There are multiple object sets you can choose from. The object set can also be changed later in the code, here sets the default option.
+
+Finally, edit all of the library locations with the correct paths.
+* If you have the source of a header only library (eg pybind11 above), simply add the path to this
+* If you have a system library already (eg armadillo above), simply add the library with ```-l``` + ```libary-name```
+* If you have a local library (eg mujoco above), either add the full path to the library location (as above) or use ```-L``` to specify the library folder and then ```-l``` to specify the library name in that folder (not shown above)
+
+**Temporary extra step for building**
+
 Currently, compilation is set up as well for the old version of mujoco (2.1.0) so for the time being you will also need to move some files. Go to the folder where you have saved your version of mujoco (eg ```mujoco-2.1.5```), then copy across the two uitools files into the include folder:
 
 ```shell
 cd /your/path/to/mujoco-2.1.5
 cp sample/uitools.c sample/uitools.h include/
 ```
+**Build commands**
 
-To build the project simply naviage to the root directory and run ```make all mybuild``` - swap ```mybuild``` for the name you chose.
+To build the project simply naviage to the root directory and run ```make all mybuild``` -> swap ```mybuild``` for the name you chose.
 
 Make options:
 
