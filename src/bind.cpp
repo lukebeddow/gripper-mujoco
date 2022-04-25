@@ -99,13 +99,15 @@ PYBIND11_MODULE(bind, m) {
     .def("wipe_rewards", &MjType::Settings::wipe_rewards)
 
     // use a macro to create code snippets for all of the settings
-    #define X(name, type, value) .def_readwrite(#name, &MjType::Settings::name)
+    #define XX(name, type, value) .def_readwrite(#name, &MjType::Settings::name)
+    #define SS(name, in_use, norm, readrate) .def_readwrite(#name, &MjType::Settings::name)
     #define BR(name, reward, done, trigger) .def_readwrite(#name, &MjType::Settings::name)
     #define LR(name, reward, done, trigger, min, max, overshoot) \
               .def_readwrite(#name, &MjType::Settings::name)
       // run the macro to create the code
       LUKE_MJSETTINGS
-    #undef X
+    #undef XX
+    #undef SS
     #undef BR
     #undef LR
 
@@ -121,12 +123,14 @@ PYBIND11_MODULE(bind, m) {
         return py::make_tuple(
 
           // expand settings into list of variable names for tuple
-          #define X(name, type, value) s.name,
+          #define XX(name, type, value) s.name,
+          #define SS(name, in_use, norm, readrate) s.name,
           #define BR(name, reward, done, trigger) s.name,
           #define LR(name, reward, done, trigger, min, max, overshoot) s.name,
             // run the macro to create the code
             LUKE_MJSETTINGS
-          #undef X
+          #undef XX
+          #undef SS
           #undef BR
           #undef LR
 
@@ -151,14 +155,17 @@ PYBIND11_MODULE(bind, m) {
         int i = 0;
 
         // expand the tuple elements and type cast them with a macro
-        #define X(name, type, value) out.name = t[i].cast<type>(); ++i;
+        #define XX(name, type, value) out.name = t[i].cast<type>(); ++i;
+        #define SS(name, in_use, norm, readrate) \
+                  out.name = t[i].cast<MjType::Sensor>(); ++i;
         #define BR(name, reward, done, trigger) \
                   out.name = t[i].cast<MjType::BinaryReward>(); ++i;
         #define LR(name, reward, done, trigger, min, max, overshoot) \
                   out.name = t[i].cast<MjType::LinearReward>(); ++i;
           // run the macro to create the code
           LUKE_MJSETTINGS
-        #undef X
+        #undef XX
+        #undef SS
         #undef BR
         #undef LR
 
@@ -179,13 +186,16 @@ PYBIND11_MODULE(bind, m) {
 
     .def(py::init<>())
 
-    #define X(name, type, value)
-    #define BR(name, reward, done, trigger) .def_readonly(#name, &MjType::EventTrack::name)
+    #define XX(name, type, value)
+    #define SS(name, in_use, norm, readrate)
+    #define BR(name, reward, done, trigger) \
+              .def_readonly(#name, &MjType::EventTrack::name)
     #define LR(name, reward, done, trigger, min, max, overshoot) \
               .def_readonly(#name, &MjType::EventTrack::name)
       // run the macro to create the binding code
       LUKE_MJSETTINGS
-    #undef X
+    #undef XX
+    #undef SS
     #undef BR
     #undef LR
 
@@ -209,7 +219,36 @@ PYBIND11_MODULE(bind, m) {
     .def_readonly("final_finger_force", &MjType::TestReport::final_finger_force)
     ;
 
-  // settings up rewards so python can interact and change them
+  // set up sensor type so python can interact and change them
+  py::class_<MjType::Sensor>(m, "Sensor")
+
+    .def(py::init<float, bool, int>())
+    .def("set", &MjType::Sensor::set)
+
+    .def_readwrite("in_use", &MjType::Sensor::in_use)
+    .def_readwrite("normalise", &MjType::Sensor::normalise)
+    .def_readwrite("read_rate", &MjType::Sensor::read_rate)
+
+    // pickle support
+    .def(py::pickle(
+      [](const MjType::Sensor r) { // __getstate___
+        /* return a tuple that fully encodes the state of the object */
+        return py::make_tuple(r.in_use, r.normalise, r.read_rate);
+      },
+      [](py::tuple t) { // __setstate__
+
+        if (t.size() != 3)
+          throw std::runtime_error("MjType::Sensor py::pickle got invalid state");
+
+        // create new c++ instance with old data
+        MjType::Sensor out(t[0].cast<bool>(), t[1].cast<float>(), t[2].cast<float>());
+
+        return out;
+      }
+    ))
+    ;
+
+  // set up binary reward type so python can interact and change them
   py::class_<MjType::BinaryReward>(m, "BinaryReward")
 
     .def(py::init<float, bool, int>())
@@ -238,6 +277,7 @@ PYBIND11_MODULE(bind, m) {
     ))
     ;
 
+  // set up linear reward type so python can edit them
   py::class_<MjType::LinearReward>(m, "LinearReward")
 
     .def(py::init<float, bool, int, float, float, float>())

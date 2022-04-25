@@ -46,16 +46,37 @@ namespace MjType
     };
   };
 
+  // sensor type for sensing in simulation
+  struct Sensor {
+
+    bool in_use;            // is this sensor currently in use
+    float normalise;        // value with which to normalise readings to [-1,1]
+    float read_rate;        // rate in Hz which this sensor is read
+    double last_read_time;  // time in seconds sensor was last read
+
+    Sensor(bool in_use, float normalise, float read_rate)
+      : in_use(in_use), normalise(normalise), read_rate(read_rate)
+    {
+      last_read_time = 0.0;
+    }
+
+    void set(bool in_use_, float normalise_, float read_rate_) {
+      in_use = in_use_; normalise = normalise_; read_rate = read_rate_;
+    }
+  };
+
   // what key events will we keep track of in the simulation
   struct EventTrack {
 
     // we keep track of every event related to a reward
-    #define X(name, type, value)
+    #define XX(name, type, value)
+    #define SS(name, used, normalise, read_rate)
     #define BR(name, reward, done, trigger) int name { false };
     #define LR(name, reward, done, trigger, min, max, overshoot) int name { false };
       // run the macro to create the code
       LUKE_MJSETTINGS
-    #undef X
+    #undef XX
+    #undef SS
     #undef BR
     #undef LR
 
@@ -64,9 +85,9 @@ namespace MjType
 
   struct BinaryReward {
 
-    float reward;
-    int done;
-    int trigger;
+    float reward;            // numerical reward value
+    int done;                // instances of this behaviour in a row to terminate sim
+    int trigger;             // instances of this behaviour in a row to trigger reward
 
     BinaryReward(float reward, int done, int trigger)
       : reward(reward), done(done), trigger(trigger) {}
@@ -79,12 +100,12 @@ namespace MjType
 
   struct LinearReward {
 
-    float reward;
-    int done;
-    int trigger;
-    float min;
-    float max;
-    float overshoot;
+    float reward;            // numerical reward value
+    int done;                // instances of this behaviour in a row to terminate sim
+    int trigger;             // instances of this behaviour in a row to trigger reward
+    float min;               // min value for this behaviour to be measured (0)
+    float max;               // max value for the behaviour (1)
+    float overshoot;         // -1 = saturate above max, >max = linear decay from max-overshoot
 
     LinearReward(float reward, int done, int trigger, float min, float max, float overshoot)
       : reward(reward), done(done), trigger(trigger), min(min), max(max), overshoot(overshoot) {}
@@ -102,13 +123,15 @@ namespace MjType
     // see simsettings.h
 
     // define the assignment code we want for X, BR, LR
-    #define X(name, type, value) type name { value };
+    #define XX(name, type, value) type name { value };
+    #define SS(name, use, norm, readrate) Sensor name { use, norm, readrate };
     #define BR(name, reward, done, trigger) BinaryReward name { reward, done, trigger };
     #define LR(name, reward, done, trigger, min, max, overshoot) \
               LinearReward name { reward, done, trigger, min, max, overshoot };
       // run the macro to create the code
       LUKE_MJSETTINGS
-    #undef X
+    #undef XX
+    #undef SS
     #undef BR
     #undef LR
 

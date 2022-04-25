@@ -1242,7 +1242,7 @@ std::string MjType::Settings::get_settings()
   output_str += str;
 
   // we will use our macro to build one large string
-  #define X(NAME, TYPE, VALUE) \
+  #define XX(NAME, TYPE, VALUE) \
             str.clear();\
             /* type first */\
             type_str.clear(); type_str += #TYPE;\
@@ -1255,6 +1255,29 @@ std::string MjType::Settings::get_settings()
             /* value last */\
             val_str.clear(); val_str += std::to_string((TYPE)NAME);\
             str += "{ " + val_str + " }\n";\
+            /* add to output */\
+            output_str += str;
+
+  #define SS(NAME, IN_USE, NORM, READRATE) \
+            str.clear();\
+            /* type first */\
+            type_str.clear(); type_str += "Sensor";\
+            pad.clear(); pad.resize(type_chars - type_str.size(), ' ');\
+            str += type_str + pad;\
+            /* name next */\
+            name_str.clear(); name_str += #NAME;\
+            pad.clear(); pad.resize(name_chars - name_str.size(), ' ');\
+            str += name_str + pad;\
+            /* now values */\
+            val_str.clear(); val_str += std::to_string((bool)NAME.in_use);\
+            pad.clear(); pad.resize(val_chars - val_str.size(), ' ');\
+            str += "{" + pad + val_str + ", ";\
+            val_str.clear(); val_str += std::to_string((float)NAME.normalise);\
+            pad.clear(); pad.resize(val_chars + float_bonus - val_str.size(), ' ');\
+            str += pad + val_str + ", ";\
+            val_str.clear(); val_str += std::to_string((float)NAME.read_rate);\
+            pad.clear(); pad.resize(val_chars + float_bonus - val_str.size(), ' ');\
+            str += pad + val_str + " }\n";\
             /* add to output */\
             output_str += str;
             
@@ -1315,7 +1338,8 @@ std::string MjType::Settings::get_settings()
 
     // now run the macros
     LUKE_MJSETTINGS
-  #undef X
+  #undef XX
+  #undef SS
   #undef BR
   #undef LR
 
@@ -1328,7 +1352,8 @@ void MjType::Settings::wipe_rewards()
 
   int never = 10000;
 
-  #define X(NAME, TYPE, VALUE)
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, IN_USE, NORM, READRATE)
   #define BR(NAME, REWARD, DONE, TRIGGER) \
             NAME.reward = 0.0;\
             NAME.done = false;\
@@ -1344,7 +1369,8 @@ void MjType::Settings::wipe_rewards()
     // run the macro and wipe the rewards
     LUKE_MJSETTINGS
   
-  #undef X
+  #undef XX
+  #undef SS
   #undef BR
   #undef LR
 }
@@ -1352,7 +1378,8 @@ void MjType::Settings::wipe_rewards()
 void MjType::EventTrack::print()
 {
   
-  #define X(name, type, value)
+  #define XX(name, type, value)
+  #define SS(name, in_use, normalise, readrate)
   #define BR(name, reward, done, trigger) << #name << " = " << name << "; "
   #define LR(name, reward, done, trigger, min, max, overshoot) \
             << #name << " = " << name << "; "
@@ -1360,7 +1387,8 @@ void MjType::EventTrack::print()
     // run the macro and print all the event track fields
     std::cout LUKE_MJSETTINGS << "\n";
 
-  #undef X
+  #undef XX
+  #undef SS
   #undef BR
   #undef LR
 }
