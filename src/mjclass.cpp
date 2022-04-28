@@ -121,6 +121,47 @@ void MjClass::configure_settings()
 
   n_actions = i;
 
+  // what sample function will we use for sampling regular sensor data
+  switch (s_.sensor_sample_mode) {
+    case MjType::Sample::raw: {
+      sampleFcnPtr = &MjType::Sensor::raw_sample;
+      break;
+    }
+    case MjType::Sample::change: {
+      sampleFcnPtr = &MjType::Sensor::change_sample;
+      break;
+    }
+    case MjType::Sample::average: {
+      sampleFcnPtr = &MjType::Sensor::average_sample;
+      break;
+    }
+    default: {
+      throw std::runtime_error("s_.sensor_sample_mode not set to legal value");
+    }
+  }
+
+  // what sample function will we use for sampling state data
+  switch (s_.state_sample_mode) {
+    case MjType::Sample::raw: {
+      stateFcnPtr = &MjType::Sensor::raw_sample;
+      break;
+    }
+    case MjType::Sample::change: {
+      stateFcnPtr = &MjType::Sensor::change_sample;
+      break;
+    }
+    case MjType::Sample::average: {
+      stateFcnPtr = &MjType::Sensor::average_sample;
+      break;
+    }
+    default: {
+      throw std::runtime_error("s_.state_sample_mode not set to legal value");
+    }
+  }
+
+  // safety check
+  if (s_.motor_state_sensor.read_rate >= 0)
+    throw std::runtime_error("motor_state_sensor read_rate must be a negative number");
 }
 
 /* ----- core functionality ----- */
@@ -181,9 +222,11 @@ void MjClass::reset()
   // reset the simulation
   luke::reset(model, data);
 
-  // reset this class to defaults
+  // reset standard class variables
   timeout_count = 0;
   last_read_time = 0.0;
+
+  // reset sensor saved data
   finger1_gauge.reset();
   finger2_gauge.reset();
   finger3_gauge.reset();
@@ -194,8 +237,16 @@ void MjClass::reset()
   wrist_X_sensor.reset();
   wrist_Y_sensor.reset();
   wrist_Z_sensor.reset();
+  x_motor_position.reset();
+  y_motor_position.reset();
+  z_motor_position.reset();
+
+  // reset timestamps for sensor readings
   gauge_timestamps.reset();
-  env_.reset();
+  axial_timestamps.reset();
+  palm_timestamps.reset();
+  wristXY_timestamps.reset();
+  wristZ_timestamps.reset();
 
   // reset sensor last read times
   s_.bending_gauge.reset();
@@ -203,8 +254,10 @@ void MjClass::reset()
   s_.palm_sensor.reset();
   s_.wrist_sensor_XY.reset();
   s_.wrist_sensor_Z.reset();
+  s_.motor_state_sensor.reset();
 
-  // reset the test report
+  // reset data structures
+  env_.reset();
   MjType::TestReport blank_report;
   testReport_ = blank_report;
 
@@ -227,8 +280,9 @@ void MjClass::step()
   luke::step(model, data);
   luke::after_step(model, data);
 
-  // check for new gauge data
-  monitor_gauges();
+  // check for new sensor data
+  // monitor_gauges();
+  monitor_sensors();
 
   if (s_.render_on_step) {
     render();
@@ -319,6 +373,12 @@ void MjClass::monitor_sensors()
     finger1_gauge.add(gauges[0]);
     finger2_gauge.add(gauges[1]);
     finger3_gauge.add(gauges[2]);
+
+    // record time
+    gauge_timestamps.add(data->time);
+
+    // whilst testing: are we validating finger curvature?
+    if (s_.curve_validation) validate_curve();
   }
 
   // check the axial strain gauges
@@ -326,6 +386,7 @@ void MjClass::monitor_sensors()
 
     if (not retrieved_forces) {
       forces = luke::get_object_forces(model, data);
+      retrieved_forces = true;
     }
 
     // read
@@ -344,6 +405,9 @@ void MjClass::monitor_sensors()
     finger1_axial_gauge.add(axial_gauges[0]);
     finger2_axial_gauge.add(axial_gauges[1]);
     finger3_axial_gauge.add(axial_gauges[2]);
+
+    // record time
+    axial_timestamps.add(data->time);
   }
 
   // check the palm sensor
@@ -351,6 +415,7 @@ void MjClass::monitor_sensors()
 
     if (not retrieved_forces) {
       forces = luke::get_object_forces(model, data);
+      retrieved_forces = true;
     }
     
     // read
@@ -362,6 +427,9 @@ void MjClass::monitor_sensors()
 
     // save
     palm_sensor.add(palm_reading);
+
+    // record time
+    palm_timestamps.add(data->time);
   }
 
   // check the wrist sensor XY force
@@ -369,8 +437,10 @@ void MjClass::monitor_sensors()
 
     if (not retrieved_forces) {
       forces = luke::get_object_forces(model, data);
+      retrieved_forces = true;
     }
 
+    std::cout << "wrist sensor XY not yet implemented\n";
   }
 
   // check the wrist sensor Z force
@@ -378,127 +448,32 @@ void MjClass::monitor_sensors()
 
     if (not retrieved_forces) {
       forces = luke::get_object_forces(model, data);
+      retrieved_forces = true;
     }
 
+    std::cout << "wrist sensor Z not yet implemented\n";
   }
 }
 
-bool MjClass::monitor_gauges()
+void MjClass::sense_gripper_state()
 {
-  /* check with set rate whether gauges have new data */
+  /* save the gripper xyz motor state position */
 
-  // // read and save the gauge data
-  // double time_between_reads = 1.0 / s_.gauge_read_rate_hz;
-  // if (data->time > last_read_time + time_between_reads) {
+  // get position we think each motor should be (NOT luke::get_gripper_state(data)!)
+  std::vector<luke::gfloat> xyz_pos = luke::get_target_state();
 
-  if (s_.bending_gauge.ready_to_read(data->time)) {
+  // normalise { x, y, z } joint values
+  xyz_pos[0] = normalise_between(
+    xyz_pos[0], luke::Gripper::xy_min, luke::Gripper::xy_max);
+  xyz_pos[1] = normalise_between(
+    xyz_pos[1], luke::Gripper::xy_min, luke::Gripper::xy_max);
+  xyz_pos[2] = normalise_between(
+    xyz_pos[2], luke::Gripper::z_min, luke::Gripper::z_max);
 
-    std::vector<luke::gfloat> gauges = read_gauges();
-
-    finger1_gauge.add(gauges[0]);
-    finger2_gauge.add(gauges[1]);
-    finger3_gauge.add(gauges[2]);
-
-    if (s_.use_palm_sensor) 
-      palm_sensor.add(read_palm());
-
-    gauge_timestamps.add(data->time);
-    last_read_time = data->time;
-
-    // for testing the curve validation
-    if (s_.curve_validation) {
-      // extract the finger data
-      MjType::CurveFitData::PoseData pose;
-      luke::verify_armadillo_gauge(data, 0,
-        pose.f1.x, pose.f1.y, pose.f1.coeff, pose.f1.errors);
-      luke::verify_armadillo_gauge(data, 1,
-        pose.f2.x, pose.f2.y, pose.f2.coeff, pose.f2.errors);
-      luke::verify_armadillo_gauge(data, 2,
-        pose.f3.x, pose.f3.y, pose.f3.coeff, pose.f3.errors);
-      // save
-      curve_validation_data_.entries.push_back(pose);
-    }
-
-    return true;
-  }
-
-  return false;
-}
-
-std::vector<luke::gfloat> MjClass::read_gauges()
-{
-  /* read the strain gauges of each finger, readings only arrive with set Hz */
-
-  std::vector<luke::gfloat> gauges = luke::get_gauge_data(model, data);
-
-  // scale and clip the data to fall between -1 and 1
-  for (int i = 0; i < 3; i++) {
-
-    gauges[i] = gauges[i] / s_.normalising_force;
-
-    if (gauges[i] > 1) gauges[i] = 1;
-    else if (gauges[i] < -1) gauges[i] = -1;
-
-  }
-
-  return gauges;
-}
-
-luke::gfloat MjClass::read_palm()
-{
-  /* read from the palm sensor */
-
-  if (s_.use_palm_sensor) {
-
-    luke::gfloat palm_reading = luke::get_palm_force(model, data);
-
-    // bumper sensor
-    if (s_.palm_force_normalise < 0) {
-      if (palm_reading > ftol) {
-        palm_reading = 1;
-      }
-      else {
-        palm_reading = -1;
-      }
-    }
-
-    // force sensor
-    else {
-      palm_reading = palm_reading / s_.palm_force_normalise;
-      if (palm_reading > 1) palm_reading = 1;
-      else if (palm_reading < -1) palm_reading = -1;
-    }
-
-    return palm_reading;
-  }
-  else {
-    return 0.0;
-  }
-}
-
-std::vector<luke::gfloat> MjClass::get_gripper_state()
-{
-  /* get the state of the joints */
-
-  // old: get the true joint positions
-  // return luke::get_gripper_state(data);
-
-  // new: get the target joint positions (ie what we hope they are)
-  return luke::get_target_state();
-}
-
-bool MjClass::is_target_reached()
-{
-  /* have we reached the target state - note this suffers from steady state error */
-
-  return luke::is_target_reached();
-}
-
-bool MjClass::is_settled()
-{
-  /* is the gripper in equilibrium */
-
-  return luke::is_settled();
+  // save reading
+  x_motor_position.add(xyz_pos[0]);
+  y_motor_position.add(xyz_pos[1]);
+  z_motor_position.add(xyz_pos[2]);
 }
 
 void MjClass::update_env()
@@ -751,6 +726,9 @@ bool MjClass::action_step()
   // track whether action step is settling, or timing out
   timeout_count = (timeout_count + 1) * timeout;
 
+  // save the new gripper position
+  sense_gripper_state();
+
   // track the object and environment
   update_env();
   
@@ -961,10 +939,97 @@ std::vector<luke::gfloat> MjClass::get_observation(int n)
 {
   /* get an observation with n samples from the gauges */
 
-  std::vector<luke::gfloat> sensor_output;
-  std::vector<luke::gfloat> state_output;
   std::vector<luke::gfloat> observation;
 
+  // first get the sensor output
+
+  // old code
+  // // calculate how many sensor readings since the last timestep
+  // double time_per_step = mujoco_timestep * s_.max_action_steps;
+  //   double readings_since_step = time_per_step * s_.gauge_read_rate_hz;
+  //   // round to int (if between round up) to include the last reading
+  //   int n_readings = std::ceil(readings_since_step);
+
+  // how much time has elapsed since the last state
+  double time_per_step = model->opt.timestep * s_.max_action_steps;
+
+  // get bending strain gauge sensor output
+  if (s_.bending_gauge.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> f1 = 
+      (s_.bending_gauge.*sampleFcnPtr)(finger1_gauge, time_per_step);
+    std::vector<luke::gfloat> f2 = 
+      (s_.bending_gauge.*sampleFcnPtr)(finger2_gauge, time_per_step);
+    std::vector<luke::gfloat> f3 = 
+      (s_.bending_gauge.*sampleFcnPtr)(finger3_gauge, time_per_step);
+
+    // insert data into observation output
+    observation.insert(observation.end(), f1.begin(), f1.end());
+    observation.insert(observation.end(), f2.begin(), f2.end());
+    observation.insert(observation.end(), f3.begin(), f3.end());
+  }
+
+  // get axial strain gauge sensor output
+  if (s_.axial_gauge.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> a1 = 
+      (s_.axial_gauge.*sampleFcnPtr)(finger1_axial_gauge, time_per_step);
+    std::vector<luke::gfloat> a2 = 
+      (s_.axial_gauge.*sampleFcnPtr)(finger2_axial_gauge, time_per_step);
+    std::vector<luke::gfloat> a3 = 
+      (s_.axial_gauge.*sampleFcnPtr)(finger3_axial_gauge, time_per_step);
+
+    // insert data into observation output
+    observation.insert(observation.end(), a1.begin(), a1.end());
+    observation.insert(observation.end(), a2.begin(), a2.end());
+    observation.insert(observation.end(), a3.begin(), a3.end());
+  }
+
+  // get palm sensor output
+  if (s_.palm_sensor.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> p1 = 
+      (s_.palm_sensor.*sampleFcnPtr)(palm_sensor, time_per_step);
+
+    // insert data into observation output
+    observation.insert(observation.end(), p1.begin(), p1.end());
+  }
+
+  // get wrist sensor XY output
+  if (s_.wrist_sensor_XY.in_use) {
+    // not implemented
+  }
+
+  // get wrist sensor Z output
+  if (s_.wrist_sensor_Z.in_use) {
+    // not implemented
+  }
+
+  std::cout << "observation size before motor state " << observation.size() << '\n';
+
+  // get motor state output
+  if (s_.motor_state_sensor.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> s1 = 
+      (s_.motor_state_sensor.*stateFcnPtr)(x_motor_position, time_per_step);
+    std::vector<luke::gfloat> s2 = 
+      (s_.motor_state_sensor.*stateFcnPtr)(y_motor_position, time_per_step);
+    std::vector<luke::gfloat> s3 = 
+      (s_.motor_state_sensor.*stateFcnPtr)(z_motor_position, time_per_step);
+
+    // insert data into observation output
+    observation.insert(observation.end(), s1.begin(), s1.end());
+    observation.insert(observation.end(), s2.begin(), s2.end());
+    observation.insert(observation.end(), s3.begin(), s3.end());
+  }
+
+  std::cout << "observation size after " << observation.size() << '\n';
+
+  /* old code
   if (s_.obs_raw_data) {
 
     // get the raw observations from the gauges and the gripper state
@@ -983,7 +1048,7 @@ std::vector<luke::gfloat> MjClass::get_observation(int n)
   }
   else {
 
-    /* the default mujoco timestep is 0.002 seconds */
+    // the default mujoco timestep is 0.002 seconds
     constexpr double mujoco_timestep = 0.002;
     double time_per_step = mujoco_timestep * s_.max_action_steps;
     double readings_since_step = time_per_step * s_.gauge_read_rate_hz;
@@ -1029,11 +1094,25 @@ std::vector<luke::gfloat> MjClass::get_observation(int n)
     }
     state_output[6] = normalise_between(state_output[6], luke::Gripper::z_min, luke::Gripper::z_max);
   }
+  */
 
-  // finally, build the observation as state + sensor data  
-  observation.reserve(sensor_output.size() + state_output.size());
-  observation.insert(observation.end(), state_output.begin(), state_output.end());
-  observation.insert(observation.end(), sensor_output.begin(), sensor_output.end());
+  // idea, make 'state' a sensor and use read rate = 0 to indicate only 1 reading per ask
+
+  // // get position we think each motor should be
+  // state_output = get_target_state();
+
+  // // normalise { x, y, z } joint values
+  // state_output[0] = normalise_between(
+  //   state_output[0], luke::Gripper::xy_min, luke::Gripper::xy_max);
+  // state_output[1] = normalise_between(
+  //   state_output[1], luke::Gripper::xy_min, luke::Gripper::xy_max);
+  // state_output[2] = normalise_between(
+  //   state_output[2], luke::Gripper::z_min, luke::Gripper::z_max);
+
+  // // finally, build the observation as state + sensor data  
+  // observation.reserve(sensor_output.size() + state_output.size());
+  // observation.insert(observation.end(), state_output.begin(), state_output.end());
+  // observation.insert(observation.end(), sensor_output.begin(), sensor_output.end());
   
   return observation;
 }
@@ -1265,6 +1344,22 @@ MjType::TestReport MjClass::get_test_report()
   testReport_.abs_cnt = env_.abs_cnt;
 
   return testReport_;
+}
+
+void MjClass::validate_curve()
+{
+  /* for testing the curvature of the fingers */
+
+  // extract the finger data
+  MjType::CurveFitData::PoseData pose;
+  luke::verify_armadillo_gauge(data, 0,
+    pose.f1.x, pose.f1.y, pose.f1.coeff, pose.f1.errors);
+  luke::verify_armadillo_gauge(data, 1,
+    pose.f2.x, pose.f2.y, pose.f2.coeff, pose.f2.errors);
+  luke::verify_armadillo_gauge(data, 2,
+    pose.f3.x, pose.f3.y, pose.f3.coeff, pose.f3.errors);
+  // save
+  curve_validation_data_.entries.push_back(pose);
 }
 
 /* ------ utility functions ----- */

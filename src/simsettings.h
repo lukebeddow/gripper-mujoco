@@ -37,6 +37,10 @@
   XX(  use_wrist_sensor_XY,     bool,     false)    /* get X and Y force information from wrist sensor*/\
   XX(  use_wrist_sensor_Z,      bool,     false)    /* get Z force information from wrist sensor*/\
   XX(  use_axial_strain_gauge,  bool,     false)    /* get axial finger strain information*/\
+  /*
+  get_observation() settings    (NB: sample modes: 0=raw, 1=change, 2=average) */\
+  XX(  sensor_sample_mode,      int,      1)        /* how to sample sensor observations, see MjType::Sample*/\
+  XX(  state_sample_mode,       int,      0)        /* how to sample motor state, see MjType::Sample*/\
   /* 
   update_env() settings */\
   XX(  lift_distance,           double,   1e-3)     /* distance to consider object lifted */\
@@ -68,34 +72,35 @@
   /* 
 
   2. Sensors
-      name                      used      normalise read-rate */\
-  SS(  bending_gauge,           true,     100.0,    10)       /* strain gauge to measure finger bending*/\
-  SS(  axial_gauge,             false,    1,        1)        /* strain gauge to measure axial finger strain*/\
-  SS(  palm_sensor,             false,    1,        1)        /* palm force sensor */\
-  SS(  wrist_sensor_XY,         false,    1,        1)        /* F/T wrist sensor X and Y forces*/\
-  SS(  wrist_sensor_Z,          false,    1,        1)        /* F/T wrist sensor Z force*/\
+      name                      used      normalise read-rate   (NB: -ve read-rate gives -n_readings) */\
+  SS(  motor_state_sensor,      true,     0,        -2)     /* xyz motor states, normalise is ignored */\
+  SS(  bending_gauge,           true,     100.0,    10)     /* strain gauge to measure finger bending */\
+  SS(  axial_gauge,             true,     1,        10)     /* strain gauge to measure axial finger strain */\
+  SS(  palm_sensor,             true,     1,        10)     /* palm force sensor */\
+  SS(  wrist_sensor_XY,         false,    1,        10)     /* F/T wrist sensor X and Y forces */\
+  SS(  wrist_sensor_Z,          false,    1,        10)     /* F/T wrist sensor Z force */\
   /* 
 
   3. Binary rewards
       name                      reward    done      trigger */\
-  BR( step_num,                 -0.01,    false,    1)      /* when a step is made */\
-  BR( lifted,                   0.005,    false,    1)      /* object leaves the ground */\
-  BR( oob,                      0.0,      1,        1)      /* object out of bounds */\
-  BR( dropped,                  0.0,      false,    1000)   /* object lifted and then touches gnd */\
-  BR( target_height,            1.0,      false,    1000)   /* object lifted to height target */\
-  BR( exceed_limits,            -0.1,     false,    1)      /* gripper motor limits exceeded */\
-  BR( object_contact,           0.005,    false,    1)      /* fingers or palm touches object */\
-  BR( object_stable,            1.0,      false,    1)      /* fingers and palm apply min force */\
-  BR( stable_height,            0.0,      1,        1)      /* object stable and at height target */\
+  BR(  step_num,                -0.01,    false,    1)      /* when a step is made */\
+  BR(  lifted,                  0.005,    false,    1)      /* object leaves the ground */\
+  BR(  oob,                     0.0,      1,        1)      /* object out of bounds */\
+  BR(  dropped,                 0.0,      false,    1000)   /* object lifted and then touches gnd */\
+  BR(  target_height,           1.0,      false,    1000)   /* object lifted to height target */\
+  BR(  exceed_limits,           -0.1,     false,    1)      /* gripper motor limits exceeded */\
+  BR(  object_contact,          0.005,    false,    1)      /* fingers or palm touches object */\
+  BR(  object_stable,           1.0,      false,    1)      /* fingers and palm apply min force */\
+  BR(  stable_height,           0.0,      1,        1)      /* object stable and at height target */\
   /*
 
   4. Linear rewards
       name                      reward    done   trigger  min   max   overshoot */\
-  LR( finger_force,             0.0,      false,    1,    1.0,  2.0,  -1)     /* avg. force from fingers */\
-  LR( palm_force,               0.05,     false,    1,    1.0,  3.0,  6.0)    /* palm force applied */\
-  LR( exceed_axial,             -0.05,    false,    1,    2.0,  6.0,  -1)     /* exceed axial finger force limit */\
-  LR( exceed_lateral,           -0.05,    false,    1,    4.0,  6.0,  -1)     /* exceed lateral finger force limit */\
-  LR( exceed_palm,              -0.05,    false,    1,    6.0,  10.0, -1)     /* exceed palm force limit */
+  LR(  finger_force,            0.0,      false,    1,    1.0,  2.0,  -1)     /* avg. force from fingers */\
+  LR(  palm_force,              0.05,     false,    1,    1.0,  3.0,  6.0)    /* palm force applied */\
+  LR(  exceed_axial,            -0.05,    false,    1,    2.0,  6.0,  -1)     /* exceed axial finger force limit */\
+  LR(  exceed_lateral,          -0.05,    false,    1,    4.0,  6.0,  -1)     /* exceed lateral finger force limit */\
+  LR(  exceed_palm,             -0.05,    false,    1,    6.0,  10.0, -1)     /* exceed palm force limit */
   
 
 // end of user defined simulation settings

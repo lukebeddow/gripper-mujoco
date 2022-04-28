@@ -12,28 +12,34 @@ class ModelSaver:
     Saves learned models at relative path
     """
 
-    if not root:
-      self.root = "/home/luke/mymujoco/rl/"
-    else:
-      if root[-1] != '/': root += '/'
-      self.root = root
+    # user set parameters 
+    self.default_num = 1             # starting number for saving files with numbers
+    self.file_ext = ".pickle"        # saved file extension for pickled files
+    self.file_num = "{:03d}"         # digit format for saving files with numbers
+    self.date_str = "%d-%m-%Y-%H:%M" # date string, must be seperated by '-'
+    self.folder_names = "train_{}/"  # name of created folders, then formatted with date
 
-    self.default_num = 1
-    self.file_ext = ".pickle"
-    self.file_num = "{:03d}"
-    self.date_str = "%d-%m-%Y_%H:%M"
-    self.folder_names = "train_{}/"
-    self.last_loadpath = ""
+    # if we are given a root, we can use abs paths not relative
+    if not root:
+      self.root = None
+      use_root = False
+    else:
+      if self.root[-1] != '/': self.root += '/'
+      self.root = root
+      use_root = True
 
     self.in_folder = False
     self.folder = ""
+    self.last_loadpath = ""
 
+    # ensure path ends in trailing slash
     if path[-1] != '/': path += '/'
     self.rel_path = path
 
-    use_root = False
+    # if a root is given, add this to the path
     if use_root: self.path = self.root + self.rel_path
     else:
+      # save the path
       self.path = path
 
     # create directories if they don't already exist
@@ -54,7 +60,8 @@ class ModelSaver:
 
   def get_recent_file(self, path, id=None):
     """
-    Get the path to the most recent save in the path, or return None if empty
+    Get the path to the highest index save in the path, or return None if empty,
+    for example, if we have file_001, file_002, file_004, we return file_004
     """
 
     # get all files with pickle extension in the target directory
@@ -86,6 +93,93 @@ class ModelSaver:
     if path[-1] != '/': path += '/'
     return path + pkl_files[imax]
 
+  def get_recent_folder(self, path, target_index=None, x_most_recent=None):
+    """
+    Get the most recent folder based on the date string stamp
+    """
+
+    # get all files with pickle extension in the target directory
+    folders = [x for x in os.listdir(path) if os.path.isdir(path + x)]
+
+    # create an intial entry, we compare our folders with this
+    folder_elem = -1
+    day = 0; month = 0; year = 0; hour = 0; min = 0; index = 0
+    most_recent = [folder_elem, [year, month, day, hour, min, index]]
+
+    all_entries = []
+
+    # loop through all folder names to find which is the most recent
+    for i, name in enumerate(folders):
+      day, month, year, time = name.split('-') # TIME STRING MUST BE SEPERATED BY '-'
+
+      # do our folder names have trailing indexes, eg train_cluster..._array_11
+      trailing_index = name.split('_') # REGULAR PARTS MUST BE SEPERATED BY '_'
+      trailing_index = trailing_index[-1]
+      if trailing_index.isnumeric():
+        trailing_index = int(trailing_index)
+      else:
+        trailing_index = 0
+
+      # get the components of the date
+      day = int(day[-2:]) # train_cluster_04 -> int('04') -> 4
+      month = int(month)
+      year = int(year)
+      time = time[:5] # 12:47_array_11 -> '12:47'
+      hour, min = time.split(':')
+      hour = int(hour)
+      min = int(min)
+
+      # create an entry for this folder
+      entry = [i, [year, month, day, hour, min, trailing_index]]
+      all_entries.append(entry)
+
+      # compare with current most recent to see if this is more recent
+      for d in range(len(entry[1])):
+
+        # if we are at the end and we have a target for the trailing index
+        if (d == len(entry[1]) - 1 and target_index != None
+            and entry[d] == target_index):
+          most_recent[0] = entry[0]
+          most_recent[1] = entry[1][:]
+          break
+
+        # if this entry is more recent, overwrite most recent
+        if entry[d] > most_recent[d]:
+          most_recent[0] = entry[0]
+          most_recent[1] = entry[1][:]
+          break
+        elif entry[d] == most_recent[d]: continue
+        else: break
+          
+    if most_recent[0] == -1:
+      print("No recent folders found at path:", path)
+      return None
+
+    # if we don't want the most recent, but the x-th (eg 2nd, 4th,...)
+    if x_most_recent != None:
+      # sort all of the entries
+      sorted_entries = []
+      for i in range(len(all_entries)):
+        inserted = False
+        for j in range(len(sorted_entries)):
+          for k in range(len(all_entries[0][1])):
+            if (sorted_entries[j][1][k] < all_entries[i][1][k]):
+              sorted_entries.insert(j, all_entries[i])
+              inserted = True
+              break
+            elif sorted_entries[j][1][k] == all_entries[i][1][k]: continue
+            else: break
+          if inserted == True: break
+        if inserted == False: sorted_entries.append(all_entries[i])
+      if x_most_recent < 0 or x_most_recent >= len(sorted_entries):
+        print("x_most recent (", x_most_recent, "), out of bounds - max is", 
+              len(sorted_entries))
+        return None
+      return folders[sorted_entries[x_most_recent][0]]
+
+    # return the name of the most recent folder
+    return folders[most_recent[0]]
+
   def get_most_recent(self, label=None):
     """
     Get the most recent model trained in the path. First we check the root of
@@ -93,19 +187,39 @@ class ModelSaver:
     timestamp, and then get the most recent in there
     """
 
+    # see if there is a model file in the root
     root_recent = self.get_recent_file(self.path)
 
     if root_recent != None:
       print("Found the most recent file:", root_recent)
       return root_recent
 
-    else:
-      print("No recent files found")
+    # see if there is a recent folder
+    recent_folder = self.get_recent_folder(self.path)
 
-    # # else we need to check the folder names
-    # subdir = [x for x in os.listdir(self.path) if os.path.isdir(x)]
+    if recent_folder == None:
+      print(f"No recent file or recent folder found in {self.path}")
+      return None
 
-    # # find which name is the most recent
+    # go into this recent folder to find a recent file
+    file_in_folder = self.get_recent_file(self.path + recent_folder)
+
+    if file_in_folder == None:
+      i = 1
+      while True:
+        print(f"No recent file found in {self.path + recent_folder}")
+        recent_folder = self.get_recent_folder(self.path, x_most_recent=i)
+        if recent_folder == None: break
+        file_in_folder = self.get_recent_file(self.path + recent_folder)
+        if file_in_folder == None: i += 1
+        else:
+          print("Found the most recent file:", recent_folder + "/" + file_in_folder)
+          return recent_folder + "/" + file_in_folder
+      print("No recent files found at all, giving up")
+      return None
+
+    print("Found the most recent file:", recent_folder + "/" + file_in_folder)
+    return recent_folder + "/" + file_in_folder
 
   def new_folder(self, label=None, suffix=None):
     """
@@ -219,20 +333,21 @@ class ModelSaver:
     Load a model, by default loads the most recent in the current folder
     """
 
+    # default is loading from the main path
     loadpath = self.path
 
-    # if a path to a file is specified
+    # if a different path to a file is specified
     if folderpath != None:
       loadpath = folderpath
 
-    # if the path to the folder is given
+    # if the file name is specified
     if foldername != None:
       loadpath += foldername
       if loadpath[-1] != '/': loadpath += '/'
       loadpath = self.get_recent_file(loadpath, id)
 
     else:
-      # default: find in current folder folder
+      # default: find file in current folder folder
       loadpath = self.path
 
       if self.in_folder: 
@@ -261,7 +376,7 @@ if __name__ == "__main__":
 
   pyobj = [1, 2, 3, 4, 5]
 
-  obj.new_folder(label="cluster")
+  obj.new_folder()
   obj.new_folder(label="cluster")
   obj.new_folder(label="cluster")
 
@@ -281,5 +396,7 @@ if __name__ == "__main__":
   obj.save("network2", pyobj=pyobj)
 
   obj.load()
+
+  print(obj.get_most_recent())
 
     

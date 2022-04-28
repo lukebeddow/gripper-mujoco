@@ -475,9 +475,9 @@ if __name__ == "__main__":
   # with open("test_file.pickle", 'rb') as f:
   #   mj = pickle.load(f)
 
-  # mj._load_xml(task_id=0)
+  mj._load_xml(task_id=0)
 
-  # mj.step(0)
+  mj.step(0)
 
   # print(mj._get_cpp_settings())
 
@@ -485,8 +485,6 @@ if __name__ == "__main__":
 
   # print(mj._get_cpp_settings())
 
-  # obs = mj.reset()
+  obs = mj.mj.get_observation()
 
-  # print(obs)
-
-  print(mj._get_cpp_settings())
+  print(obs)

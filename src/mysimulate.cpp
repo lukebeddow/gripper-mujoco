@@ -50,7 +50,10 @@ mjvFigure figsensor;
 
 // added by luke
 mjvFigure figgauges;
-
+mjvFigure figbendgauge;
+mjvFigure figaxialgauge;
+mjvFigure figpalm;
+mjvFigure figwrist;
 
 // OpenGL rendering and UI
 GLFWvidmode vmode;
@@ -82,6 +85,11 @@ struct
     int vsync = 1;
     int busywait = 0;
     int gaugefig = 0;       // added by luke
+    int bendgauge = 0;      // added by luke
+    int axialgauge = 0;     // added by luke
+    int palmsensor = 0;     // added by luke
+    int wristsensor = 0;    // added by luke
+    int allsensors = 0;     // added by luke
     int object_int = 0;     // added by luke
     int env_steps = 1;      // added by luke
 
@@ -159,8 +167,12 @@ const mjuiDef defOption[] =
 #endif
     {mjITEM_CHECKINT,  "Vertical Sync", 1, &settings.vsync,         " #295"},
     {mjITEM_CHECKINT,  "Busy Wait",     1, &settings.busywait,      " #296"},
-    {mjITEM_CHECKINT,  "Gauges",        2, &settings.gaugefig,      " #297"}, // added by luke
-
+    {mjITEM_CHECKINT,  "old gauges",    2, &settings.gaugefig,      " #400"}, // added by luke
+    {mjITEM_CHECKINT,  "Bend gauge",    2, &settings.bendgauge,     " #401"}, // added by luke
+    {mjITEM_CHECKINT,  "Axial gauge",   2, &settings.axialgauge,    " #402"}, // added by luke
+    {mjITEM_CHECKINT,  "Palm sensor",   2, &settings.palmsensor,    " #403"}, // added by luke
+    {mjITEM_CHECKINT,  "Wrist sensor",  2, &settings.wristsensor,   " #404"}, // added by luke
+    {mjITEM_CHECKINT,  "All sensors",   2, &settings.allsensors,    " #405"}, // added by luke
     {mjITEM_END}
 };
 
@@ -573,6 +585,63 @@ void sensorshow(mjrRect rect)
 
 /* ----- added by luke ----- */
 
+void lukesensorfigsinit(void)
+{
+    // create default figures
+    mjv_defaultFigure(&figbendgauge);
+    mjv_defaultFigure(&figaxialgauge);
+    mjv_defaultFigure(&figpalm);
+    mjv_defaultFigure(&figwrist);
+
+    // what figures are we initialising
+    std::vector<mjvFigure*> myfigs {
+        &figbendgauge, &figaxialgauge, &figpalm, &figwrist
+    };
+
+    // initialise all figures the same
+    for (int i = 0; i < myfigs.size(); i++) {
+
+        // create a default figure
+        mjv_defaultFigure(myfigs[i]);
+
+        // set flags
+        myfigs[i]->flg_legend = 1;
+        myfigs[i]->flg_extend = 1;
+        myfigs[i]->flg_symmetric = 1;
+
+        // y-tick number format
+        strcpy(myfigs[i]->yformat, "%.0f");
+
+        // grid size
+        myfigs[i]->gridsize[0] = 2;
+        myfigs[i]->gridsize[1] = 3;
+
+        // minimum range
+        myfigs[i]->range[0][0] = 0;
+        myfigs[i]->range[0][1] = 0;
+        myfigs[i]->range[1][0] = -1;
+        myfigs[i]->range[1][1] = 1;
+    }
+
+    // add titles
+    strcpy(figbendgauge.title, "Bending gauges");
+    strcpy(figaxialgauge.title, "Axial gauges");
+    strcpy(figpalm.title, "Palm sensor");
+    strcpy(figwrist.title, "Wrist sensor");
+
+    // add legends
+    strcpy(figbendgauge.linename[0], "1");
+    strcpy(figbendgauge.linename[1], "2");
+    strcpy(figbendgauge.linename[2], "3");
+    strcpy(figaxialgauge.linename[0], "1");
+    strcpy(figaxialgauge.linename[1], "2");
+    strcpy(figaxialgauge.linename[2], "3");
+    strcpy(figpalm.linename[0], "P");
+    strcpy(figwrist.linename[0], "X");
+    strcpy(figwrist.linename[1], "Y");
+    strcpy(figwrist.linename[2], "Z");
+}
+
 // gauge data figure
 void gaugefiginit(void)
 {
@@ -609,6 +678,97 @@ void gaugefiginit(void)
 
     if (myMjClass.s_.use_palm_sensor)
         strcpy(figgauges.linename[3], "P");
+}
+
+void lukesensorfigsupdate(void)
+{
+    // amount of data we extract for each sensor
+    int gnum = myMjClass.gauge_buffer_size;
+
+    // check we can plot this amount of data
+    if (gnum > mjMAXLINEPNT) {
+        std::cout << "gnum exceeds mjMAXLINEPNT in gaugefigupdate()\n";
+        gnum = mjMAXLINEPNT;
+    }
+
+    // read the data    
+    std::vector<luke::gfloat> b1data = myMjClass.finger1_gauge.read(gnum);
+    std::vector<luke::gfloat> b2data = myMjClass.finger2_gauge.read(gnum);
+    std::vector<luke::gfloat> b3data = myMjClass.finger3_gauge.read(gnum);
+    std::vector<luke::gfloat> p1data = myMjClass.palm_sensor.read(gnum);
+    std::vector<luke::gfloat> a1data = myMjClass.finger1_axial_gauge.read(gnum);
+    std::vector<luke::gfloat> a2data = myMjClass.finger2_axial_gauge.read(gnum);
+    std::vector<luke::gfloat> a3data = myMjClass.finger2_axial_gauge.read(gnum);
+    std::vector<luke::gfloat> wXdata = myMjClass.wrist_X_sensor.read(gnum);
+    std::vector<luke::gfloat> wYdata = myMjClass.wrist_Y_sensor.read(gnum);
+    std::vector<luke::gfloat> wZdata = myMjClass.wrist_Z_sensor.read(gnum);
+
+    // get the corresponding timestamps
+    std::vector<float> btdata = myMjClass.gauge_timestamps.read(gnum);
+    std::vector<float> atdata = myMjClass.axial_timestamps.read(gnum);
+    std::vector<float> ptdata = myMjClass.palm_timestamps.read(gnum);
+    std::vector<float> wtdata = myMjClass.wristZ_timestamps.read(gnum);
+
+    // package sensor data pointers in iterable vectors
+    std::vector<std::vector<luke::gfloat>*> bdata {
+        &b1data, &b2data, &b3data
+    };
+    std::vector<std::vector<luke::gfloat>*> adata {
+        &a1data, &a2data, &a3data
+    };
+    std::vector<std::vector<luke::gfloat>*> pdata {
+        &p1data
+    };
+    std::vector<std::vector<luke::gfloat>*> wdata {
+        &wXdata, &wYdata, &wZdata
+    };
+
+    // package figures into iterable vector
+    std::vector<mjvFigure*> myfigs {
+        &figbendgauge, &figaxialgauge, &figpalm, &figwrist
+    };
+
+    // package sensor data in same order as figures
+    std::vector< std::vector<std::vector<luke::gfloat>*>* > sensordata {
+        &bdata, &adata, &pdata, &wdata
+    };
+    std::vector<std::vector<float>*> timedata {
+        &btdata, &atdata, &ptdata, &wtdata
+    };
+
+    // maximum number of lines on a figure
+    static const int maxline = 10;
+
+    // loop through each figure/sensor type
+    for (int i = 0; i < sensordata.size(); i++) {
+
+        // start with line 0
+        int lineid = 0;
+
+        // loop over each set of sensor data (eg finger gauges 1, 2, then 3)
+        for (int n = 0; n < sensordata[i]->size(); n++)
+        {
+            lineid = n;
+
+            if (lineid >= maxline) 
+                throw std::runtime_error("max number of figure lines exceeded");
+        
+            // data pointer in line (don't need this as sliding window does it for us)
+            int p = myfigs[i]->linepnt[lineid];
+
+            // loop over the data itself and save it in the figure
+            for (int g = 0; g < gnum; g++) {
+                // figgauges.linedata[lineid][2 * g] = tdata[g];
+                // figgauges.linedata[lineid][2 * g + 1] = (*fdata[n])[g];
+
+                myfigs[i]->linedata[lineid][2 * g] = (*timedata[i])[g];
+                myfigs[i]->linedata[lineid][2 * g + 1] = (*(*sensordata[i])[n])[g];
+            }
+
+            // update linepnt (index of last data point)
+            myfigs[i]->linepnt[lineid] = gnum;
+        }
+    }
 }
 
 // update gauge figure
@@ -662,93 +822,50 @@ void gaugefigupdate(void)
         // update linepnt (index of last data point)
         figgauges.linepnt[lineid] = gnum;
     }
+}
 
-    // if (myMjClass.s_.use_palm_sensor) {
+void lukesensorfigshow(mjrRect rect)
+{
+    // what figures are showing
+    std::vector<mjvFigure*> myfigs {
+        &figbendgauge, &figaxialgauge, &figpalm, &figwrist
+    };
+    // what settings determine if these are showing
+    std::vector<int> flags {
+        settings.bendgauge, 
+        settings.axialgauge, 
+        settings.palmsensor,
+        settings.wristsensor
+    };
 
-    //     std::vector<luke::gfloat> palmdata = myMjClass.palm_sensor.read(gnum);
-    //     std::vector<float> palm_tdata = myMjClass.palm_timestamps.read(gnum);
+    // how many graphs do we need to fit
+    int num = myfigs.size();
 
-    //     myMjClass.palm_sensor.print();
+    // constant width with and without profiler
+    int width = settings.profiler ? rect.width / 3 : rect.width / num;
+    int show = 0;
 
-    //     lineid = 3;
+    for (int i = 0; i < myfigs.size(); i++) {
 
-    //     int index = 0;
+        // is this figure set to display
+        if (flags[i] != 0 or settings.allsensors) {
 
-    //     for (int t = 0; t < gnum; t++) {
+            // another figure is showing
+            show += 1;
 
-    //         // // if time data is the same
-    //         // if (abs(float_tdata[index] - tdata[t]) < 1e-6) {
-    //         //     figgauges.linedata[lineid][2 * g] = tdata[g];
-    //         //     figgauges.linedata[lineid][2 * g + 1] = palmdata[index];
-    //         // }
+            // render figure on the right
+            mjrRect viewport = {
+                rect.left + rect.width - width * show,
+                rect.bottom,
+                width,
+                rect.height/3
+            };
 
-
-    //         // if palm timestamps are behind finger timestamps
-    //         if (
-    //             palm_tdata[index] < tdata[t]) {
-    //             while (palm_tdata[index] < tdata[t] and
-    //                    abs(palm_tdata[index] - tdata[t]) > 1e-6) {
-    //                 index += 1;
-    //                 if (index >= gnum - 1) {
-    //                     index = gnum - 1;
-    //                     break;
-    //                 }
-    //             }
-    //         }
-    //         // if finger timestamps are behind palm timestamps
-    //         else {
-    //             std::cout << "update at " << t << " with data "
-    //                 << palmdata[index] << " at index " << index << '\n';
-    //             figgauges.linedata[lineid][2 * t] = tdata[t];
-    //             figgauges.linedata[lineid][2 * t + 1] = palmdata[index];
-    //         }
-            
-    //     }
-    // }
-
-
-    return;
-
-    // old code below
-
-    std::vector<luke::gfloat> gauge_data = myMjClass.read_gauges();
-
-    // clear linepnt
-    for( int i=0; i<maxline; i++ )
-        figsensor.linepnt[i] = 0;
-
-    // loop over sensors
-    for (int n = 0; n < 3; n++)
-    {
-        lineid = n;
-    
-        // data pointer in line
-        int p = figgauges.linepnt[lineid];
-
-        // new data
-        figgauges.linedata[lineid][2*p] = (float)d->time;
-        figgauges.linedata[lineid][2*p+1] = gauge_data[n];
-
-        // shift data once we reach the data limit
-        if (p >= mjMAXLINEPNT / 2 - 1) {
-            for (int i = 0; i < p; i++) {
-                // shift the x data
-                figgauges.linedata[n][2*i] = figgauges.linedata[n][2*(i+1)];
-
-                // shift only the y data (odd numbers)
-                figgauges.linedata[n][2*i+1] = figgauges.linedata[n][2*(i+1)+1];
-            }   
-        }
-
-        // update linepnt
-        figgauges.linepnt[lineid] = mjMIN(mjMAXLINEPNT / 2 - 1,
-                                          figgauges.linepnt[lineid] + 1);
-
-        if (figgauges.linepnt[lineid] >= mjMAXLINEPNT / 2 - 1) {
-            
+            mjr_figure(viewport, myfigs[i], &con);
         }
     }
 }
+
 
 // show gauge figure
 void gaugefigshow(mjrRect rect)
@@ -2228,6 +2345,9 @@ void prepare(void)
     if (settings.gaugefig && settings.run)
         gaugefigupdate();
 
+    // added by luke
+    lukesensorfigsupdate();
+
     // clear timers once profiler info has been copied
     cleartimers();
 }
@@ -2305,6 +2425,9 @@ void render_MS(GLFWwindow* window)
     // added by luke
     if (settings.gaugefig)
         gaugefigshow(smallrect);
+
+    // added by luke
+    lukesensorfigshow(smallrect);
 
     // finalize
     glfwSwapBuffers(window);
@@ -2476,7 +2599,8 @@ void init(void)
     mjv_defaultOption(&vopt);
     profilerinit();
     sensorinit();
-    gaugefiginit(); // added by luke
+    gaugefiginit();         // added by luke
+    lukesensorfigsinit();   // added by luke
 
     // make empty scene
     mjv_defaultScene(&scn);

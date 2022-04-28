@@ -46,6 +46,15 @@ namespace MjType
     };
   };
 
+  // what are the possible sampling methods to get observation data
+  struct Sample {
+    enum {
+      raw = 0,
+      change,
+      average
+    };
+  };
+
   // sensor type for sensing in simulation
   struct Sensor {
 
@@ -68,8 +77,10 @@ namespace MjType
       last_read_time = 0.0;
     }
 
-    float apply_normalisation(float value) {
-      // normalise the given value from [-1 to +1]
+    float apply_normalisation(float value) 
+    {
+      /* normalise the given value from [-1 to +1] */
+
       if (in_use) {
         // bumper sensor only
         if (normalise <= 0) {
@@ -91,19 +102,89 @@ namespace MjType
       }
     }
 
-    bool ready_to_read(double current_time_seconds) {
-      // return true if the sensor is ready to read, also saves last read time
-      // as the current time
+    bool ready_to_read(double current_time_seconds) 
+    {
+      /* return true if the sensor is ready to read, also saves last read time
+         as the current time */
 
       if (not in_use) return false;
 
       double time_between_reads = 1 / read_rate;
 
       if (current_time_seconds > last_read_time + time_between_reads) {
+        // assume a read will be made, save last read time as now
         last_read_time = current_time_seconds;
         return true;
       }
       else return false;
+    }
+
+    int get_n_readings(float time_since_last_sample)
+    {
+      /* get the number of readings since the last sample, with overlap, so the
+      final reading in the last sample will be the first reading in this one */
+
+      int n_readings;
+
+      // how many readings since last sample, with overlap
+      if (read_rate > 0) {
+        double readings_since_step = time_since_last_sample * read_rate;
+        n_readings = std::ceil(readings_since_step);
+      }
+      else {
+        n_readings = -1 * read_rate;
+      }
+
+      return n_readings;
+    }
+
+    std::vector<luke::gfloat> raw_sample(luke::SlidingWindow<luke::gfloat> data, 
+      float time_since_last_sample)
+    {
+      /* sample some data from a given time interval in seconds */
+
+      int n_readings = get_n_readings(time_since_last_sample);
+
+      return data.read(n_readings);
+    }
+
+    std::vector<luke::gfloat> change_sample(luke::SlidingWindow<luke::gfloat> data,
+      float time_since_last_sample)
+    {
+      /* sample the first and last reading as well as the change [x0, dx, x1] */
+
+      int n_readings = get_n_readings(time_since_last_sample);
+
+      std::vector<luke::gfloat> result(3);
+      result[0] = data.read_element(n_readings - 1); // read_element 0 indexed
+      result[2] = data.read_element();
+      result[1] = result[2] - result[0];
+
+      return result;
+    }
+
+    std::vector<luke::gfloat> average_sample(luke::SlidingWindow<luke::gfloat> data,
+      float time_since_last_sample)
+    {
+      /* sample the first and last reading as well as the average [x0, xbar, x1] */
+
+      int n_readings = get_n_readings(time_since_last_sample);
+
+      std::vector<luke::gfloat> all = data.read(n_readings);
+
+      luke::gfloat mean = 0.0;
+
+      for (uint i = 0; i < all.size(); i++) {
+        mean += all[i];
+      }
+
+      mean /= (luke::gfloat)all.size();
+
+      std::vector<luke::gfloat> result {
+        all[0], mean, all[all.size() - 1]
+      };
+
+      return result;
     }
   };
 
@@ -344,10 +425,11 @@ public:
   typedef std::chrono::high_resolution_clock time_;
 
   // parameters set at compile time
-  static constexpr bool debug = false;           // are we in debug mode
-  static constexpr double ftol = 1e-5;          // floating point tolerance
-  static constexpr int gauge_buffer_size = 50;  // buffer to store gauge data 
-  static constexpr int state_buffer_size = 50;  // buffer to store state data
+  static constexpr bool debug = false;              // are we in debug mode
+  static constexpr double ftol = 1e-5;             // floating point tolerance
+  static constexpr int gauge_buffer_size = 50;     // buffer to store gauge data 
+  static constexpr int state_buffer_size = 50;     // buffer to store state data
+  static constexpr float mujoco_timestep = 0.002;  // default is 0.002
 
   /* ----- parameters that are unchanged with reset() ----- */
 
@@ -356,6 +438,13 @@ public:
 
   MjType::Settings s_;                          // simulation settings
   std::chrono::time_point<time_> start_time_;   // time from tick() call
+  bool render_init = false;                     // have we initialised the render window
+
+  // function pointers for sampling functions
+  std::vector<luke::gfloat> (MjType::Sensor::*sampleFcnPtr)
+    (luke::SlidingWindow<luke::gfloat>, float);
+  std::vector<luke::gfloat> (MjType::Sensor::*stateFcnPtr)
+    (luke::SlidingWindow<luke::gfloat>, float);
 
   // path information for loading models, have we defined defaults?
   #if defined(LUKE_MJCF_PATH)
@@ -376,11 +465,15 @@ public:
   /* ----- variables that are reset ----- */
 
   // standard class variables
-  bool render_init = false;           // have we initialised the render window
   int timeout_count = 0;              // number of action_step() timeouts in a row
   double last_read_time = 0;          // last gauge read time in seconds
   std::vector<int> action_options;    // possible action codes
   int n_actions;                      // number of possible actions
+
+  // storage containers for state data
+  luke::SlidingWindow<luke::gfloat> x_motor_position { gauge_buffer_size };
+  luke::SlidingWindow<luke::gfloat> y_motor_position { gauge_buffer_size };
+  luke::SlidingWindow<luke::gfloat> z_motor_position { gauge_buffer_size };
   
   // create storage containers for sensor data
   luke::SlidingWindow<luke::gfloat> finger1_gauge { gauge_buffer_size };
@@ -394,8 +487,12 @@ public:
   luke::SlidingWindow<luke::gfloat> wrist_Y_sensor { gauge_buffer_size };
   luke::SlidingWindow<luke::gfloat> wrist_Z_sensor { gauge_buffer_size };
 
-  // track the timestamps of gauges updates, this is for plotting in mysimlulate.cpp
+  // track the timestamps of sensor updates, this is for plotting in mysimlulate.cpp
   luke::SlidingWindow<float> gauge_timestamps { gauge_buffer_size };
+  luke::SlidingWindow<float> axial_timestamps { gauge_buffer_size };
+  luke::SlidingWindow<float> palm_timestamps { gauge_buffer_size };
+  luke::SlidingWindow<float> wristXY_timestamps { gauge_buffer_size };
+  luke::SlidingWindow<float> wristZ_timestamps { gauge_buffer_size };
 
   // data structures
   MjType::Env env_;
@@ -423,12 +520,7 @@ public:
 
   // sensing
   void monitor_sensors();
-  bool monitor_gauges();
-  std::vector<luke::gfloat> read_gauges();
-  luke::gfloat read_palm();
-  std::vector<luke::gfloat> get_gripper_state();
-  bool is_target_reached();
-  bool is_settled();
+  void sense_gripper_state();
   void update_env();
 
   // control
@@ -457,6 +549,7 @@ public:
   int get_number_of_objects() { return env_.object_names.size(); }
   std::string get_current_object_name() { return env_.obj.name; }
   MjType::TestReport get_test_report();
+  void validate_curve();
   void tick();
   float tock();
 

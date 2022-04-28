@@ -31,11 +31,7 @@ PYBIND11_MODULE(bind, m) {
     .def("render", &MjClass::render)
 
     // sensing
-    .def("read_gauges", &MjClass::read_gauges)
-    .def("read_palm", &MjClass::read_palm)
-    .def("get_gripper_state", &MjClass::get_gripper_state)
-    .def("is_target_reached", &MjClass::is_target_reached)
-    .def("is_settled", &MjClass::is_settled)
+    // none atm
 
     // control
     .def("set_joint_target", &MjClass::set_joint_target)

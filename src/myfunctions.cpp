@@ -1410,7 +1410,7 @@ std::vector<gfloat> get_target_state()
   gfloat y = target_.end.y; // or theta?
   gfloat z = target_.end.z;
 
-  std::vector<gfloat> target_joint_values = { x, y, x, y, x, y, z };
+  std::vector<gfloat> target_joint_values = { x, y, z };
 
   return target_joint_values;
 }

@@ -47,6 +47,7 @@ class TrainDQN():
     target_update: int = 100        # initial 10
     num_episodes: int = 10000       # initial 40
     memory_replay: int = 10000      # initial 10000
+    min_memory_replay: int = 5000   # initial 5000
 
     save_freq: int = 1000
     test_freq: int = 1000
@@ -406,7 +407,7 @@ class TrainDQN():
     """
 
     # only optimise when enough memory is built up
-    if (len(self.memory)) < self.params.batch_size:
+    if (len(self.memory)) < self.params.min_memory_replay: # self.params.batch_size
       return
 
     transitions = self.memory.sample(self.params.batch_size)
@@ -485,7 +486,7 @@ class TrainDQN():
       if self.log_level > 0: print("Begin training episode", i_episode)
 
       # for debugging, show memory usage
-      if i_episode % 10 == 0:
+      if i_episode % 100 == 0:
         theheap = guph.heap()
         print("Heap total size is", theheap.size, "(", theheap.size / 10e6, "GB)")
 
