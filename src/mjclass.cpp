@@ -524,7 +524,7 @@ void MjClass::update_env()
     forces.obj.finger1_local[1], forces.obj.finger2_local[1], forces.obj.finger3_local[1]
   });
 
-  /* ----- detect state of key events ----- */
+  /* ----- detect state of binary events ----- */
 
   // lifted is true if ground force is 0 and lift distance is exceeded
   bool lifted = false;
@@ -543,27 +543,6 @@ void MjClass::update_env()
       and not out_of_bounds)
     target_height = true;
 
-  // check if the finger limit axial force is exceeded
-  bool exceed_axial = false;
-  if (env_.grp.peak_finger_axial_force > s_.exceed_axial.min)
-    exceed_axial = true;
-
-  // check if the finger lateral force limit is exceeded
-  bool exceed_lateral = false;
-  if (env_.grp.peak_finger_lateral_force > s_.exceed_lateral.min)
-    exceed_lateral = true;
-
-  // detect if we are in a good palm force range (must be lifted)
-  bool palm_force = false;
-  if (env_.obj.palm_axial_force > s_.palm_force.min and
-      env_.obj.palm_axial_force < s_.palm_force.overshoot and lifted)
-    palm_force = true;
-
-  // detect if we exceed safe limits for palm force
-  bool exceed_palm = false;
-  if (env_.obj.palm_axial_force > s_.exceed_palm.min)
-    exceed_palm = true;
-
   // detect any contact with the object
   bool object_contact = false;
   if (finger1_force_mag > ftol or
@@ -571,11 +550,6 @@ void MjClass::update_env()
       finger3_force_mag > ftol or
       palm_force_mag > ftol)
     object_contact = true;
-
-  // detect finger force on object
-  bool finger_force = false;
-  if (env_.obj.avg_finger_force > s_.finger_force.min)
-    finger_force = true;
 
   // check if object is stable (must also be lifted)
   bool object_stable = false;
@@ -588,6 +562,39 @@ void MjClass::update_env()
   bool stable_height = false;
   if (object_stable and target_height)
     stable_height = true;
+
+  /* ----- detect state of linear events (also save reward scaled value) ----- */
+
+  // check if the finger limit axial force is exceeded
+  s_.exceed_axial.value = env_.grp.peak_finger_axial_force;       // don't forget this!
+  bool exceed_axial = false;
+  if (s_.exceed_axial.value > s_.exceed_axial.min)
+    exceed_axial = true;
+
+  // check if the finger lateral force limit is exceeded
+  s_.exceed_lateral.value = env_.grp.peak_finger_lateral_force;   // don't forget this!
+  bool exceed_lateral = false;
+  if (s_.exceed_lateral.value > s_.exceed_lateral.min)
+    exceed_lateral = true;
+
+  // detect if we are in a good palm force range (must be lifted)
+  s_.palm_force.value = env_.obj.palm_axial_force;                // don't forget this!
+  bool palm_force = false;
+  if (s_.palm_force.value > s_.palm_force.min and
+      s_.palm_force.value < s_.palm_force.overshoot and lifted)
+    palm_force = true;
+
+  // detect if we exceed safe limits for palm force
+  s_.exceed_palm.value = env_.obj.palm_axial_force;               // don't forget this!
+  bool exceed_palm = false;
+  if (s_.exceed_palm.value > s_.exceed_palm.min)
+    exceed_palm = true;
+
+  // detect finger force on object
+  s_.finger_force.value = env_.obj.avg_finger_force;              // don't forget this!
+  bool finger_force = false;
+  if (s_.finger_force.value > s_.finger_force.min)
+    finger_force = true;
 
   /* ----- update count of events in a row ----- */
 
@@ -611,7 +618,7 @@ void MjClass::update_env()
   env_.cnt.exceed_palm = env_.cnt.exceed_palm * exceed_palm + exceed_palm;
   env_.cnt.finger_force = env_.cnt.finger_force * finger_force + finger_force;
   env_.cnt.stable_height = env_.cnt.stable_height * stable_height + stable_height;
-  // env_.cnt.exceed_limits is set in set_action()
+  // env_.cnt.exceed_limits is already set in set_action()
 
   if (s_.debug) { std::cout << "cnt: "; env_.cnt.print(); }
 
@@ -827,8 +834,8 @@ bool MjClass::is_done()
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                             \
             if (s_.NAME.done and env_.cnt.NAME >= s_.NAME.done) {     \
-              if (s_.debug) std::cout << "is_done() = true, "           \
-                << #NAME << " limit of " << #DONE << " exceeded\n";    \
+              if (s_.debug) std::cout << "is_done() = true, "         \
+                << #NAME << " limit of " << #DONE << " exceeded\n";   \
               return true;                                            \
             }                                                         \
    
@@ -860,60 +867,6 @@ bool MjClass::is_done()
   //     << "oob" << " limit of " << s_.oob.done << " exceeded)\n";
   //   return true;
   // }
-
-  // // if the object has been dropped
-  // if (s_.dropped.done and env_.cnt.dropped >= s_.dropped.done) {
-  //   if (s_.debug) std::cout << "The object has been dropped, is_done() = true"
-  //     << " (dropped limit of " << s_.dropped.done << " exceeded)\n";
-  //   return true;
-  // }
-  // // if the object has been lifted to the target height
-  // if (s_.target_height.done and env_.cnt.target_height >= s_.target_height.done) {
-  //   if (s_.debug) std::cout << "Object has reached target height, is_done() = true"
-  //     << " (target_height limit of " << s_.target_height.done << " exceeded)\n";
-  //   return true;
-  // }
-  // // if the limits are exceeded
-  // if (s_.exceed_limits.done and env_.cnt.exceed_limits >= s_.exceed_limits.done) {
-  //   if (s_.debug) std::cout << "Gripper limits exceeded, is_done() = true"
-  //     << " (exceed_limits limit of " << s_.exceed_limits.done << " exceeded)\n";
-  //   return true;
-  // }
-  // // if the finger axial force is too high
-  // if (s_.exceed_axial.done and env_.cnt.exceed_axial >= s_.exceed_axial.done) {
-  //   if (s_.debug) std::cout << "Finger axial force too high, is_done() = true"
-  //     << " (exceed_axial limit of " << s_.exceed_axial.done << " exceeded)\n";
-  //   return true;
-  // }
-  // // if the finger lateral force is too high
-  // if (s_.exceed_lateral.done and env_.cnt.exceed_lateral >= s_.exceed_lateral.done) {
-  //   if (s_.debug) std::cout << "Finger lateral force too high, is_done() = true"
-  //     << " (exceed_lateral limit of " << s_.exceed_lateral.done << " exceeded)\n";
-  //   return true;
-  // }
-  // // if the palm force is too high
-  // if (s_.exceed_palm.done and env_.cnt.exceed_palm >= s_.exceed_palm.done) {
-  //   if (s_.debug) std::cout << "Palm force too high, is_done() = true"
-  //     << " (exceed_palm limit of " << s_.exceed_palm.done << " exceeded)\n";
-  //   return true;
-  // }
-  // // if object is stable
-  // if (s_.object_stable.done and env_.cnt.object_stable >= s_.object_stable.done) {
-  //   if (s_.debug) std::cout << "Object stable long enough, is_done() = true"
-  //     << " (object_stable limit of " << s_.object_stable.done << " exceeded)\n";
-  //   return true;
-  // }
-  // // if object is stable and at target height
-  // if (s_.stable_height.done and env_.cnt.stable_height >= s_.stable_height.done) {
-  //   if (s_.debug) std::cout << "Object stable and at target height, is_done() = true"
-  //     << " (stable_height limit of " << s_.stable_height.done << " exceeded)\n";
-  //   return true;
-  // }
-
-  // step_num: not implemented, done should never be true
-  // object_contact: not implemented, done should never be true
-  // finger_force: not implemented, done should never be true
-  // palm_force: not implemented, done should never be true
 
   // if the cumulative reward drops below a given threshold
   if (env_.cumulative_reward < s_.quit_on_reward_below) {
@@ -1157,115 +1110,156 @@ float MjClass::reward()
 
   /* ----- binary rewards ----- */
 
-  // reward per step
-  if (env_.cnt.step_num >= s_.step_num.trigger) {
-    if (s_.debug) std::printf("Step made, reward += %.4f\n", s_.step_num.reward);
-    reward += s_.step_num.reward;
-  }
+  // general and sensor settings not used
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, USE, NORM, READRATE)
 
-  // reward for object contact
-  if (env_.cnt.object_contact >= s_.object_contact.trigger) {
-    if (s_.debug) std::printf("Contact made, reward += %.4f\n", s_.object_contact.reward);
-    reward += s_.object_contact.reward;
-  }
+  #define BR(NAME, REWARD, DONE, TRIGGER)                                         \
+            if (env_.cnt.NAME >= TRIGGER) {                                       \
+              if (s_.debug)                                                       \
+                std::printf("%s triggered, reward += %.4f\n", #NAME, REWARD);     \
+              reward += REWARD;                                                   \
+            }
+   
+  #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)                    \
+            if (env_.cnt.NAME >= TRIGGER) {                                       \
+              float fraction = linear_reward(s_.NAME.value, MIN, MAX, OVERSHOOT); \
+              float scaled_reward = REWARD * fraction;                            \
+              if (s_.debug)                                                       \
+                std::printf("%s triggered by value %.1f, reward += %.4f\n",       \
+                  #NAME, s_.NAME.value, REWARD);                                  \
+              reward += scaled_reward;                                            \
+            }
+            
+    // run the macro to create the code
+    LUKE_MJSETTINGS
 
-  // is the object currently lifted
-  if (env_.cnt.lifted >= s_.lifted.trigger) {
-    if (s_.debug) std::printf("Object lifted, reward += %.4f\n", s_.lifted.reward);
-    reward += s_.lifted.reward;
-  }
+  #undef XX
+  #undef SS
+  #undef BR
+  #undef LR
 
-  // is the object out of bounds
-  if (env_.cnt.oob >= s_.oob.trigger) {
-    if (s_.debug) std::printf("Object oob, reward += %.4f\n", s_.oob.reward);
-    reward += s_.oob.reward;
-  }
+  // example of binary reward snippet from above macro
+  // if (env_.cnt.step_num >= s_.step_num.trigger) {
+  //   if (s_.debug)                                                       
+  //     std::printf("%s triggered, reward += %.4f\n", "step_num", s_.step_num.reward);
+  //   reward += s_.step_num.reward;
+  // }
+
+  // example of linear reward snippet from above macro
+  // if (env_.cnt.palm_force >= s_.palm_force.trigger) {
+  //   float fraction = linear_reward(s_.palm_force.value, s_.palm_force.min,
+  //     s_.palm_force.max, s_.palm_force.overshoot);
+  //   float scaled_reward = s_.palm_force.reward * fraction;
+  //   if (s_.debug)
+  //     std::printf("%s triggered by value %.1f, reward += %.4f\n",
+  //       "palm_force", s_.palm_force.value, s_.palm_force.reward); 
+  //   reward += scaled_reward;
+  // }
+
+  // // reward for object contact
+  // if (env_.cnt.object_contact >= s_.object_contact.trigger) {
+  //   if (s_.debug) std::printf("Contact made, reward += %.4f\n", s_.object_contact.reward);
+  //   reward += s_.object_contact.reward;
+  // }
+
+  // // is the object currently lifted
+  // if (env_.cnt.lifted >= s_.lifted.trigger) {
+  //   if (s_.debug) std::printf("Object lifted, reward += %.4f\n", s_.lifted.reward);
+  //   reward += s_.lifted.reward;
+  // }
+
+  // // is the object out of bounds
+  // if (env_.cnt.oob >= s_.oob.trigger) {
+  //   if (s_.debug) std::printf("Object oob, reward += %.4f\n", s_.oob.reward);
+  //   reward += s_.oob.reward;
+  // }
   
-  // has the object reached the target height for the first time
-  if (env_.cnt.target_height >= s_.target_height.trigger) {
-    if (s_.debug) std::printf("Object reached target height, reward += %.4f\n", s_.target_height.reward);
-    reward += s_.target_height.reward;
-  }
+  // // has the object reached the target height for the first time
+  // if (env_.cnt.target_height >= s_.target_height.trigger) {
+  //   if (s_.debug) std::printf("Object reached target height, reward += %.4f\n", s_.target_height.reward);
+  //   reward += s_.target_height.reward;
+  // }
 
-  // is the object grasped stably (do we make sure this can only be applied once?)
-  if (env_.cnt.object_stable >= s_.object_stable.trigger) {
-    if (s_.debug) std::printf("Object grasped stably, reward += %.4f\n", s_.object_stable.reward);
-    reward += s_.object_stable.reward;
-  }
+  // // is the object grasped stably (do we make sure this can only be applied once?)
+  // if (env_.cnt.object_stable >= s_.object_stable.trigger) {
+  //   if (s_.debug) std::printf("Object grasped stably, reward += %.4f\n", s_.object_stable.reward);
+  //   reward += s_.object_stable.reward;
+  // }
 
-  // is the object grasped stably and at the target height
-  if (env_.cnt.stable_height >= s_.stable_height.trigger) {
-    if (s_.debug) std::printf("Object stable and at target height, reward += %.4f\n", s_.stable_height.reward);
-    reward += s_.stable_height.reward;
-  }
+  // // is the object grasped stably and at the target height
+  // if (env_.cnt.stable_height >= s_.stable_height.trigger) {
+  //   if (s_.debug) std::printf("Object stable and at target height, reward += %.4f\n", s_.stable_height.reward);
+  //   reward += s_.stable_height.reward;
+  // }
 
-  // has the object been dropped
-  if (env_.cnt.dropped >= s_.dropped.trigger) {
-    if (s_.debug) std::printf("Object dropped, reward += %.4f\n", s_.dropped.reward);
-    reward += s_.dropped.reward;
-  }
+  // // has the object been dropped
+  // if (env_.cnt.dropped >= s_.dropped.trigger) {
+  //   if (s_.debug) std::printf("Object dropped, reward += %.4f\n", s_.dropped.reward);
+  //   reward += s_.dropped.reward;
+  // }
 
-  // has the gripper or base exceeded its limits
-  if (env_.cnt.exceed_limits >= s_.exceed_limits.trigger) {
-    if (s_.debug) std::printf("Limits exceeded, reward += %.4f\n", s_.exceed_limits.reward);
-    reward += s_.exceed_limits.reward;
-  }
+  // // has the gripper or base exceeded its limits
+  // if (env_.cnt.exceed_limits >= s_.exceed_limits.trigger) {
+  //   if (s_.debug) std::printf("Limits exceeded, reward += %.4f\n", s_.exceed_limits.reward);
+  //   reward += s_.exceed_limits.reward;
+  // }
 
-  /* ----- linear rewards ----- */
+  // /* ----- linear rewards ----- */
 
-  // reward based on achieving a target palm force (must be lifted)
-  if (env_.cnt.palm_force >= s_.palm_force.trigger) {
-    // linearly scale reward
-    float fraction = linear_reward(env_.obj.palm_axial_force, s_.palm_force.min,
-      s_.palm_force.max, s_.palm_force.overshoot);
-    float r = s_.palm_force.reward * fraction;
-    if (s_.debug) std::printf("Palm force of %.1f gets reward += %.4f\n",
-      env_.obj.palm_axial_force, r);
-    reward += r;
-  }
+  // // reward based on achieving a target palm force (must be lifted)
+  // if (env_.cnt.palm_force >= s_.palm_force.trigger) {
+  //   // linearly scale reward
+  //   float fraction = linear_reward(env_.obj.palm_axial_force, s_.palm_force.min,
+  //     s_.palm_force.max, s_.palm_force.overshoot);
+  //   float r = s_.palm_force.reward * fraction;
+  //   if (s_.debug) std::printf("Palm force of %.1f gets reward += %.4f\n",
+  //     env_.obj.palm_axial_force, r);
+  //   reward += r;
+  // }
 
-  // reward for all fingers exerting force on the object
-  if (env_.cnt.finger_force >= s_.finger_force.trigger) {
-    // linearly scale reward
-    float fraction = linear_reward(env_.obj.avg_finger_force, s_.finger_force.min,
-      s_.finger_force.max, s_.finger_force.overshoot);
-    float r = s_.finger_force.reward * fraction;
-    if (s_.debug) std::printf("Finger force avg of %.1f gets reward += %.4f\n",
-      env_.obj.avg_finger_force, r);
-    reward += r;
-  }
+  // // reward for all fingers exerting force on the object
+  // if (env_.cnt.finger_force >= s_.finger_force.trigger) {
+  //   // linearly scale reward
+  //   float fraction = linear_reward(env_.obj.avg_finger_force, s_.finger_force.min,
+  //     s_.finger_force.max, s_.finger_force.overshoot);
+  //   float r = s_.finger_force.reward * fraction;
+  //   if (s_.debug) std::printf("Finger force avg of %.1f gets reward += %.4f\n",
+  //     env_.obj.avg_finger_force, r);
+  //   reward += r;
+  // }
 
-  // penalty for exceeding safe amount of palm force
-  if (env_.cnt.exceed_palm >= s_.exceed_palm.trigger) {
-    // linearly scale reward
-    float fraction = linear_reward(env_.obj.palm_axial_force, s_.exceed_palm.min,
-      s_.exceed_palm.max, s_.exceed_palm.overshoot);
-    float r = s_.exceed_palm.reward * fraction;
-    if (s_.debug) std::printf("Palm force of %.1f gets reward += %.4f\n",
-      env_.obj.palm_axial_force, r);
-    reward += r;
-  }
+  // // penalty for exceeding safe amount of palm force
+  // if (env_.cnt.exceed_palm >= s_.exceed_palm.trigger) {
+  //   // linearly scale reward
+  //   float fraction = linear_reward(env_.obj.palm_axial_force, s_.exceed_palm.min,
+  //     s_.exceed_palm.max, s_.exceed_palm.overshoot);
+  //   float r = s_.exceed_palm.reward * fraction;
+  //   if (s_.debug) std::printf("Palm force of %.1f gets reward += %.4f\n",
+  //     env_.obj.palm_axial_force, r);
+  //   reward += r;
+  // }
 
-  // penalty based on high axial force on the fingers
-  if (env_.cnt.exceed_axial >= s_.exceed_axial.trigger) {
-    // linearly scale reward
-    float fraction = linear_reward(env_.grp.peak_finger_axial_force,
-      s_.exceed_axial.min, s_.exceed_axial.max, s_.exceed_axial.overshoot);
-    float r = s_.exceed_axial.reward * fraction;
-    if (s_.debug) std::printf("Max finger axial force of %.1f gets reward += %.4f\n",
-      env_.grp.peak_finger_axial_force, r);
-    reward += r;
-  }
+  // // penalty based on high axial force on the fingers
+  // if (env_.cnt.exceed_axial >= s_.exceed_axial.trigger) {
+  //   // linearly scale reward
+  //   float fraction = linear_reward(env_.grp.peak_finger_axial_force,
+  //     s_.exceed_axial.min, s_.exceed_axial.max, s_.exceed_axial.overshoot);
+  //   float r = s_.exceed_axial.reward * fraction;
+  //   if (s_.debug) std::printf("Max finger axial force of %.1f gets reward += %.4f\n",
+  //     env_.grp.peak_finger_axial_force, r);
+  //   reward += r;
+  // }
 
-  // penalty based on high lateral force on the fingers
-  if (env_.cnt.exceed_lateral >= s_.exceed_lateral.trigger) {
-    float fraction = linear_reward(env_.grp.peak_finger_lateral_force,
-      s_.exceed_lateral.min, s_.exceed_lateral.max, s_.exceed_lateral.overshoot);
-    float r = s_.exceed_lateral.reward * fraction;
-    if (s_.debug) std::printf("Max finger lateral force of %.1f gets reward += %.4f\n",
-      env_.grp.peak_finger_lateral_force, r);
-    reward += r;
-  }
+  // // penalty based on high lateral force on the fingers
+  // if (env_.cnt.exceed_lateral >= s_.exceed_lateral.trigger) {
+  //   float fraction = linear_reward(env_.grp.peak_finger_lateral_force,
+  //     s_.exceed_lateral.min, s_.exceed_lateral.max, s_.exceed_lateral.overshoot);
+  //   float r = s_.exceed_lateral.reward * fraction;
+  //   if (s_.debug) std::printf("Max finger lateral force of %.1f gets reward += %.4f\n",
+  //     env_.grp.peak_finger_lateral_force, r);
+  //   reward += r;
+  // }
 
   // useful for testing, this value is not used in python
   env_.cumulative_reward += reward;

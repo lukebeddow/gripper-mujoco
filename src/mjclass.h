@@ -191,7 +191,7 @@ namespace MjType
   // what key events will we keep track of in the simulation
   struct EventTrack {
 
-    // we keep track of every event related to a reward
+    // initialise an int tracking variable with the same name as each reward
     #define XX(name, type, value)
     #define SS(name, used, normalise, read_rate)
     #define BR(name, reward, done, trigger) int name { false };
@@ -229,6 +229,7 @@ namespace MjType
     float min;               // min value for this behaviour to be measured (0)
     float max;               // max value for the behaviour (1)
     float overshoot;         // -1 = saturate above max, >max = linear decay from max-overshoot
+    float value = 0;         // container to store the value which triggers reward
 
     LinearReward(float reward, int done, int trigger, float min, float max, float overshoot)
       : reward(reward), done(done), trigger(trigger), min(min), max(max), overshoot(overshoot) {}
@@ -549,6 +550,26 @@ public:
   void validate_curve();
   void tick();
   float tock();
+
+  // special functions for evaluating reward events
+  struct Eval {
+
+    // when we evaluate an event, we return if it happened and what value it had
+    struct Event { bool happened; float value; };
+
+    // declare an evaluation function with the same name as each reward
+    #define XX(name, type, value)
+    #define SS(name, used, normalise, read_rate)
+    #define BR(name, reward, done, trigger) Event name(bool value_only);
+    #define LR(name, reward, done, trigger, min, max, overshoot) Event name(bool value_only);
+      // run the macro to create the code
+      LUKE_MJSETTINGS
+    #undef XX
+    #undef SS
+    #undef BR
+    #undef LR
+
+  } eval;
 
 }; // class MjClass
 
