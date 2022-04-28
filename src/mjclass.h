@@ -465,8 +465,6 @@ public:
   /* ----- variables that are reset ----- */
 
   // standard class variables
-  int timeout_count = 0;              // number of action_step() timeouts in a row
-  double last_read_time = 0;          // last gauge read time in seconds
   std::vector<int> action_options;    // possible action codes
   int n_actions;                      // number of possible actions
 
@@ -532,14 +530,13 @@ public:
   bool move_step_target(int x, int y, int z);
 
   // learning functions
-  bool action_step();
+  void action_step();
   void set_action(int action);
   void reset_object();
   void spawn_object(int index);
   void spawn_object(int index, double xpos, double ypos);
   bool is_done();
   std::vector<luke::gfloat> get_observation();
-  std::vector<luke::gfloat> get_observation(int n);
   float reward();
   int get_n_actions();
   int get_n_obs();

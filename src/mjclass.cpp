@@ -87,6 +87,9 @@ void MjClass::configure_settings()
 {
   /* apply simulation settings */
 
+  // set the simulation timestep
+  model->opt.timestep = s_.mujoco_timestep;
+
   /* check what actions are set */
   action_options.clear();
   action_options.resize(MjType::Action::count, -1);
@@ -221,10 +224,6 @@ void MjClass::reset()
 
   // reset the simulation
   luke::reset(model, data);
-
-  // reset standard class variables
-  timeout_count = 0;
-  last_read_time = 0.0;
 
   // reset sensor saved data
   finger1_gauge.reset();
@@ -540,7 +539,7 @@ void MjClass::update_env()
 
   // has the object been lifted above the target height and not oob
   bool target_height = false;
-  if (env_.obj.qpos.z > env_.start_qpos.z + s_.height_target
+  if (env_.obj.qpos.z > env_.start_qpos.z + s_.done_height
       and not out_of_bounds)
     target_height = true;
 
@@ -686,45 +685,26 @@ bool MjClass::move_step_target(int x, int y, int z)
 
 /* ----- learning functions ----- */
 
-bool MjClass::action_step()
+void MjClass::action_step()
 {
   /* step until the simulation settles */
 
   if (s_.debug) tick();
 
-  // ensure the simulation is not settled to start with
-  bool timeout = s_.use_settling;
-  luke::wipe_settled();
-
-  bool settled = false;
   bool target_reached = false;
   bool target_step = false;
 
-  for (int i = 0; i < s_.max_action_steps; i++) {
+  for (int i = 0; i < s_.sim_steps_per_action; i++) {
     
     step();
 
-    settled = luke::is_settled();
     target_step = luke::is_target_step();
     target_reached = luke::is_target_reached();
-
-    // if the simulation is in steady state and target commands aren't changing
-    if (s_.use_settling and settled and target_step) {
-      timeout = false;
-      if (s_.debug) std::cout << "action_step() settled after " << i << " steps\n";
-      break;
-    }
   }
 
-  if (timeout and s_.debug and s_.use_settling) 
-    std::cout << "action_step() timeout after limit of " 
-      << s_.max_action_steps << " steps\n";
-  else if (s_.debug and not s_.use_settling)
-    std::cout << "action_step() complete after " << s_.max_action_steps
+  if (s_.debug)
+    std::cout << "action_step() complete after " << s_.sim_steps_per_action
       << " steps\n";
-
-  // track whether action step is settling, or timing out
-  timeout_count = (timeout_count + 1) * timeout;
 
   // save the new gripper position
   sense_gripper_state();
@@ -736,7 +716,7 @@ bool MjClass::action_step()
 
   if (s_.debug) std::cout << "time for action_step() was " << tock() << " seconds\n";
 
-  return timeout;
+  return;
 }
 
 void MjClass::set_action(int action)
@@ -841,66 +821,94 @@ bool MjClass::is_done()
 {
   /* determine if an episode should end */
 
-  // if the object has been lifted for long enough
-  if (s_.lifted.done and env_.cnt.lifted >= s_.lifted.done) {
-    if (s_.debug) std::cout << "The has been lifted long enough, is_done() = true"
-      << " (lifted limit of " << s_.lifted.done << " exceeded)\n";
-    return true;
-  }
-  // if the object has been dropped
-  if (s_.dropped.done and env_.cnt.dropped >= s_.dropped.done) {
-    if (s_.debug) std::cout << "The object has been dropped, is_done() = true"
-      << " (dropped limit of " << s_.dropped.done << " exceeded)\n";
-    return true;
-  }
-  // if the object is out of bounds
-  if (s_.oob.done and env_.cnt.oob >= s_.oob.done) {
-    if (s_.debug) std::cout << "The object is out of bounds, is_done() = true"
-      << " (oob limit of " << s_.oob.done << " exceeded)\n";
-    return true;
-  }
-  // if the object has been lifted to the target height
-  if (s_.target_height.done and env_.cnt.target_height >= s_.target_height.done) {
-    if (s_.debug) std::cout << "Object has reached target height, is_done() = true"
-      << " (target_height limit of " << s_.target_height.done << " exceeded)\n";
-    return true;
-  }
-  // if the limits are exceeded
-  if (s_.exceed_limits.done and env_.cnt.exceed_limits >= s_.exceed_limits.done) {
-    if (s_.debug) std::cout << "Gripper limits exceeded, is_done() = true"
-      << " (exceed_limits limit of " << s_.exceed_limits.done << " exceeded)\n";
-    return true;
-  }
-  // if the finger axial force is too high
-  if (s_.exceed_axial.done and env_.cnt.exceed_axial >= s_.exceed_axial.done) {
-    if (s_.debug) std::cout << "Finger axial force too high, is_done() = true"
-      << " (exceed_axial limit of " << s_.exceed_axial.done << " exceeded)\n";
-    return true;
-  }
-  // if the finger lateral force is too high
-  if (s_.exceed_lateral.done and env_.cnt.exceed_lateral >= s_.exceed_lateral.done) {
-    if (s_.debug) std::cout << "Finger lateral force too high, is_done() = true"
-      << " (exceed_lateral limit of " << s_.exceed_lateral.done << " exceeded)\n";
-    return true;
-  }
-  // if the palm force is too high
-  if (s_.exceed_palm.done and env_.cnt.exceed_palm >= s_.exceed_palm.done) {
-    if (s_.debug) std::cout << "Palm force too high, is_done() = true"
-      << " (exceed_palm limit of " << s_.exceed_palm.done << " exceeded)\n";
-    return true;
-  }
-  // if object is stable
-  if (s_.object_stable.done and env_.cnt.object_stable >= s_.object_stable.done) {
-    if (s_.debug) std::cout << "Object stable long enough, is_done() = true"
-      << " (object_stable limit of " << s_.object_stable.done << " exceeded)\n";
-    return true;
-  }
-  // if object is stable and at target height
-  if (s_.stable_height.done and env_.cnt.stable_height >= s_.stable_height.done) {
-    if (s_.debug) std::cout << "Object stable and at target height, is_done() = true"
-      << " (stable_height limit of " << s_.stable_height.done << " exceeded)\n";
-    return true;
-  }
+  // general and sensor settings not used
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, USE, NORM, READRATE)
+
+  #define BR(NAME, REWARD, DONE, TRIGGER)                             \
+            if (s_.NAME.done and env_.cnt.NAME >= s_.NAME.done) {     \
+              if (s_.debug) std::cout << "is_done() = true, "           \
+                << #NAME << " limit of " << #DONE << " exceeded\n";    \
+              return true;                                            \
+            }                                                         \
+   
+  #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)        \
+            if (s_.NAME.done and env_.cnt.NAME >= s_.NAME.done) {     \
+              if (s_.debug) std::cout << "is_done() = true, "         \
+                << #NAME << " limit of " << #DONE << " exceeded\n";   \
+              return true;                                            \
+            }                                                         \
+            
+    // run the macro to create the code
+    LUKE_MJSETTINGS
+
+  #undef XX
+  #undef SS
+  #undef BR
+  #undef LR
+
+  // the above macro produces code snippets equivalent to these below examples
+
+  // if (s_.lifted.done and env_.cnt.lifted >= s_.lifted.done) {
+  //   if (s_.debug) std::cout << "is_done() = true, "         
+  //     << "lifted" << " limit of " << s_.lifted.done << " exceeded\n";  
+  //   return true;
+  // }
+
+  // if (s_.oob.done and env_.cnt.oob >= s_.oob.done) {
+  //   if (s_.debug) std::cout << "is_done() = true, "
+  //     << "oob" << " limit of " << s_.oob.done << " exceeded)\n";
+  //   return true;
+  // }
+
+  // // if the object has been dropped
+  // if (s_.dropped.done and env_.cnt.dropped >= s_.dropped.done) {
+  //   if (s_.debug) std::cout << "The object has been dropped, is_done() = true"
+  //     << " (dropped limit of " << s_.dropped.done << " exceeded)\n";
+  //   return true;
+  // }
+  // // if the object has been lifted to the target height
+  // if (s_.target_height.done and env_.cnt.target_height >= s_.target_height.done) {
+  //   if (s_.debug) std::cout << "Object has reached target height, is_done() = true"
+  //     << " (target_height limit of " << s_.target_height.done << " exceeded)\n";
+  //   return true;
+  // }
+  // // if the limits are exceeded
+  // if (s_.exceed_limits.done and env_.cnt.exceed_limits >= s_.exceed_limits.done) {
+  //   if (s_.debug) std::cout << "Gripper limits exceeded, is_done() = true"
+  //     << " (exceed_limits limit of " << s_.exceed_limits.done << " exceeded)\n";
+  //   return true;
+  // }
+  // // if the finger axial force is too high
+  // if (s_.exceed_axial.done and env_.cnt.exceed_axial >= s_.exceed_axial.done) {
+  //   if (s_.debug) std::cout << "Finger axial force too high, is_done() = true"
+  //     << " (exceed_axial limit of " << s_.exceed_axial.done << " exceeded)\n";
+  //   return true;
+  // }
+  // // if the finger lateral force is too high
+  // if (s_.exceed_lateral.done and env_.cnt.exceed_lateral >= s_.exceed_lateral.done) {
+  //   if (s_.debug) std::cout << "Finger lateral force too high, is_done() = true"
+  //     << " (exceed_lateral limit of " << s_.exceed_lateral.done << " exceeded)\n";
+  //   return true;
+  // }
+  // // if the palm force is too high
+  // if (s_.exceed_palm.done and env_.cnt.exceed_palm >= s_.exceed_palm.done) {
+  //   if (s_.debug) std::cout << "Palm force too high, is_done() = true"
+  //     << " (exceed_palm limit of " << s_.exceed_palm.done << " exceeded)\n";
+  //   return true;
+  // }
+  // // if object is stable
+  // if (s_.object_stable.done and env_.cnt.object_stable >= s_.object_stable.done) {
+  //   if (s_.debug) std::cout << "Object stable long enough, is_done() = true"
+  //     << " (object_stable limit of " << s_.object_stable.done << " exceeded)\n";
+  //   return true;
+  // }
+  // // if object is stable and at target height
+  // if (s_.stable_height.done and env_.cnt.stable_height >= s_.stable_height.done) {
+  //   if (s_.debug) std::cout << "Object stable and at target height, is_done() = true"
+  //     << " (stable_height limit of " << s_.stable_height.done << " exceeded)\n";
+  //   return true;
+  // }
 
   // step_num: not implemented, done should never be true
   // object_contact: not implemented, done should never be true
@@ -914,28 +922,10 @@ bool MjClass::is_done()
     return true;
   }
 
-  // if the simulation is unstable (action_step() not settling with use_setting=true)
-  if (timeout_count > s_.max_timeouts) {
-    if (s_.debug) std::cout << "The max unsettled steps is exceeded, is_done() = true"
-      << " (max_timeouts of " << s_.max_timeouts << " exceeded)\n";
-    return true;
-  }
-
   return false;
 }
 
 std::vector<luke::gfloat> MjClass::get_observation()
-{
-  /* overload */
-
-  if (s_.obs_raw_data) {
-    throw std::runtime_error("get_observation() needs the number of samples n for raw data");
-  }
-
-  return get_observation(0);
-}
-
-std::vector<luke::gfloat> MjClass::get_observation(int n)
 {
   /* get an observation with n samples from the gauges */
 
@@ -945,13 +935,13 @@ std::vector<luke::gfloat> MjClass::get_observation(int n)
 
   // old code
   // // calculate how many sensor readings since the last timestep
-  // double time_per_step = mujoco_timestep * s_.max_action_steps;
+  // double time_per_step = mujoco_timestep * s_.sim_steps_per_action;
   //   double readings_since_step = time_per_step * s_.gauge_read_rate_hz;
   //   // round to int (if between round up) to include the last reading
   //   int n_readings = std::ceil(readings_since_step);
 
   // how much time has elapsed since the last state
-  double time_per_step = model->opt.timestep * s_.max_action_steps;
+  double time_per_step = model->opt.timestep * s_.sim_steps_per_action;
 
   // get bending strain gauge sensor output
   if (s_.bending_gauge.in_use) {
@@ -1050,7 +1040,7 @@ std::vector<luke::gfloat> MjClass::get_observation(int n)
 
     // the default mujoco timestep is 0.002 seconds
     constexpr double mujoco_timestep = 0.002;
-    double time_per_step = mujoco_timestep * s_.max_action_steps;
+    double time_per_step = mujoco_timestep * s_.sim_steps_per_action;
     double readings_since_step = time_per_step * s_.gauge_read_rate_hz;
     // round to int (if between round up) to include the last reading
     int n_readings = std::ceil(readings_since_step);

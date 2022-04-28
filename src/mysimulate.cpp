@@ -84,7 +84,6 @@ struct
     int fullscreen = 0;
     int vsync = 1;
     int busywait = 0;
-    int gaugefig = 0;       // added by luke
     int bendgauge = 0;      // added by luke
     int axialgauge = 0;     // added by luke
     int palmsensor = 0;     // added by luke
@@ -167,7 +166,6 @@ const mjuiDef defOption[] =
 #endif
     {mjITEM_CHECKINT,  "Vertical Sync", 1, &settings.vsync,         " #295"},
     {mjITEM_CHECKINT,  "Busy Wait",     1, &settings.busywait,      " #296"},
-    {mjITEM_CHECKINT,  "old gauges",    2, &settings.gaugefig,      " #400"}, // added by luke
     {mjITEM_CHECKINT,  "Bend gauge",    2, &settings.bendgauge,     " #401"}, // added by luke
     {mjITEM_CHECKINT,  "Axial gauge",   2, &settings.axialgauge,    " #402"}, // added by luke
     {mjITEM_CHECKINT,  "Palm sensor",   2, &settings.palmsensor,    " #403"}, // added by luke
@@ -566,7 +564,6 @@ void sensorupdate(void)
 }
 
 
-
 // show sensor figure
 void sensorshow(mjrRect rect)
 {
@@ -582,6 +579,7 @@ void sensorshow(mjrRect rect)
     };
     mjr_figure(viewport, &figsensor, &con);
 }
+
 
 /* ----- added by luke ----- */
 
@@ -642,43 +640,6 @@ void lukesensorfigsinit(void)
     strcpy(figwrist.linename[2], "Z");
 }
 
-// gauge data figure
-void gaugefiginit(void)
-{
-    // set figure to default
-    mjv_defaultFigure(&figgauges);
-    figgauges.figurergba[3] = 0.5f;
-
-    // set flags
-    figgauges.flg_legend = 1;
-    figgauges.flg_extend = 1;
-    // figgauges.flg_barplot = 1;
-    figgauges.flg_symmetric = 1;
-
-    // title
-    strcpy(figgauges.title, "Gauge data");
-
-    // y-tick nubmer format
-    strcpy(figgauges.yformat, "%.0f");
-
-    // grid size
-    figgauges.gridsize[0] = 2;
-    figgauges.gridsize[1] = 3;
-
-    // minimum range
-    figgauges.range[0][0] = 0;
-    figgauges.range[0][1] = 0;
-    figgauges.range[1][0] = -1;
-    figgauges.range[1][1] = 1;
-
-    // legend
-    strcpy(figgauges.linename[0], "1");
-    strcpy(figgauges.linename[1], "2");
-    strcpy(figgauges.linename[2], "3");
-
-    if (myMjClass.s_.use_palm_sensor)
-        strcpy(figgauges.linename[3], "P");
-}
 
 void lukesensorfigsupdate(void)
 {
@@ -771,58 +732,6 @@ void lukesensorfigsupdate(void)
     }
 }
 
-// update gauge figure
-void gaugefigupdate(void)
-{
-    // amount of gauge data we will extract
-    int gnum = myMjClass.gauge_buffer_size;
-
-    // check we can plot this amount of data
-    if (gnum > mjMAXLINEPNT) {
-        std::cout << "gnum exceeds mjMAXLINEPNT in gaugefigupdate()\n";
-        gnum = mjMAXLINEPNT;
-    }
-
-    // read the data    
-    std::vector<luke::gfloat> f1data = myMjClass.finger1_gauge.read(gnum);
-    std::vector<luke::gfloat> f2data = myMjClass.finger2_gauge.read(gnum);
-    std::vector<luke::gfloat> f3data = myMjClass.finger3_gauge.read(gnum);
-    std::vector<luke::gfloat> pdata = myMjClass.palm_sensor.read(gnum);
-    std::vector<float> tdata = myMjClass.gauge_timestamps.read(gnum);
-
-    // package finger data pointers in iterable vector
-    std::vector<std::vector<luke::gfloat>*> fdata;
-    if (myMjClass.s_.use_palm_sensor) {
-        // plot palm data too
-        fdata = { &f1data, &f2data, &f3data, &pdata };
-    }
-    else {
-        // don't plot palm data
-        fdata = { &f1data, &f2data, &f3data };
-    }
-
-    static const int maxline = 10;
-
-    // start with line 0
-    int lineid = 0;
-
-    // loop over each finger gauge
-    for (int n = 0; n < fdata.size(); n++)
-    {
-        lineid = n;
-    
-        // data pointer in line
-        int p = figgauges.linepnt[lineid];
-
-        for (int g = 0; g < gnum; g++) {
-            figgauges.linedata[lineid][2 * g] = tdata[g];
-            figgauges.linedata[lineid][2 * g + 1] = (*fdata[n])[g];
-        }
-
-        // update linepnt (index of last data point)
-        figgauges.linepnt[lineid] = gnum;
-    }
-}
 
 void lukesensorfigshow(mjrRect rect)
 {
@@ -864,23 +773,6 @@ void lukesensorfigshow(mjrRect rect)
             mjr_figure(viewport, myfigs[i], &con);
         }
     }
-}
-
-
-// show gauge figure
-void gaugefigshow(mjrRect rect)
-{
-    // constant width with and without profiler
-    int width = settings.profiler ? rect.width/3 : rect.width/4;
-
-    // render figure on the right
-    mjrRect viewport = {
-        rect.left + rect.width - width,
-        rect.bottom,
-        width,
-        rect.height/3
-    };
-    mjr_figure(viewport, &figgauges, &con);
 }
 
 /* ----- end of added by luke ----- */
@@ -1224,6 +1116,7 @@ void makeGripperUI(int oldstate)
     }
 }
 
+
 void makeActionsUI(int oldstate)
 {
     mjuiDef defActions[] =
@@ -1245,12 +1138,13 @@ void makeActionsUI(int oldstate)
         {mjITEM_SLIDERNUM, "Base trans.",          2, 
             &myMjClass.s_.action_base_translation,        "0.0 0.05"},
         {mjITEM_SLIDERINT, "Action steps",          2, 
-            &myMjClass.s_.max_action_steps,        "0 2000"},
+            &myMjClass.s_.sim_steps_per_action,           "0 2000"},
         {mjITEM_END}
     };
 
     mjui_add(&ui1, defActions);
 }
+
 
 void makeObjectUI(int oldstate)
 {
@@ -1356,7 +1250,7 @@ void makejoint(int oldstate)
         }
 }
 
-
+/* ----- end of added by luke ----- */
 
 // make control section of UI
 void makecontrol(int oldstate)
@@ -1989,9 +1883,8 @@ void uiEvent(mjuiState* state)
 
             // if we are set to full environment steps
             if (settings.env_steps and it->itemid < 8) {
-                int num_gauge_readings = 7;
                 std::vector<luke::gfloat> obs = 
-                    myMjClass.get_observation(num_gauge_readings);
+                    myMjClass.get_observation();
                 double reward = myMjClass.reward();
                 bool done = myMjClass.is_done();
 
@@ -2342,10 +2235,6 @@ void prepare(void)
         sensorupdate();
 
     // added by luke
-    if (settings.gaugefig && settings.run)
-        gaugefigupdate();
-
-    // added by luke
     lukesensorfigsupdate();
 
     // clear timers once profiler info has been copied
@@ -2421,10 +2310,6 @@ void render_MS(GLFWwindow* window)
     // show sensor
     if( settings.sensor )
         sensorshow(smallrect);
-
-    // added by luke
-    if (settings.gaugefig)
-        gaugefigshow(smallrect);
 
     // added by luke
     lukesensorfigshow(smallrect);
@@ -2599,7 +2484,6 @@ void init(void)
     mjv_defaultOption(&vopt);
     profilerinit();
     sensorinit();
-    gaugefiginit();         // added by luke
     lukesensorfigsinit();   // added by luke
 
     // make empty scene

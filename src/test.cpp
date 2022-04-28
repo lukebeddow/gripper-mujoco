@@ -5,7 +5,6 @@
 #include "mjclass.h"
 #include "myfunctions.h"
 
-int num_gauge_readings_if_raw = 7;
 int num_xml_tasks = 37;
 bool print_step = false;
 bool print_ep = true;
@@ -24,7 +23,7 @@ bool learning_step(MjClass& mj)
   mj.action_step();
 
   // get an observation
-  std::vector<luke::gfloat> obs = mj.get_observation(num_gauge_readings_if_raw);
+  std::vector<luke::gfloat> obs = mj.get_observation();
 
   double actreward = mj.reward();
   bool done = mj.is_done();
@@ -54,7 +53,7 @@ void reset_sim(MjClass& mj)
   mj.spawn_object(randobj);
 
   // reset normally returns the next observation
-  mj.get_observation(num_gauge_readings_if_raw);
+  mj.get_observation();
 
   return;
 }
