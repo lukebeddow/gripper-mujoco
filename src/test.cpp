@@ -110,24 +110,6 @@ void run_test(int num_episodes, int step_cap, int reload_rate)
 
 int main(int argc, char** argv)
 {
-  // testing area
-
-  luke::SlidingWindow<int> testwindow(10);
-
-  testwindow.add(0);
-  testwindow.add(1);
-  testwindow.add(2);
-  testwindow.add(3);
-  testwindow.add(4);
-  testwindow.add(5);
-  testwindow.add(6);
-
-  std::cout << "testwindow is "; testwindow.print();
-  std::cout << "read_element(4) gives " << testwindow.read_element(4) << "\n";
-  std::cout << "read(4) gives: "; testwindow.print(4);
-
-  return 0;
-
   // precompiled settings
   int num_episodes = 10;
   int step_cap = 30;

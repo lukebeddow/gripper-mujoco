@@ -1,0 +1,21 @@
+<mujoco><mesh file="models/cube/cube_fillet_35.STL" name="cube_fillet_35_normal_8" refquat="1 0 0 0" scale="1.0 1.0 1.0"/>
+  <mesh file="models/cuboid_211/cuboid_211_fillet_35.STL" name="cuboid_211_fillet_35_normal_3" refquat="1 0 0 0" scale="0.825 0.825 0.825"/>
+  <mesh file="models/cuboid_211/cuboid_211_fillet_5.STL" name="cuboid_211_fillet_5_normal_6" refquat="1 0 0 0" scale="0.7125 0.7125 0.7125"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_35" refquat="1 0 0 0" scale="1.2 1.2 1.2"/>
+  <mesh file="models/cuboid_311/cuboid_311_fillet_25.STL" name="cuboid_311_fillet_25_normal_3" refquat="1 0 0 0" scale="0.75 0.75 0.75"/>
+  <mesh file="models/cylinder_21/cylinder_21_fillet_45.STL" name="cylinder_21_fillet_45_normal_10" refquat="1 0 0 0" scale="0.5785714285714286 0.5785714285714286 0.5785714285714286"/>
+  <mesh file="models/cuboid_311/cuboid_311_fillet_15.STL" name="cuboid_311_fillet_15_normal_4" refquat="1 0 0 0" scale="0.725 0.725 0.725"/>
+  <mesh file="models/cylinder_12/cylinder_12_fillet_5.STL" name="cylinder_12_fillet_5_upright_6" refquat="0 -0.01 0 0" scale="0.6642857142857143 0.6642857142857143 0.6642857142857143"/>
+  <mesh file="models/cube/cube_fillet_15.STL" name="cube_fillet_15_normal_2" refquat="1 0 0 0" scale="1.3428571428571427 1.3428571428571427 1.3428571428571427"/>
+  <mesh file="models/cylinder_11/cylinder_11_fillet_5.STL" name="cylinder_11_fillet_5_normal_5" refquat="1 0 0 0" scale="1.2 1.2 1.2"/>
+  <mesh file="models/cylinder_14/cylinder_14_fillet_15.STL" name="cylinder_14_fillet_15_normal_12" refquat="0.683 -0.683 -0.183 -0.183" scale="0.6642857142857143 0.6642857142857143 0.6642857142857143"/>
+  <mesh file="models/cylinder_11/cylinder_11_fillet_35.STL" name="cylinder_11_fillet_35_normal_6" refquat="1 0 0 0" scale="1.15 1.15 1.15"/>
+  <mesh file="models/cube/cube_fillet_35.STL" name="cube_fillet_35_normal_15" refquat="1 0 0 0" scale="0.6 0.6 0.6"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_6" refquat="1 0 0 0" scale="1.3705882352941177 1.3705882352941177 1.3705882352941177"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_81" refquat="1 0 0 0" scale="0.9294117647058823 0.9294117647058823 0.9294117647058823"/>
+  <mesh file="models/cylinder_21/cylinder_21_fillet_35.STL" name="cylinder_21_fillet_35_normal_6" refquat="1 0 0 0" scale="0.7214285714285715 0.7214285714285715 0.7214285714285715"/>
+  <mesh file="models/cuboid_311/cuboid_311_fillet_15.STL" name="cuboid_311_fillet_15_normal_2" refquat="1 0 0 0" scale="0.775 0.775 0.775"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_46" refquat="1 0 0 0" scale="1.1352941176470588 1.1352941176470588 1.1352941176470588"/>
+  <mesh file="models/cylinder_21/cylinder_21_fillet_15.STL" name="cylinder_21_fillet_15_normal_2" refquat="1 0 0 0" scale="0.8642857142857143 0.8642857142857143 0.8642857142857143"/>
+  <mesh file="models/cuboid_311/cuboid_311_fillet_25.STL" name="cuboid_311_fillet_25_normal_8" refquat="1 0 0 0" scale="0.625 0.625 0.625"/>
+  </mujoco>

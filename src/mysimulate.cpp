@@ -659,7 +659,7 @@ void lukesensorfigsupdate(void)
     std::vector<luke::gfloat> p1data = myMjClass.palm_sensor.read(gnum);
     std::vector<luke::gfloat> a1data = myMjClass.finger1_axial_gauge.read(gnum);
     std::vector<luke::gfloat> a2data = myMjClass.finger2_axial_gauge.read(gnum);
-    std::vector<luke::gfloat> a3data = myMjClass.finger2_axial_gauge.read(gnum);
+    std::vector<luke::gfloat> a3data = myMjClass.finger3_axial_gauge.read(gnum);
     std::vector<luke::gfloat> wXdata = myMjClass.wrist_X_sensor.read(gnum);
     std::vector<luke::gfloat> wYdata = myMjClass.wrist_Y_sensor.read(gnum);
     std::vector<luke::gfloat> wZdata = myMjClass.wrist_Z_sensor.read(gnum);

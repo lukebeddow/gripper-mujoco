@@ -18,11 +18,8 @@
 #include "customtypes.h"
 
 // if we are on the cluster, we must not include the rendering libraries
-#if defined(LUKE_CLUSTER)
-  // #define LUKE_FILE_ROOT "/home/lbeddow/mjcf/"
-#else
+#if !defined(LUKE_CLUSTER)
   #include "rendering.h"
-  // #define LUKE_FILE_ROOT "/home/luke/gripper_repo_ws/src/gripper_v2/gripper_description/urdf/mujoco/"
 #endif
 
 namespace MjType
@@ -550,26 +547,6 @@ public:
   void validate_curve();
   void tick();
   float tock();
-
-  // special functions for evaluating reward events
-  struct Eval {
-
-    // when we evaluate an event, we return if it happened and what value it had
-    struct Event { bool happened; float value; };
-
-    // declare an evaluation function with the same name as each reward
-    #define XX(name, type, value)
-    #define SS(name, used, normalise, read_rate)
-    #define BR(name, reward, done, trigger) Event name(bool value_only);
-    #define LR(name, reward, done, trigger, min, max, overshoot) Event name(bool value_only);
-      // run the macro to create the code
-      LUKE_MJSETTINGS
-    #undef XX
-    #undef SS
-    #undef BR
-    #undef LR
-
-  } eval;
 
 }; // class MjClass
 

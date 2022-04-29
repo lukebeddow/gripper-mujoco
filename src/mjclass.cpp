@@ -416,9 +416,8 @@ void MjClass::monitor_sensors()
       forces = luke::get_object_forces(model, data);
       retrieved_forces = true;
     }
-    
+
     // read
-    // luke::gfloat palm_reading = luke::get_palm_force(model, data);
     luke::gfloat palm_reading = forces.all.palm_local[0];
 
     // normalise
@@ -434,23 +433,37 @@ void MjClass::monitor_sensors()
   // check the wrist sensor XY force
   if (s_.wrist_sensor_XY.ready_to_read(data->time)) {
 
-    if (not retrieved_forces) {
-      forces = luke::get_object_forces(model, data);
-      retrieved_forces = true;
-    }
+    // read
+    luke::gfloat x = data->userdata[0];
+    luke::gfloat y = data->userdata[1];
 
-    std::cout << "wrist sensor XY not yet implemented\n";
+    // normalise
+    x = s_.wrist_sensor_XY.apply_normalisation(x);
+    y = s_.wrist_sensor_XY.apply_normalisation(y);
+
+    // save
+    wrist_X_sensor.add(x);
+    wrist_Y_sensor.add(y);
+    
+    // record time
+    wristXY_timestamps.add(data->time);
+    
   }
 
   // check the wrist sensor Z force
   if (s_.wrist_sensor_Z.ready_to_read(data->time)) {
 
-    if (not retrieved_forces) {
-      forces = luke::get_object_forces(model, data);
-      retrieved_forces = true;
-    }
+    // read
+    luke::gfloat z = data->userdata[2];
 
-    std::cout << "wrist sensor Z not yet implemented\n";
+    // normalise
+    z = s_.wrist_sensor_Z.apply_normalisation(z);
+
+    // save
+    wrist_Z_sensor.add(z);
+
+    // record time
+    wristZ_timestamps.add(data->time);
   }
 }
 
@@ -943,15 +956,28 @@ std::vector<luke::gfloat> MjClass::get_observation()
 
   // get wrist sensor XY output
   if (s_.wrist_sensor_XY.in_use) {
-    // not implemented
+
+    // sample data
+    std::vector<luke::gfloat> wX =
+      (s_.wrist_sensor_XY.*sampleFcnPtr)(wrist_X_sensor, time_per_step);
+    std::vector<luke::gfloat> wY =
+      (s_.wrist_sensor_XY.*sampleFcnPtr)(wrist_Y_sensor, time_per_step);
+
+    // insert data into observation output
+    observation.insert(observation.end(), wX.begin(), wX.end());
+    observation.insert(observation.end(), wY.begin(), wY.end());
   }
 
   // get wrist sensor Z output
   if (s_.wrist_sensor_Z.in_use) {
-    // not implemented
-  }
+    
+    // sample data
+    std::vector<luke::gfloat> wZ =
+      (s_.wrist_sensor_XY.*sampleFcnPtr)(wrist_Z_sensor, time_per_step);
 
-  std::cout << "observation size before motor state " << observation.size() << '\n';
+    // insert data into observation output
+    observation.insert(observation.end(), wZ.begin(), wZ.end());
+  }
 
   // get motor state output
   if (s_.motor_state_sensor.in_use) {
@@ -969,8 +995,6 @@ std::vector<luke::gfloat> MjClass::get_observation()
     observation.insert(observation.end(), s2.begin(), s2.end());
     observation.insert(observation.end(), s3.begin(), s3.end());
   }
-
-  std::cout << "observation size after " << observation.size() << '\n';
 
   /* old code
   if (s_.obs_raw_data) {
@@ -1155,110 +1179,6 @@ float MjClass::reward()
   //     std::printf("%s triggered by value %.1f, reward += %.4f\n",
   //       "palm_force", s_.palm_force.value, s_.palm_force.reward); 
   //   reward += scaled_reward;
-  // }
-
-  // // reward for object contact
-  // if (env_.cnt.object_contact >= s_.object_contact.trigger) {
-  //   if (s_.debug) std::printf("Contact made, reward += %.4f\n", s_.object_contact.reward);
-  //   reward += s_.object_contact.reward;
-  // }
-
-  // // is the object currently lifted
-  // if (env_.cnt.lifted >= s_.lifted.trigger) {
-  //   if (s_.debug) std::printf("Object lifted, reward += %.4f\n", s_.lifted.reward);
-  //   reward += s_.lifted.reward;
-  // }
-
-  // // is the object out of bounds
-  // if (env_.cnt.oob >= s_.oob.trigger) {
-  //   if (s_.debug) std::printf("Object oob, reward += %.4f\n", s_.oob.reward);
-  //   reward += s_.oob.reward;
-  // }
-  
-  // // has the object reached the target height for the first time
-  // if (env_.cnt.target_height >= s_.target_height.trigger) {
-  //   if (s_.debug) std::printf("Object reached target height, reward += %.4f\n", s_.target_height.reward);
-  //   reward += s_.target_height.reward;
-  // }
-
-  // // is the object grasped stably (do we make sure this can only be applied once?)
-  // if (env_.cnt.object_stable >= s_.object_stable.trigger) {
-  //   if (s_.debug) std::printf("Object grasped stably, reward += %.4f\n", s_.object_stable.reward);
-  //   reward += s_.object_stable.reward;
-  // }
-
-  // // is the object grasped stably and at the target height
-  // if (env_.cnt.stable_height >= s_.stable_height.trigger) {
-  //   if (s_.debug) std::printf("Object stable and at target height, reward += %.4f\n", s_.stable_height.reward);
-  //   reward += s_.stable_height.reward;
-  // }
-
-  // // has the object been dropped
-  // if (env_.cnt.dropped >= s_.dropped.trigger) {
-  //   if (s_.debug) std::printf("Object dropped, reward += %.4f\n", s_.dropped.reward);
-  //   reward += s_.dropped.reward;
-  // }
-
-  // // has the gripper or base exceeded its limits
-  // if (env_.cnt.exceed_limits >= s_.exceed_limits.trigger) {
-  //   if (s_.debug) std::printf("Limits exceeded, reward += %.4f\n", s_.exceed_limits.reward);
-  //   reward += s_.exceed_limits.reward;
-  // }
-
-  // /* ----- linear rewards ----- */
-
-  // // reward based on achieving a target palm force (must be lifted)
-  // if (env_.cnt.palm_force >= s_.palm_force.trigger) {
-  //   // linearly scale reward
-  //   float fraction = linear_reward(env_.obj.palm_axial_force, s_.palm_force.min,
-  //     s_.palm_force.max, s_.palm_force.overshoot);
-  //   float r = s_.palm_force.reward * fraction;
-  //   if (s_.debug) std::printf("Palm force of %.1f gets reward += %.4f\n",
-  //     env_.obj.palm_axial_force, r);
-  //   reward += r;
-  // }
-
-  // // reward for all fingers exerting force on the object
-  // if (env_.cnt.finger_force >= s_.finger_force.trigger) {
-  //   // linearly scale reward
-  //   float fraction = linear_reward(env_.obj.avg_finger_force, s_.finger_force.min,
-  //     s_.finger_force.max, s_.finger_force.overshoot);
-  //   float r = s_.finger_force.reward * fraction;
-  //   if (s_.debug) std::printf("Finger force avg of %.1f gets reward += %.4f\n",
-  //     env_.obj.avg_finger_force, r);
-  //   reward += r;
-  // }
-
-  // // penalty for exceeding safe amount of palm force
-  // if (env_.cnt.exceed_palm >= s_.exceed_palm.trigger) {
-  //   // linearly scale reward
-  //   float fraction = linear_reward(env_.obj.palm_axial_force, s_.exceed_palm.min,
-  //     s_.exceed_palm.max, s_.exceed_palm.overshoot);
-  //   float r = s_.exceed_palm.reward * fraction;
-  //   if (s_.debug) std::printf("Palm force of %.1f gets reward += %.4f\n",
-  //     env_.obj.palm_axial_force, r);
-  //   reward += r;
-  // }
-
-  // // penalty based on high axial force on the fingers
-  // if (env_.cnt.exceed_axial >= s_.exceed_axial.trigger) {
-  //   // linearly scale reward
-  //   float fraction = linear_reward(env_.grp.peak_finger_axial_force,
-  //     s_.exceed_axial.min, s_.exceed_axial.max, s_.exceed_axial.overshoot);
-  //   float r = s_.exceed_axial.reward * fraction;
-  //   if (s_.debug) std::printf("Max finger axial force of %.1f gets reward += %.4f\n",
-  //     env_.grp.peak_finger_axial_force, r);
-  //   reward += r;
-  // }
-
-  // // penalty based on high lateral force on the fingers
-  // if (env_.cnt.exceed_lateral >= s_.exceed_lateral.trigger) {
-  //   float fraction = linear_reward(env_.grp.peak_finger_lateral_force,
-  //     s_.exceed_lateral.min, s_.exceed_lateral.max, s_.exceed_lateral.overshoot);
-  //   float r = s_.exceed_lateral.reward * fraction;
-  //   if (s_.debug) std::printf("Max finger lateral force of %.1f gets reward += %.4f\n",
-  //     env_.grp.peak_finger_lateral_force, r);
-  //   reward += r;
   // }
 
   // useful for testing, this value is not used in python

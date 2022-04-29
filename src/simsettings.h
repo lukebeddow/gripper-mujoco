@@ -36,7 +36,7 @@
   /* 
   update_env() settings */\
   XX(  oob_distance,            double,   75e-3)    /* distance to consider object out of bounds */\
-  XX(  done_height,             double,   30e-3)    /* grasp done if object lifted to this height */\
+  XX(  done_height,             double,   25e-3)    /* grasp done if object lifted to this height */\
   XX(  stable_finger_force,     double,   0.4)      /* finger force (N) on object to consider stable */\
   XX(  stable_palm_force,       double,   1.0)      /* palm force (N) on object to consider stable */\
   /* 
@@ -62,10 +62,10 @@
       name                      used      normalise read-rate   (NB: -ve read-rate gives -n_readings) */\
   SS(  motor_state_sensor,      true,     0,        -2)     /* xyz motor states, normalise is ignored */\
   SS(  bending_gauge,           true,     100.0,    10)     /* strain gauge to measure finger bending */\
-  SS(  axial_gauge,             true,     1,        10)     /* strain gauge to measure axial finger strain */\
+  SS(  axial_gauge,             true,     3.0,      10)     /* strain gauge to measure axial finger strain */\
   SS(  palm_sensor,             true,     8.0,      10)     /* palm force sensor */\
-  SS(  wrist_sensor_XY,         false,    1,        10)     /* F/T wrist sensor X and Y forces */\
-  SS(  wrist_sensor_Z,          false,    1,        10)     /* F/T wrist sensor Z force */\
+  SS(  wrist_sensor_XY,         true,     5.00,     10)     /* force wrist sensor X and Y forces */\
+  SS(  wrist_sensor_Z,          true,     28.0,     10)     /* force wrist sensor Z force */\
   /* 
 
   3. Binary rewards

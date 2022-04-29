@@ -59,12 +59,6 @@ class MjEnv(gym.Env):
     super(MjEnv, self).__init__()
 
     # user defined parameters
-    max_angle = 35 * (3.1415926535987 / 180.0)
-    self.state_max = [140e-3, max_angle, 140e-3, max_angle, 140e-3, max_angle, 160e-3]
-    self.state_min = [0.0, -max_angle, 0.0, -max_angle, 0.0, -max_angle, 0.0]
-    self.num_state_readings = 7
-    self.num_gauge_readings = 3
-    self.num_palm_readings = 3
     self.max_episode_steps = 100
     self.object_position_noise_mm = 10
     self.disable_rendering = True
@@ -261,7 +255,7 @@ class MjEnv(gym.Env):
     Returns the next observation from the simuation
     """
 
-    obs = self.mj.get_observation(self.num_gauge_readings)
+    obs = self.mj.get_observation()
     return np.array(obs)
 
   def _reward(self):

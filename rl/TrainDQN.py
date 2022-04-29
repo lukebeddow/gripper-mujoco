@@ -114,6 +114,9 @@ class TrainDQN():
     # update the environment with correct numbers of actions and observations
     self.env._update_n_actions_obs()
 
+    print("number of actions is", self.env.n_actions)
+    print("number of observations", self.env.n_obs)
+
     # create networks
     if network == None:
       raise RuntimeError("TrainDQN network must be specified")

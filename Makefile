@@ -28,7 +28,7 @@ OUTCPP := bin
 OUTPY := rl/env/mjpy
 
 # object set name
-DEFAULT_OBJECTSET = set1_nocuboid_526
+DEFAULT_OBJECTSET = set1_nocuboid_525
 
 # for generating models, non-essential feature
 MODELBASH := generate_models.sh

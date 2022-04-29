@@ -1,8 +1,38 @@
 #!/usr/bin/env python3
 
 import sys
+from time import sleep
 from TrainDQN import TrainDQN
 import networks
+
+def mixed_rewards(model):
+  # mixture of positive and negative rewards
+
+  # binary rewards                       reward   done   trigger
+  model.env.mj.set.step_num.set          (0.00,   False,   1)
+  model.env.mj.set.lifted.set            (0.002,  False,   1)
+  model.env.mj.set.target_height.set     (0.002,  False,   1)
+  model.env.mj.set.object_stable.set     (0.002,  False,   1)
+
+  # linear rewards                       reward   done   trigger min   max  overshoot
+  model.env.mj.set.finger_force.set      (0.002,  False,   1,    0.2,  1.0,  -1)
+  model.env.mj.set.palm_force.set        (0.002,  False,   1,    1.0,  6.0,  -1)
+
+  # penalties                            reward   done   trigger min   max  overshoot
+  model.env.mj.set.exceed_limits.set     (-0.005, 5,       1)
+  model.env.mj.set.exceed_axial.set      (-0.005, 5,       1,    3.0,  6.0,  -1)
+  model.env.mj.set.exceed_lateral.set    (-0.005, 5,       1,    4.0,  6.0,  -1)
+  model.env.mj.set.exceed_palm.set       (-0.005, 5,       1,    6.0,  10.0, -1)
+
+  # end criteria                         reward   done   trigger
+  model.env.mj.set.stable_height.set     (0.0,    True,    1)
+  model.env.mj.set.oob.set               (-1.0,   True,    1)
+
+  # terminate episode when reward drops below -1.01, also cap at this value
+  model.env.mj.set.quit_on_reward_below = -100
+  model.env.mj.set.quit_reward_capped = True
+
+  return model
 
 def make_rewards_negative(model):
   # shift the rewards to always be negative
@@ -18,17 +48,17 @@ def make_rewards_negative(model):
   model.env.mj.set.palm_force.set        (0.002,  False,   1,    1.0,  6.0,  -1)
 
   # penalties                            reward   done   trigger min   max  overshoot
-  model.env.mj.set.exceed_limits.set     (-0.002, False,   1)
-  model.env.mj.set.exceed_axial.set      (-0.002, False,   1,    3.0,  6.0,  -1)
-  model.env.mj.set.exceed_lateral.set    (-0.002, False,   1,    4.0,  6.0,  -1)
-  model.env.mj.set.exceed_palm.set       (-0.002, False,   1,    6.0,  10.0, -1)
+  model.env.mj.set.exceed_limits.set     (-0.005, False,   1)
+  model.env.mj.set.exceed_axial.set      (-0.005, False,   1,    3.0,  6.0,  -1)
+  model.env.mj.set.exceed_lateral.set    (-0.005, False,   1,    4.0,  6.0,  -1)
+  model.env.mj.set.exceed_palm.set       (-0.005, False,   1,    6.0,  10.0, -1)
 
   # end criteria                         reward   done   trigger
   model.env.mj.set.stable_height.set     (0.0,    True,    1)
-  model.env.mj.set.oob.set               (-1.0,   True,    1)
+  model.env.mj.set.oob.set               (-2.0,   True,    1)
 
   # terminate episode when reward drops below -1.01, also cap at this value
-  model.env.mj.set.quit_on_reward_below = -1.01
+  model.env.mj.set.quit_on_reward_below = -2.01
   model.env.mj.set.quit_reward_capped = True
 
   return model
@@ -55,47 +85,65 @@ def finger_only_lifting(model):
   model.env.mj.set.oob.set               (-1.0,   True,    1)
 
   # terminate episode when reward drops below -1.01, also cap at this value
-  model.env.mj.set.quit_on_reward_below = -1.01
+  model.env.mj.set.quit_on_reward_below = -2.01
   model.env.mj.set.quit_reward_capped = True
 
-  return model
-
-def add_palm_force_sensor(model):
-  # add force sensor to the palm
-  model.env.mj.set.use_palm_sensor = True
-  model.env.mj.set.palm_force_normalise = 8.0
-  return model
-
-def add_palm_bumper_sensor(model):
-  # add a palm bumper sensor
-  model.env.mj.set.use_palm_sensor = True
-  model.env.mj.set.palm_force_normalise = -1
   return model
 
 def apply_to_all_models(model):
   """
   Settings we want to apply to every single running model
   """
+
+  # set up the object set
+  model.env.mj.object_set_name = "set1_nocuboid_525"
+  model.env.training_xmls = 24
+
+  # ensure we know what parameters we are using
+  model.params.batch_size = 128
+  model.params.learning_rate = 0.01
+  model.params.gamma = 0.999
+  model.params.eps_start = 0.9
+  model.params.eps_end = 0.05
+  model.params.eps_decay = 2000
+  model.params.target_update = 100
+  model.params.num_episodes = 20_000
+  model.params.memory_replay = 20_000
+  model.params.min_memory_replay = 5_000
+  model.params.save_freq = 2_000
+  model.params.test_freq = 2_000
+
   # ensure debug mode is off
+  model.env.log_level = 0
   model.env.mj.set.debug = False
 
-  # these settings should never be changed
-  model.env.mj.set.gauge_read_rate_hz = 10
+  # disable all rendering
   model.env.mj.set.use_render_delay = False
   model.env.mj.set.render_on_step = False
-  model.env.mj.set.use_settling = False
 
-  # ensure key settings are set to defaults
-  model.env.mj.set.normalising_force = 100
-  model.env.mj.set.use_palm_sensor = False
+  # define lengths and forces
   model.env.mj.set.oob_distance = 75e-3
-  model.env.mj.set.height_target = 25e-3
+  model.env.mj.set.done_height = 25e-3
   model.env.mj.set.stable_finger_force = 0.4
   model.env.mj.set.stable_palm_force = 1.0
-  model.env.mj.set.obs_raw_data = False
+
+  # what actions are we using
   model.env.mj.set.paired_motor_X_step = True
   model.env.mj.set.use_palm_action = True
   model.env.mj.set.use_height_action = True
+
+  # remove all extra sensors
+  model.env.mj.set.motor_state_sensor.in_use = True
+  model.env.mj.set.motor_state_sensor.read_rate = -1 # -2 means 2 readings, current + prev
+  model.env.mj.set.bending_gauge.in_use = True
+  model.env.mj.set.axial_gauge.in_use = False
+  model.env.mj.set.palm_sensor.in_use = False
+  model.env.mj.set.wrist_sensor_XY.in_use = False
+  model.env.mj.set.wrist_sensor_Z.in_use = False
+
+  # what sensing mode (0=raw data, 1=change, 2=average)
+  model.env.mj.set.sensor_sample_mode = 1
+  model.env.mj.set.state_sample_mode = 0
 
   # wipe all rewards so none trigger
   model.env.mj.set.wipe_rewards()
@@ -108,8 +156,9 @@ if __name__ == "__main__":
 
   inputarg = int(sys.argv[1])
   print("Input argument: ", inputarg)
+  sleep(inputarg)
 
-  # ----- 1 - 5, default network, default settings, vary rewards ----- #
+  # ----- 1 - 5, default network, negative rewards, vary number of sensors ----- #
   if inputarg <= 5:
 
     # create training instance and apply settings
@@ -119,243 +168,180 @@ if __name__ == "__main__":
 
     # now form the network
     network = networks.DQN_2L60
-    model.init(network)
 
     # ----- adjust the rewards and step number ----- #
     if inputarg == 1:
-      model.params.eps_decay = 1000
-      model.env.max_episode_steps = 100
-      model.env.mj.set.quit_on_reward_below = -1.01
-      model.env.mj.set.quit_reward_capped = True
+      model.env.max_episode_steps = 200
+      model.init(network)
       model.train()
 
     elif inputarg == 2:
-      model.params.eps_decay = 1000
-      model.env.max_episode_steps = 150
-      model.env.mj.set.quit_on_reward_below = -1.51
-      model.env.mj.set.quit_reward_capped = True
+      model.env.max_episode_steps = 200
+      model.env.mj.set.motor_state_sensor.read_rate = -2
+      model.init(network)
       model.train()
 
     elif inputarg == 3:
-      model.params.eps_decay = 1000
       model.env.max_episode_steps = 200
-      model.env.mj.set.quit_on_reward_below = -2.01
-      model.env.mj.set.quit_reward_capped = True
+      model.env.mj.set.motor_state_sensor.read_rate = -2
+      model.env.mj.set.axial_gauge.in_use = True
+      model.init(network)
       model.train()
 
     elif inputarg == 4:
-      model.params.eps_decay = 1000
-      model.env.max_episode_steps = 100
-      model.env.mj.set.quit_on_reward_below = -100
-      model.env.mj.set.quit_reward_capped = False
+      model.env.max_episode_steps = 200
+      model.env.mj.set.motor_state_sensor.read_rate = -2
+      model.env.mj.set.axial_gauge.in_use = True
+      model.env.mj.set.wrist_sensor_Z.in_use = True
+      model.init(network)
       model.train()
 
     elif inputarg == 5:
-      model.params.eps_decay = 1000
-      model.env.max_episode_steps = 150
-      model.env.mj.set.quit_on_reward_below = -100
-      model.env.mj.set.quit_reward_capped = False
+      model.env.max_episode_steps = 200
+      model.env.mj.set.motor_state_sensor.read_rate = -2
+      model.env.mj.set.axial_gauge.in_use = True
+      model.env.mj.set.wrist_sensor_Z.in_use = True
+      model.env.mj.set.wrist_sensor_XY.in_use = True
+      model.init(network)
       model.train()
 
-  # ----- 6 - 10, default network, no palm, vary rewards ----- #
+  # ----- 6 - 10, deeper network, negative rewards, vary number of sensors ----- #
   elif inputarg > 5 and inputarg <= 10:
 
     # create training instance and apply settings
     model = TrainDQN(cluster=cluster, save_suffix=f"array_{inputarg}")
     model = apply_to_all_models(model)
-    model = finger_only_lifting(model)
+    model = make_rewards_negative(model)
 
     # now form the network
-    network = networks.DQN_2L60
-    model.init(network)
+    network = networks.DQN_3L60
 
     # ----- adjust the rewards and step number ----- #
     if inputarg == 6:
-      model.params.eps_decay = 1000
-      model.env.max_episode_steps = 100
-      model.env.mj.set.quit_on_reward_below = -1.01
-      model.env.mj.set.quit_reward_capped = True
+      model.env.max_episode_steps = 200
+      model.init(network)
       model.train()
 
     elif inputarg == 7:
-      model.params.eps_decay = 1000
-      model.env.max_episode_steps = 150
-      model.env.mj.set.quit_on_reward_below = -1.51
-      model.env.mj.set.quit_reward_capped = True
+      model.env.max_episode_steps = 200
+      model.env.mj.set.motor_state_sensor.read_rate = -2
+      model.init(network)
       model.train()
 
     elif inputarg == 8:
-      model.params.eps_decay = 1000
       model.env.max_episode_steps = 200
-      model.env.mj.set.quit_on_reward_below = -2.01
-      model.env.mj.set.quit_reward_capped = True
+      model.env.mj.set.motor_state_sensor.read_rate = -2
+      model.env.mj.set.axial_gauge.in_use = True
+      model.init(network)
       model.train()
 
     elif inputarg == 9:
-      model.params.eps_decay = 1000
-      model.env.max_episode_steps = 100
-      model.env.mj.set.quit_on_reward_below = -100
-      model.env.mj.set.quit_reward_capped = False
+      model.env.max_episode_steps = 200
+      model.env.mj.set.motor_state_sensor.read_rate = -2
+      model.env.mj.set.axial_gauge.in_use = True
+      model.env.mj.set.wrist_sensor_Z.in_use = True
+      model.init(network)
       model.train()
 
     elif inputarg == 10:
-      model.params.eps_decay = 1000
-      model.env.max_episode_steps = 150
-      model.env.mj.set.quit_on_reward_below = -100
-      model.env.mj.set.quit_reward_capped = False
+      model.env.max_episode_steps = 200
+      model.env.mj.set.motor_state_sensor.read_rate = -2
+      model.env.mj.set.axial_gauge.in_use = True
+      model.env.mj.set.wrist_sensor_Z.in_use = True
+      model.env.mj.set.wrist_sensor_XY.in_use = True
+      model.init(network)
       model.train()
 
-  # ----- 11 - 15, default network, palm force sensor, vary rewards ----- #
+  # ----- 11 - 15, default network, mixed rewards, vary sensors ----- #
   elif inputarg > 10 and inputarg <= 15:
 
     # create training instance and apply settings
     model = TrainDQN(cluster=cluster, save_suffix=f"array_{inputarg}")
     model = apply_to_all_models(model)
-    model = make_rewards_negative(model)
-
-    model = add_palm_force_sensor(model)
+    model = mixed_rewards(model)
 
     # now form the network
     network = networks.DQN_2L60
-    model.init(network)
 
     # ----- adjust the rewards and step number ----- #
     if inputarg == 11:
-      model.params.eps_decay = 1000
-      model.env.max_episode_steps = 100
-      model.env.mj.set.quit_on_reward_below = -1.01
-      model.env.mj.set.quit_reward_capped = True
+      model.env.max_episode_steps = 200
+      model.init(network)
       model.train()
 
     elif inputarg == 12:
-      model.params.eps_decay = 1000
-      model.env.max_episode_steps = 150
-      model.env.mj.set.quit_on_reward_below = -1.51
-      model.env.mj.set.quit_reward_capped = True
+      model.env.max_episode_steps = 200
+      model.env.mj.set.motor_state_sensor.read_rate = -2
+      model.init(network)
       model.train()
 
     elif inputarg == 13:
-      model.params.eps_decay = 1000
       model.env.max_episode_steps = 200
-      model.env.mj.set.quit_on_reward_below = -2.01
-      model.env.mj.set.quit_reward_capped = True
+      model.env.mj.set.motor_state_sensor.read_rate = -2
+      model.env.mj.set.axial_gauge.in_use = True
+      model.init(network)
       model.train()
 
     elif inputarg == 14:
-      model.params.eps_decay = 1000
-      model.env.max_episode_steps = 100
-      model.env.mj.set.quit_on_reward_below = -100
-      model.env.mj.set.quit_reward_capped = False
+      model.env.max_episode_steps = 200
+      model.env.mj.set.motor_state_sensor.read_rate = -2
+      model.env.mj.set.axial_gauge.in_use = True
+      model.env.mj.set.wrist_sensor_Z.in_use = True
+      model.init(network)
       model.train()
 
     elif inputarg == 15:
-      model.params.eps_decay = 1000
-      model.env.max_episode_steps = 150
-      model.env.mj.set.quit_on_reward_below = -100
-      model.env.mj.set.quit_reward_capped = False
+      model.env.max_episode_steps = 200
+      model.env.mj.set.motor_state_sensor.read_rate = -2
+      model.env.mj.set.axial_gauge.in_use = True
+      model.env.mj.set.wrist_sensor_Z.in_use = True
+      model.env.mj.set.wrist_sensor_XY.in_use = True
+      model.init(network)
       model.train()
 
-  # ----- BELOW NOT USED, array trained 1-15 ----- #
-
-  # ----- 16 - 20, deeper network, palm force sensor, vary eps decay ----- #
+  # ----- 16 - 20, deeper network, mixed rewards, vary sensors ----- #
   elif inputarg > 15 and inputarg <= 20:
 
     # create training instance and apply settings
     model = TrainDQN(cluster=cluster, save_suffix=f"array_{inputarg}")
     model = apply_to_all_models(model)
-    model = make_rewards_negative(model)
-
-    model = add_palm_force_sensor(model)
+    model = mixed_rewards(model)
 
     # now form the network
     network = networks.DQN_3L60
-    model.init(network)
 
-    # ----- adjust the eps_decay ----- #
+    # ----- adjust the rewards and step number ----- #
     if inputarg == 16:
-      model.params.eps_decay = 250
+      model.env.max_episode_steps = 200
+      model.init(network)
       model.train()
 
     elif inputarg == 17:
-      model.params.eps_decay = 500
+      model.env.max_episode_steps = 200
+      model.env.mj.set.motor_state_sensor.read_rate = -2
+      model.init(network)
       model.train()
 
     elif inputarg == 18:
-      model.params.eps_decay = 1000
+      model.env.max_episode_steps = 200
+      model.env.mj.set.motor_state_sensor.read_rate = -2
+      model.env.mj.set.axial_gauge.in_use = True
+      model.init(network)
       model.train()
 
     elif inputarg == 19:
-      model.params.eps_decay = 2000
+      model.env.max_episode_steps = 200
+      model.env.mj.set.motor_state_sensor.read_rate = -2
+      model.env.mj.set.axial_gauge.in_use = True
+      model.env.mj.set.wrist_sensor_Z.in_use = True
+      model.init(network)
       model.train()
 
     elif inputarg == 20:
-      model.params.eps_decay = 4000
-      model.train()
-
-  # ----- 21 - 25, default network, default settings, vary target update ----- #
-  elif inputarg > 20 and inputarg <= 25:
-
-    # create training instance and apply settings
-    model = TrainDQN(cluster=cluster, save_suffix=f"array_{inputarg}")
-    model = apply_to_all_models(model)
-    model = make_rewards_negative(model)
-
-    model = add_palm_force_sensor(model)
-
-    # now form the network
-    network = networks.DQN_2L60
-    model.init(network)
-
-    # ----- adjust the eps_decay ----- #
-    if inputarg == 21:
-      model.params.target_update = 50
-      model.train()
-
-    elif inputarg == 22:
-      model.params.target_update = 100
-      model.train()
-
-    elif inputarg == 23:
-      model.params.target_update = 200
-      model.train()
-
-    elif inputarg == 24:
-      model.params.target_update = 400
-      model.train()
-
-    elif inputarg == 25:
-      model.params.target_update = 800
-      model.train()
-
-  # ----- 26 - 30, default network, palm force sensor, vary target update ----- #
-  elif inputarg > 25 and inputarg <= 30:
-
-    # create training instance and apply settings
-    model = TrainDQN(cluster=cluster, save_suffix=f"array_{inputarg}")
-    model = apply_to_all_models(model)
-    model = make_rewards_negative(model)
-
-    # now form the network
-    network = networks.DQN_2L60
-    model.init(network)
-
-    # ----- adjust the eps_decay ----- #
-    if inputarg == 26:
-      model.params.target_update = 50
-      model.train()
-
-    elif inputarg == 27:
-      model.params.target_update = 100
-      model.train()
-
-    elif inputarg == 28:
-      model.params.target_update = 200
-      model.train()
-
-    elif inputarg == 29:
-      model.params.target_update = 400
-      model.train()
-
-    elif inputarg == 30:
-      model.params.target_update = 800
+      model.env.max_episode_steps = 200
+      model.env.mj.set.motor_state_sensor.read_rate = -2
+      model.env.mj.set.axial_gauge.in_use = True
+      model.env.mj.set.wrist_sensor_Z.in_use = True
+      model.env.mj.set.wrist_sensor_XY.in_use = True
+      model.init(network)
       model.train()
