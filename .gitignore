@@ -8,3 +8,4 @@ bin/
 *.so
 *.pickle
 *.pyc
+**/wandb/

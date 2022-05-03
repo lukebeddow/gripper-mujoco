@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 
-import gym
 import math
 import random
 import time
 import numpy as np
 from collections import namedtuple, deque
 from itertools import count
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from copy import deepcopy
 
+import wandb
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -35,6 +35,19 @@ class TrainDQN():
       self.test_rewards = np.array([], dtype=np.float64)
       self.test_durations = np.array([], dtype=np.int32)
       self.test_episodes = np.array([], dtype=np.int32)
+      self.last_log = 0
+
+    def log_wandb(self, log_frequency):
+      if (self.last_log + log_frequency < time.time()):
+
+        train_reward_data = [[x, y] for (x, y) in zip(self.train_episodes, self.train_rewards)]
+        train_reward_table = wandb.Table(data=train_reward_data, columns=["x", "y"])
+        wandb.log({
+          "rewards_plot" : wandb.plot.line(train_reward_table, "Episode", "Reward", 
+                                           title="Rewards")
+        })
+
+        self.last_log = time.time()
 
   @dataclass
   class Parameters:
@@ -51,6 +64,7 @@ class TrainDQN():
 
     save_freq: int = 1000
     test_freq: int = 1000
+    wandb_freq_s: int = 5
 
   Transition = namedtuple('Transition',
                           ('state', 'action', 'next_state', 'reward'))
@@ -70,7 +84,8 @@ class TrainDQN():
     def __len__(self):
       return len(self.memory)
 
-  def __init__(self, cluster=True, save_suffix=None, device=None):
+  def __init__(self, cluster=True, save_suffix=None, device=None, timestamp=None, 
+               use_wandb=None):
 
     # define key training parameters
     self.params = TrainDQN.Parameters()
@@ -84,6 +99,8 @@ class TrainDQN():
     self.log_level = 1
     self.cluster = cluster
     self.save_suffix = save_suffix
+    self.save_timestamp = timestamp
+    self.use_wandb = True if use_wandb else False
 
     # cluster specific
     if not self.cluster:
@@ -137,6 +154,12 @@ class TrainDQN():
 
     # prepare for saving and loading
     self.modelsaver = ModelSaver('models/dqn/' + self.policy_net.name())
+
+    # save weights and biases
+    if self.use_wandb:
+      wandb.init(project="luke-gripper-mujoco", entity="lbeddow", config=asdict(self.params))
+      # wandb.config = asdict(self.params)
+      # wandb.config = { "test": 1 }
 
     # print important info
     print("Using model:", self.policy_net.name())
@@ -464,17 +487,21 @@ class TrainDQN():
 
     return
 
-  def train(self, i_start=None):
+  def train(self, network=None, i_start=None):
     """
     Train the model for the desired number of episodes
     """
+
+    # if we have been given a network to train
+    if network != None:
+      self.init(network)
 
     # if this is a fresh, new training
     if i_start == None:
       i_start = 0
       # create a new folder to save training results in
       self.modelsaver.new_folder(label="cluster" if self.cluster else "laptop",
-                                 suffix=self.save_suffix)
+                                 suffix=self.save_suffix, timestamp=self.save_timestamp)
       # save record of the training time hyperparameters
       self.save_hyperparameters()
     else:
@@ -531,14 +558,19 @@ class TrainDQN():
         if self.log_level > 1: print("Time for action in TrainDQN", t_step_end - t_step_start, 
                                      "seconds")
 
-        # check if this episode is over, if so plot and break
+        # check if this episode is over
         if done:
 
+          # save data and plot it
           self.track.episodes_done = i_episode + 1
           self.track.train_episodes = np.append(self.track.train_episodes, i_episode)
           self.track.train_durations = np.append(self.track.train_durations, t + 1)
           self.track.train_rewards = np.append(self.track.train_rewards, self.env.track.cumulative_reward)
           self.plot()
+
+          # save to wandb
+          if self.use_wandb:
+            self.track.log_wandb(self.params.wandb_freq_s)
 
           break
 
@@ -743,35 +775,34 @@ if __name__ == "__main__":
   
   # ----- prepare ----- #
 
+  use_wandb = True
   cluster = False
   force_device = "cpu"
-  model = TrainDQN(cluster=cluster, device=force_device)
+  model = TrainDQN(cluster=cluster, device=force_device, use_wandb=use_wandb)
 
   # if we want to adjust parameters
   # model.params.num_episodes = 11
   # model.params.test_freq = 250
-  # model.env.max_episode_steps = 1
+  model.env.max_episode_steps = 50
   # model.env.mj.set.max_action_steps = 1000
-  # model.env._override_binary(model.env.mj.set.target_height, 1.0, 1, 1)
 
   # now set up the network, ready for training
   net = networks.DQN_2L60
-  model.init(network=net)
 
   # ----- load ----- #
 
   # load
-  folderpath = "/home/luke/cluster/rl/models/dqn/DQN_2L60/"
+  # folderpath = "/home/luke/cluster/rl/models/dqn/" + model.policy_net.name() + "/"
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"
-  foldername = "train_cluster_04-04-2022_12:47_array_13"
-  model.load(id=None, folderpath=folderpath, foldername=foldername)
+  # foldername = "train_cluster_29-04-2022-12:51_array_1"
+  # model.load(id=None, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
-  # # train
-  # model.env.disable_rendering = True
-  # model.env.mj.set.debug = False
-  # model.train()
+  # train
+  model.env.disable_rendering = True
+  model.env.mj.set.debug = False
+  model.train(net)
 
   # continue training
   # model.continue_training('train_cluster_24-02-2022_12:43_array_6', folderpath=folderpath)
@@ -783,13 +814,14 @@ if __name__ == "__main__":
   # model.plot()
   # plt.show()
 
-  # test
-  model.env.disable_rendering = False
-  model.env.test_trials_per_obj = 1
-  model.env.mj.set.exceed_limits.set     (-0.005, True,   10)
-  model.env.mj.set.exceed_axial.set      (-0.005, True,   10,    3.0,  6.0,  -1)
-  model.env.mj.set.exceed_lateral.set    (-0.005, True,   10,    4.0,  6.0,  -1)
-  test_data = model.test()
+  # # test
+  # model.env.disable_rendering = False
+  # model.env.test_trials_per_obj = 1
+  # model.env.mj.set.step_num.set          (0,      70,   1)
+  # model.env.mj.set.exceed_limits.set     (-0.005, True,   10)
+  # model.env.mj.set.exceed_axial.set      (-0.005, True,   10,    3.0,  6.0,  -1)
+  # model.env.mj.set.exceed_lateral.set    (-0.005, True,   10,    4.0,  6.0,  -1)
+  # test_data = model.test()
 
   # # save results
   # test_report = model.create_test_report(test_data)
