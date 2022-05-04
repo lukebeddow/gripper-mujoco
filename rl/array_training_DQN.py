@@ -96,8 +96,10 @@ def apply_to_all_models(model):
   """
 
   # set up the object set
-  model.env.mj.object_set_name = "set1_nocuboid_525"
-  model.env.training_xmls = 24
+  model.env._load_object_set(name="set1_nocuboid_525")
+
+  # number of steps in an episode
+  model.env.max_episode_steps = 200
 
   # ensure we know what parameters we are using
   model.params.batch_size = 128
@@ -112,6 +114,7 @@ def apply_to_all_models(model):
   model.params.min_memory_replay = 5_000
   model.params.save_freq = 2_000
   model.params.test_freq = 2_000
+  model.params.wandb_freq_s = 300
 
   # ensure debug mode is off
   model.env.log_level = 0
@@ -152,17 +155,26 @@ def apply_to_all_models(model):
 
 if __name__ == "__main__":
 
+  # ARRAY JOBS ON CLUSTER MUST HAVE CLUSTER SET TO TRUE
   cluster = True
 
   inputarg = int(sys.argv[1])
   print("Input argument: ", inputarg)
   sleep(inputarg)
 
+  if len(sys.argv) > 1:
+    timestamp = sys.argv[2]
+    notimestamp = True
+  else:
+    timestamp = ""
+    notimestamp = None
+
   # ----- 1 - 5, default network, negative rewards, vary number of sensors ----- #
   if inputarg <= 5:
 
     # create training instance and apply settings
-    model = TrainDQN(cluster=cluster, save_suffix=f"array_{inputarg}")
+    model = TrainDQN(cluster=cluster, notimestamp=notimestamp,
+                     save_suffix=f"{timestamp}_array_{inputarg}")
     model = apply_to_all_models(model)
     model = make_rewards_negative(model)
 
@@ -172,29 +184,25 @@ if __name__ == "__main__":
     # ----- adjust the rewards and step number ----- #
     if inputarg == 1:
       model.env.max_episode_steps = 200
-      model.init(network)
-      model.train()
+      model.train(network)
 
     elif inputarg == 2:
       model.env.max_episode_steps = 200
       model.env.mj.set.motor_state_sensor.read_rate = -2
-      model.init(network)
-      model.train()
+      model.train(network)
 
     elif inputarg == 3:
       model.env.max_episode_steps = 200
       model.env.mj.set.motor_state_sensor.read_rate = -2
       model.env.mj.set.axial_gauge.in_use = True
-      model.init(network)
-      model.train()
+      model.train(network)
 
     elif inputarg == 4:
       model.env.max_episode_steps = 200
       model.env.mj.set.motor_state_sensor.read_rate = -2
       model.env.mj.set.axial_gauge.in_use = True
       model.env.mj.set.wrist_sensor_Z.in_use = True
-      model.init(network)
-      model.train()
+      model.train(network)
 
     elif inputarg == 5:
       model.env.max_episode_steps = 200
@@ -202,14 +210,14 @@ if __name__ == "__main__":
       model.env.mj.set.axial_gauge.in_use = True
       model.env.mj.set.wrist_sensor_Z.in_use = True
       model.env.mj.set.wrist_sensor_XY.in_use = True
-      model.init(network)
-      model.train()
+      model.train(network)
 
   # ----- 6 - 10, deeper network, negative rewards, vary number of sensors ----- #
   elif inputarg > 5 and inputarg <= 10:
 
     # create training instance and apply settings
-    model = TrainDQN(cluster=cluster, save_suffix=f"array_{inputarg}")
+    model = TrainDQN(cluster=cluster, notimestamp=notimestamp,
+                     save_suffix=f"{timestamp}_array_{inputarg}")
     model = apply_to_all_models(model)
     model = make_rewards_negative(model)
 
@@ -219,29 +227,25 @@ if __name__ == "__main__":
     # ----- adjust the rewards and step number ----- #
     if inputarg == 6:
       model.env.max_episode_steps = 200
-      model.init(network)
-      model.train()
+      model.train(network)
 
     elif inputarg == 7:
       model.env.max_episode_steps = 200
       model.env.mj.set.motor_state_sensor.read_rate = -2
-      model.init(network)
-      model.train()
+      model.train(network)
 
     elif inputarg == 8:
       model.env.max_episode_steps = 200
       model.env.mj.set.motor_state_sensor.read_rate = -2
       model.env.mj.set.axial_gauge.in_use = True
-      model.init(network)
-      model.train()
+      model.train(network)
 
     elif inputarg == 9:
       model.env.max_episode_steps = 200
       model.env.mj.set.motor_state_sensor.read_rate = -2
       model.env.mj.set.axial_gauge.in_use = True
       model.env.mj.set.wrist_sensor_Z.in_use = True
-      model.init(network)
-      model.train()
+      model.train(network)
 
     elif inputarg == 10:
       model.env.max_episode_steps = 200
@@ -249,14 +253,14 @@ if __name__ == "__main__":
       model.env.mj.set.axial_gauge.in_use = True
       model.env.mj.set.wrist_sensor_Z.in_use = True
       model.env.mj.set.wrist_sensor_XY.in_use = True
-      model.init(network)
-      model.train()
+      model.train(network)
 
   # ----- 11 - 15, default network, mixed rewards, vary sensors ----- #
   elif inputarg > 10 and inputarg <= 15:
 
     # create training instance and apply settings
-    model = TrainDQN(cluster=cluster, save_suffix=f"array_{inputarg}")
+    model = TrainDQN(cluster=cluster, notimestamp=notimestamp,
+                     save_suffix=f"{timestamp}_array_{inputarg}")
     model = apply_to_all_models(model)
     model = mixed_rewards(model)
 
@@ -266,29 +270,25 @@ if __name__ == "__main__":
     # ----- adjust the rewards and step number ----- #
     if inputarg == 11:
       model.env.max_episode_steps = 200
-      model.init(network)
-      model.train()
+      model.train(network)
 
     elif inputarg == 12:
       model.env.max_episode_steps = 200
       model.env.mj.set.motor_state_sensor.read_rate = -2
-      model.init(network)
-      model.train()
+      model.train(network)
 
     elif inputarg == 13:
       model.env.max_episode_steps = 200
       model.env.mj.set.motor_state_sensor.read_rate = -2
       model.env.mj.set.axial_gauge.in_use = True
-      model.init(network)
-      model.train()
+      model.train(network)
 
     elif inputarg == 14:
       model.env.max_episode_steps = 200
       model.env.mj.set.motor_state_sensor.read_rate = -2
       model.env.mj.set.axial_gauge.in_use = True
       model.env.mj.set.wrist_sensor_Z.in_use = True
-      model.init(network)
-      model.train()
+      model.train(network)
 
     elif inputarg == 15:
       model.env.max_episode_steps = 200
@@ -296,14 +296,14 @@ if __name__ == "__main__":
       model.env.mj.set.axial_gauge.in_use = True
       model.env.mj.set.wrist_sensor_Z.in_use = True
       model.env.mj.set.wrist_sensor_XY.in_use = True
-      model.init(network)
-      model.train()
+      model.train(network)
 
   # ----- 16 - 20, deeper network, mixed rewards, vary sensors ----- #
   elif inputarg > 15 and inputarg <= 20:
 
     # create training instance and apply settings
-    model = TrainDQN(cluster=cluster, save_suffix=f"array_{inputarg}")
+    model = TrainDQN(cluster=cluster, notimestamp=notimestamp,
+                     save_suffix=f"{timestamp}_array_{inputarg}")
     model = apply_to_all_models(model)
     model = mixed_rewards(model)
 
@@ -313,29 +313,25 @@ if __name__ == "__main__":
     # ----- adjust the rewards and step number ----- #
     if inputarg == 16:
       model.env.max_episode_steps = 200
-      model.init(network)
-      model.train()
+      model.train(network)
 
     elif inputarg == 17:
       model.env.max_episode_steps = 200
       model.env.mj.set.motor_state_sensor.read_rate = -2
-      model.init(network)
-      model.train()
+      model.train(network)
 
     elif inputarg == 18:
       model.env.max_episode_steps = 200
       model.env.mj.set.motor_state_sensor.read_rate = -2
       model.env.mj.set.axial_gauge.in_use = True
-      model.init(network)
-      model.train()
+      model.train(network)
 
     elif inputarg == 19:
       model.env.max_episode_steps = 200
       model.env.mj.set.motor_state_sensor.read_rate = -2
       model.env.mj.set.axial_gauge.in_use = True
       model.env.mj.set.wrist_sensor_Z.in_use = True
-      model.init(network)
-      model.train()
+      model.train(network)
 
     elif inputarg == 20:
       model.env.max_episode_steps = 200
@@ -343,5 +339,4 @@ if __name__ == "__main__":
       model.env.mj.set.axial_gauge.in_use = True
       model.env.mj.set.wrist_sensor_Z.in_use = True
       model.env.mj.set.wrist_sensor_XY.in_use = True
-      model.init(network)
-      model.train()
+      model.train(network)

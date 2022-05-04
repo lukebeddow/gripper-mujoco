@@ -11,7 +11,7 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N ArrayTrainDQN_11
+#$ -N ArrayTrainDQN_12
 #$ -t 1-20
 
 # The code you want to run now goes here.
@@ -19,11 +19,12 @@
 hostname
 date
 
+# source python and export the library location
 source mypython/python3/bin/activate
 export LD_LIBRARY_PATH=/share/apps/python-3.6.9/lib:$LD_LIBRARY_PATH
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/.mujoco/mujoco210/bin
 
 cd ~/mymujoco/rl
-python3 array_training_DQN.py ${SGE_TASK_ID}
+python3 array_training_DQN.py ${SGE_TASK_ID} $LUKE_JOB_SUBMIT_TIME
 
 date
