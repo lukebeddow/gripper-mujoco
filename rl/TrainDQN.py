@@ -26,28 +26,103 @@ class TrainDQN():
   """
 
   class Tracker:
+
     def __init__(self):
+      """
+      Class which tracks key data during training and logs to wandb
+      """
+      # parameters to set
+      self.moving_avg_num = 50
+      # general
       self.actions_done = 0
       self.episodes_done = 0
+      self.last_log = 0
+      # training data
+      self.train_episodes = np.array([], dtype=np.int32)
       self.train_rewards = np.array([], dtype=np.float64)
       self.train_durations = np.array([], dtype=np.int32)
-      self.train_episodes = np.array([], dtype=np.int32)
+      self.episodes_avg = np.array([], dtype=np.int32)
+      self.rewards_avg = np.array([], dtype=np.float64)
+      self.durations_avg = np.array([], dtype=np.float64)
+      # test data
+      self.test_episodes = np.array([], dtype=np.int32)
       self.test_rewards = np.array([], dtype=np.float64)
       self.test_durations = np.array([], dtype=np.int32)
-      self.test_episodes = np.array([], dtype=np.int32)
-      self.last_log = 0
+      self.avg_p_lifted = np.array([], dtype=np.float64)
+      self.avg_p_contact = np.array([], dtype=np.float64)
+      self.avg_p_palm_force = np.array([], dtype=np.float64)
+      self.avg_p_exceed_limits = np.array([], dtype=np.float64)
+      self.avg_p_exceed_axial = np.array([], dtype=np.float64)
+      self.avg_p_exceed_lateral = np.array([], dtype=np.float64)
+      self.avg_p_exceed_palm = np.array([], dtype=np.float64)
+      
+    def calc_moving_average(self):
+      # save the rewards and durations moving averages
+      if len(self.train_episodes) > self.moving_avg_num:
+        self.durations_avg = np.convolve(self.train_durations, np.ones(self.moving_avg_num), 'valid') / self.moving_avg_num
+        self.rewards_avg = np.convolve(self.train_rewards, np.ones(self.moving_avg_num), 'valid') / self.moving_avg_num
+        x = int(self.moving_avg_num / 2)
+        self.episodes_avg = self.train_episodes[x - 1:-x]
+
+    def plot_wandb(self, xdata, ydata, xlabel, ylabel, title):
+      # plot data to weights and biases
+      data = [[x, y] for (x, y) in zip(xdata, ydata)]
+      table = wandb.Table(data=data, columns=[xlabel, ylabel])
+      wandb.log({title + " plot" : wandb.plot.line(table, xlabel, ylabel, title=title)})
 
     def log_wandb(self, log_frequency):
+
+      # if enough time has elapsed for another data upload
       if (self.last_log + log_frequency < time.time()):
 
-        train_reward_data = [[x, y] for (x, y) in zip(self.train_episodes, self.train_rewards)]
-        train_reward_table = wandb.Table(data=train_reward_data, columns=["x", "y"])
-        wandb.log({
-          "rewards_plot" : wandb.plot.line(train_reward_table, "Episode", "Reward", 
-                                           title="Rewards")
-        })
+        E = "Episode"
+        R = "Reward"
+        D = "Duration"
 
+        # # create the raw rewards plot
+        # self.plot_wandb(self.train_episodes, self.train_rewards, E, R, "Raw rewards")
+
+        # # create the raw durations plot
+        # self.plot_wandb(self.train_episodes, self.train_durations, E, D, "Raw durations")
+
+        # create the average rewards plot
+        self.plot_wandb(self.episodes_avg, self.rewards_avg, E, R, 
+                        f"Average rewards ({self.moving_avg_num} samples)")
+
+        # create the average durations plot
+        self.plot_wandb(self.episodes_avg, self.durations_avg, E, D, 
+                        f"Average durations ({self.moving_avg_num} samples)")
+
+        # define performance metrics to examine
+        good_metrics = [
+          [self.avg_p_lifted, "% Lifted"],
+          [self.avg_p_contact, "% Contact"],
+          [self.avg_p_palm_force, "% Palm contact"]
+        ]
+        bad_metrics = [
+          [self.avg_p_exceed_limits, "% Exceed limits"],
+          [self.avg_p_exceed_axial, "% Exceed axial force"],
+          [self.avg_p_exceed_lateral, "% Exceed bending"],
+          [self.avg_p_exceed_palm, "% Exceed palm force"]
+        ]
+
+        # create test results plots
+        wandb.log({"Test good performance metrics" : wandb.plot.line_series(
+          xs=[self.test_episodes for i in range(len(good_metrics))],
+          ys=[x[0] for x in good_metrics],
+          keys=[x[1] for x in good_metrics],
+          title="Test good performance metrics", xname="Training episodes"
+        )})
+        wandb.log({"Test bad performance metrics" : wandb.plot.line_series(
+          xs=[self.test_episodes for i in range(len(bad_metrics))],
+          ys=[x[0] for x in bad_metrics],
+          keys=[x[1] for x in bad_metrics],
+          title="Test bad performance metrics", xname="Training episodes"
+        )})
+
+        # finish by recording the last log time
         self.last_log = time.time()
+      return
 
   @dataclass
   class Parameters:
@@ -64,7 +139,7 @@ class TrainDQN():
 
     save_freq: int = 1000
     test_freq: int = 1000
-    wandb_freq_s: int = 5
+    wandb_freq_s: int = 30
 
   Transition = namedtuple('Transition',
                           ('state', 'action', 'next_state', 'reward'))
@@ -85,7 +160,7 @@ class TrainDQN():
       return len(self.memory)
 
   def __init__(self, cluster=True, save_suffix=None, device=None, timestamp=None, 
-               use_wandb=None):
+               use_wandb=None, wandb_name=None):
 
     # define key training parameters
     self.params = TrainDQN.Parameters()
@@ -101,6 +176,7 @@ class TrainDQN():
     self.save_suffix = save_suffix
     self.save_timestamp = timestamp
     self.use_wandb = True if use_wandb else False
+    self.wandb_name = wandb_name
 
     # cluster specific
     if not self.cluster:
@@ -116,6 +192,7 @@ class TrainDQN():
     self.test_episodes = []
     self.no_plot = self.cluster
     self.plot_limit = 2000
+    self.moving_avg_num = 50
     if not self.no_plot:
       self.fig, self.axs = plt.subplots(2, 1)
 
@@ -130,9 +207,6 @@ class TrainDQN():
 
     # update the environment with correct numbers of actions and observations
     self.env._update_n_actions_obs()
-
-    print("number of actions is", self.env.n_actions)
-    print("number of observations", self.env.n_obs)
 
     # create networks
     if network == None:
@@ -157,9 +231,8 @@ class TrainDQN():
 
     # save weights and biases
     if self.use_wandb:
-      wandb.init(project="luke-gripper-mujoco", entity="lbeddow", config=asdict(self.params))
-      # wandb.config = asdict(self.params)
-      # wandb.config = { "test": 1 }
+      wandb.init(project="luke-gripper-mujoco", entity="lbeddow", 
+                 name=self.wandb_name, config=asdict(self.params))
 
     # print important info
     print("Using model:", self.policy_net.name())
@@ -170,7 +243,7 @@ class TrainDQN():
     """
     if dtype == None: dtype = torch.float32
 
-    return torch.tensor([data], device=self.device, dtype=dtype)
+    return torch.tensor(np.array([data]), device=self.device, dtype=dtype)
 
   def select_action(self, state, decay_num):
 
@@ -198,6 +271,8 @@ class TrainDQN():
     Create a plot to track the training data
     """
 
+    self.track.calc_moving_average()
+
     if self.no_plot:
       return
 
@@ -211,18 +286,18 @@ class TrainDQN():
     self.axs[0].plot(self.track.test_episodes, self.track.test_durations, "r*", label="Test")
     self.axs[1].plot(self.track.test_episodes, self.track.test_rewards, "r*", label="Test")
 
-    # get moving average
-    avg_num = 50 # must be even number
-    if len(self.track.train_durations) > avg_num:
-      durations_avg = np.convolve(self.track.train_durations, np.ones(avg_num), 'valid') / avg_num
-      rewards_avg = np.convolve(self.track.train_rewards, np.ones(avg_num), 'valid') / avg_num
-      # plot
-      x = int(avg_num / 2)
-      self.axs[0].plot(self.track.train_episodes[x - 1:-x], durations_avg, label="Average")
-      self.axs[1].plot(self.track.train_episodes[x - 1:-x], rewards_avg, label="Average")
+    # # plot moving average
+    # if len(self.track.train_durations) > self.moving_avg_num:
+    #   x = int(self.moving_avg_num / 2)
+    #   self.axs[0].plot(self.track.train_episodes[x - 1:-x], durations_avg, label="Average")
+    #   self.axs[1].plot(self.track.train_episodes[x - 1:-x], rewards_avg, label="Average")
+
+    # plot moving average
+    self.axs[0].plot(self.track.episodes_avg, self.track.durations_avg, label="Average")
+    self.axs[1].plot(self.track.episodes_avg, self.track.rewards_avg, label="Average")
 
     # label
-    self.fig.tight_layout(rect=[0, 0.03, 0, 0.9])
+    # self.fig.tight_layout(rect=[0, 0.03, 0, 0.9]) # warning: not applied
     self.fig.subplots_adjust(hspace=0.4)
     self.axs[0].set_title("Episode durations", fontstyle="italic")
     self.axs[1].set_title("Episode rewards", fontstyle="italic")
@@ -320,6 +395,7 @@ class TrainDQN():
 
       for k in range(num_trials):
 
+        # sum end of episode totals for this set of trials
         total_rewards += test_data[j + k].reward
         total_steps += test_data[j + k].steps
         total_lifted += test_data[j + k].lifted
@@ -330,6 +406,7 @@ class TrainDQN():
         total_palm_force += test_data[j + k].palm_force
         total_finger_force += test_data[j + k].finger_force
 
+        # sum during episode step events for this set of trials
         cnt_lifted += test_data[j + k].cnt_lifted
         cnt_object_contact += test_data[j + k].cnt_object_contact
         cnt_palm_force += test_data[j + k].cnt_palm_force
@@ -338,16 +415,20 @@ class TrainDQN():
         cnt_exceed_lateral += test_data[j + k].cnt_exceed_lateral
         cnt_exceed_palm += test_data[j + k].cnt_exceed_palm
 
+      # calculate averages for the set of trials
       avg_rewards.append(total_rewards / float(num_trials))
       avg_steps.append(total_steps / float(num_trials))
       avg_palm_force.append(total_palm_force / float(num_trials))
       avg_finger_force.append(total_finger_force / float(num_trials))
+
+      # keep running totals of which events were active when episode ended
       num_stable += total_stable
       num_lifted += total_lifted
       num_oob += total_oob
       num_target_height += total_target_height
       num_stable_height += total_stable_height
 
+      # calculate the percentage of steps that events occured for these trials
       p_lifted = 100 * (cnt_lifted / float(total_steps))
       p_object_contact = 100 * (cnt_object_contact / float(total_steps))
       p_palm_force = 100 * (cnt_palm_force / float(total_steps))
@@ -356,6 +437,7 @@ class TrainDQN():
       p_exceed_lateral = 100 * (cnt_exceed_lateral / float(total_steps))
       p_exceed_palm = 100 * (cnt_exceed_palm / float(total_steps))
 
+      # save these percentages in vectors
       lifted_vec.append(p_lifted)
       contact_vec.append(p_object_contact)
       palm_force_vec.append(p_palm_force)
@@ -364,15 +446,7 @@ class TrainDQN():
       exceed_lateral_vec.append(p_exceed_lateral)
       exceed_palm_vec.append(p_exceed_palm)
 
-      per_obj_str = f"Object: {names[-1]}, "\
-        f"avg reward {avg_rewards[-1]:.3f}, "\
-        f"avg steps {avg_steps[-1]:.1f}, "\
-        f"avg palm force {avg_palm_force[-1]:.1f}, "\
-        f"lifted {total_lifted}, "\
-        f"stable {total_stable}, "\
-        f"target height {total_target_height}, "\
-        f"stable height {total_stable_height}"
-
+      # save all data in a string to output to a test summary text file
       obj_row = row_str.format(
         names[-1], avg_rewards[-1], avg_steps[-1], avg_palm_force[-1], avg_finger_force[-1],
         total_lifted, total_stable, total_oob, total_target_height, total_stable_height,
@@ -380,12 +454,11 @@ class TrainDQN():
         p_exceed_axial, p_exceed_lateral, p_exceed_palm
       )
 
-      # output_str += per_obj_str + "\n"
       output_str += obj_row
 
-      if print_out: print(per_obj_str)
+      if print_out: print(obj_row)
 
-    # now get the overall averages
+    # now get the overall averages for float/integer values
     mean_reward = np.mean(np.array(avg_rewards))
     mean_steps = np.mean(np.array(avg_steps))
     mean_palm_force = np.mean(np.array(avg_palm_force))
@@ -396,32 +469,38 @@ class TrainDQN():
     avg_target_height = num_target_height / float(num_obj)
     avg_stable_height = num_stable_height / float(num_obj)
 
-    lifted_vec.append(p_lifted)
-    contact_vec.append(p_object_contact)
-    palm_force_vec.append(p_palm_force)
-    exceed_limits_vec.append(p_exceed_limits)
-    exceed_axial_vec.append(p_exceed_axial)
-    exceed_lateral_vec.append(p_exceed_lateral)
-    exceed_palm_vec.append(p_exceed_palm)
+    # get the overall averages for percentage of step values
+    avg_p_lifted = np.mean(np.array(lifted_vec))
+    avg_p_contact = np.mean(np.array(contact_vec))
+    avg_p_palm_force = np.mean(np.array(palm_force_vec))
+    avg_p_exceed_limits = np.mean(np.array(exceed_limits_vec))
+    avg_p_exceed_axial = np.mean(np.array(exceed_axial_vec))
+    avg_p_exceed_lateral = np.mean(np.array(exceed_lateral_vec))
+    avg_p_exceed_palm = np.mean(np.array(exceed_palm_vec))
 
+    # add the overall averages to the test report string
     end_str = res_str.format(
-      "Overall averages per object: ", mean_reward, mean_steps, mean_palm_force,
+      "\nOverall averages per object: ", mean_reward, mean_steps, mean_palm_force,
       mean_finger_force, avg_lifted, avg_stable, avg_oob, avg_target_height,
-      avg_stable_height,
-      np.mean(np.array(lifted_vec)), np.mean(np.array(contact_vec)),
-      np.mean(np.array(palm_force_vec)), np.mean(np.array(exceed_limits_vec)),
-      np.mean(np.array(exceed_axial_vec)), np.mean(np.array(exceed_lateral_vec)),
-      np.mean(np.array(exceed_palm_vec))
+      avg_stable_height, avg_p_lifted, avg_p_contact, avg_p_palm_force,
+      avg_p_exceed_limits, avg_p_exceed_axial, avg_p_exceed_lateral,
+      avg_p_exceed_palm
     )
 
-    # save outputs if we are mid-training
     if i_episode != None:
+      # save outputs if we are mid-training
       self.track.test_episodes = np.append(self.track.test_episodes, i_episode)
       self.track.test_durations = np.append(self.track.test_durations, mean_steps)
       self.track.test_rewards = np.append(self.track.test_rewards, mean_reward)
+      self.track.avg_p_lifted = np.append(self.track.avg_p_lifted, avg_p_lifted)
+      self.track.avg_p_contact = np.append(self.track.avg_p_contact, avg_p_contact)
+      self.track.avg_p_palm_force = np.append(self.track.avg_p_palm_force, avg_p_palm_force)
+      self.track.avg_p_exceed_limits = np.append(self.track.avg_p_exceed_limits, avg_p_exceed_limits)
+      self.track.avg_p_exceed_axial = np.append(self.track.avg_p_exceed_axial, avg_p_exceed_axial)
+      self.track.avg_p_exceed_lateral = np.append(self.track.avg_p_exceed_lateral, avg_p_exceed_lateral)
+      self.track.avg_p_exceed_palm = np.append(self.track.avg_p_exceed_palm, avg_p_exceed_palm)
 
-    # output_str += "\n" + end_str + "\n\n"
-    output_str += "\n" + end_str
+    output_str += end_str
 
     if print_out: print(end_str)
 
@@ -776,15 +855,18 @@ if __name__ == "__main__":
   # ----- prepare ----- #
 
   use_wandb = True
-  cluster = False
+  cluster = True
   force_device = "cpu"
-  model = TrainDQN(cluster=cluster, device=force_device, use_wandb=use_wandb)
+  model = TrainDQN(cluster=cluster, device=force_device, use_wandb=use_wandb,
+                   wandb_name=None)
 
   # if we want to adjust parameters
   # model.params.num_episodes = 11
-  # model.params.test_freq = 250
-  model.env.max_episode_steps = 50
-  # model.env.mj.set.max_action_steps = 1000
+  model.params.test_freq = 10
+  model.env.test_trials_per_obj = 1
+  model.env.max_episode_steps = 20
+  model.params.wandb_freq_s = 5
+  model.env.mj.set.action_motor_steps = 350
 
   # now set up the network, ready for training
   net = networks.DQN_2L60
