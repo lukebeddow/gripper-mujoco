@@ -72,15 +72,14 @@ class MjEnv(gym.Env):
     self.test_obj_limit = 1000  # limit number of objects in test, 1000~=no limit
     
     # define file structure
-    self.default_path = "/home/luke/gripper_repo_ws/src/gripper_v2/gripper_description/urdf/mujoco/"
-    self.task_xml_template = "/task/gripper_task_{}.xml"
-    self.default_xml = "gripper_task.xml"
-    self.training_xmls = 37
+    self.task_xml_folder = "task"
+    self.task_xml_template = "gripper_task_{}.xml"
     self.testing_xmls = 1                 # test xml is always the last one
     
     # create mujoco instance
     self.mj = MjClass()
-    self._load_xml(random=True)
+    self._load_object_set()
+    self._load_xml()
 
     # # do we override the c++ default simulator settings - comment out if not
     # self._override_settings()    
@@ -106,37 +105,54 @@ class MjEnv(gym.Env):
 
     return
 
-  def _load_xml(self, path=None, task_id=None, random=None, test=None):
+  def _load_xml(self, test=None, index=None):
     """
     Load the mujoco instance with the given mjcf xml file name
     """
-
-    # set to default task filename
-    filename = self.default_xml
-    filepath = self.default_path
-
-    # check user inputs
-    if path:
-      filepath = path
-    if task_id != None:
-      filename = self.task_xml_template.format(task_id)
-    if random:
+    if index:
+      filename = self.task_xml_template.format(index)
+    elif test:
+      # get the random test xml file
+      r = np.random.randint(self.training_xmls, self.training_xmls + self.testing_xmls)
+      filename = self.task_xml_template.format(r)
+    else:
+      # get a random task xml file
       r = np.random.randint(0, self.training_xmls)
       filename = self.task_xml_template.format(r)
-    if test:
-      # return
-      filename = self.task_xml_template.format(self.training_xmls 
-                                                + self.testing_xmls - 1)
 
     if self.log_level > 1: print("loading xml: ", filename)
 
-    # self.mj = MjClass(self.mj.set) # old: create a brand new mjclass instance
-
     # load the new task xml (old model/data are deleted)
-    self.mj.load_relative(filename)
+    self.mj.load_relative(self.task_xml_folder + '/' + filename)
     self.num_objects = self.mj.get_number_of_objects()
 
     self.reload_flag = False
+
+  def _load_object_set(self, name=None, mjcf_path=None):
+    """
+    Determine how many model xml files are in the object set
+    """
+
+    # if a mjcf_path is given, override, otherwise we use default
+    if mjcf_path != None: self.mj.model_folder_path = mjcf_path
+
+    # if a object set name is given, override, otherwise we use default
+    if name != None: self.mj.object_set_name = name
+
+    # check the mjcf_path is correctly formatted
+    if self.mj.model_folder_path[-1] != '/':
+      self.mj.model_folder_path += '/'
+
+    # now determine the model xml path
+    self.xml_path = (self.mj.model_folder_path + self.mj.object_set_name 
+                      + '/' + self.task_xml_folder + '/')
+
+    # find out how many xmls are available for training/testing
+    xml_files = [x for x in os.listdir(self.xml_path)]
+    self.training_xmls = len(xml_files) - self.testing_xmls
+
+    if self.training_xmls < 1:
+      raise RuntimeError(f"training xmls failed to be found in MjEnv at: {self.xml_path}")
 
   def _update_n_actions_obs(self):
     # get an updated number of actions and observations
@@ -420,7 +436,7 @@ class MjEnv(gym.Env):
     # there is a small chance we reload a new random task
     if ((np.random.random() < self.task_reload_chance or
         self.reload_flag) and not self.test_in_progress):
-        self._load_xml(random=True)
+        self._load_xml()
 
     # reset the simulation and spawn a new random object
     self.mj.reset()
@@ -469,7 +485,7 @@ if __name__ == "__main__":
   # with open("test_file.pickle", 'rb') as f:
   #   mj = pickle.load(f)
 
-  mj._load_xml(task_id=0)
+  mj._load_xml(index=0)
 
   mj.step(0)
 
