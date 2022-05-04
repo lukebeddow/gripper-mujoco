@@ -159,7 +159,7 @@ class TrainDQN():
     def __len__(self):
       return len(self.memory)
 
-  def __init__(self, cluster=True, save_suffix=None, device=None, timestamp=None, 
+  def __init__(self, cluster=True, save_suffix=None, device=None, notimestamp=None, 
                use_wandb=None, wandb_name=None):
 
     # define key training parameters
@@ -174,7 +174,7 @@ class TrainDQN():
     self.log_level = 1
     self.cluster = cluster
     self.save_suffix = save_suffix
-    self.save_timestamp = timestamp
+    self.notimestamp = notimestamp
     self.use_wandb = True if use_wandb else False
     self.wandb_name = wandb_name
 
@@ -580,7 +580,7 @@ class TrainDQN():
       i_start = 0
       # create a new folder to save training results in
       self.modelsaver.new_folder(label="cluster" if self.cluster else "laptop",
-                                 suffix=self.save_suffix, timestamp=self.save_timestamp)
+                                 suffix=self.save_suffix, notimestamp=self.notimestamp)
       # save record of the training time hyperparameters
       self.save_hyperparameters()
     else:
@@ -752,23 +752,16 @@ class TrainDQN():
       name = "hyperparameters"
 
     # capture parameters info
-    param_str += f"""Hyperparameters at training time:
+    param_str += f"""Hyperparameters at training time:\n\n"""
 
-    network_name = {network_name}
-    batch_size = {self.params.batch_size}
-    gamma = {self.params.gamma}
-    eps_start = {self.params.eps_start}
-    eps_end = {self.params.eps_end}
-    eps_decay = {self.params.eps_decay}
-    target_update = {self.params.target_update}
-    num_episodes = {self.params.num_episodes}
-    max_episode_steps = {self.env.max_episode_steps}
-    memory_replay = {self.params.memory_replay}
-    test_freq = {self.params.test_freq}
-    save_freq = {self.params.save_freq}
-    """
+    # convert parameters to a string
+    param_str += str(asdict(self.params))
 
-    param_str += "\n" + self.env._get_cpp_settings()
+    # swap commas for newlines for prettier printing
+    param_str = param_str.replace(',', '\n')
+
+    # add the c++ settings to the string
+    param_str += "\n\n" + self.env._get_cpp_settings()
 
     savepath = self.modelsaver.save(name, txtstr=param_str,
                                     txtonly=True)

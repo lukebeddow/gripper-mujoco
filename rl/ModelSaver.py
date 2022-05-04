@@ -239,12 +239,12 @@ class ModelSaver:
     if notimestamp != True:
       now = datetime.now()
       time_stamp = now.strftime(self.date_str)
-      if label != None: save_label += '_'
+      if save_label[-1] != '_': save_label += '_'
       save_label += time_stamp
 
     # add in a user specified suffix -> train_{DD-MM-YYYY-hr:min}_{suffix}
     if suffix != None:
-      if notimestamp != True: save_label += '_'
+      if save_label[-1] != '_': save_label += '_'
       save_label += suffix
 
     # create the folder name

@@ -160,7 +160,6 @@ if __name__ == "__main__":
 
   inputarg = int(sys.argv[1])
   print("Input argument: ", inputarg)
-  sleep(inputarg)
 
   if len(sys.argv) > 1:
     timestamp = sys.argv[2]
@@ -168,6 +167,8 @@ if __name__ == "__main__":
   else:
     timestamp = ""
     notimestamp = None
+
+  print("Timestamp is:", timestamp)
 
   # ----- 1 - 5, default network, negative rewards, vary number of sensors ----- #
   if inputarg <= 5:

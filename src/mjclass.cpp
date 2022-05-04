@@ -184,6 +184,8 @@ void MjClass::load(std::string model_path)
   model = mj_loadXML(model_path.c_str(), 0, error, 500);
 
   if (not model) {
+    std::cout << "MjClass load model error when trying to load file: "
+      << model_path << '\n';
     mju_error_s("Load model error: %s", error);
   }
 
@@ -794,42 +796,6 @@ void MjClass::set_action(int action)
       throw std::runtime_error("MjClass::set_action() received out of bounds int");
    
   }
-
-  // int num_steps = s_.action_motor_steps;
-  // switch (action) {
-  //   case 0:
-  //     if (s_.paired_motor_X_step)
-  //       wl = luke::move_gripper_target_step(num_steps, num_steps, 0);
-  //     else
-  //       wl = luke::move_gripper_target_step(num_steps, 0, 0);
-  //     break;
-  //   case 1:
-  //     wl = luke::move_gripper_target_step(0, num_steps, 0);
-  //     break;
-  //   case 2:
-  //     wl = luke::move_gripper_target_step(0, 0, num_steps);
-  //     break;
-  //   case 3:
-  //     if (s_.paired_motor_X_step)
-  //       wl = luke::move_gripper_target_step(-num_steps, -num_steps, 0);
-  //     else
-  //       wl = luke::move_gripper_target_step(-num_steps, 0, 0);
-  //     break;
-  //   case 4:
-  //     wl = luke::move_gripper_target_step(0, -num_steps, 0);
-  //     break;
-  //   case 5:
-  //     wl = luke::move_gripper_target_step(0, 0, -num_steps);
-  //     break;
-  //   case 6:
-  //     wl = luke::move_base_target_m(0, 0, s_.action_base_translation);
-  //     break;
-  //   case 7:
-  //     wl = luke::move_base_target_m(0, 0, -s_.action_base_translation);
-  //     break;
-  //   default:
-  //     throw std::runtime_error("MjClass::set_action() received out of bounds int");
-  // }
 
   // save if we exceeded limits
   bool exceed_limits = not wl;
