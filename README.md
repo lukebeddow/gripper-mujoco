@@ -28,6 +28,9 @@ ifeq ($(filter mybuild, $(MAKECMDGOALS)), mybuild)
 # path to the mjcf (mujoco model) files, most likely they are in the mjcf folder of this repo
 MJCF_PATH = /home/luke/mymujoco/mjcf/object_set_1
 
+# what machine are we compiled for, change this to any name of your choice
+MACHINE = luke-laptop
+
 # local machine library locations
 PYTHON_PATH = /usr/include/python3.6m # path to python version you want to use for the python module
 PYBIND_PATH = /home/luke/pybind11 # path to your pybind source folder
