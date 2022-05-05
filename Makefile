@@ -105,9 +105,9 @@ cluster: py
 
 # compile the uitools object file which is used by both cpp and python targets
 # ADDED -fPIC FOR CLUSTER TO WORK
-# $(BUILDDIR)/uitools.o:
-# 	gcc -c -O2 -mavx -fPIC -I$(RENDER_PATH)/include -I$(MUJOCO_PATH)/include \
-# 		$(MUJOCO_PATH)/include/uitools.c -o $@
+$(BUILDDIR)/uitools.o:
+	gcc -c -O2 -mavx -fPIC -I$(RENDER_PATH)/include -I$(MUJOCO_PATH)/include \
+		$(MUJOCO_PATH)/include/uitools.c -o $@
 
 # build object files
 $(CPPSHAREDOBJ): $(BUILDCPP)/%.o : $(SOURCEDIR)/%.cpp
@@ -122,9 +122,7 @@ $(PYTARGETOBJ): $(BUILDDIR)/%.o : $(SOURCEDIR)/%.cpp
 # build targets
 $(CPPTARGETS): $(OUTCPP)% : $(BUILDDIR)%.o $(BUILDDIR)/uitools.o $(CPPSHAREDOBJ)
 	g++ $(COMMON) $^ $(CORE_LIBS) $(RENDER_LIBS) -o $@
-# $(PYTARGETS): $(OUTPY)%.so : $(BUILDDIR)%.o $(BUILDDIR)/uitools.o $(PYSHAREDOBJ)
-# 	g++ $(PYBIND) $^ $(CORE_LIBS) $(RENDER_LIBS) -o $@
-$(PYTARGETS): $(OUTPY)%.so : $(BUILDDIR)%.o $(PYSHAREDOBJ)
+$(PYTARGETS): $(OUTPY)%.so : $(BUILDDIR)%.o $(BUILDDIR)/uitools.o $(PYSHAREDOBJ)
 	g++ $(PYBIND) $^ $(CORE_LIBS) $(RENDER_LIBS) -o $@
 
 # if not cleaning, declare the dependencies of each object file (headers and source)
