@@ -25,6 +25,9 @@ In order to build, the locations of the dependent libraries needs to be specifie
 ```make
 ifeq ($(filter mybuild, $(MAKECMDGOALS)), mybuild)
 
+# set this command goal as a phony target (important)
+.PHONY: mybuild
+
 # what machine are we compiling for, change this to any name of your choice
 MACHINE = luke-laptop
 
@@ -47,10 +50,13 @@ MAKEFLAGS += -j8 # jN => compile using N parallel cpu cores
 endif
 ```
 
-In the above code, the keyword ```mybuild``` is used to select this path/library locations. So you would run ```make all mybuild``` to have these paths set. Change ```mybuild``` to the command of your choice:
+In the above code, the keyword ```mybuild``` is used as a phony make command goal to select these path/library locations. So you would run ```make all mybuild``` to have these paths set. Change ```mybuild``` to the command of your choice:
 
 <pre>
 ifeq ($(filter <b>mybuild</b>, $(MAKECMDGOALS)), <b>mybuild</b>)
+
+# add a phony target for this command goal (important)
+.PHONY: <b>mybuild</b>
 </pre>
 
 Next, select the path to the mjcf files in ```$(MJCF_PATH)```. These are the models that are the robot models and object models that will be loaded into mujoco. They are contained in the ```mjcf``` folder of this repository. There are multiple object sets you can choose from. The object set can also be changed later in the code, here sets the default option.
