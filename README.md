@@ -35,7 +35,8 @@ ARMA_PATH = # none, use system library # path to armadillo, you can leave this b
 MUJOCO_PATH = /home/luke/mujoco-2.1.5 # path to your mujoco folder
 CORE_LIBS = -larmadillo -$(MUJOCO_PATH)/lib/libmujoco.so # core libraries for armadillo and mujoco
 RENDER_LIBS = -lglfw # rendering library
-DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' # define c++ macros, you don't need to edit this
+DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
+						 -DLUKE_MACHINE='"$(MACHINE)"'      # define c++ macros, no need to edit
 
 endif
 ```
