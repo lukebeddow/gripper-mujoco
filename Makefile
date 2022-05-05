@@ -12,13 +12,16 @@
 #   https://www.hiroom2.com/2016/09/03/makefile-header-dependencies/
 #   https://stackoverflow.com/questions/16924333/makefile-compiling-from-directory-to-another-directory
 
+# This file does not need to be edited to build on a new machine. Instead, the
+# file 'buildsettings.mk' should be edited, as explained in the readme file.
+
 # ----- user defined variables ----- #
 
 # define the targets (must compile from a .cpp file with same name in SOURCEDIR)
 TARGET_LIST_CPP := test mysimulate
 TARGET_LIST_PY := bind
 
-# define directory structure (these folders must exist)
+# define directory structure
 SOURCEDIR := src
 BUILDDIR := build
 BUILDPY := $(BUILDDIR)/py
@@ -27,7 +30,7 @@ BUILDDEP := $(BUILDDIR)/depends
 OUTCPP := bin
 OUTPY := rl/env/mjpy
 
-# object set name
+# default object set name
 DEFAULT_OBJECTSET = set1_nocuboid_525
 
 # for generating models, non-essential feature
@@ -43,7 +46,7 @@ else
 OPTIM = -O2
 endif
 
-# define library locations
+# define library locations - this file contains user specified options
 include buildsettings.mk
 
 # ----- compilation settings ----- #
@@ -54,8 +57,9 @@ COMMON = $(OPTIM) -std=c++11 -mavx -pthread -Wl,-rpath,'$$ORIGIN' $(DEFINE_VAR) 
 		 -I$(MUJOCO_PATH)/include \
 		 -I$(PYBIND_PATH)/include \
 		 -I$(ARMA_PATH)/include \
-		 -L$(MUJOCO_PATH)/bin \
-		 -I$(PYTHON_PATH)
+		 -I$(PYTHON_PATH) \
+		 -I$(RENDER_PATH)/include
+
 PYBIND = $(COMMON) -fPIC -Wall -shared #-I$(PYTHON_PATH) $(PY_LIBS)
 
 # ----- automatically generated variables ----- #
@@ -99,16 +103,11 @@ debug: cpp
 .PHONY: cluster
 cluster: py
 
-# empty targets to set library variables,  see: buildsettings.mk
-.PHONY: lab
-.PHONY: luke
-.PHONY: luke-old
-
 # compile the uitools object file which is used by both cpp and python targets
 # ADDED -fPIC FOR CLUSTER TO WORK
-$(BUILDDIR)/uitools.o:
-	gcc -c -O2 -mavx -fPIC -I $(MUJOCO_PATH)/include \
-		$(MUJOCO_PATH)/include/uitools.c -o $@
+# $(BUILDDIR)/uitools.o:
+# 	gcc -c -O2 -mavx -fPIC -I$(RENDER_PATH)/include -I$(MUJOCO_PATH)/include \
+# 		$(MUJOCO_PATH)/include/uitools.c -o $@
 
 # build object files
 $(CPPSHAREDOBJ): $(BUILDCPP)/%.o : $(SOURCEDIR)/%.cpp
@@ -123,7 +122,9 @@ $(PYTARGETOBJ): $(BUILDDIR)/%.o : $(SOURCEDIR)/%.cpp
 # build targets
 $(CPPTARGETS): $(OUTCPP)% : $(BUILDDIR)%.o $(BUILDDIR)/uitools.o $(CPPSHAREDOBJ)
 	g++ $(COMMON) $^ $(CORE_LIBS) $(RENDER_LIBS) -o $@
-$(PYTARGETS): $(OUTPY)%.so : $(BUILDDIR)%.o $(BUILDDIR)/uitools.o $(PYSHAREDOBJ)
+# $(PYTARGETS): $(OUTPY)%.so : $(BUILDDIR)%.o $(BUILDDIR)/uitools.o $(PYSHAREDOBJ)
+# 	g++ $(PYBIND) $^ $(CORE_LIBS) $(RENDER_LIBS) -o $@
+$(PYTARGETS): $(OUTPY)%.so : $(BUILDDIR)%.o $(PYSHAREDOBJ)
 	g++ $(PYBIND) $^ $(CORE_LIBS) $(RENDER_LIBS) -o $@
 
 # if not cleaning, declare the dependencies of each object file (headers and source)
