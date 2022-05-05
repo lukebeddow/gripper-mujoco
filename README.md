@@ -32,14 +32,14 @@ MJCF_PATH = /home/luke/mymujoco/mjcf/object_set_1
 MACHINE = luke-laptop
 
 # local machine library locations
-PYTHON_PATH = /usr/include/python3.6m # path to python version you want to use for the python module
-PYBIND_PATH = /home/luke/pybind11 # path to your pybind source folder
-ARMA_PATH = # none, use system library # path to armadillo, you can leave this blank if you have it installed already
-MUJOCO_PATH = /home/luke/mujoco-2.1.5 # path to your mujoco folder
-CORE_LIBS = -larmadillo -$(MUJOCO_PATH)/lib/libmujoco.so # core libraries for armadillo and mujoco
-RENDER_LIBS = -lglfw # rendering library
+PYTHON_PATH = /usr/include/python3.6m                     # path to python version you want to use for the python module
+PYBIND_PATH = /home/luke/pybind11                         # path to your pybind source folder
+ARMA_PATH =                                               # path to armadillo, leave this blank if system library
+MUJOCO_PATH = /home/luke/mujoco-2.1.5                     # path to your mujoco folder
+CORE_LIBS = -larmadillo -$(MUJOCO_PATH)/lib/libmujoco.so  # core libraries for armadillo and mujoco
+RENDER_LIBS = -lglfw                                      # rendering library
 DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
-             -DLUKE_MACHINE='"$(MACHINE)"'      # define c++ macros, no need to edit
+             -DLUKE_MACHINE='"$(MACHINE)"'                # define c++ macros, no need to edit
 
 endif
 ```
