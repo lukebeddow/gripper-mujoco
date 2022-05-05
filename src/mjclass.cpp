@@ -811,19 +811,21 @@ bool MjClass::is_done()
   #define XX(NAME, TYPE, VALUE)
   #define SS(NAME, USE, NORM, READRATE)
 
-  #define BR(NAME, REWARD, DONE, TRIGGER)                             \
-            if (s_.NAME.done and env_.cnt.NAME >= s_.NAME.done) {     \
-              if (s_.debug) std::cout << "is_done() = true, "         \
-                << #NAME << " limit of " << #DONE << " exceeded\n";   \
-              return true;                                            \
-            }                                                         \
+  /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
+     eg instead of using TRIGGER we need to use s_.NAME.trigger */
+  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)                                \
+            if (s_.NAME.done and env_.cnt.NAME >= s_.NAME.done) {               \
+              if (s_.debug) std::cout << "is_done() = true, "                   \
+                << #NAME << " limit of " << s_.NAME.done << " exceeded\n";      \
+              return true;                                                      \
+            }                                                                   \
    
-  #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)        \
-            if (s_.NAME.done and env_.cnt.NAME >= s_.NAME.done) {     \
-              if (s_.debug) std::cout << "is_done() = true, "         \
-                << #NAME << " limit of " << #DONE << " exceeded\n";   \
-              return true;                                            \
-            }                                                         \
+  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)  \
+            if (s_.NAME.done and env_.cnt.NAME >= s_.NAME.done) {               \
+              if (s_.debug) std::cout << "is_done() = true, "                   \
+                << #NAME << " limit of " << s_.NAME.done << " exceeded\n";      \
+              return true;                                                      \
+            }                                                                   \
             
     // run the macro to create the code
     LUKE_MJSETTINGS
@@ -1104,21 +1106,25 @@ float MjClass::reward()
   #define XX(NAME, TYPE, VALUE)
   #define SS(NAME, USE, NORM, READRATE)
 
-  #define BR(NAME, REWARD, DONE, TRIGGER)                                         \
-            if (env_.cnt.NAME >= TRIGGER) {                                       \
-              if (s_.debug)                                                       \
-                std::printf("%s triggered, reward += %.4f\n", #NAME, REWARD);     \
-              reward += REWARD;                                                   \
+  /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
+     eg instead of using TRIGGER we need to use s_.NAME.trigger */
+  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)                                 \
+            if (env_.cnt.NAME >= s_.NAME.trigger) {                              \
+              if (s_.debug)                                                      \
+                std::printf("%s triggered, reward += %.4f\n",                    \
+                  #NAME, s_.NAME.reward);                                        \
+              reward += s_.NAME.reward;                                          \
             }
-   
-  #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)                    \
-            if (env_.cnt.NAME >= TRIGGER) {                                       \
-              float fraction = linear_reward(s_.NAME.value, MIN, MAX, OVERSHOOT); \
-              float scaled_reward = REWARD * fraction;                            \
-              if (s_.debug)                                                       \
-                std::printf("%s triggered by value %.1f, reward += %.4f\n",       \
-                  #NAME, s_.NAME.value, REWARD);                                  \
-              reward += scaled_reward;                                            \
+        
+  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)   \
+            if (env_.cnt.NAME >= s_.NAME.trigger) {                              \
+              float fraction = linear_reward(s_.NAME.value, s_.NAME.min,         \
+                s_.NAME.max, s_.NAME.overshoot);                                 \
+              float scaled_reward = s_.NAME.reward * fraction;                   \
+              if (s_.debug)                                                      \
+                std::printf("%s triggered by value %.1f, reward += %.4f\n",      \
+                  #NAME, s_.NAME.value, s_.NAME.reward);                         \
+              reward += scaled_reward;                                           \
             }
             
     // run the macro to create the code
@@ -1158,6 +1164,10 @@ float MjClass::reward()
       env_.cumulative_reward = s_.quit_on_reward_below - ftol;
     }
   }
+
+  if (s_.debug)
+    std::cout << "Action reward is: " << reward << ", cumulative reward is "
+      << env_.cumulative_reward << '\n';
 
   return reward;
 }
@@ -1306,6 +1316,10 @@ std::string MjType::Settings::get_settings()
   // now add headers to output
   output_str += str;
 
+  /* be aware when using macro fields other than name as it will pull values 
+     from simsettings.h not s_, instead of using TRIGGER we need to use 
+     s_.NAME.trigger */
+
   // we will use our macro to build one large string
   #define XX(NAME, TYPE, VALUE) \
             str.clear();\
@@ -1346,7 +1360,7 @@ std::string MjType::Settings::get_settings()
             /* add to output */\
             output_str += str;
             
-  #define BR(NAME, REWARD, DONE, TRIGGER) \
+  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3) \
             str.clear();\
             /* type first */\
             type_str.clear(); type_str += "BinaryReward";\
@@ -1369,7 +1383,7 @@ std::string MjType::Settings::get_settings()
             /* add to output */\
             output_str += str;
 
-  #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) \
+  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6) \
             str.clear();\
             /* type first */\
             type_str.clear(); type_str += "LinearReward";\
@@ -1417,13 +1431,15 @@ void MjType::Settings::wipe_rewards()
 
   int never = 10000;
 
+  /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
+     eg instead of using TRIGGER we need to use s_.NAME.trigger */
   #define XX(NAME, TYPE, VALUE)
   #define SS(NAME, IN_USE, NORM, READRATE)
-  #define BR(NAME, REWARD, DONE, TRIGGER) \
+  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3) \
             NAME.reward = 0.0;\
             NAME.done = false;\
             NAME.trigger = never;
-  #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) \
+  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6) \
             NAME.reward = 0.0;\
             NAME.done = false;\
             NAME.trigger = never;\

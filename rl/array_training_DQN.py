@@ -2,6 +2,7 @@
 
 import sys
 from time import sleep
+from datetime import datetime
 from TrainDQN import TrainDQN
 import networks
 
@@ -121,6 +122,7 @@ def apply_to_all_models(model):
   model.env.mj.set.debug = False
 
   # disable all rendering
+  model.env.disable_rendering = True
   model.env.mj.set.use_render_delay = False
   model.env.mj.set.render_on_step = False
 
@@ -155,11 +157,11 @@ def apply_to_all_models(model):
 
 if __name__ == "__main__":
 
-  # ARRAY JOBS ON CLUSTER MUST HAVE CLUSTER SET TO TRUE
-  cluster = True
+  # will we publish results to weights and biases
+  use_wandb = True
 
+  # extract input arguments
   inputarg = int(sys.argv[1])
-  print("Input argument: ", inputarg)
 
   if len(sys.argv) > 1:
     timestamp = sys.argv[2]
@@ -168,15 +170,27 @@ if __name__ == "__main__":
     timestamp = ""
     notimestamp = None
 
+  save_suffix = f"{timestamp}_array_{inputarg}"
+
+  print("Input argument: ", inputarg)
   print("Timestamp is:", timestamp)
+
+  # create and configure the model to default
+  model = TrainDQN(notimestamp=notimestamp, save_suffix=save_suffix,
+                   use_wandb=use_wandb)
+  model = apply_to_all_models(model)
+  model.no_plot = True
+
+  # create the name of the run and configure for wandb
+  run_name = f"train_{model.machine}_{save_suffix}"
+  model.wandb_name = run_name
+
+  print("This run will be saved as", run_name)
 
   # ----- 1 - 5, default network, negative rewards, vary number of sensors ----- #
   if inputarg <= 5:
 
-    # create training instance and apply settings
-    model = TrainDQN(cluster=cluster, notimestamp=notimestamp,
-                     save_suffix=f"{timestamp}_array_{inputarg}")
-    model = apply_to_all_models(model)
+    # apply settings
     model = make_rewards_negative(model)
 
     # now form the network
@@ -217,9 +231,6 @@ if __name__ == "__main__":
   elif inputarg > 5 and inputarg <= 10:
 
     # create training instance and apply settings
-    model = TrainDQN(cluster=cluster, notimestamp=notimestamp,
-                     save_suffix=f"{timestamp}_array_{inputarg}")
-    model = apply_to_all_models(model)
     model = make_rewards_negative(model)
 
     # now form the network
@@ -260,9 +271,6 @@ if __name__ == "__main__":
   elif inputarg > 10 and inputarg <= 15:
 
     # create training instance and apply settings
-    model = TrainDQN(cluster=cluster, notimestamp=notimestamp,
-                     save_suffix=f"{timestamp}_array_{inputarg}")
-    model = apply_to_all_models(model)
     model = mixed_rewards(model)
 
     # now form the network
@@ -303,9 +311,6 @@ if __name__ == "__main__":
   elif inputarg > 15 and inputarg <= 20:
 
     # create training instance and apply settings
-    model = TrainDQN(cluster=cluster, notimestamp=notimestamp,
-                     save_suffix=f"{timestamp}_array_{inputarg}")
-    model = apply_to_all_models(model)
     model = mixed_rewards(model)
 
     # now form the network

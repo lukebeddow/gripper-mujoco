@@ -2,6 +2,7 @@
 
 # add the env folder to path
 import os
+import pickle
 import sys
 sys.path.insert(0, os.path.expanduser('~') + '/mymujoco/rl/env')
 
@@ -79,10 +80,7 @@ class MjEnv(gym.Env):
     # create mujoco instance
     self.mj = MjClass()
     self._load_object_set()
-    self._load_xml()
-
-    # # do we override the c++ default simulator settings - comment out if not
-    # self._override_settings()    
+    self._load_xml()  
 
     # auto generated parameters
     self._update_n_actions_obs()
@@ -160,78 +158,13 @@ class MjEnv(gym.Env):
     self.n_actions = self.mj.get_n_actions()
     self.n_obs = self.mj.get_n_obs()
 
-  def _override_binary(self, field, reward, done, trigger):
+  def _get_machine(self):
     """
-    Override a binary reward, field should be self.mj.set.<reward_name>
+    Get the machine that the MjClass library is compiled for, and so presumably
+    the machine which the code is currently running on.
+    Current options: "luke-laptop", "luke-PC", "cluster"
     """
-    field.reward = reward
-    field.done = done
-    field.trigger = int(trigger)
-
-  def _override_linear(self, field, reward, done, trigger, min, max, overshoot):
-    """
-    Override a linear reward, field should be self.mj.set.<reward_name>
-    """
-    field.reward = reward
-    field.done = done
-    field.trigger = int(trigger)
-    field.min = min 
-    field.max = max
-    field.overshoot = overshoot
-
-  def _override_settings(self):
-    """
-    Key simulation settings are present in the mjclass.h file. Check there to
-    see the defaults - this function may NOT be up to date. This function is
-    provided for reference, DO NOT run this function. Instead copy out lines
-    """
-
-    never = 1e4
-
-    # reward settings
-    self._override_binary(self.mj.set.step_num,         -0.01,  False,  1)
-    self._override_binary(self.mj.set.lifted,           0.005,  False,  1)
-    self._override_binary(self.mj.set.oob,              0,      1,      1)
-    self._override_binary(self.mj.set.dropped,          0,      False,  never)
-    self._override_binary(self.mj.set.target_height,    1.0,    1,      never)
-    self._override_binary(self.mj.set.exceed_limits,    -0.1,   False,  1)
-    self._override_binary(self.mj.set.object_contact,   0.005,  False,  1)
-    self._override_binary(self.mj.set.object_stable,    1.0,    1,      3)
-    self._override_linear(self.mj.set.exceed_axial,     -0.05,  False,  1,  2.0, 6.0, -1)
-    self._override_linear(self.mj.set.exceed_lateral,   -0.05,  False,  1,  4.0, 6.0, -1)
-    self._override_linear(self.mj.set.palm_force,       0.05,   False,  1,  1.0, 3.0, 6.0)
-    self._override_linear(self.mj.set.exceed_palm,      -0.05,  False,  1,  6.0, 10.0, -1)
-
-    # step() settings
-    self.mj.set.gauge_read_rate_hz = 10
-
-    # update_env() settings
-    self.mj.set.lift_distance = 1e-3
-    self.mj.set.height_target = 50e-3
-    self.mj.set.oob_distance = 50e-3
-    self.mj.set.stable_finger_force = 1.00
-    self.mj.set.stable_palm_force = 2.00
-
-    # is_done() settings
-    self.mj.set.max_timeouts = 10
-
-    # set_action() settings
-    self.mj.set.action_motor_steps = 100             
-    self.mj.set.action_base_translation = 3e-3 
-    self.mj.set.max_action_steps = 1000
-    self.mj.set.paired_motor_X_step = True
-
-    # action_step() settings
-    self.mj.set.render_on_step = False       
-    self.mj.set.use_settling = False     
-
-    # render() settings
-    self.mj.set.use_render_delay = False       
-    self.mj.set.render_delay = 0.5
-
-    raise RuntimeError("_override_settings is provided for reference, it should not be run")
-
-    return
+    return self.mj.machine
 
   def _get_cpp_settings(self):
     """
@@ -474,27 +407,25 @@ if __name__ == "__main__":
   # import pickle
 
   mj = MjEnv()
+  mj.mj.set.wipe_rewards()
+  mj.mj.set.lifted.set(100, 10, 1)
+  print(mj._get_cpp_settings())
 
-  # mj._override_binary(mj.mj.set.step_num, 1.0, 3, 10)
-  # mj.mj.set.lifted.set(-0.1, 42, 100)
-  # mj.mj.set.gauge_read_rate_hz = 100
+  with open("test_file.pickle", 'wb') as f:
+    pickle.dump(mj, f)
+    print("Pickle saved")
 
-  # with open("test_file.pickle", 'wb') as f:
-  #   pickle.dump(mj, f)
-
-  # with open("test_file.pickle", 'rb') as f:
-  #   mj = pickle.load(f)
+  with open("test_file.pickle", 'rb') as f:
+    mj = pickle.load(f)
+    print("Pickle loaded")
 
   mj._load_xml(index=0)
+  mj._load_xml(index=1)
+  mj._load_xml(index=2)
 
   mj.step(0)
 
-  # print(mj._get_cpp_settings())
+  print(mj._get_cpp_settings())
 
-  # mj.mj.set.wipe_rewards()
-
-  # print(mj._get_cpp_settings())
-
-  obs = mj.mj.get_observation()
-
-  print(obs)
+  # obs = mj.mj.get_observation()
+  # print(obs)

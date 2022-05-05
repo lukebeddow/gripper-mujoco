@@ -11,7 +11,7 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N ArrayTrainDQN_12
+#$ -N ArrayTrainDQN_13
 #$ -t 1-20
 
 # The code you want to run now goes here.

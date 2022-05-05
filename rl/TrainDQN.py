@@ -3,6 +3,7 @@
 import math
 import random
 import time
+from datetime import datetime
 import numpy as np
 from collections import namedtuple, deque
 from itertools import count
@@ -79,11 +80,11 @@ class TrainDQN():
         R = "Reward"
         D = "Duration"
 
-        # # create the raw rewards plot
-        # self.plot_wandb(self.train_episodes, self.train_rewards, E, R, "Raw rewards")
+        # create the raw rewards plot
+        self.plot_wandb(self.train_episodes, self.train_rewards, E, R, "Raw rewards")
 
-        # # create the raw durations plot
-        # self.plot_wandb(self.train_episodes, self.train_durations, E, D, "Raw durations")
+        # create the raw durations plot
+        self.plot_wandb(self.train_episodes, self.train_durations, E, D, "Raw durations")
 
         # create the average rewards plot
         self.plot_wandb(self.episodes_avg, self.rewards_avg, E, R, 
@@ -159,7 +160,15 @@ class TrainDQN():
     def __len__(self):
       return len(self.memory)
 
-  def __init__(self, cluster=True, save_suffix=None, device=None, notimestamp=None, 
+    def to(self, device):
+      """Move to a device"""
+      for (s1, a, s2, r) in self.memory:
+        s1.to(device)
+        a.to(device)
+        s2.to(device)
+        r.to(device)
+
+  def __init__(self, save_suffix=None, device=None, notimestamp=None, 
                use_wandb=None, wandb_name=None):
 
     # define key training parameters
@@ -168,37 +177,44 @@ class TrainDQN():
 
     # prepare environment
     self.env = MjEnv()
+
+    # what machine are we on
+    self.machine = self.env._get_machine()
+
     if device != None: self.device = device
     else: self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     self.actions_taken = 0
     self.log_level = 1
-    self.cluster = cluster
     self.save_suffix = save_suffix
     self.notimestamp = notimestamp
     self.use_wandb = True if use_wandb else False
     self.wandb_name = wandb_name
-
-    # cluster specific
-    if not self.cluster:
+ 
+    # if we are not on the cluster we are able to import matplotlib
+    if self.machine != "cluster":
       # import into global variable
       global plt
       import matplotlib.pyplot as plt
-
-    # prepare for plotting
-    self.episode_durations = []
-    self.episode_rewards = []
-    self.test_durations = []
-    self.test_rewards = []
-    self.test_episodes = []
-    self.no_plot = self.cluster
-    self.plot_limit = 2000
-    self.moving_avg_num = 50
-    if not self.no_plot:
+      # allow plotting by default
+      self.no_plot = False
+      # create figure
       self.fig, self.axs = plt.subplots(2, 1)
+    else:
+      self.no_plot = True
 
+    # # prepare for plotting
+    # self.episode_durations = []
+    # self.episode_rewards = []
+    # self.test_durations = []
+    # self.test_rewards = []
+    # self.test_episodes = []
+    # self.plot_limit = 2000
+    # self.moving_avg_num = 50
+      
     # print important info
-    print("On cluster:", "TRUE" if self.cluster else "FALSE")
+    print("Using machine:", self.machine)
     print("Using device:", self.device)
+    print("Using wandb:", self.use_wandb)
 
   def init(self, network):
     """
@@ -576,11 +592,11 @@ class TrainDQN():
       self.init(network)
 
     # if this is a fresh, new training
-    if i_start == None:
+    if i_start == None or i_start == 0:
       i_start = 0
       # create a new folder to save training results in
-      self.modelsaver.new_folder(label="cluster" if self.cluster else "laptop",
-                                 suffix=self.save_suffix, notimestamp=self.notimestamp)
+      self.modelsaver.new_folder(label=self.machine, suffix=self.save_suffix, 
+                                 notimestamp=self.notimestamp)
       # save record of the training time hyperparameters
       self.save_hyperparameters()
     else:
@@ -589,9 +605,9 @@ class TrainDQN():
       hypername = f"hyperparameters_from_ep_{i_start}"
       self.save_hyperparameters(labelstr=continue_label, name=hypername)
 
-
+    # begin training episodes
     for i_episode in range(i_start, self.params.num_episodes):
-
+      
       if self.log_level > 0: print("Begin training episode", i_episode)
 
       # for debugging, show memory usage
@@ -640,7 +656,7 @@ class TrainDQN():
         # check if this episode is over
         if done:
 
-          # save data and plot it
+          # save training data and plot it
           self.track.episodes_done = i_episode + 1
           self.track.train_episodes = np.append(self.track.train_episodes, i_episode)
           self.track.train_durations = np.append(self.track.train_durations, t + 1)
@@ -739,11 +755,11 @@ class TrainDQN():
 
   def save_hyperparameters(self, labelstr=None, name=None):
     """
-    Save a text file with the hyperparameters
+    Save a text file with the current hyperparameters
     """
 
     param_str = ""
-    network_name = self.policy_net.name()
+    time_stamp = datetime.now().strftime("%d-%m-%Y-%H:%M")
 
     if labelstr != None:
       param_str += labelstr + '\n'
@@ -754,7 +770,13 @@ class TrainDQN():
     # capture parameters info
     param_str += f"""Hyperparameters at training time:\n\n"""
 
+    # add in some important information
+    param_str += "Network name: " + self.policy_net.name() + "\n"
+    param_str += "Save time and date: " + time_stamp + "\n"
+    param_str += "Running on machine: " + self.machine + "\n"
+
     # convert parameters to a string
+    param_str += "Parameters dataclass:\n"
     param_str += str(asdict(self.params))
 
     # swap commas for newlines for prettier printing
@@ -798,20 +820,21 @@ class TrainDQN():
     self.policy_net = core[0]
     self.params = core[1]
     self.memory = core[2]
-
-    if len(core) == 4:
-      self.env = core[3]
-      self.env._load_xml(random=True) # segfault without this
+    self.env = core[3]
 
     # extract additional data
     self.track = tupledata[0]
     self.loaded_test_data = tupledata[1]
 
+    # reload environment
+    self.env._load_xml # segfault without this
+
     # reinitialise to prepare for further training
     self.target_net = deepcopy(core[0])
     self.target_net.load_state_dict(self.policy_net.state_dict())
 
-    # move to the device
+    # move to the current device
+    self.memory.to(self.device)
     self.policy_net.to(self.device)
     self.target_net.to(self.device)
 
@@ -824,7 +847,7 @@ class TrainDQN():
 
   def continue_training(self, foldername, folderpath=None, new_endpoint=None):
     """
-    Continue training of a model
+    Load a model and then continue training it
     """
 
     # load the most recent model in the given folder
@@ -839,6 +862,10 @@ class TrainDQN():
       self.params.num_episodes = 2 * self.track.episodes_done
       print("New training endpoint set as:", self.params.num_episodes)
 
+    # check if our training endpoint is already satisfied
+    if self.params.num_episodes < self.track.episodes_done:
+      raise RuntimeError("episodes done exceeds the params.num_episodes target")
+
     # begin the training at the given starting point (always uses most recent pickle)
     self.train(i_start=self.track.episodes_done)
 
@@ -847,40 +874,42 @@ if __name__ == "__main__":
   
   # ----- prepare ----- #
 
-  use_wandb = True
-  cluster = True
+  use_wandb = False
   force_device = "cpu"
-  model = TrainDQN(cluster=cluster, device=force_device, use_wandb=use_wandb,
+
+  model = TrainDQN(device=force_device, use_wandb=use_wandb,
                    wandb_name=None)
 
   # if we want to adjust parameters
   # model.params.num_episodes = 11
-  model.params.test_freq = 10
-  model.env.test_trials_per_obj = 1
-  model.env.max_episode_steps = 20
-  model.params.wandb_freq_s = 5
-  model.env.mj.set.action_motor_steps = 350
+  # model.params.test_freq = 10
+  # model.env.test_trials_per_obj = 1
+  # model.env.max_episode_steps = 20
+  # model.params.wandb_freq_s = 5
+  # model.env.mj.set.action_motor_steps = 350
 
   # now set up the network, ready for training
   net = networks.DQN_2L60
+  model.init(net)
 
   # ----- load ----- #
 
   # load
-  # folderpath = "/home/luke/cluster/rl/models/dqn/" + model.policy_net.name() + "/"
-  # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"
-  # foldername = "train_cluster_29-04-2022-12:51_array_1"
-  # model.load(id=None, folderpath=folderpath, foldername=foldername)
+  folderpath = "/home/luke/cluster/rl/models/dqn/" + model.policy_net.name() + "/"
+  foldername = "train_cluster_29-04-2022-12:51_array_4"
+  model.load(id=None, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
-  # train
-  model.env.disable_rendering = True
-  model.env.mj.set.debug = False
-  model.train(net)
+  # # train
+  # model.env.disable_rendering = False
+  # model.env.mj.set.debug = True
+  # model.train()
 
-  # continue training
-  # model.continue_training('train_cluster_24-02-2022_12:43_array_6', folderpath=folderpath)
+  # # continue training
+  # folderpath = "/home/luke/cluster/rl/models/dqn/" + model.policy_net.name() + "/"
+  # foldername = "train_cluster_29-04-2022-12:51_array_4"
+  # model.continue_training(foldername, folderpath=folderpath)
 
   # ----- visualise ----- #
 
@@ -889,14 +918,24 @@ if __name__ == "__main__":
   # model.plot()
   # plt.show()
 
+  import array_training_DQN
+  model = array_training_DQN.apply_to_all_models(model)
+  model = array_training_DQN.make_rewards_negative(model)
+  model.env.max_episode_steps = 200
+  model.env.mj.set.motor_state_sensor.read_rate = -2
+  model.env.mj.set.axial_gauge.in_use = True
+  model.env.mj.set.wrist_sensor_Z.in_use = True
+
   # # test
-  # model.env.disable_rendering = False
-  # model.env.test_trials_per_obj = 1
+  print(model.env._get_cpp_settings())
+  model.env.mj.set.debug = True
+  model.env.disable_rendering = False
+  model.env.test_trials_per_obj = 1
   # model.env.mj.set.step_num.set          (0,      70,   1)
   # model.env.mj.set.exceed_limits.set     (-0.005, True,   10)
   # model.env.mj.set.exceed_axial.set      (-0.005, True,   10,    3.0,  6.0,  -1)
   # model.env.mj.set.exceed_lateral.set    (-0.005, True,   10,    4.0,  6.0,  -1)
-  # test_data = model.test()
+  test_data = model.test()
 
   # # save results
   # test_report = model.create_test_report(test_data)

@@ -61,6 +61,7 @@ PYBIND11_MODULE(bind, m) {
     .def_readwrite("set", &MjClass::s_)
     .def_readwrite("model_folder_path", &MjClass::model_folder_path)
     .def_readwrite("object_set_name", &MjClass::object_set_name)
+    .def_readonly("machine", &MjClass::machine)
     .def_readonly("current_load_path", &MjClass::current_load_path)
     .def_readwrite("curve_validation_data", &MjClass::curve_validation_data_)
 
@@ -68,18 +69,27 @@ PYBIND11_MODULE(bind, m) {
     .def(py::pickle(
       [](const MjClass &mjobj) { // __getstate___
         /* return a tuple that fully encodes the state of the object */
-        return py::make_tuple(mjobj.s_, mjobj.current_load_path);
+        return py::make_tuple(
+          mjobj.s_,                   // simulation settings struct
+          mjobj.current_load_path,    // path of currently loaded model
+          mjobj.model_folder_path,    // path to the mjcf models folder
+          mjobj.object_set_name,      // name of object set in use
+          mjobj.machine               // machine library is compiled for
+        );
       },
       [](py::tuple t) { // __setstate__
 
-        if (t.size() != 2)
+        if (t.size() != 5 and t.size() != 2) // 2 is OLD version, delete later
           throw std::runtime_error("mjclass py::pickle got invalid state (tuple size wrong)");
 
         // create new c++ instance with old settings
         MjClass mjobj(t[0].cast<MjType::Settings>());
 
-        // save the old load path
-        mjobj.current_load_path = t[1].cast<std::string>();
+        // set the variables (must be same order as tuple above)
+        if (t.size() >= 2) mjobj.current_load_path = t[1].cast<std::string>();
+        if (t.size() >= 3) mjobj.model_folder_path = t[2].cast<std::string>();
+        if (t.size() >= 4) mjobj.object_set_name = t[3].cast<std::string>();
+        if (t.size() >= 5) mjobj.machine = t[4].cast<std::string>();
 
         return mjobj;
       }

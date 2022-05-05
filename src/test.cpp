@@ -5,7 +5,7 @@
 #include "mjclass.h"
 #include "myfunctions.h"
 
-int num_xml_tasks = 37;
+int num_xml_tasks = 4; // intentionally low number to allow different object sets
 bool print_step = false;
 bool print_ep = true;
 bool debug_print = false;

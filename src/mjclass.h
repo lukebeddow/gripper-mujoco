@@ -423,11 +423,8 @@ public:
   typedef std::chrono::high_resolution_clock time_;
 
   // parameters set at compile time
-  static constexpr bool debug = false;              // are we in debug mode
   static constexpr double ftol = 1e-5;             // floating point tolerance
   static constexpr int gauge_buffer_size = 50;     // buffer to store gauge data 
-  static constexpr int state_buffer_size = 50;     // buffer to store state data
-  static constexpr float mujoco_timestep = 0.002;  // default is 0.002
 
   /* ----- parameters that are unchanged with reset() ----- */
 
@@ -455,6 +452,12 @@ public:
     std::string object_set_name = LUKE_DEFAULTOBJECTS;
   #else
     std::string object_set_name = "";
+  #endif
+
+  #if defined(LUKE_MACHINE)
+    std::string machine = LUKE_MACHINE;
+  #else
+    std::string machine = "machine_not_defined";
   #endif
 
   std::string current_load_path;                // xml path of currently loaded model

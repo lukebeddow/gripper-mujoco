@@ -110,24 +110,42 @@ class ModelSaver:
 
     # loop through all folder names to find which is the most recent
     for i, name in enumerate(folders):
-      day, month, year, time = name.split('-') # TIME STRING MUST BE SEPERATED BY '-'
+
+      # TIME STRING MUST BE SEPERATED BY '-'
+      # PARTS SEPERATED BY DASHES '-' CANNOT BE NUMERIC EXCEPT DATE eg not train-4-cluster
+      dash_seperated = name.split('-')
+      target = ["day", "month", "year", "hour", "min"]
+      ind = 0
+      for str in dash_seperated:
+        if ind == 0 and len(str) >= 2 and str[-2:].isnumeric():
+          target[0] = str[-2:]
+          ind += 1
+        elif ind > 0 and ind < 3:
+          target[ind] = str
+          ind += 1
+        elif ind == 3:
+          if str[2] != ':':
+            raise RuntimeError("colon (:) not found in date string in ModelSaver"
+              ", check to ensure only date information is seperated by dashes (-)"
+              " unless the item between the dashes does not trigger isnumeric() == True")
+          h, m = str.split(':')
+          target[3] = h
+          target[4] = m[:2]
 
       # do our folder names have trailing indexes, eg train_cluster..._array_11
-      trailing_index = name.split('_') # REGULAR PARTS MUST BE SEPERATED BY '_'
+      trailing_index = name.split('_')
       trailing_index = trailing_index[-1]
       if trailing_index.isnumeric():
         trailing_index = int(trailing_index)
       else:
         trailing_index = 0
 
-      # get the components of the date
-      day = int(day[-2:]) # train_cluster_04 -> int('04') -> 4
-      month = int(month)
-      year = int(year)
-      time = time[:5] # 12:47_array_11 -> '12:47'
-      hour, min = time.split(':')
-      hour = int(hour)
-      min = int(min)
+      # convert date to a set of integers
+      day = int(target[0])
+      month = int(target[1])
+      year = int(target[2])
+      hour = int(target[3])
+      min = int(target[4])
 
       # create an entry for this folder
       entry = [i, [year, month, day, hour, min, trailing_index]]
@@ -239,12 +257,12 @@ class ModelSaver:
     if notimestamp != True:
       now = datetime.now()
       time_stamp = now.strftime(self.date_str)
-      if save_label[-1] != '_': save_label += '_'
+      if not save_label.endswith('_') and len(save_label) > 0: save_label += '_'
       save_label += time_stamp
 
     # add in a user specified suffix -> train_{DD-MM-YYYY-hr:min}_{suffix}
     if suffix != None:
-      if save_label[-1] != '_': save_label += '_'
+      if not save_label.endswith('_') and len(save_label) > 0: save_label += '_'
       save_label += suffix
 
     # create the folder name
@@ -382,28 +400,28 @@ if __name__ == "__main__":
 
   obj = ModelSaver('models/demosave')
 
-  pyobj = [1, 2, 3, 4, 5]
+  # pyobj = [1, 2, 3, 4, 5]
 
-  obj.new_folder()
-  obj.new_folder(label="cluster")
-  obj.new_folder(label="cluster")
+  # obj.new_folder()
+  # obj.new_folder(label="cluster")
+  # obj.new_folder(label="cluster")
 
-  obj.save("hyperparams", txtstr="testing 1 2 3", txtonly=True)
-  obj.save("network1", pyobj=pyobj)
-  obj.save("network1", pyobj=pyobj)
-  obj.save("network1", pyobj=pyobj)
-  obj.save("network1", pyobj=pyobj)
+  # obj.save("hyperparams", txtstr="testing 1 2 3", txtonly=True)
+  # obj.save("network1", pyobj=pyobj)
+  # obj.save("network1", pyobj=pyobj)
+  # obj.save("network1", pyobj=pyobj)
+  # obj.save("network1", pyobj=pyobj)
 
-  obj.load()
+  # obj.load()
 
-  obj.exit_folder()
+  # obj.exit_folder()
 
-  obj.save("network2", pyobj=pyobj)
-  obj.save("network2", pyobj=pyobj)
-  obj.save("network2", pyobj=pyobj)
-  obj.save("network2", pyobj=pyobj)
+  # obj.save("network2", pyobj=pyobj)
+  # obj.save("network2", pyobj=pyobj)
+  # obj.save("network2", pyobj=pyobj)
+  # obj.save("network2", pyobj=pyobj)
 
-  obj.load()
+  # obj.load()
 
   print(obj.get_most_recent())
 
