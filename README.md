@@ -25,11 +25,11 @@ In order to build, the locations of the dependent libraries needs to be specifie
 ```make
 ifeq ($(filter mybuild, $(MAKECMDGOALS)), mybuild)
 
+# what machine are we compiling for, change this to any name of your choice
+MACHINE = luke-laptop
+
 # path to the mjcf (mujoco model) files, most likely they are in the mjcf folder of this repo
 MJCF_PATH = /home/luke/mymujoco/mjcf/object_set_1
-
-# what machine are we compiled for, change this to any name of your choice
-MACHINE = luke-laptop
 
 # local machine library locations
 PYTHON_PATH = /usr/include/python3.6m                     # path to python version you want to use for the python module
@@ -40,6 +40,9 @@ CORE_LIBS = -larmadillo -$(MUJOCO_PATH)/lib/libmujoco.so  # core libraries for a
 RENDER_LIBS = -lglfw                                      # rendering library
 DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
              -DLUKE_MACHINE='"$(MACHINE)"'                # define c++ macros, no need to edit
+           
+# optional extras, delete if not wanted
+MAKEFLAGS += -j8 # jN => compile using N parallel cpu cores
 
 endif
 ```
