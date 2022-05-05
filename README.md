@@ -25,25 +25,38 @@ In order to build, the locations of the dependent libraries needs to be specifie
 ```make
 ifeq ($(filter mybuild, $(MAKECMDGOALS)), mybuild)
 
+# set this command goal as a phony target (important)
+.PHONY: mybuild
+
+# what machine are we compiling for, change this to any name of your choice
+MACHINE = luke-laptop
+
 # path to the mjcf (mujoco model) files, most likely they are in the mjcf folder of this repo
 MJCF_PATH = /home/luke/mymujoco/mjcf/object_set_1
 
 # local machine library locations
-PYTHON_PATH = /usr/include/python3.6m # path to python version you want to use for the python module
-PYBIND_PATH = /home/luke/pybind11 # path to your pybind source folder
-ARMA_PATH = # none, use system library # path to armadillo, you can leave this blank if you have it installed already
-MUJOCO_PATH = /home/luke/mujoco-2.1.5 # path to your mujoco folder
-CORE_LIBS = -larmadillo -$(MUJOCO_PATH)/lib/libmujoco.so # core libraries for armadillo and mujoco
-RENDER_LIBS = -lglfw # rendering library
-DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' # define c++ macros, you don't need to edit this
+PYTHON_PATH = /usr/include/python3.6m                     # path to python version you want to use for the python module
+PYBIND_PATH = /home/luke/pybind11                         # path to your pybind source folder
+ARMA_PATH =                                               # path to armadillo, leave this blank if system library
+MUJOCO_PATH = /home/luke/mujoco-2.1.5                     # path to your mujoco folder
+CORE_LIBS = -larmadillo -$(MUJOCO_PATH)/lib/libmujoco.so  # core libraries for armadillo and mujoco
+RENDER_LIBS = -lglfw                                      # rendering library
+DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
+             -DLUKE_MACHINE='"$(MACHINE)"'                # define c++ macros, no need to edit
+           
+# optional extras, delete if not wanted
+MAKEFLAGS += -j8 # jN => compile using N parallel cpu cores
 
 endif
 ```
 
-In the above code, the keyword ```mybuild``` is used to select this path/library locations. So you would run ```make all mybuild``` to have these paths set. Change ```mybuild``` to the command of your choice:
+In the above code, the keyword ```mybuild``` is used as a phony make command goal to select these path/library locations. So you would run ```make all mybuild``` to have these paths set. Change ```mybuild``` to the command of your choice:
 
 <pre>
 ifeq ($(filter <b>mybuild</b>, $(MAKECMDGOALS)), <b>mybuild</b>)
+
+# add a phony target for this command goal (important)
+.PHONY: <b>mybuild</b>
 </pre>
 
 Next, select the path to the mjcf files in ```$(MJCF_PATH)```. These are the models that are the robot models and object models that will be loaded into mujoco. They are contained in the ```mjcf``` folder of this repository. There are multiple object sets you can choose from. The object set can also be changed later in the code, here sets the default option.
