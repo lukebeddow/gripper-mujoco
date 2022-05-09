@@ -169,7 +169,7 @@ class TrainDQN():
         r.to(device)
 
   def __init__(self, save_suffix=None, device=None, notimestamp=None, 
-               use_wandb=None, wandb_name=None):
+               use_wandb=None, wandb_name=None, no_plot=None, log_level=None):
 
     # define key training parameters
     self.params = TrainDQN.Parameters()
@@ -181,40 +181,28 @@ class TrainDQN():
     # what machine are we on
     self.machine = self.env._get_machine()
 
+    # configure options
     if device != None: self.device = device
     else: self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    self.actions_taken = 0
-    self.log_level = 1
     self.save_suffix = save_suffix
     self.notimestamp = notimestamp
-    self.use_wandb = True if use_wandb else False
+    self.use_wandb = use_wandb if use_wandb is not None else True
     self.wandb_name = wandb_name
- 
-    # if we are not on the cluster we are able to import matplotlib
-    if self.machine != "cluster":
-      # import into global variable
+    self.log_level = log_level if log_level is not None else 1
+
+    # if we are plotting graphs during this training
+    if no_plot == True:
+      self.no_plot = True
+    else:
       global plt
       import matplotlib.pyplot as plt
-      # allow plotting by default
-      self.no_plot = False
-      # create figure
       self.fig, self.axs = plt.subplots(2, 1)
-    else:
-      self.no_plot = True
-
-    # # prepare for plotting
-    # self.episode_durations = []
-    # self.episode_rewards = []
-    # self.test_durations = []
-    # self.test_rewards = []
-    # self.test_episodes = []
-    # self.plot_limit = 2000
-    # self.moving_avg_num = 50
       
     # print important info
-    print("Using machine:", self.machine)
-    print("Using device:", self.device)
-    print("Using wandb:", self.use_wandb)
+    if self.log_level > 0:
+      print("Using machine:", self.machine)
+      print("Using device:", self.device)
+      print("Using wandb:", self.use_wandb)
 
   def init(self, network):
     """
