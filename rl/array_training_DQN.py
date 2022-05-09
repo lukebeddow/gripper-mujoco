@@ -3,6 +3,8 @@
 import sys
 from time import sleep
 from datetime import datetime
+
+from gym import make
 from TrainDQN import TrainDQN
 import networks
 
@@ -115,7 +117,7 @@ def apply_to_all_models(model):
   model.params.min_memory_replay = 5_000
   model.params.save_freq = 2_000
   model.params.test_freq = 2_000
-  model.params.wandb_freq_s = 300
+  model.params.wandb_freq_s = 10
 
   # ensure debug mode is off
   model.env.log_level = 0
@@ -188,8 +190,47 @@ if __name__ == "__main__":
   # create the name of the run and configure for wandb
   run_name = f"train_{model.machine}_{save_suffix}"
   model.wandb_name = run_name
+  
+  model.log_level = 1
 
   print("This run will be saved as", run_name)
+
+  if inputarg <= 5:
+
+    # now form the network
+    network = networks.DQN_2L60
+
+    model.env.max_episode_steps = 200
+    model.env.max_episode_steps = 200
+    model.env.mj.set.motor_state_sensor.read_rate = -2
+    model.env.mj.set.axial_gauge.in_use = True
+    model.env.mj.set.wrist_sensor_Z.in_use = True
+
+    if inputarg == 1:
+      model.wandb_note = "10x negative rewards, DQN_2L60"
+      model = make_rewards_negative(model)
+      model.env.mj.set.scale_rewards(10)
+      model.train(network)
+
+    elif inputarg == 2:
+      model.wandb_note = "100x negative rewards, DQN_2L60"
+      model = make_rewards_negative(model)
+      model.env.mj.set.scale_rewards(100)
+      model.train(network)
+
+    elif inputarg == 3:
+      model.wandb_note = "10x mixed rewards, DQN_2L60"
+      model = mixed_rewards(model)
+      model.env.mj.set.scale_rewards(10)
+      model.train(network)
+
+    elif inputarg == 4:
+      model.wandb_note = "100x mixed rewards, DQN_2L60"
+      model = mixed_rewards(model)
+      model.env.mj.set.scale_rewards(100)
+      model.train(network)
+
+  exit()
 
   # ----- 1 - 5, default network, negative rewards, vary number of sensors ----- #
   if inputarg <= 5:
@@ -203,6 +244,7 @@ if __name__ == "__main__":
     # ----- adjust the rewards and step number ----- #
     if inputarg == 1:
       model.env.max_episode_steps = 200
+      model.wandb_note = "No extra sensors, 2 layer network"
       model.train(network)
 
     elif inputarg == 2:
