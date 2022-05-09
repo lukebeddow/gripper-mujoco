@@ -148,7 +148,7 @@ ifeq ($(filter lab, $(MAKECMDGOALS)), lab)
 MACHINE = luke-PC
 
 # mjcf files location (model files like gripper/objects)
-MJCF_PATH = /home/luke/luke-gripper-mujoco/mjcf
+MJCF_PATH = /home/luke/mymujoco/mjcf
 
 # local machine library locations
 PYTHON_PATH = /usr/include/python3.6m
