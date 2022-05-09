@@ -157,8 +157,9 @@ def apply_to_all_models(model):
 
 if __name__ == "__main__":
 
-  # will we publish results to weights and biases
+  # key settings
   use_wandb = True
+  no_plot = True
 
   # extract input arguments
   inputarg = int(sys.argv[1])
@@ -177,9 +178,12 @@ if __name__ == "__main__":
 
   # create and configure the model to default
   model = TrainDQN(notimestamp=notimestamp, save_suffix=save_suffix,
-                   use_wandb=use_wandb)
+                   use_wandb=use_wandb, no_plot=no_plot)
   model = apply_to_all_models(model)
-  model.no_plot = True
+
+  # cpu training only on cluster or PC
+  if model.machine in ["cluster", "luke-PC"]: 
+    model.device = "cpu"
 
   # create the name of the run and configure for wandb
   run_name = f"train_{model.machine}_{save_suffix}"
