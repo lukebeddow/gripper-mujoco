@@ -259,8 +259,10 @@ namespace MjType
     // never used, added here only for convenience in bind.cpp
     bool dummy = false;
 
+    // function definitions
     std::string get_settings();
     void wipe_rewards();
+    void scale_rewards(float scale); 
 
   };
 

@@ -1456,6 +1456,27 @@ void MjType::Settings::wipe_rewards()
   #undef LR
 }
 
+void MjType::Settings::scale_rewards(float scale)
+{
+  /* scale all of the rewards by a given value */
+
+  /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
+     eg instead of using TRIGGER we need to use s_.NAME.trigger */
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, IN_USE, NORM, READRATE)
+  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3) NAME.reward *= scale;
+  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6) \
+            NAME.reward *= scale;
+  
+    // run the macro and scale the rewards
+    LUKE_MJSETTINGS
+  
+  #undef XX
+  #undef SS
+  #undef BR
+  #undef LR
+}
+
 void MjType::EventTrack::print()
 {
   
