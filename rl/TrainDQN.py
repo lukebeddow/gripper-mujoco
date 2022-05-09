@@ -94,6 +94,9 @@ class TrainDQN():
         self.plot_wandb(self.episodes_avg, self.durations_avg, E, D, 
                         f"Average durations ({self.moving_avg_num} samples)")
 
+        # create a test performance plot
+        self.plot_wandb(self.test_episodes, self.test_rewards, E, R, "Test rewards")
+
         # define performance metrics to examine
         good_metrics = [
           [self.avg_p_lifted, "% Lifted"],
