@@ -186,9 +186,12 @@ class TrainDQN():
     else: self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     self.save_suffix = save_suffix
     self.notimestamp = notimestamp
+    self.log_level = 1 if log_level is None else log_level
+
+    # wandb options
     self.use_wandb = use_wandb if use_wandb is not None else True
     self.wandb_name = wandb_name
-    self.log_level = log_level if log_level is not None else 1
+    self.wandb_note = ""
 
     # if we are plotting graphs during this training
     if no_plot == True:
@@ -236,7 +239,8 @@ class TrainDQN():
     # save weights and biases
     if self.use_wandb:
       wandb.init(project="luke-gripper-mujoco", entity="lbeddow", 
-                 name=self.wandb_name, config=asdict(self.params))
+                 name=self.wandb_name, config=asdict(self.params),
+                 notes=self.wandb_note + "\n\n" + self.env._get_cpp_settings())
 
     # print important info
     print("Using model:", self.policy_net.name())
