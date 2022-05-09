@@ -201,7 +201,6 @@ if __name__ == "__main__":
     network = networks.DQN_2L60
 
     model.env.max_episode_steps = 200
-    model.env.max_episode_steps = 200
     model.env.mj.set.motor_state_sensor.read_rate = -2
     model.env.mj.set.axial_gauge.in_use = True
     model.env.mj.set.wrist_sensor_Z.in_use = True
