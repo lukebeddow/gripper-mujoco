@@ -32,7 +32,7 @@ def mixed_rewards(model):
   model.env.mj.set.oob.set               (-1.0,   True,    1)
 
   # terminate episode when reward drops below -1.01, also cap at this value
-  model.env.mj.set.quit_on_reward_below = -100
+  model.env.mj.set.quit_on_reward_below = -10000
   model.env.mj.set.quit_reward_capped = True
 
   return model
@@ -61,7 +61,7 @@ def make_rewards_negative(model):
   model.env.mj.set.oob.set               (-2.0,   True,    1)
 
   # terminate episode when reward drops below -1.01, also cap at this value
-  model.env.mj.set.quit_on_reward_below = -2.01
+  model.env.mj.set.quit_on_reward_below = -10000
   model.env.mj.set.quit_reward_capped = True
 
   return model
