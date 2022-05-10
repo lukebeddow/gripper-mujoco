@@ -37,6 +37,7 @@ class TrainDQN():
       self.plot_raw = False
       self.plot_avg = True
       self.plot_test_reward = True
+      self.plot_test_duration = True
       self.plot_test_metrics = True
       # general
       self.actions_done = 0
@@ -84,24 +85,25 @@ class TrainDQN():
         R = "Reward"
         D = "Duration"
 
+        # create plots of raw reward and duration data
         if self.plot_raw:
-          # create the raw rewards plot
           self.plot_wandb(self.train_episodes, self.train_rewards, E, R, "Raw rewards")
-
-          # create the raw durations plot
           self.plot_wandb(self.train_episodes, self.train_durations, E, D, "Raw durations")
 
+        # create plots for average rewards and durations
         if self.plot_avg:
-          # create the average rewards plot
           self.plot_wandb(self.episodes_avg, self.rewards_avg, E, R, 
                           f"Average rewards ({self.moving_avg_num} samples)")
-
-          # create the average durations plot
           self.plot_wandb(self.episodes_avg, self.durations_avg, E, D, 
                           f"Average durations ({self.moving_avg_num} samples)")
 
+        # plot the test time reward
         if self.plot_test_reward:
           self.plot_wandb(self.test_episodes, self.test_rewards, E, R, "Test rewards")
+
+        # plot the test time duration
+        if self.plot_test_duration:
+          self.plot_wandb(self.test_episodes, self.test_durations, E, D, "Test durations")
           
         if self.plot_test_metrics:
           # define performance metrics to examine
@@ -133,6 +135,7 @@ class TrainDQN():
 
         # finish by recording the last log time
         self.last_log = time.time()
+
       return
 
   @dataclass
