@@ -66,6 +66,38 @@ def make_rewards_negative(model):
 
   return model
 
+def sparse_rewards(model):
+  """
+  Have strong but sparse reward signals
+  """
+
+  # binary rewards                       reward   done   trigger
+  model.env.mj.set.step_num.set          ( -1,  False,   1)
+  model.env.mj.set.lifted.set            (0.2,  False,   1)
+  model.env.mj.set.target_height.set     (0.2,  False,   1)
+  model.env.mj.set.object_stable.set     (0.2,  False,   1)
+  
+  # linear rewards                       reward   done   trigger min   max  overshoot
+  model.env.mj.set.finger_force.set      (0.2,  False,   1,    0.2,  1.0,  -1)
+  model.env.mj.set.palm_force.set        (0.2,  False,   1,    1.0,  6.0,  -1)
+
+  # penalties                            reward   done   trigger min   max  overshoot
+  model.env.mj.set.exceed_limits.set     (-0.5, False,   1)
+  model.env.mj.set.exceed_axial.set      (-0.5, False,   1,    3.0,  6.0,  -1)
+  model.env.mj.set.exceed_lateral.set    (-0.5, False,   1,    4.0,  6.0,  -1)
+  model.env.mj.set.exceed_palm.set       (-0.5, False,   1,    6.0,  10.0, -1)
+
+  # end criteria                         reward   done   trigger
+  model.env.mj.set.stable_height.set     (0.0,    True,    1)
+  model.env.mj.set.oob.set               (-10.0,   True,    1)
+
+  # terminate episode when reward drops below -1.01, also cap at this value
+  model.env.mj.set.quit_on_reward_below = -10000
+  model.env.mj.set.quit_reward_capped = True
+
+  return model
+
+
 def finger_only_lifting(model):
   # try only to lift objects with the fingers
 
@@ -117,7 +149,7 @@ def apply_to_all_models(model):
   model.params.min_memory_replay = 5_000
   model.params.save_freq = 2_000
   model.params.test_freq = 2_000
-  model.params.wandb_freq_s = 10
+  model.params.wandb_freq_s = 300
 
   # ensure debug mode is off
   model.env.log_level = 0

@@ -34,6 +34,10 @@ class TrainDQN():
       """
       # parameters to set
       self.moving_avg_num = 50
+      self.plot_raw = False
+      self.plot_avg = True
+      self.plot_test_reward = True
+      self.plot_test_metrics = True
       # general
       self.actions_done = 0
       self.episodes_done = 0
@@ -80,46 +84,52 @@ class TrainDQN():
         R = "Reward"
         D = "Duration"
 
-        # create the raw rewards plot
-        self.plot_wandb(self.train_episodes, self.train_rewards, E, R, "Raw rewards")
+        if self.plot_raw:
+          # create the raw rewards plot
+          self.plot_wandb(self.train_episodes, self.train_rewards, E, R, "Raw rewards")
 
-        # create the raw durations plot
-        self.plot_wandb(self.train_episodes, self.train_durations, E, D, "Raw durations")
+          # create the raw durations plot
+          self.plot_wandb(self.train_episodes, self.train_durations, E, D, "Raw durations")
 
-        # create the average rewards plot
-        self.plot_wandb(self.episodes_avg, self.rewards_avg, E, R, 
-                        f"Average rewards ({self.moving_avg_num} samples)")
+        if self.plot_avg:
+          # create the average rewards plot
+          self.plot_wandb(self.episodes_avg, self.rewards_avg, E, R, 
+                          f"Average rewards ({self.moving_avg_num} samples)")
 
-        # create the average durations plot
-        self.plot_wandb(self.episodes_avg, self.durations_avg, E, D, 
-                        f"Average durations ({self.moving_avg_num} samples)")
+          # create the average durations plot
+          self.plot_wandb(self.episodes_avg, self.durations_avg, E, D, 
+                          f"Average durations ({self.moving_avg_num} samples)")
 
-        # define performance metrics to examine
-        good_metrics = [
-          [self.avg_p_lifted, "% Lifted"],
-          [self.avg_p_contact, "% Contact"],
-          [self.avg_p_palm_force, "% Palm contact"]
-        ]
-        bad_metrics = [
-          [self.avg_p_exceed_limits, "% Exceed limits"],
-          [self.avg_p_exceed_axial, "% Exceed axial force"],
-          [self.avg_p_exceed_lateral, "% Exceed bending"],
-          [self.avg_p_exceed_palm, "% Exceed palm force"]
-        ]
+        if self.plot_test_reward:
+          self.plot_wandb(self.test_episodes, self.test_rewards, E, R, "Test rewards")
+          
+        if self.plot_test_metrics:
+          # define performance metrics to examine
+          good_metrics = [
+            [self.avg_p_lifted, "% Lifted"],
+            [self.avg_p_contact, "% Contact"],
+            [self.avg_p_palm_force, "% Palm contact"]
+          ]
+          bad_metrics = [
+            [self.avg_p_exceed_limits, "% Exceed limits"],
+            [self.avg_p_exceed_axial, "% Exceed axial force"],
+            [self.avg_p_exceed_lateral, "% Exceed bending"],
+            [self.avg_p_exceed_palm, "% Exceed palm force"]
+          ]
 
-        # create test results plots
-        wandb.log({"Test good performance metrics" : wandb.plot.line_series(
-          xs=[self.test_episodes for i in range(len(good_metrics))],
-          ys=[x[0] for x in good_metrics],
-          keys=[x[1] for x in good_metrics],
-          title="Test good performance metrics", xname="Training episodes"
-        )})
-        wandb.log({"Test bad performance metrics" : wandb.plot.line_series(
-          xs=[self.test_episodes for i in range(len(bad_metrics))],
-          ys=[x[0] for x in bad_metrics],
-          keys=[x[1] for x in bad_metrics],
-          title="Test bad performance metrics", xname="Training episodes"
-        )})
+          # create test results plots
+          wandb.log({"Test good performance metrics" : wandb.plot.line_series(
+            xs=[self.test_episodes for i in range(len(good_metrics))],
+            ys=[x[0] for x in good_metrics],
+            keys=[x[1] for x in good_metrics],
+            title="Test good performance metrics", xname="Training episodes"
+          )})
+          wandb.log({"Test bad performance metrics" : wandb.plot.line_series(
+            xs=[self.test_episodes for i in range(len(bad_metrics))],
+            ys=[x[0] for x in bad_metrics],
+            keys=[x[1] for x in bad_metrics],
+            title="Test bad performance metrics", xname="Training episodes"
+          )})
 
         # finish by recording the last log time
         self.last_log = time.time()
