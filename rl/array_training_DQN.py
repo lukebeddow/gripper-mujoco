@@ -72,24 +72,24 @@ def sparse_rewards(model):
   """
 
   # binary rewards                       reward   done   trigger
-  model.env.mj.set.step_num.set          ( -1,  False,   1)
-  model.env.mj.set.lifted.set            (0.2,  False,   1)
-  model.env.mj.set.target_height.set     (0.2,  False,   1)
-  model.env.mj.set.object_stable.set     (0.2,  False,   1)
+  model.env.mj.set.step_num.set          (0,      False,   1)
+  model.env.mj.set.lifted.set            (0,      False,   1)
+  model.env.mj.set.target_height.set     (0,      False,   1)
   
   # linear rewards                       reward   done   trigger min   max  overshoot
-  model.env.mj.set.finger_force.set      (0.2,  False,   1,    0.2,  1.0,  -1)
-  model.env.mj.set.palm_force.set        (0.2,  False,   1,    1.0,  6.0,  -1)
+  model.env.mj.set.finger_force.set      (0.0,    False,   1,    0.2,  1.0,  -1)
+  model.env.mj.set.palm_force.set        (0.0,    False,   1,    1.0,  6.0,  -1)
 
   # penalties                            reward   done   trigger min   max  overshoot
-  model.env.mj.set.exceed_limits.set     (-0.5, False,   1)
-  model.env.mj.set.exceed_axial.set      (-0.5, False,   1,    3.0,  6.0,  -1)
-  model.env.mj.set.exceed_lateral.set    (-0.5, False,   1,    4.0,  6.0,  -1)
-  model.env.mj.set.exceed_palm.set       (-0.5, False,   1,    6.0,  10.0, -1)
+  model.env.mj.set.exceed_limits.set     (0.0,    False,   1)
+  model.env.mj.set.exceed_axial.set      (0.0,    False,   1,    3.0,  6.0,  -1)
+  model.env.mj.set.exceed_lateral.set    (0.0,    False,   1,    4.0,  6.0,  -1)
+  model.env.mj.set.exceed_palm.set       (0.0,    False,   1,    6.0,  10.0, -1)
 
   # end criteria                         reward   done   trigger
-  model.env.mj.set.stable_height.set     (0.0,    True,    1)
-  model.env.mj.set.oob.set               (-10.0,   True,    1)
+  model.env.mj.set.object_stable.set     (1,      True,   1)
+  model.env.mj.set.stable_height.set     (0.0,    False,    1)
+  model.env.mj.set.oob.set               (0,      True,    1)
 
   # terminate episode when reward drops below -1.01, also cap at this value
   model.env.mj.set.quit_on_reward_below = -10000
@@ -230,7 +230,7 @@ if __name__ == "__main__":
   if inputarg <= 5:
 
     # now form the network
-    network = networks.DQN_2L60
+    network = networks.DQN_3L60
 
     model.env.max_episode_steps = 200
     model.env.mj.set.motor_state_sensor.read_rate = -2
@@ -238,30 +238,72 @@ if __name__ == "__main__":
     model.env.mj.set.wrist_sensor_Z.in_use = True
 
     if inputarg == 1:
-      model.wandb_note = "10x negative rewards, DQN_2L60"
-      model = make_rewards_negative(model)
-      model.env.mj.set.scale_rewards(10)
+      model.wandb_note = "sparse rewards 1"
+      model = sparse_rewards(model)
       model.train(network)
 
     elif inputarg == 2:
-      model.wandb_note = "100x negative rewards, DQN_2L60"
-      model = make_rewards_negative(model)
-      model.env.mj.set.scale_rewards(100)
+      model.wandb_note = "sparse rewards 2"
+      model = sparse_rewards(model)
       model.train(network)
 
     elif inputarg == 3:
-      model.wandb_note = "10x mixed rewards, DQN_2L60"
-      model = mixed_rewards(model)
-      model.env.mj.set.scale_rewards(10)
+      model.wandb_note = "sparse rewards with early termination 1"
+      model = sparse_rewards(model)
+      # linear rewards                       reward   done   trigger min   max  overshoot
+      model.env.mj.set.exceed_limits.set     (0.0,    True,   3)
+      model.env.mj.set.exceed_axial.set      (0.0,    True,   3,    3.0,  6.0,  -1)
+      model.env.mj.set.exceed_lateral.set    (0.0,    True,   3,    4.0,  6.0,  -1)
+      model.env.mj.set.exceed_palm.set       (0.0,    True,   3,    6.0,  10.0, -1)
       model.train(network)
 
     elif inputarg == 4:
-      model.wandb_note = "100x mixed rewards, DQN_2L60"
-      model = mixed_rewards(model)
-      model.env.mj.set.scale_rewards(100)
+      model.wandb_note = "sparse rewards with early termination 2"
+      model = sparse_rewards(model)
+      # linear rewards                       reward   done   trigger min   max  overshoot
+      model.env.mj.set.exceed_limits.set     (0.0,    True,   3)
+      model.env.mj.set.exceed_axial.set      (0.0,    True,   3,    3.0,  6.0,  -1)
+      model.env.mj.set.exceed_lateral.set    (0.0,    True,   3,    4.0,  6.0,  -1)
+      model.env.mj.set.exceed_palm.set       (0.0,    True,   3,    6.0,  10.0, -1)
       model.train(network)
 
   exit()
+
+  # if inputarg <= 5:
+
+  #   # now form the network
+  #   network = networks.DQN_2L60
+
+  #   model.env.max_episode_steps = 200
+  #   model.env.mj.set.motor_state_sensor.read_rate = -2
+  #   model.env.mj.set.axial_gauge.in_use = True
+  #   model.env.mj.set.wrist_sensor_Z.in_use = True
+
+  #   if inputarg == 1:
+  #     model.wandb_note = "10x negative rewards, DQN_2L60"
+  #     model = make_rewards_negative(model)
+  #     model.env.mj.set.scale_rewards(10)
+  #     model.train(network)
+
+  #   elif inputarg == 2:
+  #     model.wandb_note = "100x negative rewards, DQN_2L60"
+  #     model = make_rewards_negative(model)
+  #     model.env.mj.set.scale_rewards(100)
+  #     model.train(network)
+
+  #   elif inputarg == 3:
+  #     model.wandb_note = "10x mixed rewards, DQN_2L60"
+  #     model = mixed_rewards(model)
+  #     model.env.mj.set.scale_rewards(10)
+  #     model.train(network)
+
+  #   elif inputarg == 4:
+  #     model.wandb_note = "100x mixed rewards, DQN_2L60"
+  #     model = mixed_rewards(model)
+  #     model.env.mj.set.scale_rewards(100)
+  #     model.train(network)
+
+  # exit()
 
   # ----- 1 - 5, default network, negative rewards, vary number of sensors ----- #
   if inputarg <= 5:
