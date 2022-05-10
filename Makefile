@@ -33,6 +33,9 @@ OUTPY := rl/env/mjpy
 # default object set name
 DEFAULT_OBJECTSET = set1_nocuboid_525
 
+# do we want to prevent any rendering libraries from compiling (1=True, 0=false)
+PREVENT_RENDERING = 0
+
 # for generating models, non-essential feature
 MODELBASH := generate_models.sh
 MODELDIR := /home/luke/gripper_repo_ws/src/gripper_v2/gripper_description/urdf/mujoco
@@ -66,6 +69,15 @@ PYBIND = $(COMMON) -fPIC -Wall -shared #-I$(PYTHON_PATH) $(PY_LIBS)
 
 # get every source file and each corresponding dependecy file
 SOURCES := $(wildcard $(SOURCEDIR)/*.cpp)
+
+# are we going to prevent any rendering libraries compiling
+ifeq ($(PREVENT_RENDERING), 1)
+SOURCES := $(filter-out $(SOURCEDIR)/rendering.cpp, $(SOURCES))
+else
+UITOOLS = $(BUILDDIR)/uitools.o
+endif
+
+# get the dependencies of each source file
 DEPENDS := $(patsubst $(SOURCEDIR)/%.cpp, $(BUILDDEP)/%.d, $(SOURCES))
 
 # define targets in the output directory
@@ -101,7 +113,7 @@ everything: cpp py models
 debug: cpp
 
 .PHONY: cluster
-cluster: py
+cluster: py $(OUTCPP)/test
 
 # compile the uitools object file which is used by both cpp and python targets
 # ADDED -fPIC FOR CLUSTER TO WORK
@@ -120,9 +132,9 @@ $(PYTARGETOBJ): $(BUILDDIR)/%.o : $(SOURCEDIR)/%.cpp
 	g++ $(PYBIND) -c $< -o $@
 
 # build targets
-$(CPPTARGETS): $(OUTCPP)% : $(BUILDDIR)%.o $(BUILDDIR)/uitools.o $(CPPSHAREDOBJ)
+$(CPPTARGETS): $(OUTCPP)% : $(BUILDDIR)%.o $(UITOOLS) $(CPPSHAREDOBJ)
 	g++ $(COMMON) $^ $(CORE_LIBS) $(RENDER_LIBS) -o $@
-$(PYTARGETS): $(OUTPY)%.so : $(BUILDDIR)%.o $(BUILDDIR)/uitools.o $(PYSHAREDOBJ)
+$(PYTARGETS): $(OUTPY)%.so : $(BUILDDIR)%.o $(UITOOLS) $(PYSHAREDOBJ)
 	g++ $(PYBIND) $^ $(CORE_LIBS) $(RENDER_LIBS) -o $@
 
 # if not cleaning, declare the dependencies of each object file (headers and source)

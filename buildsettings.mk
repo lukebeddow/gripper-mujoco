@@ -74,11 +74,8 @@ DEFINE_VAR = -DLUKE_CLUSTER -DARMA_DONT_USE_WRAPPER \
 						 -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
 						 -DLUKE_MACHINE='"$(MACHINE)"'
 
-# # what is different in cluster-old
-# MUJOCO_PATH = /home/lbeddow/clusterlibs/mujoco/mujoco210
-# RENDER_PATH = # none, use system library
-# CORE_LIBS = -L$(MUJOCO_PATH)/bin -lmujoco210 -lblas -llapack
-# RENDER_LIBS = -lGL -lglew $(MUJOCO_PATH)/bin/libglfw.so.3
+# we do not want to compile any rendering files
+PREVENT_RENDERING := 1
 
 endif
 

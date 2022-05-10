@@ -94,6 +94,12 @@ To run the simluation and play around, use run ```bin/mysimulate task 0```.
 
 To run the python training, have a look at ```rl/TrainDQN.py```.
 
+Note: in order to run you will need to tell the computer about the mujoco shared library which will be in the ```lib``` folder of you mujoco 2.1.5 installation. The computer checks for shared libraries listed in the ```LD_LIBRARY_PATH``` environment variable, so add the path to the mujoco library to this variable:
+
+```bash
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/mujoco-2.1.5/lib
+```
+
 ## Cluster
 
 For building on the cluster, use:
