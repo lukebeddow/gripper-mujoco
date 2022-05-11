@@ -4,16 +4,14 @@
 
 namespace py = pybind11;
 
-int add(int i, int j) {
-  return i + j;
-}
-
 // create a python module, called bind (must be saved in bind.so)
 PYBIND11_MODULE(bind, m) {
 
   m.doc() = "A module to wrap mujoco into python"; // module docstring
 
-  m.def("add", &add, "A function which adds two numbers");
+  // functions
+  m.def("calc_rewards", &calc_rewards);
+  m.def("add_events", &add_events);
   
   // main wrapper
   py::class_<MjClass>(m, "MjClass")
@@ -58,6 +56,8 @@ PYBIND11_MODULE(bind, m) {
     .def("get_number_of_objects", &MjClass::get_number_of_objects)
     .def("get_current_object_name", &MjClass::get_current_object_name)
     .def("get_test_report", &MjClass::get_test_report)
+
+    // exposed variables
     .def_readwrite("set", &MjClass::s_)
     .def_readwrite("model_folder_path", &MjClass::model_folder_path)
     .def_readwrite("object_set_name", &MjClass::object_set_name)
@@ -187,6 +187,54 @@ PYBIND11_MODULE(bind, m) {
     ))
     ;
 
+  py::class_<MjType::EventTrack::Row>(m, "Row")
+
+    #define XX(name, type, value)
+    #define SS(name, in_use, norm, readrate)
+    #define BR(name, reward, done, trigger) \
+              .def_readonly(#name, &MjType::EventTrack::Row::name)
+    #define LR(name, reward, done, trigger, min, max, overshoot) \
+              .def_readonly(#name, &MjType::EventTrack::Row::name)
+      // run the macro to create the binding code
+      LUKE_MJSETTINGS
+    #undef XX
+    #undef SS
+    #undef BR
+    #undef LR
+    ;
+
+  py::class_<MjType::EventTrack::Abs>(m, "Abs")
+
+    #define XX(name, type, value)
+    #define SS(name, in_use, norm, readrate)
+    #define BR(name, reward, done, trigger) \
+              .def_readonly(#name, &MjType::EventTrack::Abs::name)
+    #define LR(name, reward, done, trigger, min, max, overshoot) \
+              .def_readonly(#name, &MjType::EventTrack::Abs::name)
+      // run the macro to create the binding code
+      LUKE_MJSETTINGS
+    #undef XX
+    #undef SS
+    #undef BR
+    #undef LR
+    ;
+    
+  py::class_<MjType::EventTrack::Percent>(m, "Percent")
+
+    #define XX(name, type, value)
+    #define SS(name, in_use, norm, readrate)
+    #define BR(name, reward, done, trigger) \
+              .def_readonly(#name, &MjType::EventTrack::Percent::name)
+    #define LR(name, reward, done, trigger, min, max, overshoot) \
+              .def_readonly(#name, &MjType::EventTrack::Percent::name)
+      // run the macro to create the binding code
+      LUKE_MJSETTINGS
+    #undef XX
+    #undef SS
+    #undef BR
+    #undef LR
+    ;
+
   // tracking of important events in the simulation
   py::class_<MjType::EventTrack>(m, "EventTrack")
 
@@ -194,8 +242,9 @@ PYBIND11_MODULE(bind, m) {
 
     #define XX(name, type, value)
     #define SS(name, in_use, norm, readrate)
-    #define BR(name, reward, done, trigger) \
+    #define BR(name, reward, done, trigger)                               \
               .def_readonly(#name, &MjType::EventTrack::name)
+
     #define LR(name, reward, done, trigger, min, max, overshoot) \
               .def_readonly(#name, &MjType::EventTrack::name)
       // run the macro to create the binding code

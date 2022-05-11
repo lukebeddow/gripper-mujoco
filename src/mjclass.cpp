@@ -1514,7 +1514,7 @@ void MjType::EventTrack::print()
   #undef LR
 }
 
-void update_events(MjType::EventTrack events, MjType::Settings settings)
+void update_events(MjType::EventTrack& events, MjType::Settings& settings)
 {
   /* update the count of each event and reset recent event information */
 
@@ -1545,7 +1545,7 @@ void update_events(MjType::EventTrack events, MjType::Settings settings)
   #undef LR
 }
 
-float calc_rewards(MjType::EventTrack events, MjType::Settings settings)
+float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings)
 {
   /* calculate the reward based on the simulation events */
 
@@ -1603,6 +1603,34 @@ float calc_rewards(MjType::EventTrack events, MjType::Settings settings)
   // }
 
   return reward;
+}
+
+MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2)
+{
+  /* add the counts of two events */
+
+  MjType::EventTrack out;
+
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, USED, NORMALISE, READ_RATE)
+
+  #define BR(NAME, REWARD, DONE, TRIGGER)                            \
+            out.row.NAME = (bool)e1.row.NAME + (bool)e2.row.NAME;    \
+            out.abs.NAME = e1.abs.NAME + e2.abs.NAME;
+
+  #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)       \
+            out.row.NAME = (bool)e1.row.NAME + (bool)e2.row.NAME;    \
+            out.abs.NAME = e1.abs.NAME + e2.abs.NAME;
+
+    // run the macro to create the code
+    LUKE_MJSETTINGS
+    
+  #undef XX
+  #undef SS 
+  #undef BR
+  #undef LR
+
+  return out;
 }
 
 // end

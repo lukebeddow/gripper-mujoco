@@ -209,7 +209,7 @@ namespace MjType
       // run the macro to create the code
       LUKE_MJSETTINGS
     #undef XX
-    #undef SS
+    #undef SS 
     #undef BR
     #undef LR
     } row;
@@ -228,6 +228,20 @@ namespace MjType
     #undef LR
     } abs;
 
+    // tracking the percentage occurance (based on step_num)
+    struct Percent {
+    #define XX(NAME, TYPE, VALUE)
+    #define SS(NAME, USED, NORMALISE, READ_RATE)
+    #define BR(NAME, REWARD, DONE, TRIGGER) float NAME { 0.0 };
+    #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) float NAME { 0.0 };
+      // run the macro to create the code
+      LUKE_MJSETTINGS
+    #undef XX
+    #undef SS 
+    #undef BR
+    #undef LR
+    } percent;
+
     void print();
 
     void reset()
@@ -240,16 +254,36 @@ namespace MjType
       #define BR(NAME, REWARD, DONE, TRIGGER)                          \
                 NAME = false;                                          \
                 row.NAME = 0;                                          \
-                abs.NAME = 0;                                          
+                abs.NAME = 0;                                          \
+                percent.NAME = 0.0;
 
       #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)     \
                 NAME = 0.0;                                            \
                 row.NAME = 0;                                          \
-                abs.NAME = 0;                                          
+                abs.NAME = 0;                                          \
+                percent.NAME = 0.0;
 
         // run the macro to create the code
         LUKE_MJSETTINGS
 
+      #undef XX
+      #undef SS
+      #undef BR
+      #undef LR
+    }
+
+    void calculate_percentage()
+    {
+      /* calculate the percentage of steps where this event occured */
+
+      #define XX(NAME, TYPE, VALUE)
+      #define SS(NAME, USED, NORMALISE, READ_RATE)
+      #define BR(NAME, REWARD, DONE, TRIGGER) \
+                percent.NAME = abs.NAME / (float) abs.step_num;
+      #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) \
+                percent.NAME = abs.NAME / (float) abs.step_num;
+        // run the macro to create the code
+        LUKE_MJSETTINGS
       #undef XX
       #undef SS
       #undef BR
@@ -619,7 +653,8 @@ public:
 // utility functions
 float linear_reward(float val, float min, float max, float overshoot);
 float normalise_between(float val, float min, float max);
-void update_events(MjType::EventTrack events, MjType::Settings settings);
-float calc_rewards(MjType::EventTrack events, MjType::Settings settings);
+void update_events(MjType::EventTrack& events, MjType::Settings& settings);
+float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings);
+MjType::EventTrack add_events(MjType::EventTrack e1, MjType::EventTrack e2);
 
 #endif // MJCLASS_H_
