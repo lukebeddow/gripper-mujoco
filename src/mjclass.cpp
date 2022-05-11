@@ -541,120 +541,132 @@ void MjClass::update_env()
 
   /* ----- detect state of binary events ----- */
 
+  // another step has been made
+  env_.cnt.step_num = true;
+
   // lifted is true if ground force is 0 and lift distance is exceeded
-  bool lifted = false;
   if (env_.obj.ground_force.magnitude3() < ftol)
-    lifted = true;
+    env_.cnt.lifted = true;
 
   // check if the object has gone out of bounds
-  bool out_of_bounds = false;
   if (env_.obj.qpos.x > s_.oob_distance or env_.obj.qpos.x < -s_.oob_distance or
       env_.obj.qpos.y > s_.oob_distance or env_.obj.qpos.y < -s_.oob_distance)
-    out_of_bounds = true;
+    env_.cnt.oob = true;
 
-  // has the object been lifted above the target height and not oob
-  bool target_height = false;
+  // check if the object has been dropped (env_.cnt.lifted must already be set)
+  env_.cnt.dropped = 
+    // if lastdropped==false, newlifted==false, and lastlifted==true, set dropped=1
+    ((not env_.cnt.row.dropped * not env_.cnt.lifted * env_.cnt.row.lifted) ? 1
+    // else if lifted==true -> set dropped=0
+    : (env_.cnt.lifted ? 0 
+    // else if lastdropped==true +=1 to it, otherwise -> set dropped=0
+    : (env_.cnt.row.dropped ? env_.cnt.row.dropped + 1 : 0)));
+
+  // lifted above the target height and not oob (env_.cnt.oob must be set)
   if (env_.obj.qpos.z > env_.start_qpos.z + s_.done_height
-      and not out_of_bounds)
-    target_height = true;
+      and not env_.cnt.oob)
+    env_.cnt.target_height = true;
 
-  // detect any contact with the object
-  bool object_contact = false;
+  // detect any gripper contact with the object
   if (finger1_force_mag > ftol or
       finger2_force_mag > ftol or
       finger3_force_mag > ftol or
       palm_force_mag > ftol)
-    object_contact = true;
+    env_.cnt.object_contact = true;
 
-  // check if object is stable (must also be lifted)
-  bool object_stable = false;
+  // check if object is stable (must also be lifted and env_.cnt.lifted set)
   if (finger1_force_mag > s_.stable_finger_force and
       finger2_force_mag > s_.stable_finger_force and
       finger3_force_mag > s_.stable_finger_force and
-      palm_force_mag > s_.stable_palm_force and lifted)
-    object_stable = true;
+      palm_force_mag > s_.stable_palm_force and env_.cnt.lifted)
+    env_.cnt.object_stable = true;
 
-  bool stable_height = false;
-  if (object_stable and target_height)
-    stable_height = true;
+  // if stable and lifted to target (need env_.cnt.object_stable and target_height set)
+  if (env_.cnt.object_stable and env_.cnt.target_height)
+    env_.cnt.stable_height = true;
 
   /* ----- detect state of linear events (also save reward scaled value) ----- */
 
-  // check if the finger limit axial force is exceeded
-  s_.exceed_axial.value = env_.grp.peak_finger_axial_force;       // don't forget this!
-  bool exceed_axial = false;
-  if (s_.exceed_axial.value > s_.exceed_axial.min)
-    exceed_axial = true;
+  env_.cnt.exceed_axial = env_.grp.peak_finger_axial_force;
+  env_.cnt.exceed_lateral = env_.grp.peak_finger_lateral_force;
+  env_.cnt.palm_force = env_.obj.palm_axial_force * env_.cnt.lifted; // must be lifted
+  env_.cnt.exceed_palm = env_.obj.palm_axial_force;
+  env_.cnt.finger_force = env_.obj.avg_finger_force;
 
-  // check if the finger lateral force limit is exceeded
-  s_.exceed_lateral.value = env_.grp.peak_finger_lateral_force;   // don't forget this!
-  bool exceed_lateral = false;
-  if (s_.exceed_lateral.value > s_.exceed_lateral.min)
-    exceed_lateral = true;
+  // // check if the finger limit axial force is exceeded
+  // s_.exceed_axial.value = env_.grp.peak_finger_axial_force;       // don't forget this!
+  // if (s_.exceed_axial.value > s_.exceed_axial.min)
+  //   env_.cnt.exceed_axial = true;
 
-  // detect if we are in a good palm force range (must be lifted)
-  s_.palm_force.value = env_.obj.palm_axial_force;                // don't forget this!
-  bool palm_force = false;
-  if (s_.palm_force.value > s_.palm_force.min and
-      s_.palm_force.value < s_.palm_force.overshoot and lifted)
-    palm_force = true;
+  // // check if the finger lateral force limit is exceeded
+  // s_.exceed_lateral.value = env_.grp.peak_finger_lateral_force;   // don't forget this!
+  // if (s_.exceed_lateral.value > s_.exceed_lateral.min)
+  //   env_.cnt.exceed_lateral = true;
 
-  // detect if we exceed safe limits for palm force
-  s_.exceed_palm.value = env_.obj.palm_axial_force;               // don't forget this!
-  bool exceed_palm = false;
-  if (s_.exceed_palm.value > s_.exceed_palm.min)
-    exceed_palm = true;
+  // // detect if we are in a good palm force range (must be lifted and env_.cnt.lifted set)
+  // s_.palm_force.value = env_.obj.palm_axial_force;                // don't forget this!
+  // if (s_.palm_force.value > s_.palm_force.min and
+  //     s_.palm_force.value < s_.palm_force.overshoot and env_.cnt.lifted)
+  //   env_.cnt.palm_force = true;
 
-  // detect finger force on object
-  s_.finger_force.value = env_.obj.avg_finger_force;              // don't forget this!
-  bool finger_force = false;
-  if (s_.finger_force.value > s_.finger_force.min)
-    finger_force = true;
+  // // detect if we exceed safe limits for palm force
+  // s_.exceed_palm.value = env_.obj.palm_axial_force;               // don't forget this!
+  // if (s_.exceed_palm.value > s_.exceed_palm.min)
+  //   env_.cnt.exceed_palm = true;
 
-  /* ----- update count of events in a row ----- */
+  // // detect finger force on object
+  // s_.finger_force.value = env_.obj.avg_finger_force;              // don't forget this!
+  // if (s_.finger_force.value > s_.finger_force.min)
+  //   env_.cnt.finger_force = true;
 
-  env_.cnt.step_num += 1;
+  // new code
+  update_events(env_.cnt, s_);
+  if (s_.debug) env_.cnt.print();
 
-  // update dropped - this is a complex boolean expression
-  // if dropped==false, lifted==false, and cnt.lifted==true, set dropped=1
-  env_.cnt.dropped = ((not env_.cnt.dropped * not lifted * env_.cnt.lifted) ? 1
-    // otherwise, if lifted==true, set dropped=0, else true+=1 and false=0
-    : (lifted ? 0 : (env_.cnt.dropped ? env_.cnt.dropped + 1 : 0)));
+  // /* ----- update count of events in a row ----- */
 
-  // update the rest, if=0 do nothing, if!=0, increment by 1
-  env_.cnt.lifted = env_.cnt.lifted * lifted + lifted;
-  env_.cnt.oob = env_.cnt.oob * out_of_bounds + out_of_bounds;
-  env_.cnt.target_height = env_.cnt.target_height * target_height + target_height;
-  env_.cnt.object_stable = env_.cnt.object_stable * object_stable + object_stable;
-  env_.cnt.exceed_axial = env_.cnt.exceed_axial * exceed_axial + exceed_axial;
-  env_.cnt.exceed_lateral = env_.cnt.exceed_lateral * exceed_lateral + exceed_lateral;
-  env_.cnt.palm_force = env_.cnt.palm_force * palm_force + palm_force;
-  env_.cnt.object_contact = env_.cnt.object_contact * object_contact + object_contact;
-  env_.cnt.exceed_palm = env_.cnt.exceed_palm * exceed_palm + exceed_palm;
-  env_.cnt.finger_force = env_.cnt.finger_force * finger_force + finger_force;
-  env_.cnt.stable_height = env_.cnt.stable_height * stable_height + stable_height;
-  // env_.cnt.exceed_limits is already set in set_action()
+  // env_.cnt.step_num += 1;
 
-  if (s_.debug) { std::cout << "cnt: "; env_.cnt.print(); }
+  // // update dropped - this is a complex boolean expression
+  // // if dropped==false, lifted==false, and cnt.lifted==true, set dropped=1
+  // env_.cnt.dropped = ((not env_.cnt.dropped * not lifted * env_.cnt.lifted) ? 1
+  //   // otherwise, if lifted==true, set dropped=0, else true+=1 and false=0
+  //   : (lifted ? 0 : (env_.cnt.dropped ? env_.cnt.dropped + 1 : 0)));
 
-  /* ----- update absolute count of events ----- */
+  // // update the rest, if=0 do nothing, if!=0, increment by 1
+  // env_.cnt.lifted = env_.cnt.lifted * lifted + lifted;
+  // env_.cnt.oob = env_.cnt.oob * out_of_bounds + out_of_bounds;
+  // env_.cnt.target_height = env_.cnt.target_height * target_height + target_height;
+  // env_.cnt.object_stable = env_.cnt.object_stable * object_stable + object_stable;
+  // env_.cnt.exceed_axial = env_.cnt.exceed_axial * exceed_axial + exceed_axial;
+  // env_.cnt.exceed_lateral = env_.cnt.exceed_lateral * exceed_lateral + exceed_lateral;
+  // env_.cnt.palm_force = env_.cnt.palm_force * palm_force + palm_force;
+  // env_.cnt.object_contact = env_.cnt.object_contact * object_contact + object_contact;
+  // env_.cnt.exceed_palm = env_.cnt.exceed_palm * exceed_palm + exceed_palm;
+  // env_.cnt.finger_force = env_.cnt.finger_force * finger_force + finger_force;
+  // env_.cnt.stable_height = env_.cnt.stable_height * stable_height + stable_height;
+  // // env_.cnt.exceed_limits is already set in set_action()
 
-  env_.abs_cnt.step_num = env_.cnt.step_num;
-  if (env_.cnt.lifted) env_.abs_cnt.lifted += 1;
-  if (env_.cnt.oob) env_.abs_cnt.oob += 1;
-  if (env_.cnt.dropped) env_.abs_cnt.dropped += 1;
-  if (env_.cnt.target_height) env_.abs_cnt.target_height += 1;
-  if (env_.cnt.exceed_limits) env_.abs_cnt.exceed_limits += 1;
-  if (env_.cnt.exceed_axial) env_.abs_cnt.exceed_axial += 1;
-  if (env_.cnt.exceed_lateral) env_.abs_cnt.exceed_lateral += 1;
-  if (env_.cnt.object_stable) env_.abs_cnt.object_stable += 1;
-  if (env_.cnt.palm_force) env_.abs_cnt.palm_force += 1;
-  if (env_.cnt.object_contact) env_.abs_cnt.object_contact += 1;
-  if (env_.cnt.exceed_palm) env_.abs_cnt.exceed_palm += 1;
-  if (env_.cnt.finger_force) env_.abs_cnt.finger_force += 1;
-  if (env_.cnt.stable_height) env_.abs_cnt.stable_height += 1;
+  // if (s_.debug) { std::cout << "cnt: "; env_.cnt.print(); }
 
-  if (s_.debug) { std::cout << "abs_cnt: "; env_.abs_cnt.print(); }
+  // /* ----- update absolute count of events ----- */
+
+  // env_.abs_cnt.step_num = env_.cnt.step_num;
+  // if (env_.cnt.lifted) env_.abs_cnt.lifted += 1;
+  // if (env_.cnt.oob) env_.abs_cnt.oob += 1;
+  // if (env_.cnt.dropped) env_.abs_cnt.dropped += 1;
+  // if (env_.cnt.target_height) env_.abs_cnt.target_height += 1;
+  // if (env_.cnt.exceed_limits) env_.abs_cnt.exceed_limits += 1;
+  // if (env_.cnt.exceed_axial) env_.abs_cnt.exceed_axial += 1;
+  // if (env_.cnt.exceed_lateral) env_.abs_cnt.exceed_lateral += 1;
+  // if (env_.cnt.object_stable) env_.abs_cnt.object_stable += 1;
+  // if (env_.cnt.palm_force) env_.abs_cnt.palm_force += 1;
+  // if (env_.cnt.object_contact) env_.abs_cnt.object_contact += 1;
+  // if (env_.cnt.exceed_palm) env_.abs_cnt.exceed_palm += 1;
+  // if (env_.cnt.finger_force) env_.abs_cnt.finger_force += 1;
+  // if (env_.cnt.stable_height) env_.abs_cnt.stable_height += 1;
+
+  // if (s_.debug) { std::cout << "abs_cnt: "; env_.abs_cnt.print(); }
   
   return;
 }
@@ -797,10 +809,12 @@ void MjClass::set_action(int action)
    
   }
 
-  // save if we exceeded limits
-  bool exceed_limits = not wl;
-  env_.cnt.exceed_limits *= exceed_limits;  // wipe to zero if false
-  env_.cnt.exceed_limits += exceed_limits;  // increment by one if true
+  // // save if we exceeded limits
+  // bool exceed_limits = not wl;
+  // env_.cnt.exceed_limits *= exceed_limits;  // wipe to zero if false
+  // env_.cnt.exceed_limits += exceed_limits;  // increment by one if true
+
+  env_.cnt.exceed_limits = not wl;
 }
 
 bool MjClass::is_done()
@@ -1098,42 +1112,40 @@ float MjClass::reward()
 {
   /* calculate the reward available at the current simulation state */
 
-  float reward = 0;
+  // float reward = 0;
 
-  /* ----- binary rewards ----- */
+  // // general and sensor settings not used
+  // #define XX(NAME, TYPE, VALUE)
+  // #define SS(NAME, USE, NORM, READRATE)
 
-  // general and sensor settings not used
-  #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USE, NORM, READRATE)
-
-  /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
-     eg instead of using TRIGGER we need to use s_.NAME.trigger */
-  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)                                 \
-            if (env_.cnt.NAME >= s_.NAME.trigger) {                              \
-              if (s_.debug)                                                      \
-                std::printf("%s triggered, reward += %.4f\n",                    \
-                  #NAME, s_.NAME.reward);                                        \
-              reward += s_.NAME.reward;                                          \
-            }
+  // /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
+  //    eg instead of using TRIGGER we need to use s_.NAME.trigger */
+  // #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)                                 \
+  //           if (env_.cnt.NAME >= s_.NAME.trigger) {                              \
+  //             if (s_.debug)                                                      \
+  //               std::printf("%s triggered, reward += %.4f\n",                    \
+  //                 #NAME, s_.NAME.reward);                                        \
+  //             reward += s_.NAME.reward;                                          \
+  //           }
         
-  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)   \
-            if (env_.cnt.NAME >= s_.NAME.trigger) {                              \
-              float fraction = linear_reward(s_.NAME.value, s_.NAME.min,         \
-                s_.NAME.max, s_.NAME.overshoot);                                 \
-              float scaled_reward = s_.NAME.reward * fraction;                   \
-              if (s_.debug)                                                      \
-                std::printf("%s triggered by value %.1f, reward += %.4f\n",      \
-                  #NAME, s_.NAME.value, s_.NAME.reward);                         \
-              reward += scaled_reward;                                           \
-            }
+  // #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)   \
+  //           if (env_.cnt.NAME >= s_.NAME.trigger) {                              \
+  //             float fraction = linear_reward(s_.NAME.value, s_.NAME.min,         \
+  //               s_.NAME.max, s_.NAME.overshoot);                                 \
+  //             float scaled_reward = s_.NAME.reward * fraction;                   \
+  //             if (s_.debug)                                                      \
+  //               std::printf("%s triggered by value %.1f, reward += %.4f\n",      \
+  //                 #NAME, s_.NAME.value, s_.NAME.reward);                         \
+  //             reward += scaled_reward;                                           \
+  //           }
             
-    // run the macro to create the code
-    LUKE_MJSETTINGS
+  //   // run the macro to create the code
+  //   LUKE_MJSETTINGS
 
-  #undef XX
-  #undef SS
-  #undef BR
-  #undef LR
+  // #undef XX
+  // #undef SS
+  // #undef BR
+  // #undef LR
 
   // example of binary reward snippet from above macro
   // if (env_.cnt.step_num >= s_.step_num.trigger) {
@@ -1152,6 +1164,9 @@ float MjClass::reward()
   //       "palm_force", s_.palm_force.value, s_.palm_force.reward); 
   //   reward += scaled_reward;
   // }
+
+  // new code
+  float reward = calc_rewards(env_.cnt, s_);
 
   // useful for testing, this value is not used in python
   env_.cumulative_reward += reward;
@@ -1220,8 +1235,7 @@ MjType::TestReport MjClass::get_test_report()
   testReport_.final_finger_force = (env_.obj.finger1_force.magnitude3() +
     env_.obj.finger2_force.magnitude3() + env_.obj.finger3_force.magnitude3()) / 3;
 
-  testReport_.final_cnt = env_.cnt;
-  testReport_.abs_cnt = env_.abs_cnt;
+  testReport_.cnt = env_.cnt;
 
   return testReport_;
 }
@@ -1479,20 +1493,116 @@ void MjType::Settings::scale_rewards(float scale)
 
 void MjType::EventTrack::print()
 {
-  
-  #define XX(name, type, value)
-  #define SS(name, in_use, normalise, readrate)
-  #define BR(name, reward, done, trigger) << #name << " = " << name << "; "
-  #define LR(name, reward, done, trigger, min, max, overshoot) \
-            << #name << " = " << name << "; "
-    
-    // run the macro and print all the event track fields
-    std::cout LUKE_MJSETTINGS << "\n";
+  /* print out the event track information */
+
+  std::cout << "EventTrack = row (abs); "
+
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define BR(NAME, REWARD, DONE, TRIGGER)                               \
+            << #NAME << " = " << row.NAME << " (" << abs.NAME << "); "
+
+  #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)          \
+            << #NAME << " = " << row.NAME << " (" << abs.NAME << "); "
+
+    // run the macro to create the code
+    LUKE_MJSETTINGS << "\n";
 
   #undef XX
   #undef SS
   #undef BR
   #undef LR
+}
+
+void update_events(MjType::EventTrack events, MjType::Settings settings)
+{
+  /* update the count of each event and reset recent event information */
+
+  bool active = false; // is a linear reward active
+
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define BR(NAME, REWARD, DONE, TRIGGER)                                    \
+            events.row.NAME = events.row.NAME * events.NAME + events.NAME;   \
+            events.abs.NAME += events.NAME;                                  \
+            events.NAME = false; // reset
+
+  #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)               \
+            active = false;                                                  \
+            if (events.NAME > settings.NAME.min and                          \
+                (events.NAME < settings.NAME.overshoot or                    \
+                 settings.NAME.overshoot < 0))                              \
+              { active = true; }                                             \
+            events.row.NAME = events.row.NAME * active + active;             \
+            events.abs.NAME += active;                                       \
+            events.NAME = 0.0; // reset
+
+    // run the macro to create the code
+    LUKE_MJSETTINGS
+  #undef XX
+  #undef SS
+  #undef BR
+  #undef LR
+}
+
+float calc_rewards(MjType::EventTrack events, MjType::Settings settings)
+{
+  /* calculate the reward based on the simulation events */
+
+  float reward = 0;
+
+  // general and sensor settings not used
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, USE, NORM, READRATE)
+
+  /* do NOT use other fields than name as it will pull values from simsettings.h,
+     eg instead of using TRIGGER we need to use settings.NAME.trigger */
+  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)                                \
+            if (events.row.NAME >= settings.NAME.trigger) {                     \
+              if (settings.debug)                                               \
+                std::printf("%s triggered, reward += %.4f\n",                   \
+                  #NAME, settings.NAME.reward);                                 \
+              reward += settings.NAME.reward;                                   \
+            }
+        
+  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)  \
+            if (events.row.NAME >= settings.NAME.trigger) {                     \
+              float fraction = linear_reward(settings.NAME.value,               \
+                settings.NAME.min, settings.NAME.max, settings.NAME.overshoot); \
+              float scaled_reward = settings.NAME.reward * fraction;            \
+              if (settings.debug)                                               \
+                std::printf("%s triggered by value %.1f, reward += %.4f\n",     \
+                  #NAME, settings.NAME.value, settings.NAME.reward);            \
+              reward += scaled_reward;                                          \
+            }
+            
+    // run the macro to create the code
+    LUKE_MJSETTINGS
+
+  #undef XX
+  #undef SS
+  #undef BR
+  #undef LR
+
+  /* example of binary reward snippet from above macro */
+  // if (events.row.step_num >= settings.step_num.trigger) {
+  //   if (settings.debug)                                                       
+  //     std::printf("%s triggered, reward += %.4f\n", "step_num", settings.step_num.reward);
+  //   reward += settings.step_num.reward;
+  // }
+
+  /* example of linear reward snippet from above macro */
+  // if (events.row.palm_force >= settings.palm_force.trigger) {
+  //   float fraction = linear_reward(settings.palm_force.value, settings.palm_force.min,
+  //     settings.palm_force.max, settings.palm_force.overshoot);
+  //   float scaled_reward = settings.palm_force.reward * fraction;
+  //   if (settings.debug)
+  //     std::printf("%s triggered by value %.1f, reward += %.4f\n",
+  //       "palm_force", settings.palm_force.value, settings.palm_force.reward); 
+  //   reward += scaled_reward;
+  // }
+
+  return reward;
 }
 
 // end

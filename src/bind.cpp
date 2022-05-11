@@ -219,8 +219,7 @@ PYBIND11_MODULE(bind, m) {
     .def_readonly("object_name", &MjType::TestReport::object_name)
     .def_readonly("cumulative_reward", &MjType::TestReport::cumulative_reward)
     .def_readonly("num_steps", &MjType::TestReport::num_steps)
-    .def_readonly("abs_cnt", &MjType::TestReport::abs_cnt)
-    .def_readonly("final_cnt", &MjType::TestReport::final_cnt)
+    .def_readonly("cnt", &MjType::TestReport::cnt)
     .def_readonly("final_palm_force", &MjType::TestReport::final_palm_force)
     .def_readonly("final_finger_force", &MjType::TestReport::final_finger_force)
     ;

@@ -188,11 +188,11 @@ namespace MjType
   // what key events will we keep track of in the simulation
   struct EventTrack {
 
-    // initialise an int tracking variable with the same name as each reward
-    #define XX(name, type, value)
-    #define SS(name, used, normalise, read_rate)
-    #define BR(name, reward, done, trigger) int name { false };
-    #define LR(name, reward, done, trigger, min, max, overshoot) int name { false };
+    // initialise a boolean for each binary reward, float for each linear reward
+    #define XX(NAME, TYPE, VALUE)
+    #define SS(NAME, USED, NORMALISE, READ_RATE)
+    #define BR(NAME, REWARD, DONE, TRIGGER) bool NAME { false };
+    #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) float NAME { 0.0 };
       // run the macro to create the code
       LUKE_MJSETTINGS
     #undef XX
@@ -200,7 +200,62 @@ namespace MjType
     #undef BR
     #undef LR
 
+    // initialise a tracking variable for counts in a row for each reward
+    struct Row {
+    #define XX(NAME, TYPE, VALUE)
+    #define SS(NAME, USED, NORMALISE, READ_RATE)
+    #define BR(NAME, REWARD, DONE, TRIGGER) int NAME { false };
+    #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) int NAME { false };
+      // run the macro to create the code
+      LUKE_MJSETTINGS
+    #undef XX
+    #undef SS
+    #undef BR
+    #undef LR
+    } row;
+
+    // initialise a tracking variable for absolute counts for each reward
+    struct Abs {
+    #define XX(NAME, TYPE, VALUE)
+    #define SS(NAME, USED, NORMALISE, READ_RATE)
+    #define BR(NAME, REWARD, DONE, TRIGGER) int NAME { false };
+    #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) int NAME { false };
+      // run the macro to create the code
+      LUKE_MJSETTINGS
+    #undef XX
+    #undef SS
+    #undef BR
+    #undef LR
+    } abs;
+
     void print();
+
+    void reset()
+    {
+      /* set all values to zero */
+
+      #define XX(NAME, TYPE, VALUE)
+      #define SS(NAME, USED, NORMALISE, READ_RATE)
+
+      #define BR(NAME, REWARD, DONE, TRIGGER)                          \
+                NAME = false;                                          \
+                row.NAME = 0;                                          \
+                abs.NAME = 0;                                          
+
+      #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)     \
+                NAME = 0.0;                                            \
+                row.NAME = 0;                                          \
+                abs.NAME = 0;                                          
+
+        // run the macro to create the code
+        LUKE_MJSETTINGS
+
+      #undef XX
+      #undef SS
+      #undef BR
+      #undef LR
+    }
+
   };
 
   struct BinaryReward {
@@ -277,8 +332,11 @@ namespace MjType
     int num_action_steps = 0;
     luke::QPos start_qpos;
 
-    EventTrack cnt;         // track events in a row
-    EventTrack abs_cnt;     // absolute count, never reset to zero
+    // track important events in the environment
+    EventTrack cnt;
+
+    // EventTrack cnt;         // track events in a row
+    // EventTrack abs_cnt;     // absolute count, never reset to zero
 
     // track the state of the object at this step
     struct Obj {
@@ -305,18 +363,18 @@ namespace MjType
 
     void reset() {
       // reinitialise defaults
-      EventTrack blank_cnt;
       Obj blank_obj;
       Grp blank_grp;
       // override current
-      cnt = blank_cnt;
-      abs_cnt = blank_cnt;
+      // cnt = blank_cnt;
+      // abs_cnt = blank_cnt;
       obj = blank_obj;
       grp = blank_grp;
       // reset data
       cumulative_reward = 0;
       num_action_steps = 0;
       start_qpos.reset();
+      cnt.reset();
     }
 
   };
@@ -329,11 +387,14 @@ namespace MjType
     float cumulative_reward = 0;
     int num_steps = 0;
 
-    // count everytime an event occurs in the whole test
-    EventTrack abs_cnt;
+    // save the breakdown of events
+    EventTrack cnt;
 
-    // snapshot of what events have occured at the end of the test
-    EventTrack final_cnt;
+    // // count everytime an event occurs in the whole test
+    // EventTrack abs_cnt;
+
+    // // snapshot of what events have occured at the end of the test
+    // EventTrack final_cnt;
 
     // take note of forces
     float final_palm_force = 0;
@@ -558,5 +619,7 @@ public:
 // utility functions
 float linear_reward(float val, float min, float max, float overshoot);
 float normalise_between(float val, float min, float max);
+void update_events(MjType::EventTrack events, MjType::Settings settings);
+float calc_rewards(MjType::EventTrack events, MjType::Settings settings);
 
 #endif // MJCLASS_H_
