@@ -1,8 +1,7 @@
 # This file details the paths used for compiling. In order to compile
 # on your computer you will need to add your specific paths and the
 # locations of the libraries. Copy one of the ifeq...endif blocks,
-# change the name eg cluster->yourname, then edit the paths. In the full
-# Makefile you should then add a PHONY target called yourname.
+# change the name eg cluster->yourname, then edit the paths.
 
 # ----- default settings, overwritten by any of the below options ----- #
 
@@ -33,7 +32,6 @@ cluster-old: cluster
 MACHINE = cluster
 
 # cluster mjcf files location (model files like gripper/objects)
-# MJCF_PATH = /home/lbeddow/mjcf/
 MJCF_PATH = /home/lbeddow/mymujoco/mjcf
 
 # cluster library locations

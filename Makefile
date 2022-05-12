@@ -63,7 +63,7 @@ COMMON = $(OPTIM) -std=c++11 -mavx -pthread -Wl,-rpath,'$$ORIGIN' $(DEFINE_VAR) 
 		 -I$(PYTHON_PATH) \
 		 -I$(RENDER_PATH)/include
 
-PYBIND = $(COMMON) -fPIC -Wall -shared #-I$(PYTHON_PATH) $(PY_LIBS)
+PYBIND = $(COMMON) -fPIC -Wall -shared
 
 # ----- automatically generated variables ----- #
 
