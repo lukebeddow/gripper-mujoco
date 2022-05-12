@@ -3,13 +3,11 @@
 # locations of the libraries. Copy one of the ifeq...endif blocks,
 # change the name eg cluster->yourname, then edit the paths.
 
-# IMPORTANT NOTE: the path variables are used to access certain directories
-# in the following way:
-# 	eg MUJOCO_PATH = /home/luke/mujoco210
-#		   is used for -> -I $(MUJOCO_PATH)/include
-#
-# hence, there can be NO TRAILING WHITESPACE after path variables
-#		-> -I /home/luke/mujoco210   /include # this will fail due to whitespace
+# IMPORTANT NOTE: no trailing whitespace after path variables allowed
+#	eg -> MUJOCO_PATH = /home/luke/mujoco210   # trailing whitespace
+#		 -> -I $(MUJOCO_PATH)/include
+#		 -> -I /home/luke/mujoco210   /include   # whitespace breaks compile command
+#		 -> g++: error: /include: No such file or directory
 
 # ----- default settings, overwritten by any of the below options ----- #
 
