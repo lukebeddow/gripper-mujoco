@@ -21,31 +21,31 @@ The c++ outputs will be put into a folder called ```bin```, the python module in
 
 In order to build, the locations of the dependent libraries needs to be specified. This is specified in the ```buildsettings.mk``` file. **You will need to edit ```buildsettings.mk``` in order to build**. This file contains library locations for a variety of compile locations, you will need to add your compile location to this file. The file is structured as an ```if ... else if ... else if ... endif```. Copy the following code to the bottom of the file:
 
-
 ```make
 ifeq ($(filter mybuild, $(MAKECMDGOALS)), mybuild)
 
 # set this command goal as a phony target (important)
 .PHONY: mybuild
 
-# what machine are we compiling for, change this to any name of your choice
-MACHINE = luke-laptop
+# what machine are we compiling for
+MACHINE = your-machine
 
-# path to the mjcf (mujoco model) files, most likely they are in the mjcf folder of this repo
-MJCF_PATH = /home/luke/mymujoco/mjcf/object_set_1
+# mjcf files location (model files like gripper/objects)
+MJCF_PATH = /home/luke/mymujoco/mjcf
 
 # local machine library locations
-PYTHON_PATH = /usr/include/python3.6m                     # path to python version you want to use for the python module
-PYBIND_PATH = /home/luke/pybind11                         # path to your pybind source folder
-ARMA_PATH =                                               # path to armadillo, leave this blank if system library
-MUJOCO_PATH = /home/luke/mujoco-2.1.5                     # path to your mujoco folder
-CORE_LIBS = -larmadillo -$(MUJOCO_PATH)/lib/libmujoco.so  # core libraries for armadillo and mujoco
-RENDER_LIBS = -lglfw                                      # rendering library
+PYTHON_PATH = /usr/include/python3.6m
+PYBIND_PATH = /home/luke/pybind11
+ARMA_PATH = # none, use system library
+MUJOCO_PATH = /home/luke/mujoco-2.1.5
+RENDER_PATH = # none, use system library
+CORE_LIBS = -L$(MUJOCO_PATH)/lib -lmujoco -larmadillo
+RENDER_LIBS = -lglfw
 DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
-             -DLUKE_MACHINE='"$(MACHINE)"'                # define c++ macros, no need to edit
-           
-# optional extras, delete if not wanted
-MAKEFLAGS += -j8 # jN => compile using N parallel cpu cores
+             -DLUKE_MACHINE='"$(MACHINE)"'
+
+# extras
+MAKEFLAGS += -j8 # jN => use N parallel cores
 
 endif
 ```
