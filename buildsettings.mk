@@ -72,8 +72,7 @@ ARMA_PATH = /home/lbeddow/clusterlibs/armadillo-code
 MUJOCO_PATH = /home/lbeddow/clusterlibs/mujoco/mujoco-2.1.5
 RENDER_PATH = /home/lbeddow/clusterlibs/glfw
 CORE_LIBS = -L$(MUJOCO_PATH)/lib/ -lmujoco -lblas -llapack
-RENDER_LIBS =
-# RENDER_LIBS = -lGL -lglew $(MUJOCO_PATH)/bin/libglfw.so.3
+RENDER_LIBS = # none, no rendering
 DEFINE_VAR = -DLUKE_CLUSTER -DARMA_DONT_USE_WRAPPER \
 						 -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
 						 -DLUKE_MACHINE='"$(MACHINE)"'
@@ -128,7 +127,7 @@ PYTHON_PATH = /usr/include/python3.6m
 PYBIND_PATH = /home/luke/pybind11
 ARMA_PATH = # none, use system library
 MUJOCO_PATH = /home/luke/mujoco-2.1.5
-RENDER_PATH = #/home/luke/clusterlibs/glfw
+RENDER_PATH = # none, use system library
 CORE_LIBS = -L$(MUJOCO_PATH)/lib -lmujoco -larmadillo
 RENDER_LIBS = -lglfw
 DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
@@ -158,7 +157,7 @@ ARMA_PATH = # none, use system library
 MUJOCO_PATH = /home/luke/mujoco-2.1.5
 RENDER_PATH = # none, use system library
 CORE_LIBS = -L$(MUJOCO_PATH)/lib -lmujoco -larmadillo 
-RENDER_LIBS = -lglfw #-lGL -lGLU
+RENDER_LIBS = -lglfw
 DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
 						 -DLUKE_MACHINE='"$(MACHINE)"'
 
