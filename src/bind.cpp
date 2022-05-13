@@ -8,11 +8,11 @@ namespace py = pybind11;
 PYBIND11_MODULE(bind, m) {
 
   m.doc() = "A module to wrap mujoco into python"; // module docstring
-
+  
   // functions
   m.def("calc_rewards", &calc_rewards);
   m.def("add_events", &add_events);
-  
+
   // main wrapper
   py::class_<MjClass>(m, "MjClass")
 
@@ -201,6 +201,61 @@ PYBIND11_MODULE(bind, m) {
     #undef SS
     #undef BR
     #undef LR
+
+    // pickle support
+    .def(py::pickle(
+      [](const MjType::EventTrack::Row s) { // __getstate___
+        /* return a tuple that fully encodes the state of the object */
+        return py::make_tuple(
+
+          // expand into list of variable names for tuple
+          #define XX(name, type, value)
+          #define SS(name, in_use, norm, readrate)
+          #define BR(name, reward, done, trigger) s.name,
+          #define LR(name, reward, done, trigger, min, max, overshoot) s.name,
+            // run the macro to create the code
+            LUKE_MJSETTINGS
+          #undef XX
+          #undef SS
+          #undef BR
+          #undef LR
+
+          // include dummy last, all above snippets have trailing commas
+          s.step_num
+        );
+      },
+      [](py::tuple t) { // __setstate__
+        constexpr bool debug = true;
+        if (debug)
+          std::cout << "unpickling MjType::EventTrack::Row now\n";
+
+        // create new c++ instance
+        MjType::EventTrack::Row out;
+
+        // fill in with the old data
+        int i = 0;
+
+        // expand the tuple elements and type cast them with a macro
+        #define XX(name, type, value)
+        #define SS(name, in_use, norm, readrate)
+        #define BR(name, reward, done, trigger) \
+                  out.name = t[i].cast<int>(); ++i;
+        #define LR(name, reward, done, trigger, min, max, overshoot) \
+                  out.name = t[i].cast<int>(); ++i;
+          // run the macro to create the code
+          LUKE_MJSETTINGS
+        #undef XX
+        #undef SS
+        #undef BR
+        #undef LR
+
+        if (debug)
+          std::cout << "unpickling MjType::EventTrack::Row finished, i is " << i
+            << ", size of tuple is " << t.size() << '\n';
+
+        return out;
+      }
+    ))
     ;
 
   py::class_<MjType::EventTrack::Abs>(m, "Abs")
@@ -217,6 +272,62 @@ PYBIND11_MODULE(bind, m) {
     #undef SS
     #undef BR
     #undef LR
+
+    // pickle support
+    .def(py::pickle(
+      [](const MjType::EventTrack::Abs s) { // __getstate___
+        /* return a tuple that fully encodes the state of the object */
+        return py::make_tuple(
+
+          // expand into list of variable names for tuple
+          #define XX(name, type, value)
+          #define SS(name, in_use, norm, readrate)
+          #define BR(name, reward, done, trigger) s.name,
+          #define LR(name, reward, done, trigger, min, max, overshoot) s.name,
+            // run the macro to create the code
+            LUKE_MJSETTINGS
+          #undef XX
+          #undef SS
+          #undef BR
+          #undef LR
+
+          // include dummy last, all above snippets have trailing commas
+          s.step_num
+        );
+      },
+      [](py::tuple t) { // __setstate__
+        constexpr bool debug = true;
+        if (debug)
+          std::cout << "unpickling MjType::EventTrack::Abs now\n";
+
+        // create new c++ instance
+        MjType::EventTrack::Abs out;
+
+        // fill in with the old data
+        int i = 0;
+
+        // expand the tuple elements and type cast them with a macro
+        #define XX(name, type, value)
+        #define SS(name, in_use, norm, readrate)
+
+        #define BR(name, reward, done, trigger) \
+                  out.name = t[i].cast<int>(); ++i;
+        #define LR(name, reward, done, trigger, min, max, overshoot) \
+                  out.name = t[i].cast<int>(); ++i;
+          // run the macro to create the code
+          LUKE_MJSETTINGS
+        #undef XX
+        #undef SS
+        #undef BR
+        #undef LR
+
+        if (debug)
+          std::cout << "unpickling MjType::EventTrack::Row finished, i is " << i
+            << ", size of tuple is " << t.size() << '\n';
+
+        return out;
+      }
+    ))
     ;
     
   py::class_<MjType::EventTrack::Percent>(m, "Percent")
@@ -235,14 +346,36 @@ PYBIND11_MODULE(bind, m) {
     #undef LR
     ;
 
+  py::class_<MjType::EventTrack::Last_linval>(m, "Last_linval")
+
+    #define XX(name, type, value)
+    #define SS(name, in_use, norm, readrate)
+    #define BR(name, reward, done, trigger)
+    #define LR(name, reward, done, trigger, min, max, overshoot) \
+              .def_readonly(#name, &MjType::EventTrack::Last_linval::name)
+      // run the macro to create the binding code
+      LUKE_MJSETTINGS
+    #undef XX
+    #undef SS
+    #undef BR
+    #undef LR
+    ;
+
   // tracking of important events in the simulation
   py::class_<MjType::EventTrack>(m, "EventTrack")
 
     .def(py::init<>())
+    .def("print", &MjType::EventTrack::print)
+    .def("reset", &MjType::EventTrack::reset)
+    .def("calculate_percentage", &MjType::EventTrack::calculate_percentage)
+    .def_readonly("percent", &MjType::EventTrack::percent)
+    .def_readonly("row", &MjType::EventTrack::row)
+    .def_readonly("abs", &MjType::EventTrack::abs)
+    .def_readonly("last_linval", &MjType::EventTrack::last_linval)
 
     #define XX(name, type, value)
     #define SS(name, in_use, norm, readrate)
-    #define BR(name, reward, done, trigger)                               \
+    #define BR(name, reward, done, trigger) \
               .def_readonly(#name, &MjType::EventTrack::name)
 
     #define LR(name, reward, done, trigger, min, max, overshoot) \
@@ -253,6 +386,26 @@ PYBIND11_MODULE(bind, m) {
     #undef SS
     #undef BR
     #undef LR
+
+    // pickle support
+    .def(py::pickle(
+      [](const MjType::EventTrack &et) { // __getstate___
+        /* return a tuple that fully encodes the state of the object */
+        return py::make_tuple(
+          et.row,                   // events that happened in a row
+          et.abs                    // absolute event count
+        );
+      },
+      [](py::tuple t) { // __setstate__
+
+        // create new c++ instance with old settings
+        MjType::EventTrack et;
+        et.row = t[0].cast<MjType::EventTrack::Row>();
+        et.abs = t[1].cast<MjType::EventTrack::Abs>();
+
+        return et;
+      }
+    ))
 
     ; // this semicolon is required to finish the py::class definition
 
@@ -385,7 +538,6 @@ PYBIND11_MODULE(bind, m) {
     .def(py::init<>())
     .def_readwrite("entries", &MjType::CurveFitData::entries)
     ;
-
 
   /* py::overload_cast requires c++14 */
 

@@ -1495,13 +1495,15 @@ void MjType::EventTrack::print()
 {
   /* print out the event track information */
 
+  calculate_percentage();
+
   std::cout << "EventTrack = row (abs); "
 
   #define XX(NAME, TYPE, VALUE)
   #define SS(NAME, USED, NORMALISE, READ_RATE)
+
   #define BR(NAME, REWARD, DONE, TRIGGER)                               \
             << #NAME << " = " << row.NAME << " (" << abs.NAME << "); "
-
   #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)          \
             << #NAME << " = " << row.NAME << " (" << abs.NAME << "); "
 
@@ -1531,14 +1533,16 @@ void update_events(MjType::EventTrack& events, MjType::Settings& settings)
             active = false;                                                  \
             if (events.NAME > settings.NAME.min and                          \
                 (events.NAME < settings.NAME.overshoot or                    \
-                 settings.NAME.overshoot < 0))                              \
+                 settings.NAME.overshoot < 0))                               \
               { active = true; }                                             \
             events.row.NAME = events.row.NAME * active + active;             \
             events.abs.NAME += active;                                       \
+            events.last_linval.NAME = events.NAME;                           \
             events.NAME = 0.0; // reset
 
     // run the macro to create the code
     LUKE_MJSETTINGS
+
   #undef XX
   #undef SS
   #undef BR
@@ -1547,7 +1551,7 @@ void update_events(MjType::EventTrack& events, MjType::Settings& settings)
 
 float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings)
 {
-  /* calculate the reward based on the simulation events */
+  /* calculate the reward of one transition based on the simulation events */
 
   float reward = 0;
 
@@ -1567,12 +1571,12 @@ float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings)
         
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)  \
             if (events.row.NAME >= settings.NAME.trigger) {                     \
-              float fraction = linear_reward(settings.NAME.value,               \
+              float fraction = linear_reward(events.last_linval.NAME,           \
                 settings.NAME.min, settings.NAME.max, settings.NAME.overshoot); \
               float scaled_reward = settings.NAME.reward * fraction;            \
               if (settings.debug)                                               \
                 std::printf("%s triggered by value %.1f, reward += %.4f\n",     \
-                  #NAME, settings.NAME.value, settings.NAME.reward);            \
+                  #NAME, events.last_linval.NAME, settings.NAME.reward);        \
               reward += scaled_reward;                                          \
             }
             
@@ -1607,20 +1611,25 @@ float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings)
 
 MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2)
 {
-  /* add the counts of two events */
+  /* add the counts of two events. The abs count is directly added, whilst
+     the row count is converted to a bool and added, so it no longer shows
+     how many in a row, instead it shows if the condition was met at the
+     end of the last step - and that value is added. The last_linval is
+     also added */
 
   MjType::EventTrack out;
 
   #define XX(NAME, TYPE, VALUE)
   #define SS(NAME, USED, NORMALISE, READ_RATE)
 
-  #define BR(NAME, REWARD, DONE, TRIGGER)                            \
-            out.row.NAME = (bool)e1.row.NAME + (bool)e2.row.NAME;    \
+  #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
+            out.row.NAME = (bool)e1.row.NAME + (bool)e2.row.NAME;              \
             out.abs.NAME = e1.abs.NAME + e2.abs.NAME;
 
-  #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)       \
-            out.row.NAME = (bool)e1.row.NAME + (bool)e2.row.NAME;    \
-            out.abs.NAME = e1.abs.NAME + e2.abs.NAME;
+  #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)                 \
+            out.row.NAME = (bool)e1.row.NAME + (bool)e2.row.NAME;              \
+            out.abs.NAME = e1.abs.NAME + e2.abs.NAME;                          \
+            out.last_linval.NAME = e1.last_linval.NAME + e2.last_linval.NAME;  
 
     // run the macro to create the code
     LUKE_MJSETTINGS

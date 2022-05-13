@@ -372,6 +372,7 @@ class TrainDQN():
 
     # save all outputs in one place
     output_str = ""
+    output_str2 = ""
 
     # define the printing format
     #              name    reward  steps   palm f  fing.f   Lft     Stb     oob     t.h     s.h     pLft   pCon   pPlmFrc  pXLim  pXAxial  pXlaT.  pXPalm
@@ -389,7 +390,13 @@ class TrainDQN():
     output_str += start_str + "\n"
     output_str += "\n" + first_row
 
+    output_str2 += start_str + "\n"
+    output_str2 += "\n" + first_row
+
     if print_out: print(start_str)
+
+    total_counter = self.env._make_event_track()
+    obj_counter = self.env._make_event_track()
 
     for i in range(num_obj):
 
@@ -415,6 +422,8 @@ class TrainDQN():
       cnt_exceed_palm = 0
 
       for k in range(num_trials):
+
+        obj_counter = self.env._add_events(obj_counter, test_data[j+k].cnt)
 
         # sum end of episode totals for this set of trials
         total_rewards += test_data[j + k].reward
@@ -467,17 +476,46 @@ class TrainDQN():
       exceed_lateral_vec.append(p_exceed_lateral)
       exceed_palm_vec.append(p_exceed_palm)
 
+      obj_counter.calculate_percentage()
+
       # save all data in a string to output to a test summary text file
-      obj_row = row_str.format(
+      obj_row_old = row_str.format(
         names[-1], avg_rewards[-1], avg_steps[-1], avg_palm_force[-1], avg_finger_force[-1],
         total_lifted, total_stable, total_oob, total_target_height, total_stable_height,
         p_lifted, p_object_contact, p_palm_force, p_exceed_limits,
         p_exceed_axial, p_exceed_lateral, p_exceed_palm
       )
 
+      obj_row = row_str.format(
+        names[-1], 
+        avg_rewards[-1], 
+        obj_counter.abs.step_num / float(num_trials),
+        obj_counter.last_linval.palm_force / float(num_trials),
+        obj_counter.last_linval.finger_force / float(num_trials),
+        obj_counter.row.lifted, 
+        obj_counter.row.object_stable, 
+        obj_counter.row.oob, 
+        obj_counter.row.target_height, 
+        obj_counter.row.stable_height,
+        obj_counter.percent.lifted,
+        obj_counter.percent.object_contact,
+        obj_counter.percent.palm_force,
+        obj_counter.percent.exceed_limits,
+        obj_counter.percent.exceed_axial,
+        obj_counter.percent.exceed_lateral,
+        obj_counter.percent.exceed_palm
+      )
+
       output_str += obj_row
+      output_str2 += obj_row_old
 
       if print_out: print(obj_row)
+
+      # add to the total counter
+      total_counter = self.env._add_events(total_counter, obj_counter)
+
+      # reset the object counter
+      obj_counter.reset()  
 
     # now get the overall averages for float/integer values
     mean_reward = np.mean(np.array(avg_rewards))
@@ -500,12 +538,37 @@ class TrainDQN():
     avg_p_exceed_palm = np.mean(np.array(exceed_palm_vec))
 
     # add the overall averages to the test report string
-    end_str = res_str.format(
-      "\nOverall averages per object: ", mean_reward, mean_steps, mean_palm_force,
+    end_str_old = res_str.format(
+      "\nOverall averages per object:  ", mean_reward, mean_steps, mean_palm_force,
       mean_finger_force, avg_lifted, avg_stable, avg_oob, avg_target_height,
       avg_stable_height, avg_p_lifted, avg_p_contact, avg_p_palm_force,
       avg_p_exceed_limits, avg_p_exceed_axial, avg_p_exceed_lateral,
       avg_p_exceed_palm
+    )
+
+    # force the total counter to update the percentage values
+    total_counter.calculate_percentage()
+
+    total_counter.print()
+
+    end_str = res_str.format(
+      "\nOverall averages per object: ", 
+      mean_reward, 
+      total_counter.abs.step_num / float(num_trials * num_obj),
+      total_counter.last_linval.palm_force / float(num_trials * num_obj),
+      total_counter.last_linval.finger_force / float(num_trials * num_obj),
+      total_counter.row.lifted / float(num_trials * num_obj), 
+      total_counter.row.object_stable / float(num_trials * num_obj), 
+      total_counter.row.oob / float(num_trials * num_obj), 
+      total_counter.row.target_height / float(num_trials * num_obj), 
+      total_counter.row.stable_height / float(num_trials * num_obj),
+      total_counter.percent.lifted,
+      total_counter.percent.object_contact,
+      total_counter.percent.palm_force,
+      total_counter.percent.exceed_limits,
+      total_counter.percent.exceed_axial,
+      total_counter.percent.exceed_lateral,
+      total_counter.percent.exceed_palm
     )
 
     if i_episode != None:
@@ -522,6 +585,9 @@ class TrainDQN():
       self.track.avg_p_exceed_palm = np.append(self.track.avg_p_exceed_palm, avg_p_exceed_palm)
 
     output_str += end_str
+    output_str2 += end_str_old
+
+    output_str += "\n\nNow the old method:\n\n" + output_str2
 
     if print_out: print(end_str)
 
@@ -900,9 +966,9 @@ if __name__ == "__main__":
   # ----- load ----- #
 
   # load
-  folderpath = "/home/luke/cluster/rl/models/dqn/" + model.policy_net.name() + "/"
-  foldername = "train_cluster_29-04-2022-12:51_array_4"
-  model.load(id=None, folderpath=folderpath, foldername=foldername)
+  # folderpath = "/home/luke/mymujoco/rl/models/dqn/" + model.policy_net.name() + "/"
+  # foldername = "train_luke-PC_06-05-22-17:57_array_5"
+  # model.load(id=None, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
@@ -923,30 +989,32 @@ if __name__ == "__main__":
   # model.plot()
   # plt.show()
 
-  import array_training_DQN
-  model = array_training_DQN.apply_to_all_models(model)
-  model = array_training_DQN.make_rewards_negative(model)
-  model.env.max_episode_steps = 200
-  model.env.mj.set.motor_state_sensor.read_rate = -2
-  model.env.mj.set.axial_gauge.in_use = True
-  model.env.mj.set.wrist_sensor_Z.in_use = True
+  # import array_training_DQN
+  # model = array_training_DQN.apply_to_all_models(model)
+  # model = array_training_DQN.make_rewards_negative(model)
+  # model.env.max_episode_steps = 200
+  # model.env.mj.set.motor_state_sensor.read_rate = -2
+  # model.env.mj.set.axial_gauge.in_use = True
+  # model.env.mj.set.wrist_sensor_Z.in_use = True
 
   # # test
-  print(model.env._get_cpp_settings())
-  model.env.mj.set.debug = True
+  model.env.mj.set.debug = False
   model.env.disable_rendering = False
   model.env.test_trials_per_obj = 1
+  model.env.num_objects = 10
+  # model.env.max_episode_steps = 20
   # model.env.mj.set.step_num.set          (0,      70,   1)
   # model.env.mj.set.exceed_limits.set     (-0.005, True,   10)
   # model.env.mj.set.exceed_axial.set      (-0.005, True,   10,    3.0,  6.0,  -1)
   # model.env.mj.set.exceed_lateral.set    (-0.005, True,   10,    4.0,  6.0,  -1)
   test_data = model.test()
 
-  # # save results
-  # test_report = model.create_test_report(test_data)
-  # model.modelsaver.new_folder(label="DQN_testing")
-  # model.save_hyperparameters(labelstr=f"Loaded model path: {model.modelsaver.last_loadpath}\n")
-  # model.save(txtstring=test_report, txtlabel="test_results_demo")
+  # save results
+  test_report = model.create_test_report(test_data)
+  model.modelsaver.new_folder(label="DQN_testing")
+  model.save_hyperparameters(labelstr=f"Loaded model path: {model.modelsaver.last_loadpath}\n")
+  model.save(txtstring=test_report, txtlabel="test_results_demo")
+  
 
 
  

@@ -188,6 +188,37 @@ namespace MjType
   // what key events will we keep track of in the simulation
   struct EventTrack {
 
+    struct BinaryEvent {
+      bool value { false };
+      int row { 0 };
+      int abs { 0 };
+      float percent { 0.0 };
+
+      void reset() { value = 0; row = 0; abs = 0; percent = 0 };
+    };
+
+    struct LinearEvent {
+      float value { 0.0 };
+      float last_value { 0.0 };
+      int row { 0 };
+      int abs { 0 };
+      float percent { 0.0 };
+
+      void reset() { value = 0; last_value = 0; row = 0; abs = 0; percent = 0 };
+    };
+
+    // create an event for each reward, binary->binary, linear->linear
+    #define XX(NAME, TYPE, VALUE)
+    #define SS(NAME, USED, NORMALISE, READ_RATE)
+    #define BR(NAME, REWARD, DONE, TRIGGER) BinaryEvent NAME;
+    #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) LinearEvent NAME;
+      // run the macro to create the code
+      LUKE_MJSETTINGS
+    #undef XX
+    #undef SS
+    #undef BR
+    #undef LR
+
     // initialise a boolean for each binary reward, float for each linear reward
     #define XX(NAME, TYPE, VALUE)
     #define SS(NAME, USED, NORMALISE, READ_RATE)
@@ -242,6 +273,20 @@ namespace MjType
     #undef LR
     } percent;
 
+    // buffer to store last linear 
+    struct Last_linval {
+    #define XX(NAME, TYPE, VALUE)
+    #define SS(NAME, USED, NORMALISE, READ_RATE)
+    #define BR(NAME, REWARD, DONE, TRIGGER)
+    #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) float NAME { 0.0 };
+      // run the macro to create the code
+      LUKE_MJSETTINGS
+    #undef XX
+    #undef SS 
+    #undef BR
+    #undef LR
+    } last_linval;
+
     void print();
 
     void reset()
@@ -261,7 +306,8 @@ namespace MjType
                 NAME = 0.0;                                            \
                 row.NAME = 0;                                          \
                 abs.NAME = 0;                                          \
-                percent.NAME = 0.0;
+                percent.NAME = 0.0;                                    \
+                last_linval.NAME = 0.0;
 
         // run the macro to create the code
         LUKE_MJSETTINGS
@@ -278,10 +324,13 @@ namespace MjType
 
       #define XX(NAME, TYPE, VALUE)
       #define SS(NAME, USED, NORMALISE, READ_RATE)
-      #define BR(NAME, REWARD, DONE, TRIGGER) \
-                percent.NAME = abs.NAME / (float) abs.step_num;
-      #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) \
-                percent.NAME = abs.NAME / (float) abs.step_num;
+
+      #define BR(NAME, REWARD, DONE, TRIGGER)                             \
+                percent.NAME = (100.0 * abs.NAME) / (float) abs.step_num;
+
+      #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)        \
+                percent.NAME = (100.0 * abs.NAME) / (float) abs.step_num;
+                
         // run the macro to create the code
         LUKE_MJSETTINGS
       #undef XX
@@ -655,6 +704,8 @@ float linear_reward(float val, float min, float max, float overshoot);
 float normalise_between(float val, float min, float max);
 void update_events(MjType::EventTrack& events, MjType::Settings& settings);
 float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings);
-MjType::EventTrack add_events(MjType::EventTrack e1, MjType::EventTrack e2);
+MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2);
+
+// void add_events(int e1, int e2);
 
 #endif // MJCLASS_H_

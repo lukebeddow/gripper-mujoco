@@ -10,7 +10,7 @@ pathhere = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, pathhere)
 
 # with env in path, we can now import the shared cpp library
-from mjpy.bind import MjClass
+from mjpy.bind import MjClass, calc_rewards, add_events, EventTrack
 
 import time
 import gym
@@ -28,7 +28,7 @@ class MjEnv(gym.Env):
     last_reward: float = 0
     cumulative_reward: float = 0
 
-  @dataclass
+  # @dataclass
   class Test:
     # saved after each test trial ends
     obj_idx: int = 0
@@ -55,6 +55,8 @@ class MjEnv(gym.Env):
     cnt_exceed_lateral: int = 0
     cnt_exceed_palm: int = 0
 
+    def add_data(self, cnt): self.cnt = cnt
+
   def __init__(self):
     """
     A mujoco environment wrapper for OpenAI gym
@@ -67,7 +69,7 @@ class MjEnv(gym.Env):
     self.object_position_noise_mm = 10
     self.disable_rendering = True
     self.task_reload_chance = 1 / 40.
-    self.log_level = 0
+    self.log_level = 2
 
     # user defined testing parameters
     self.test_in_progress = False
@@ -78,7 +80,7 @@ class MjEnv(gym.Env):
     # define file structure
     self.task_xml_folder = "task"
     self.task_xml_template = "gripper_task_{}.xml"
-    self.testing_xmls = 1                 # test xml is always the last one
+    self.testing_xmls = 1                 # how many files reserved for testing
     
     # create mujoco instance
     self.mj = MjClass()
@@ -160,6 +162,24 @@ class MjEnv(gym.Env):
 
     self.n_actions = self.mj.get_n_actions()
     self.n_obs = self.mj.get_n_obs()
+
+  def _make_event_track(self):
+    """
+    Create an EventTrack object
+    """
+    return EventTrack()
+
+  def _add_events(self, e1, e2):
+    """
+    Add two events and return the sum
+    """
+    return add_events(e1, e2)
+
+  def _calc_rewards(self, event):
+    """
+    Calculate a reward from a set of events
+    """
+    return calc_rewards(event)
 
   def _get_machine(self):
     """
@@ -283,23 +303,25 @@ class MjEnv(gym.Env):
     trial_data.reward = self.track.cumulative_reward
     trial_data.steps = self.track.current_step
 
+    trial_data.add_data(test_report.cnt)
+
     # conditions of object at episode end
-    trial_data.lifted = bool(test_report.final_cnt.lifted)
-    trial_data.stable = bool(test_report.final_cnt.object_stable)
-    trial_data.oob = bool(test_report.final_cnt.oob)
-    trial_data.target_height = bool(test_report.final_cnt.target_height)
-    trial_data.stable_height = bool(test_report.final_cnt.stable_height)
+    trial_data.lifted = bool(test_report.cnt.row.lifted)
+    trial_data.stable = bool(test_report.cnt.row.object_stable)
+    trial_data.oob = bool(test_report.cnt.row.oob)
+    trial_data.target_height = bool(test_report.cnt.row.target_height)
+    trial_data.stable_height = bool(test_report.cnt.row.stable_height)
     trial_data.palm_force = test_report.final_palm_force
     trial_data.finger_force = test_report.final_finger_force
 
     # counts during the episode of events
-    trial_data.cnt_lifted = test_report.abs_cnt.lifted
-    trial_data.cnt_object_contact = test_report.abs_cnt.object_contact
-    trial_data.cnt_palm_force = test_report.abs_cnt.palm_force
-    trial_data.cnt_exceed_limits = test_report.abs_cnt.exceed_limits
-    trial_data.cnt_exceed_axial = test_report.abs_cnt.exceed_axial
-    trial_data.cnt_exceed_lateral = test_report.abs_cnt.exceed_lateral
-    trial_data.cnt_exceed_palm = test_report.abs_cnt.exceed_palm
+    trial_data.cnt_lifted = test_report.cnt.abs.lifted
+    trial_data.cnt_object_contact = test_report.cnt.abs.object_contact
+    trial_data.cnt_palm_force = test_report.cnt.abs.palm_force
+    trial_data.cnt_exceed_limits = test_report.cnt.abs.exceed_limits
+    trial_data.cnt_exceed_axial = test_report.cnt.abs.exceed_axial
+    trial_data.cnt_exceed_lateral = test_report.cnt.abs.exceed_lateral
+    trial_data.cnt_exceed_palm = test_report.cnt.abs.exceed_palm
 
     # insert information into stored data list
     self.test_trials.append(trial_data)
@@ -410,6 +432,9 @@ if __name__ == "__main__":
   # import pickle
 
   mj = MjEnv()
+
+  exit()
+
   mj.mj.set.wipe_rewards()
   mj.mj.set.lifted.set(100, 10, 1)
   print(mj._get_cpp_settings())
