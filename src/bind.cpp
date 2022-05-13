@@ -47,7 +47,13 @@ PYBIND11_MODULE(bind, m) {
     .def("spawn_object", static_cast<void (MjClass::*)(int, double, double)>(&MjClass::spawn_object))
     .def("is_done", &MjClass::is_done)
     .def("get_observation", &MjClass::get_observation)
-    .def("reward", &MjClass::reward)
+    .def("get_event_state", &MjClass::get_event_state)
+    // .def("reward", &MjClass::reward)
+
+    .def("reward", static_cast<float (MjClass::*)()>(&MjClass::reward))
+    .def("reward", static_cast<float (MjClass::*)(MjType::EventTrack)>(&MjClass::reward))
+    .def("reward", static_cast<float (MjClass::*)(std::vector<float>)>(&MjClass::reward))
+
     .def("get_n_actions", &MjClass::get_n_actions)
     .def("get_n_obs", &MjClass::get_n_obs)
 
@@ -187,178 +193,86 @@ PYBIND11_MODULE(bind, m) {
     ))
     ;
 
-  py::class_<MjType::EventTrack::Row>(m, "Row")
+  py::class_<MjType::EventTrack::BinaryEvent>(m, "BinaryEvent")
 
-    #define XX(name, type, value)
-    #define SS(name, in_use, norm, readrate)
-    #define BR(name, reward, done, trigger) \
-              .def_readonly(#name, &MjType::EventTrack::Row::name)
-    #define LR(name, reward, done, trigger, min, max, overshoot) \
-              .def_readonly(#name, &MjType::EventTrack::Row::name)
-      // run the macro to create the binding code
-      LUKE_MJSETTINGS
-    #undef XX
-    #undef SS
-    #undef BR
-    #undef LR
+    .def_readonly("value", &MjType::EventTrack::BinaryEvent::value)
+    .def_readonly("last_value", &MjType::EventTrack::BinaryEvent::last_value)
+    .def_readonly("row", &MjType::EventTrack::BinaryEvent::row)
+    .def_readonly("abs", &MjType::EventTrack::BinaryEvent::abs)
+    .def_readonly("percent", &MjType::EventTrack::BinaryEvent::percent)
 
     // pickle support
     .def(py::pickle(
-      [](const MjType::EventTrack::Row s) { // __getstate___
+      [](const MjType::EventTrack::BinaryEvent s) { // __getstate___
         /* return a tuple that fully encodes the state of the object */
         return py::make_tuple(
-
-          // expand into list of variable names for tuple
-          #define XX(name, type, value)
-          #define SS(name, in_use, norm, readrate)
-          #define BR(name, reward, done, trigger) s.name,
-          #define LR(name, reward, done, trigger, min, max, overshoot) s.name,
-            // run the macro to create the code
-            LUKE_MJSETTINGS
-          #undef XX
-          #undef SS
-          #undef BR
-          #undef LR
-
-          // include dummy last, all above snippets have trailing commas
-          s.step_num
+          s.value,
+          s.last_value,
+          s.row,
+          s.abs,
+          s.percent
         );
       },
       [](py::tuple t) { // __setstate__
         constexpr bool debug = true;
         if (debug)
-          std::cout << "unpickling MjType::EventTrack::Row now\n";
+          std::cout << "unpickling MjType::EventTrack::BinaryEvent now\n";
 
         // create new c++ instance
-        MjType::EventTrack::Row out;
-
-        // fill in with the old data
-        int i = 0;
-
-        // expand the tuple elements and type cast them with a macro
-        #define XX(name, type, value)
-        #define SS(name, in_use, norm, readrate)
-        #define BR(name, reward, done, trigger) \
-                  out.name = t[i].cast<int>(); ++i;
-        #define LR(name, reward, done, trigger, min, max, overshoot) \
-                  out.name = t[i].cast<int>(); ++i;
-          // run the macro to create the code
-          LUKE_MJSETTINGS
-        #undef XX
-        #undef SS
-        #undef BR
-        #undef LR
+        MjType::EventTrack::BinaryEvent out;
+        out.value = t[0].cast<bool>();
+        out.last_value = t[1].cast<int>();
+        out.row = t[2].cast<int>();
+        out.abs = t[3].cast<int>();
+        out.percent = t[4].cast<float>();
 
         if (debug)
-          std::cout << "unpickling MjType::EventTrack::Row finished, i is " << i
-            << ", size of tuple is " << t.size() << '\n';
+          std::cout << "unpickling MjType::EventTrack::BinaryEvent finished\n";
 
         return out;
       }
     ))
     ;
 
-  py::class_<MjType::EventTrack::Abs>(m, "Abs")
+  py::class_<MjType::EventTrack::LinearEvent>(m, "LinearEvent")
 
-    #define XX(name, type, value)
-    #define SS(name, in_use, norm, readrate)
-    #define BR(name, reward, done, trigger) \
-              .def_readonly(#name, &MjType::EventTrack::Abs::name)
-    #define LR(name, reward, done, trigger, min, max, overshoot) \
-              .def_readonly(#name, &MjType::EventTrack::Abs::name)
-      // run the macro to create the binding code
-      LUKE_MJSETTINGS
-    #undef XX
-    #undef SS
-    #undef BR
-    #undef LR
+    .def_readonly("value", &MjType::EventTrack::LinearEvent::value)
+    .def_readonly("last_value", &MjType::EventTrack::LinearEvent::last_value)
+    .def_readonly("row", &MjType::EventTrack::LinearEvent::row)
+    .def_readonly("abs", &MjType::EventTrack::LinearEvent::abs)
+    .def_readonly("percent", &MjType::EventTrack::LinearEvent::percent)
 
     // pickle support
     .def(py::pickle(
-      [](const MjType::EventTrack::Abs s) { // __getstate___
+      [](const MjType::EventTrack::LinearEvent s) { // __getstate___
         /* return a tuple that fully encodes the state of the object */
         return py::make_tuple(
-
-          // expand into list of variable names for tuple
-          #define XX(name, type, value)
-          #define SS(name, in_use, norm, readrate)
-          #define BR(name, reward, done, trigger) s.name,
-          #define LR(name, reward, done, trigger, min, max, overshoot) s.name,
-            // run the macro to create the code
-            LUKE_MJSETTINGS
-          #undef XX
-          #undef SS
-          #undef BR
-          #undef LR
-
-          // include dummy last, all above snippets have trailing commas
-          s.step_num
+          s.value,
+          s.last_value,
+          s.row,
+          s.abs,
+          s.percent
         );
       },
       [](py::tuple t) { // __setstate__
         constexpr bool debug = true;
         if (debug)
-          std::cout << "unpickling MjType::EventTrack::Abs now\n";
+          std::cout << "unpickling MjType::EventTrack::LinearEvent now\n";
 
         // create new c++ instance
-        MjType::EventTrack::Abs out;
-
-        // fill in with the old data
-        int i = 0;
-
-        // expand the tuple elements and type cast them with a macro
-        #define XX(name, type, value)
-        #define SS(name, in_use, norm, readrate)
-
-        #define BR(name, reward, done, trigger) \
-                  out.name = t[i].cast<int>(); ++i;
-        #define LR(name, reward, done, trigger, min, max, overshoot) \
-                  out.name = t[i].cast<int>(); ++i;
-          // run the macro to create the code
-          LUKE_MJSETTINGS
-        #undef XX
-        #undef SS
-        #undef BR
-        #undef LR
+        MjType::EventTrack::LinearEvent out;
+        out.value = t[0].cast<bool>();
+        out.last_value = t[1].cast<float>();
+        out.row = t[2].cast<int>();
+        out.abs = t[3].cast<int>();
+        out.percent = t[4].cast<float>();
 
         if (debug)
-          std::cout << "unpickling MjType::EventTrack::Row finished, i is " << i
-            << ", size of tuple is " << t.size() << '\n';
+          std::cout << "unpickling MjType::EventTrack::LinearEvent finished\n";
 
         return out;
       }
     ))
-    ;
-    
-  py::class_<MjType::EventTrack::Percent>(m, "Percent")
-
-    #define XX(name, type, value)
-    #define SS(name, in_use, norm, readrate)
-    #define BR(name, reward, done, trigger) \
-              .def_readonly(#name, &MjType::EventTrack::Percent::name)
-    #define LR(name, reward, done, trigger, min, max, overshoot) \
-              .def_readonly(#name, &MjType::EventTrack::Percent::name)
-      // run the macro to create the binding code
-      LUKE_MJSETTINGS
-    #undef XX
-    #undef SS
-    #undef BR
-    #undef LR
-    ;
-
-  py::class_<MjType::EventTrack::Last_linval>(m, "Last_linval")
-
-    #define XX(name, type, value)
-    #define SS(name, in_use, norm, readrate)
-    #define BR(name, reward, done, trigger)
-    #define LR(name, reward, done, trigger, min, max, overshoot) \
-              .def_readonly(#name, &MjType::EventTrack::Last_linval::name)
-      // run the macro to create the binding code
-      LUKE_MJSETTINGS
-    #undef XX
-    #undef SS
-    #undef BR
-    #undef LR
     ;
 
   // tracking of important events in the simulation
@@ -368,10 +282,6 @@ PYBIND11_MODULE(bind, m) {
     .def("print", &MjType::EventTrack::print)
     .def("reset", &MjType::EventTrack::reset)
     .def("calculate_percentage", &MjType::EventTrack::calculate_percentage)
-    .def_readonly("percent", &MjType::EventTrack::percent)
-    .def_readonly("row", &MjType::EventTrack::row)
-    .def_readonly("abs", &MjType::EventTrack::abs)
-    .def_readonly("last_linval", &MjType::EventTrack::last_linval)
 
     #define XX(name, type, value)
     #define SS(name, in_use, norm, readrate)
@@ -380,8 +290,10 @@ PYBIND11_MODULE(bind, m) {
 
     #define LR(name, reward, done, trigger, min, max, overshoot) \
               .def_readonly(#name, &MjType::EventTrack::name)
+
       // run the macro to create the binding code
       LUKE_MJSETTINGS
+
     #undef XX
     #undef SS
     #undef BR
@@ -392,27 +304,47 @@ PYBIND11_MODULE(bind, m) {
       [](const MjType::EventTrack &et) { // __getstate___
         /* return a tuple that fully encodes the state of the object */
         return py::make_tuple(
-          et.row,                   // events that happened in a row
-          et.abs                    // absolute event count
+          
+          #define XX(name, type, value)
+          #define SS(name, in_use, norm, readrate)
+          #define BR(name, reward, done, trigger) et.name,
+          #define LR(name, reward, done, trigger, min, max, overshoot) et.name,
+            // run the macro to create the binding code
+            LUKE_MJSETTINGS
+          #undef XX
+          #undef SS
+          #undef BR
+          #undef LR
+
+          // dummy value as macro above always uses trailing comma
+          0.0
         );
       },
       [](py::tuple t) { // __setstate__
 
         // create new c++ instance with old settings
         MjType::EventTrack et;
-        et.row = t[0].cast<MjType::EventTrack::Row>();
-        et.abs = t[1].cast<MjType::EventTrack::Abs>();
+
+        int i = 0;
+
+        // expand the tuple elements and type cast them with a macro
+        #define XX(name, type, value)
+        #define SS(name, in_use, norm, readrate)
+        #define BR(name, reward, done, trigger) \
+                  et.name = t[i].cast<MjType::EventTrack::BinaryEvent>(); ++i;
+        #define LR(name, reward, done, trigger, min, max, overshoot) \
+                  et.name = t[i].cast<MjType::EventTrack::LinearEvent>(); ++i;
+          // run the macro to create the code
+          LUKE_MJSETTINGS
+        #undef XX
+        #undef SS
+        #undef BR
+        #undef LR
 
         return et;
       }
     ))
-
-    ; // this semicolon is required to finish the py::class definition
-
-    // example snippets from the macro above
-    // .def_readonly("step_num", &MjType::EventTrack::step_num)
-    // .def_readonly("lifted", &MjType::EventTrack::lifted)
-    // .def_readonly("oob", &MjType::EventTrack::oob)
+    ;
 
   // class for outputing test results and event tracking
   py::class_<MjType::TestReport>(m, "TestReport")
@@ -420,10 +352,7 @@ PYBIND11_MODULE(bind, m) {
     .def(py::init<>())
     .def_readonly("object_name", &MjType::TestReport::object_name)
     .def_readonly("cumulative_reward", &MjType::TestReport::cumulative_reward)
-    .def_readonly("num_steps", &MjType::TestReport::num_steps)
     .def_readonly("cnt", &MjType::TestReport::cnt)
-    .def_readonly("final_palm_force", &MjType::TestReport::final_palm_force)
-    .def_readonly("final_finger_force", &MjType::TestReport::final_finger_force)
     ;
 
   // set up sensor type so python can interact and change them

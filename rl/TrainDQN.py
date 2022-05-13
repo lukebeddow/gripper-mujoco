@@ -353,26 +353,9 @@ class TrainDQN():
     # create and initialise
     names = []
     avg_rewards = []
-    avg_steps = []
-    avg_palm_force = []
-    avg_finger_force = []
-    num_stable = 0
-    num_lifted = 0
-    num_oob = 0
-    num_target_height = 0
-    num_stable_height = 0
-
-    lifted_vec = []
-    contact_vec = []
-    palm_force_vec = []
-    exceed_limits_vec = []
-    exceed_axial_vec = []
-    exceed_lateral_vec = []
-    exceed_palm_vec = []
 
     # save all outputs in one place
     output_str = ""
-    output_str2 = ""
 
     # define the printing format
     #              name    reward  steps   palm f  fing.f   Lft     Stb     oob     t.h     s.h     pLft   pCon   pPlmFrc  pXLim  pXAxial  pXlaT.  pXPalm
@@ -380,7 +363,7 @@ class TrainDQN():
     #              name     reward     steps      palm f     fing.f     Lft     Stb     oob     t.h     s.h     pLft       pCon       pPlmFrc    pXLim      pXAxial    pXlaT.     pXPalm
     row_str =    "{:<36} | {:<6.3f} | {:<6.1f} | {:<6.3f} | {:<6.3f} | {:<4} | {:<4} | {:<4} | {:<4} | {:<4} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f}\n"
     #              name     reward     steps      palm f     fing.f     Lft        Stb        oob        t.h        s.h        pLft       pCon       pPlmFrc    pXLim      pXAxial    pXlaT.     pXPalm
-    res_str =    "{:<36} | {:<6.3f} | {:<6.1f} | {:<6.3f} | {:<6.3f} | {:<4.2f} | {:<4.2f} | {:<4.2f} | {:<4.2f} | {:<4.2f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f}\n"
+    res_str =    "{:<37} | {:<6.3f} | {:<6.1f} | {:<6.3f} | {:<6.3f} | {:<4.2f} | {:<4.2f} | {:<4.2f} | {:<4.2f} | {:<4.2f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f}\n"
     first_row = header_str.format(
       "Object name", "Reward", "Steps", "Palm f", "Fing.f", "lft", "stb", "oob", "t.h", "s.h", "%Lt", "%Cn", "%PF", "%XL", "%XA", "%XT", "%XP"
     )
@@ -390,124 +373,57 @@ class TrainDQN():
     output_str += start_str + "\n"
     output_str += "\n" + first_row
 
-    output_str2 += start_str + "\n"
-    output_str2 += "\n" + first_row
-
     if print_out: print(start_str)
 
+    # create cpp counter objects
     total_counter = self.env._make_event_track()
     obj_counter = self.env._make_event_track()
 
+    # loop through the number of objects in the test
     for i in range(num_obj):
 
       j = i * num_trials
 
       names.append(test_data[j].object_name)
       total_rewards = 0
-      total_steps = 0
-      total_lifted = 0
-      total_stable = 0
-      total_oob = 0
-      total_target_height = 0
-      total_stable_height = 0
-      total_palm_force = 0
-      total_finger_force = 0
 
-      cnt_lifted = 0
-      cnt_object_contact = 0
-      cnt_palm_force = 0
-      cnt_exceed_limits = 0
-      cnt_exceed_axial = 0
-      cnt_exceed_lateral = 0
-      cnt_exceed_palm = 0
-
+      # loop through the number of trials for each object
       for k in range(num_trials):
 
+        # add event counts for this object
         obj_counter = self.env._add_events(obj_counter, test_data[j+k].cnt)
 
-        # sum end of episode totals for this set of trials
+        # sum end of episode rewards for this set of trials
         total_rewards += test_data[j + k].reward
-        total_steps += test_data[j + k].steps
-        total_lifted += test_data[j + k].lifted
-        total_stable += test_data[j + k].stable
-        total_oob += test_data[j + k].oob
-        total_target_height += test_data[j + k].target_height
-        total_stable_height += test_data[j + k].stable_height
-        total_palm_force += test_data[j + k].palm_force
-        total_finger_force += test_data[j + k].finger_force
 
-        # sum during episode step events for this set of trials
-        cnt_lifted += test_data[j + k].cnt_lifted
-        cnt_object_contact += test_data[j + k].cnt_object_contact
-        cnt_palm_force += test_data[j + k].cnt_palm_force
-        cnt_exceed_limits += test_data[j + k].cnt_exceed_limits
-        cnt_exceed_axial += test_data[j + k].cnt_exceed_axial
-        cnt_exceed_lateral += test_data[j + k].cnt_exceed_lateral
-        cnt_exceed_palm += test_data[j + k].cnt_exceed_palm
-
-      # calculate averages for the set of trials
+      # calculate averages rewards for the set of trials
       avg_rewards.append(total_rewards / float(num_trials))
-      avg_steps.append(total_steps / float(num_trials))
-      avg_palm_force.append(total_palm_force / float(num_trials))
-      avg_finger_force.append(total_finger_force / float(num_trials))
-
-      # keep running totals of which events were active when episode ended
-      num_stable += total_stable
-      num_lifted += total_lifted
-      num_oob += total_oob
-      num_target_height += total_target_height
-      num_stable_height += total_stable_height
-
-      # calculate the percentage of steps that events occured for these trials
-      p_lifted = 100 * (cnt_lifted / float(total_steps))
-      p_object_contact = 100 * (cnt_object_contact / float(total_steps))
-      p_palm_force = 100 * (cnt_palm_force / float(total_steps))
-      p_exceed_limits = 100 * (cnt_exceed_limits / float(total_steps))
-      p_exceed_axial = 100 * (cnt_exceed_axial / float(total_steps))
-      p_exceed_lateral = 100 * (cnt_exceed_lateral / float(total_steps))
-      p_exceed_palm = 100 * (cnt_exceed_palm / float(total_steps))
-
-      # save these percentages in vectors
-      lifted_vec.append(p_lifted)
-      contact_vec.append(p_object_contact)
-      palm_force_vec.append(p_palm_force)
-      exceed_limits_vec.append(p_exceed_limits)
-      exceed_axial_vec.append(p_exceed_axial)
-      exceed_lateral_vec.append(p_exceed_lateral)
-      exceed_palm_vec.append(p_exceed_palm)
-
+      
+      # calculate percentage of steps events were active
       obj_counter.calculate_percentage()
 
       # save all data in a string to output to a test summary text file
-      obj_row_old = row_str.format(
-        names[-1], avg_rewards[-1], avg_steps[-1], avg_palm_force[-1], avg_finger_force[-1],
-        total_lifted, total_stable, total_oob, total_target_height, total_stable_height,
-        p_lifted, p_object_contact, p_palm_force, p_exceed_limits,
-        p_exceed_axial, p_exceed_lateral, p_exceed_palm
-      )
-
       obj_row = row_str.format(
         names[-1], 
         avg_rewards[-1], 
-        obj_counter.abs.step_num / float(num_trials),
-        obj_counter.last_linval.palm_force / float(num_trials),
-        obj_counter.last_linval.finger_force / float(num_trials),
-        obj_counter.row.lifted, 
-        obj_counter.row.object_stable, 
-        obj_counter.row.oob, 
-        obj_counter.row.target_height, 
-        obj_counter.row.stable_height,
-        obj_counter.percent.lifted,
-        obj_counter.percent.object_contact,
-        obj_counter.percent.palm_force,
-        obj_counter.percent.exceed_limits,
-        obj_counter.percent.exceed_axial,
-        obj_counter.percent.exceed_lateral,
-        obj_counter.percent.exceed_palm
+        obj_counter.step_num.abs / float(num_trials),
+        obj_counter.palm_force.last_value / float(num_trials),
+        obj_counter.finger_force.last_value / float(num_trials),
+        obj_counter.lifted.last_value, 
+        obj_counter.object_stable.last_value, 
+        obj_counter.oob.last_value, 
+        obj_counter.target_height.last_value, 
+        obj_counter.stable_height.last_value,
+        obj_counter.lifted.percent,
+        obj_counter.object_contact.percent,
+        obj_counter.palm_force.percent,
+        obj_counter.exceed_limits.percent,
+        obj_counter.exceed_axial.percent,
+        obj_counter.exceed_lateral.percent,
+        obj_counter.exceed_palm.percent
       )
 
       output_str += obj_row
-      output_str2 += obj_row_old
 
       if print_out: print(obj_row)
 
@@ -517,77 +433,47 @@ class TrainDQN():
       # reset the object counter
       obj_counter.reset()  
 
-    # now get the overall averages for float/integer values
+    # now get the mean reward over the entire test
     mean_reward = np.mean(np.array(avg_rewards))
-    mean_steps = np.mean(np.array(avg_steps))
-    mean_palm_force = np.mean(np.array(avg_palm_force))
-    mean_finger_force = np.mean(np.array(avg_finger_force))
-    avg_lifted = num_lifted / float(num_obj)
-    avg_stable = num_stable / float(num_obj)
-    avg_oob = num_oob / float(num_obj)
-    avg_target_height = num_target_height / float(num_obj)
-    avg_stable_height = num_stable_height / float(num_obj)
 
-    # get the overall averages for percentage of step values
-    avg_p_lifted = np.mean(np.array(lifted_vec))
-    avg_p_contact = np.mean(np.array(contact_vec))
-    avg_p_palm_force = np.mean(np.array(palm_force_vec))
-    avg_p_exceed_limits = np.mean(np.array(exceed_limits_vec))
-    avg_p_exceed_axial = np.mean(np.array(exceed_axial_vec))
-    avg_p_exceed_lateral = np.mean(np.array(exceed_lateral_vec))
-    avg_p_exceed_palm = np.mean(np.array(exceed_palm_vec))
-
-    # add the overall averages to the test report string
-    end_str_old = res_str.format(
-      "\nOverall averages per object:  ", mean_reward, mean_steps, mean_palm_force,
-      mean_finger_force, avg_lifted, avg_stable, avg_oob, avg_target_height,
-      avg_stable_height, avg_p_lifted, avg_p_contact, avg_p_palm_force,
-      avg_p_exceed_limits, avg_p_exceed_axial, avg_p_exceed_lateral,
-      avg_p_exceed_palm
-    )
-
-    # force the total counter to update the percentage values
+    # update the percentage values for the entire test
     total_counter.calculate_percentage()
 
-    total_counter.print()
-
+    # add the overall averages to the test report string
     end_str = res_str.format(
       "\nOverall averages per object: ", 
       mean_reward, 
-      total_counter.abs.step_num / float(num_trials * num_obj),
-      total_counter.last_linval.palm_force / float(num_trials * num_obj),
-      total_counter.last_linval.finger_force / float(num_trials * num_obj),
-      total_counter.row.lifted / float(num_trials * num_obj), 
-      total_counter.row.object_stable / float(num_trials * num_obj), 
-      total_counter.row.oob / float(num_trials * num_obj), 
-      total_counter.row.target_height / float(num_trials * num_obj), 
-      total_counter.row.stable_height / float(num_trials * num_obj),
-      total_counter.percent.lifted,
-      total_counter.percent.object_contact,
-      total_counter.percent.palm_force,
-      total_counter.percent.exceed_limits,
-      total_counter.percent.exceed_axial,
-      total_counter.percent.exceed_lateral,
-      total_counter.percent.exceed_palm
+      total_counter.step_num.abs / float(num_trials * num_obj),
+      total_counter.palm_force.last_value / float(num_trials * num_obj),
+      total_counter.finger_force.last_value / float(num_trials * num_obj),
+      total_counter.lifted.last_value / float(num_trials * num_obj), 
+      total_counter.object_stable.last_value / float(num_trials * num_obj), 
+      total_counter.oob.last_value / float(num_trials * num_obj), 
+      total_counter.target_height.last_value / float(num_trials * num_obj), 
+      total_counter.stable_height.last_value / float(num_trials * num_obj),
+      total_counter.lifted.percent,
+      total_counter.object_contact.percent,
+      total_counter.palm_force.percent,
+      total_counter.exceed_limits.percent,
+      total_counter.exceed_axial.percent,
+      total_counter.exceed_lateral.percent,
+      total_counter.exceed_palm.percent
     )
 
+    # save test results if we are mid-training
     if i_episode != None:
-      # save outputs if we are mid-training
       self.track.test_episodes = np.append(self.track.test_episodes, i_episode)
-      self.track.test_durations = np.append(self.track.test_durations, mean_steps)
+      self.track.test_durations = np.append(self.track.test_durations, total_counter.step_num.abs / float(num_trials * num_obj))
       self.track.test_rewards = np.append(self.track.test_rewards, mean_reward)
-      self.track.avg_p_lifted = np.append(self.track.avg_p_lifted, avg_p_lifted)
-      self.track.avg_p_contact = np.append(self.track.avg_p_contact, avg_p_contact)
-      self.track.avg_p_palm_force = np.append(self.track.avg_p_palm_force, avg_p_palm_force)
-      self.track.avg_p_exceed_limits = np.append(self.track.avg_p_exceed_limits, avg_p_exceed_limits)
-      self.track.avg_p_exceed_axial = np.append(self.track.avg_p_exceed_axial, avg_p_exceed_axial)
-      self.track.avg_p_exceed_lateral = np.append(self.track.avg_p_exceed_lateral, avg_p_exceed_lateral)
-      self.track.avg_p_exceed_palm = np.append(self.track.avg_p_exceed_palm, avg_p_exceed_palm)
+      self.track.avg_p_lifted = np.append(self.track.avg_p_lifted, total_counter.lifted.percent)
+      self.track.avg_p_contact = np.append(self.track.avg_p_contact, total_counter.object_contact.percent)
+      self.track.avg_p_palm_force = np.append(self.track.avg_p_palm_force, total_counter.palm_force.percent)
+      self.track.avg_p_exceed_limits = np.append(self.track.avg_p_exceed_limits, total_counter.exceed_limits.percent)
+      self.track.avg_p_exceed_axial = np.append(self.track.avg_p_exceed_axial, total_counter.exceed_axial.percent)
+      self.track.avg_p_exceed_lateral = np.append(self.track.avg_p_exceed_lateral, total_counter.exceed_lateral.percent)
+      self.track.avg_p_exceed_palm = np.append(self.track.avg_p_exceed_palm, total_counter.exceed_palm.percent)
 
     output_str += end_str
-    output_str2 += end_str_old
-
-    output_str += "\n\nNow the old method:\n\n" + output_str2
 
     if print_out: print(end_str)
 
@@ -998,10 +884,10 @@ if __name__ == "__main__":
   # model.env.mj.set.wrist_sensor_Z.in_use = True
 
   # # test
-  model.env.mj.set.debug = False
+  model.env.mj.set.debug = True
   model.env.disable_rendering = False
   model.env.test_trials_per_obj = 1
-  model.env.num_objects = 10
+  model.env.test_obj_limit = 1
   # model.env.max_episode_steps = 20
   # model.env.mj.set.step_num.set          (0,      70,   1)
   # model.env.mj.set.exceed_limits.set     (-0.005, True,   10)

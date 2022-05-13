@@ -190,11 +190,12 @@ namespace MjType
 
     struct BinaryEvent {
       bool value { false };
+      int last_value { false }; // can represent sum of booleans (eg 2 = true twice)
       int row { 0 };
       int abs { 0 };
       float percent { 0.0 };
 
-      void reset() { value = 0; row = 0; abs = 0; percent = 0 };
+      void reset() { value = 0; last_value = 0; row = 0; abs = 0; percent = 0; }
     };
 
     struct LinearEvent {
@@ -204,7 +205,7 @@ namespace MjType
       int abs { 0 };
       float percent { 0.0 };
 
-      void reset() { value = 0; last_value = 0; row = 0; abs = 0; percent = 0 };
+      void reset() { value = 0; last_value = 0; row = 0; abs = 0; percent = 0; }
     };
 
     // create an event for each reward, binary->binary, linear->linear
@@ -219,95 +220,18 @@ namespace MjType
     #undef BR
     #undef LR
 
-    // initialise a boolean for each binary reward, float for each linear reward
-    #define XX(NAME, TYPE, VALUE)
-    #define SS(NAME, USED, NORMALISE, READ_RATE)
-    #define BR(NAME, REWARD, DONE, TRIGGER) bool NAME { false };
-    #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) float NAME { 0.0 };
-      // run the macro to create the code
-      LUKE_MJSETTINGS
-    #undef XX
-    #undef SS
-    #undef BR
-    #undef LR
-
-    // initialise a tracking variable for counts in a row for each reward
-    struct Row {
-    #define XX(NAME, TYPE, VALUE)
-    #define SS(NAME, USED, NORMALISE, READ_RATE)
-    #define BR(NAME, REWARD, DONE, TRIGGER) int NAME { false };
-    #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) int NAME { false };
-      // run the macro to create the code
-      LUKE_MJSETTINGS
-    #undef XX
-    #undef SS 
-    #undef BR
-    #undef LR
-    } row;
-
-    // initialise a tracking variable for absolute counts for each reward
-    struct Abs {
-    #define XX(NAME, TYPE, VALUE)
-    #define SS(NAME, USED, NORMALISE, READ_RATE)
-    #define BR(NAME, REWARD, DONE, TRIGGER) int NAME { false };
-    #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) int NAME { false };
-      // run the macro to create the code
-      LUKE_MJSETTINGS
-    #undef XX
-    #undef SS
-    #undef BR
-    #undef LR
-    } abs;
-
-    // tracking the percentage occurance (based on step_num)
-    struct Percent {
-    #define XX(NAME, TYPE, VALUE)
-    #define SS(NAME, USED, NORMALISE, READ_RATE)
-    #define BR(NAME, REWARD, DONE, TRIGGER) float NAME { 0.0 };
-    #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) float NAME { 0.0 };
-      // run the macro to create the code
-      LUKE_MJSETTINGS
-    #undef XX
-    #undef SS 
-    #undef BR
-    #undef LR
-    } percent;
-
-    // buffer to store last linear 
-    struct Last_linval {
-    #define XX(NAME, TYPE, VALUE)
-    #define SS(NAME, USED, NORMALISE, READ_RATE)
-    #define BR(NAME, REWARD, DONE, TRIGGER)
-    #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) float NAME { 0.0 };
-      // run the macro to create the code
-      LUKE_MJSETTINGS
-    #undef XX
-    #undef SS 
-    #undef BR
-    #undef LR
-    } last_linval;
-
     void print();
+    std::vector<float> vectorise();
+    void unvectorise(std::vector<float> in);
 
     void reset()
     {
-      /* set all values to zero */
+      /* run the reset function for all members of the class */
 
       #define XX(NAME, TYPE, VALUE)
       #define SS(NAME, USED, NORMALISE, READ_RATE)
-
-      #define BR(NAME, REWARD, DONE, TRIGGER)                          \
-                NAME = false;                                          \
-                row.NAME = 0;                                          \
-                abs.NAME = 0;                                          \
-                percent.NAME = 0.0;
-
-      #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)     \
-                NAME = 0.0;                                            \
-                row.NAME = 0;                                          \
-                abs.NAME = 0;                                          \
-                percent.NAME = 0.0;                                    \
-                last_linval.NAME = 0.0;
+      #define BR(NAME, REWARD, DONE, TRIGGER) NAME.reset();
+      #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) NAME.reset();
 
         // run the macro to create the code
         LUKE_MJSETTINGS
@@ -326,13 +250,14 @@ namespace MjType
       #define SS(NAME, USED, NORMALISE, READ_RATE)
 
       #define BR(NAME, REWARD, DONE, TRIGGER)                             \
-                percent.NAME = (100.0 * abs.NAME) / (float) abs.step_num;
+                NAME.percent = (100.0 * NAME.abs) / (float) step_num.abs;
 
       #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)        \
-                percent.NAME = (100.0 * abs.NAME) / (float) abs.step_num;
+                NAME.percent = (100.0 * NAME.abs) / (float) step_num.abs;
                 
         // run the macro to create the code
         LUKE_MJSETTINGS
+
       #undef XX
       #undef SS
       #undef BR
@@ -418,9 +343,6 @@ namespace MjType
     // track important events in the environment
     EventTrack cnt;
 
-    // EventTrack cnt;         // track events in a row
-    // EventTrack abs_cnt;     // absolute count, never reset to zero
-
     // track the state of the object at this step
     struct Obj {
       std::string name;
@@ -445,12 +367,9 @@ namespace MjType
     } grp;
 
     void reset() {
-      // reinitialise defaults
+      // reset to initialised values
       Obj blank_obj;
       Grp blank_grp;
-      // override current
-      // cnt = blank_cnt;
-      // abs_cnt = blank_cnt;
       obj = blank_obj;
       grp = blank_grp;
       // reset data
@@ -468,20 +387,9 @@ namespace MjType
     // details
     std::string object_name;
     float cumulative_reward = 0;
-    int num_steps = 0;
 
     // save the breakdown of events
     EventTrack cnt;
-
-    // // count everytime an event occurs in the whole test
-    // EventTrack abs_cnt;
-
-    // // snapshot of what events have occured at the end of the test
-    // EventTrack final_cnt;
-
-    // take note of forces
-    float final_palm_force = 0;
-    float final_finger_force = 0;
 
   };
 
@@ -684,7 +592,10 @@ public:
   void spawn_object(int index, double xpos, double ypos);
   bool is_done();
   std::vector<luke::gfloat> get_observation();
+  std::vector<float> get_event_state();
   float reward();
+  float reward(MjType::EventTrack event);
+  float reward(std::vector<float> event_vec);
   int get_n_actions();
   int get_n_obs();
 

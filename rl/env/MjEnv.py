@@ -230,6 +230,12 @@ class MjEnv(gym.Env):
     obs = self.mj.get_observation()
     return np.array(obs)
 
+  def _event_state(self):
+    """
+    Get the state of the simluation, including the observation
+    """
+    return self.mj.get_event_state()
+
   def _reward(self):
     """
     Calculate the reward on this step
@@ -297,31 +303,9 @@ class MjEnv(gym.Env):
     # save information about this trial
     trial_data.obj_idx = self.current_test_trial.obj_idx
     trial_data.obj_trial = self.current_test_trial.obj_trial
-
-    # trial results
     trial_data.object_name = test_report.object_name
     trial_data.reward = self.track.cumulative_reward
-    trial_data.steps = self.track.current_step
-
     trial_data.add_data(test_report.cnt)
-
-    # conditions of object at episode end
-    trial_data.lifted = bool(test_report.cnt.row.lifted)
-    trial_data.stable = bool(test_report.cnt.row.object_stable)
-    trial_data.oob = bool(test_report.cnt.row.oob)
-    trial_data.target_height = bool(test_report.cnt.row.target_height)
-    trial_data.stable_height = bool(test_report.cnt.row.stable_height)
-    trial_data.palm_force = test_report.final_palm_force
-    trial_data.finger_force = test_report.final_finger_force
-
-    # counts during the episode of events
-    trial_data.cnt_lifted = test_report.cnt.abs.lifted
-    trial_data.cnt_object_contact = test_report.cnt.abs.object_contact
-    trial_data.cnt_palm_force = test_report.cnt.abs.palm_force
-    trial_data.cnt_exceed_limits = test_report.cnt.abs.exceed_limits
-    trial_data.cnt_exceed_axial = test_report.cnt.abs.exceed_axial
-    trial_data.cnt_exceed_lateral = test_report.cnt.abs.exceed_lateral
-    trial_data.cnt_exceed_palm = test_report.cnt.abs.exceed_palm
 
     # insert information into stored data list
     self.test_trials.append(trial_data)
@@ -365,6 +349,7 @@ class MjEnv(gym.Env):
 
     self._take_action(action)
     obs = self._next_observation()
+    state = self._event_state()
     reward = self._reward()
     done = self._is_done()
 
@@ -432,8 +417,6 @@ if __name__ == "__main__":
   # import pickle
 
   mj = MjEnv()
-
-  exit()
 
   mj.mj.set.wipe_rewards()
   mj.mj.set.lifted.set(100, 10, 1)

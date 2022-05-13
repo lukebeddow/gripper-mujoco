@@ -542,131 +542,61 @@ void MjClass::update_env()
   /* ----- detect state of binary events ----- */
 
   // another step has been made
-  env_.cnt.step_num = true;
+  env_.cnt.step_num.value = true;
 
   // lifted is true if ground force is 0 and lift distance is exceeded
   if (env_.obj.ground_force.magnitude3() < ftol)
-    env_.cnt.lifted = true;
+    env_.cnt.lifted.value = true;
 
   // check if the object has gone out of bounds
   if (env_.obj.qpos.x > s_.oob_distance or env_.obj.qpos.x < -s_.oob_distance or
       env_.obj.qpos.y > s_.oob_distance or env_.obj.qpos.y < -s_.oob_distance)
-    env_.cnt.oob = true;
+    env_.cnt.oob.value = true;
 
   // check if the object has been dropped (env_.cnt.lifted must already be set)
-  env_.cnt.dropped = 
+  env_.cnt.dropped.value = 
     // if lastdropped==false, newlifted==false, and lastlifted==true, set dropped=1
-    ((not env_.cnt.row.dropped * not env_.cnt.lifted * env_.cnt.row.lifted) ? 1
+    ((not env_.cnt.dropped.row * not env_.cnt.lifted.value * env_.cnt.lifted.row) ? 1
     // else if lifted==true -> set dropped=0
-    : (env_.cnt.lifted ? 0 
+    : (env_.cnt.lifted.value ? 0 
     // else if lastdropped==true +=1 to it, otherwise -> set dropped=0
-    : (env_.cnt.row.dropped ? env_.cnt.row.dropped + 1 : 0)));
+    : (env_.cnt.dropped.row ? env_.cnt.dropped.row + 1 : 0)));
 
   // lifted above the target height and not oob (env_.cnt.oob must be set)
   if (env_.obj.qpos.z > env_.start_qpos.z + s_.done_height
-      and not env_.cnt.oob)
-    env_.cnt.target_height = true;
+      and not env_.cnt.oob.value)
+    env_.cnt.target_height.value = true;
 
   // detect any gripper contact with the object
   if (finger1_force_mag > ftol or
       finger2_force_mag > ftol or
       finger3_force_mag > ftol or
       palm_force_mag > ftol)
-    env_.cnt.object_contact = true;
+    env_.cnt.object_contact.value = true;
 
   // check if object is stable (must also be lifted and env_.cnt.lifted set)
   if (finger1_force_mag > s_.stable_finger_force and
       finger2_force_mag > s_.stable_finger_force and
       finger3_force_mag > s_.stable_finger_force and
-      palm_force_mag > s_.stable_palm_force and env_.cnt.lifted)
-    env_.cnt.object_stable = true;
+      palm_force_mag > s_.stable_palm_force and env_.cnt.lifted.value)
+    env_.cnt.object_stable.value = true;
 
   // if stable and lifted to target (need env_.cnt.object_stable and target_height set)
-  if (env_.cnt.object_stable and env_.cnt.target_height)
-    env_.cnt.stable_height = true;
+  if (env_.cnt.object_stable.value and env_.cnt.target_height.value)
+    env_.cnt.stable_height.value = true;
 
   /* ----- detect state of linear events (also save reward scaled value) ----- */
 
-  env_.cnt.exceed_axial = env_.grp.peak_finger_axial_force;
-  env_.cnt.exceed_lateral = env_.grp.peak_finger_lateral_force;
-  env_.cnt.palm_force = env_.obj.palm_axial_force * env_.cnt.lifted; // must be lifted
-  env_.cnt.exceed_palm = env_.obj.palm_axial_force;
-  env_.cnt.finger_force = env_.obj.avg_finger_force;
+  env_.cnt.exceed_axial.value = env_.grp.peak_finger_axial_force;
+  env_.cnt.exceed_lateral.value = env_.grp.peak_finger_lateral_force;
+  env_.cnt.palm_force.value = env_.obj.palm_axial_force * env_.cnt.lifted.value; // must be lifted
+  env_.cnt.exceed_palm.value = env_.obj.palm_axial_force;
+  env_.cnt.finger_force.value = env_.obj.avg_finger_force;
 
-  // // check if the finger limit axial force is exceeded
-  // s_.exceed_axial.value = env_.grp.peak_finger_axial_force;       // don't forget this!
-  // if (s_.exceed_axial.value > s_.exceed_axial.min)
-  //   env_.cnt.exceed_axial = true;
-
-  // // check if the finger lateral force limit is exceeded
-  // s_.exceed_lateral.value = env_.grp.peak_finger_lateral_force;   // don't forget this!
-  // if (s_.exceed_lateral.value > s_.exceed_lateral.min)
-  //   env_.cnt.exceed_lateral = true;
-
-  // // detect if we are in a good palm force range (must be lifted and env_.cnt.lifted set)
-  // s_.palm_force.value = env_.obj.palm_axial_force;                // don't forget this!
-  // if (s_.palm_force.value > s_.palm_force.min and
-  //     s_.palm_force.value < s_.palm_force.overshoot and env_.cnt.lifted)
-  //   env_.cnt.palm_force = true;
-
-  // // detect if we exceed safe limits for palm force
-  // s_.exceed_palm.value = env_.obj.palm_axial_force;               // don't forget this!
-  // if (s_.exceed_palm.value > s_.exceed_palm.min)
-  //   env_.cnt.exceed_palm = true;
-
-  // // detect finger force on object
-  // s_.finger_force.value = env_.obj.avg_finger_force;              // don't forget this!
-  // if (s_.finger_force.value > s_.finger_force.min)
-  //   env_.cnt.finger_force = true;
-
-  // new code
+  // update the counts of these events
   update_events(env_.cnt, s_);
+
   if (s_.debug) env_.cnt.print();
-
-  // /* ----- update count of events in a row ----- */
-
-  // env_.cnt.step_num += 1;
-
-  // // update dropped - this is a complex boolean expression
-  // // if dropped==false, lifted==false, and cnt.lifted==true, set dropped=1
-  // env_.cnt.dropped = ((not env_.cnt.dropped * not lifted * env_.cnt.lifted) ? 1
-  //   // otherwise, if lifted==true, set dropped=0, else true+=1 and false=0
-  //   : (lifted ? 0 : (env_.cnt.dropped ? env_.cnt.dropped + 1 : 0)));
-
-  // // update the rest, if=0 do nothing, if!=0, increment by 1
-  // env_.cnt.lifted = env_.cnt.lifted * lifted + lifted;
-  // env_.cnt.oob = env_.cnt.oob * out_of_bounds + out_of_bounds;
-  // env_.cnt.target_height = env_.cnt.target_height * target_height + target_height;
-  // env_.cnt.object_stable = env_.cnt.object_stable * object_stable + object_stable;
-  // env_.cnt.exceed_axial = env_.cnt.exceed_axial * exceed_axial + exceed_axial;
-  // env_.cnt.exceed_lateral = env_.cnt.exceed_lateral * exceed_lateral + exceed_lateral;
-  // env_.cnt.palm_force = env_.cnt.palm_force * palm_force + palm_force;
-  // env_.cnt.object_contact = env_.cnt.object_contact * object_contact + object_contact;
-  // env_.cnt.exceed_palm = env_.cnt.exceed_palm * exceed_palm + exceed_palm;
-  // env_.cnt.finger_force = env_.cnt.finger_force * finger_force + finger_force;
-  // env_.cnt.stable_height = env_.cnt.stable_height * stable_height + stable_height;
-  // // env_.cnt.exceed_limits is already set in set_action()
-
-  // if (s_.debug) { std::cout << "cnt: "; env_.cnt.print(); }
-
-  // /* ----- update absolute count of events ----- */
-
-  // env_.abs_cnt.step_num = env_.cnt.step_num;
-  // if (env_.cnt.lifted) env_.abs_cnt.lifted += 1;
-  // if (env_.cnt.oob) env_.abs_cnt.oob += 1;
-  // if (env_.cnt.dropped) env_.abs_cnt.dropped += 1;
-  // if (env_.cnt.target_height) env_.abs_cnt.target_height += 1;
-  // if (env_.cnt.exceed_limits) env_.abs_cnt.exceed_limits += 1;
-  // if (env_.cnt.exceed_axial) env_.abs_cnt.exceed_axial += 1;
-  // if (env_.cnt.exceed_lateral) env_.abs_cnt.exceed_lateral += 1;
-  // if (env_.cnt.object_stable) env_.abs_cnt.object_stable += 1;
-  // if (env_.cnt.palm_force) env_.abs_cnt.palm_force += 1;
-  // if (env_.cnt.object_contact) env_.abs_cnt.object_contact += 1;
-  // if (env_.cnt.exceed_palm) env_.abs_cnt.exceed_palm += 1;
-  // if (env_.cnt.finger_force) env_.abs_cnt.finger_force += 1;
-  // if (env_.cnt.stable_height) env_.abs_cnt.stable_height += 1;
-
-  // if (s_.debug) { std::cout << "abs_cnt: "; env_.abs_cnt.print(); }
   
   return;
 }
@@ -814,7 +744,7 @@ void MjClass::set_action(int action)
   // env_.cnt.exceed_limits *= exceed_limits;  // wipe to zero if false
   // env_.cnt.exceed_limits += exceed_limits;  // increment by one if true
 
-  env_.cnt.exceed_limits = not wl;
+  env_.cnt.exceed_limits.value = not wl;
 }
 
 bool MjClass::is_done()
@@ -828,14 +758,14 @@ bool MjClass::is_done()
   /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)                                \
-            if (s_.NAME.done and env_.cnt.NAME >= s_.NAME.done) {               \
+            if (s_.NAME.done and env_.cnt.NAME.value >= s_.NAME.done) {         \
               if (s_.debug) std::cout << "is_done() = true, "                   \
                 << #NAME << " limit of " << s_.NAME.done << " exceeded\n";      \
               return true;                                                      \
             }                                                                   \
    
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)  \
-            if (s_.NAME.done and env_.cnt.NAME >= s_.NAME.done) {               \
+            if (s_.NAME.done and env_.cnt.NAME.value >= s_.NAME.done) {         \
               if (s_.debug) std::cout << "is_done() = true, "                   \
                 << #NAME << " limit of " << s_.NAME.done << " exceeded\n";      \
               return true;                                                      \
@@ -878,15 +808,6 @@ std::vector<luke::gfloat> MjClass::get_observation()
   /* get an observation with n samples from the gauges */
 
   std::vector<luke::gfloat> observation;
-
-  // first get the sensor output
-
-  // old code
-  // // calculate how many sensor readings since the last timestep
-  // double time_per_step = mujoco_timestep * s_.sim_steps_per_action;
-  //   double readings_since_step = time_per_step * s_.gauge_read_rate_hz;
-  //   // round to int (if between round up) to include the last reading
-  //   int n_readings = std::ceil(readings_since_step);
 
   // how much time has elapsed since the last state
   double time_per_step = model->opt.timestep * s_.sim_steps_per_action;
@@ -977,93 +898,15 @@ std::vector<luke::gfloat> MjClass::get_observation()
     observation.insert(observation.end(), s2.begin(), s2.end());
     observation.insert(observation.end(), s3.begin(), s3.end());
   }
-
-  /* old code
-  if (s_.obs_raw_data) {
-
-    // get the raw observations from the gauges and the gripper state
-    std::vector<luke::gfloat> f1 = finger1_gauge.read(n);
-    std::vector<luke::gfloat> f2 = finger2_gauge.read(n);
-    std::vector<luke::gfloat> f3 = finger3_gauge.read(n);
-
-    sensor_output.reserve(3 * n);
-    sensor_output.insert(sensor_output.end(), f1.begin(), f1.end());
-    sensor_output.insert(sensor_output.end(), f2.begin(), f2.end());
-    sensor_output.insert(sensor_output.end(), f3.begin(), f3.end());
-
-    // get the gripper state
-    state_output = get_gripper_state();
-
-  }
-  else {
-
-    // the default mujoco timestep is 0.002 seconds
-    constexpr double mujoco_timestep = 0.002;
-    double time_per_step = mujoco_timestep * s_.sim_steps_per_action;
-    double readings_since_step = time_per_step * s_.gauge_read_rate_hz;
-    // round to int (if between round up) to include the last reading
-    int n_readings = std::ceil(readings_since_step);
-
-    // create vector of pointers to iterate over
-    std::vector<luke::SlidingWindow<luke::gfloat>*> data_ptrs;
-    if (s_.use_palm_sensor) {
-      data_ptrs = { &finger1_gauge, &finger2_gauge, &finger3_gauge, &palm_sensor };
-    }
-    else {
-      data_ptrs = { &finger1_gauge, &finger2_gauge, &finger3_gauge };
-    }
-
-    // create the output vector, 3 elements for each sensor
-    int data_per_sensor = 3;
-    sensor_output.resize(data_per_sensor * data_ptrs.size());
-
-    for (int i = 0; i < data_ptrs.size(); i++) {
-      
-      luke::gfloat old_reading = data_ptrs[i]->read_element(n_readings);
-      luke::gfloat new_reading = data_ptrs[i]->read_element();
-      luke::gfloat change = new_reading - old_reading;
-
-      if (change > 1) change = 1;
-      else if (change < -1) change = -1;
-
-      // save the data for this sensor
-      sensor_output[i * data_per_sensor + 0] = old_reading;
-      sensor_output[i * data_per_sensor + 1] = change;
-      sensor_output[i * data_per_sensor + 2] = new_reading;
-    }
-
-    // get the gripper state
-    state_output = get_gripper_state();
-
-    // normalise to the range -1, +1 for each state output
-    for (int i = 0; i < 6; i++) {
-      state_output[i] = normalise_between(
-        state_output[i], luke::Gripper::xy_min, luke::Gripper::xy_max
-      );
-    }
-    state_output[6] = normalise_between(state_output[6], luke::Gripper::z_min, luke::Gripper::z_max);
-  }
-  */
-
-  // idea, make 'state' a sensor and use read rate = 0 to indicate only 1 reading per ask
-
-  // // get position we think each motor should be
-  // state_output = get_target_state();
-
-  // // normalise { x, y, z } joint values
-  // state_output[0] = normalise_between(
-  //   state_output[0], luke::Gripper::xy_min, luke::Gripper::xy_max);
-  // state_output[1] = normalise_between(
-  //   state_output[1], luke::Gripper::xy_min, luke::Gripper::xy_max);
-  // state_output[2] = normalise_between(
-  //   state_output[2], luke::Gripper::z_min, luke::Gripper::z_max);
-
-  // // finally, build the observation as state + sensor data  
-  // observation.reserve(sensor_output.size() + state_output.size());
-  // observation.insert(observation.end(), state_output.begin(), state_output.end());
-  // observation.insert(observation.end(), sensor_output.begin(), sensor_output.end());
   
   return observation;
+}
+
+std::vector<float> MjClass::get_event_state()
+{
+  /* get the full state of the simulation */
+
+  return env_.cnt.vectorise();
 }
 
 void MjClass::reset_object()
@@ -1166,25 +1009,42 @@ float MjClass::reward()
   // }
 
   // new code
-  float reward = calc_rewards(env_.cnt, s_);
+  float transition_reward = reward(env_.cnt);
 
   // useful for testing, this value is not used in python
-  env_.cumulative_reward += reward;
+  env_.cumulative_reward += transition_reward;
 
   // if we are capping the maximum cumulative negative reward
   if (env_.cumulative_reward < s_.quit_on_reward_below) {
     if (s_.quit_reward_capped) {
       // reduce the reward to not put us below the cap
-      reward += s_.quit_on_reward_below - env_.cumulative_reward - ftol;
+      transition_reward += s_.quit_on_reward_below - env_.cumulative_reward - ftol;
       env_.cumulative_reward = s_.quit_on_reward_below - ftol;
     }
   }
 
   if (s_.debug)
-    std::cout << "Action reward is: " << reward << ", cumulative reward is "
-      << env_.cumulative_reward << '\n';
+    std::cout << "Transition reward is: " << transition_reward 
+      << ", cumulative reward is " << env_.cumulative_reward << '\n';
 
-  return reward;
+  return transition_reward;
+}
+
+float MjClass::reward(MjType::EventTrack event)
+{
+  /* calculate rewards using the inbuilt settings */
+
+  return calc_rewards(event, s_);
+}
+
+float MjClass::reward(std::vector<float> event_vec)
+{
+  /* calculate rewards using an event vector */
+
+  MjType::EventTrack event;
+  event.unvectorise(event_vec);
+
+  return reward(event);
 }
 
 int MjClass::get_n_actions()
@@ -1228,13 +1088,7 @@ MjType::TestReport MjClass::get_test_report()
   /* fills out and returns the test report */
 
   testReport_.object_name = env_.obj.name;
-  testReport_.num_steps = env_.num_action_steps;
   testReport_.cumulative_reward = env_.cumulative_reward;
-
-  testReport_.final_palm_force = env_.obj.palm_force.magnitude3();
-  testReport_.final_finger_force = (env_.obj.finger1_force.magnitude3() +
-    env_.obj.finger2_force.magnitude3() + env_.obj.finger3_force.magnitude3()) / 3;
-
   testReport_.cnt = env_.cnt;
 
   return testReport_;
@@ -1503,9 +1357,9 @@ void MjType::EventTrack::print()
   #define SS(NAME, USED, NORMALISE, READ_RATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                               \
-            << #NAME << " = " << row.NAME << " (" << abs.NAME << "); "
+            << #NAME << " = " << NAME.row << " (" << NAME.abs << "); "
   #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)          \
-            << #NAME << " = " << row.NAME << " (" << abs.NAME << "); "
+            << #NAME << " = " << NAME.row << " (" << NAME.abs << "); "
 
     // run the macro to create the code
     LUKE_MJSETTINGS << "\n";
@@ -1525,20 +1379,22 @@ void update_events(MjType::EventTrack& events, MjType::Settings& settings)
   #define XX(NAME, TYPE, VALUE)
   #define SS(NAME, USED, NORMALISE, READ_RATE)
   #define BR(NAME, REWARD, DONE, TRIGGER)                                    \
-            events.row.NAME = events.row.NAME * events.NAME + events.NAME;   \
-            events.abs.NAME += events.NAME;                                  \
-            events.NAME = false; // reset
+            events.NAME.row = events.NAME.row *                              \
+                                  events.NAME.value + events.NAME.value;     \
+            events.NAME.abs += events.NAME.value;                            \
+            events.NAME.last_value = events.NAME.value;                      \
+            events.NAME.value = false; // reset
 
   #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)               \
             active = false;                                                  \
-            if (events.NAME > settings.NAME.min and                          \
-                (events.NAME < settings.NAME.overshoot or                    \
+            if (events.NAME.value > settings.NAME.min and                    \
+                (events.NAME.value < settings.NAME.overshoot or              \
                  settings.NAME.overshoot < 0))                               \
               { active = true; }                                             \
-            events.row.NAME = events.row.NAME * active + active;             \
-            events.abs.NAME += active;                                       \
-            events.last_linval.NAME = events.NAME;                           \
-            events.NAME = 0.0; // reset
+            events.NAME.row = events.NAME.row * active + active;             \
+            events.NAME.abs += active;                                       \
+            events.NAME.last_value = events.NAME.value;                      \
+            events.NAME.value = 0.0; // reset
 
     // run the macro to create the code
     LUKE_MJSETTINGS
@@ -1562,7 +1418,7 @@ float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings)
   /* do NOT use other fields than name as it will pull values from simsettings.h,
      eg instead of using TRIGGER we need to use settings.NAME.trigger */
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)                                \
-            if (events.row.NAME >= settings.NAME.trigger) {                     \
+            if (events.NAME.row >= settings.NAME.trigger) {                     \
               if (settings.debug)                                               \
                 std::printf("%s triggered, reward += %.4f\n",                   \
                   #NAME, settings.NAME.reward);                                 \
@@ -1570,13 +1426,13 @@ float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings)
             }
         
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)  \
-            if (events.row.NAME >= settings.NAME.trigger) {                     \
-              float fraction = linear_reward(events.last_linval.NAME,           \
+            if (events.NAME.row >= settings.NAME.trigger) {                     \
+              float fraction = linear_reward(events.NAME.last_value,            \
                 settings.NAME.min, settings.NAME.max, settings.NAME.overshoot); \
               float scaled_reward = settings.NAME.reward * fraction;            \
               if (settings.debug)                                               \
                 std::printf("%s triggered by value %.1f, reward += %.4f\n",     \
-                  #NAME, events.last_linval.NAME, settings.NAME.reward);        \
+                  #NAME, events.NAME.last_value, settings.NAME.reward);         \
               reward += scaled_reward;                                          \
             }
             
@@ -1611,11 +1467,7 @@ float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings)
 
 MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2)
 {
-  /* add the counts of two events. The abs count is directly added, whilst
-     the row count is converted to a bool and added, so it no longer shows
-     how many in a row, instead it shows if the condition was met at the
-     end of the last step - and that value is added. The last_linval is
-     also added */
+  /* add the absolute count and last value of two events, all else is ignored */
 
   MjType::EventTrack out;
 
@@ -1623,13 +1475,12 @@ MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2)
   #define SS(NAME, USED, NORMALISE, READ_RATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
-            out.row.NAME = (bool)e1.row.NAME + (bool)e2.row.NAME;              \
-            out.abs.NAME = e1.abs.NAME + e2.abs.NAME;
+            out.NAME.abs = e1.NAME.abs + e2.NAME.abs;                          \
+            out.NAME.last_value = e1.NAME.last_value + e2.NAME.last_value;
 
   #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)                 \
-            out.row.NAME = (bool)e1.row.NAME + (bool)e2.row.NAME;              \
-            out.abs.NAME = e1.abs.NAME + e2.abs.NAME;                          \
-            out.last_linval.NAME = e1.last_linval.NAME + e2.last_linval.NAME;  
+            out.NAME.abs = e1.NAME.abs + e2.NAME.abs;                          \
+            out.NAME.last_value = e1.NAME.last_value + e2.NAME.last_value;  
 
     // run the macro to create the code
     LUKE_MJSETTINGS
@@ -1640,6 +1491,65 @@ MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2)
   #undef LR
 
   return out;
+}
+
+std::vector<float> MjType::EventTrack::vectorise()
+{
+  /* turn the state into a vector */
+
+  std::vector<float> out;
+
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, USED, NORMALISE, READ_RATE)
+
+  #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
+            out.push_back(NAME.row);
+
+  #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)                 \
+            out.push_back(NAME.row);                                           \
+            out.push_back(NAME.last_value);  
+
+    // run the macro to create the code
+    LUKE_MJSETTINGS
+    
+  #undef XX
+  #undef SS 
+  #undef BR
+  #undef LR
+
+  return out;
+}
+
+void MjType::EventTrack::unvectorise(std::vector<float> in)
+{
+  /* fill in event track details from an input vector. Check to make sure this
+  matches with vectorise() */
+
+  // reset ourselves first, to prevent mixed data
+  reset();
+
+  int i = 0;
+
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, USED, NORMALISE, READ_RATE)
+
+  #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
+            NAME.row = in[i] + 0.5; /* casts float -> int */                   \
+            i++;
+
+  #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)                 \
+            NAME.row = in[i] + 0.5; /* casts float -> int */                   \
+            i++;                                                               \
+            NAME.last_value = in[i];                                           \
+            i++;                                                               
+
+    // run the macro to create the code
+    LUKE_MJSETTINGS
+    
+  #undef XX
+  #undef SS 
+  #undef BR
+  #undef LR
 }
 
 // end
