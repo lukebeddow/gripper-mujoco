@@ -1890,6 +1890,8 @@ void uiEvent(mjuiState* state)
 
                 std::cout << "Action taken: " << it->itemid << '\n';
                 luke::print_vec(obs, "Observation");
+                if (myMjClass.s_.use_HER)
+                    luke::print_vec(myMjClass.assess_goal(), "Goal performance");
                 std::cout << "Reward is " << reward << '\n';
                 std::cout << "Cumulative reward is "
                     << myMjClass.env_.cumulative_reward << '\n';

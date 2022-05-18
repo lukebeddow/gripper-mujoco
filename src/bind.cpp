@@ -9,12 +9,14 @@ PYBIND11_MODULE(bind, m) {
 
   m.doc() = "A module to wrap mujoco into python"; // module docstring
   
-  // functions
+  // module functions
   m.def("calc_rewards", &calc_rewards);
-  m.def("add_events", &add_events);
+  m.def("goal_rewards", &goal_rewards);
+  m.def("change_goal", static_cast<void (*)(MjType::Goal&, std::vector<float>, MjType::Settings)>(&change_goal));
+  m.def("change_goal", static_cast<void (*)(MjType::Goal&, MjType::EventTrack, MjType::Settings)>(&change_goal));
 
-  // main wrapper
-  py::class_<MjClass>(m, "MjClass")
+  // main module class
+  {py::class_<MjClass>(m, "MjClass")
 
     // constructors
     .def(py::init<>())
@@ -48,12 +50,15 @@ PYBIND11_MODULE(bind, m) {
     .def("is_done", &MjClass::is_done)
     .def("get_observation", &MjClass::get_observation)
     .def("get_event_state", &MjClass::get_event_state)
-    // .def("reward", &MjClass::reward)
-
+    .def("get_goal", &MjClass::get_goal)
+    .def("assess_goal", static_cast<std::vector<float> (MjClass::*)()>(&MjClass::assess_goal))
+    .def("assess_goal", static_cast<std::vector<float> (MjClass::*)(std::vector<float>)>(&MjClass::assess_goal))
     .def("reward", static_cast<float (MjClass::*)()>(&MjClass::reward))
     .def("reward", static_cast<float (MjClass::*)(MjType::EventTrack)>(&MjClass::reward))
     .def("reward", static_cast<float (MjClass::*)(std::vector<float>)>(&MjClass::reward))
-
+    .def("reward", static_cast<float (MjClass::*)(MjType::Goal)>(&MjClass::reward))
+    .def("reward", static_cast<float (MjClass::*)(MjType::EventTrack event, MjType::Goal goal)>(&MjClass::reward))
+    .def("reward", static_cast<float (MjClass::*)(std::vector<float>, std::vector<float>)>(&MjClass::reward))
     .def("get_n_actions", &MjClass::get_n_actions)
     .def("get_n_obs", &MjClass::get_n_obs)
 
@@ -62,9 +67,12 @@ PYBIND11_MODULE(bind, m) {
     .def("get_number_of_objects", &MjClass::get_number_of_objects)
     .def("get_current_object_name", &MjClass::get_current_object_name)
     .def("get_test_report", &MjClass::get_test_report)
+    .def("add_events", &MjClass::add_events)
+    .def("reset_goal", &MjClass::reset_goal)
 
     // exposed variables
     .def_readwrite("set", &MjClass::s_)
+    .def_readwrite("goal", &MjClass::goal)
     .def_readwrite("model_folder_path", &MjClass::model_folder_path)
     .def_readwrite("object_set_name", &MjClass::object_set_name)
     .def_readonly("machine", &MjClass::machine)
@@ -101,9 +109,10 @@ PYBIND11_MODULE(bind, m) {
       }
     ))
     ;
+  }
 
   // internal simulation settings class which gets entirely pickled
-  py::class_<MjType::Settings>(m, "set")
+  {py::class_<MjType::Settings>(m, "set")
 
     .def(py::init<>())
     .def("get_settings", &MjType::Settings::get_settings)
@@ -156,7 +165,7 @@ PYBIND11_MODULE(bind, m) {
         );
       },
       [](py::tuple t) { // __setstate__
-        constexpr bool debug = true;
+        constexpr bool debug = false;
         if (debug)
           std::cout << "unpickling MjType::Settings now\n";
 
@@ -192,8 +201,9 @@ PYBIND11_MODULE(bind, m) {
       }
     ))
     ;
+  }
 
-  py::class_<MjType::EventTrack::BinaryEvent>(m, "BinaryEvent")
+  {py::class_<MjType::EventTrack::BinaryEvent>(m, "BinaryEvent")
 
     .def_readonly("value", &MjType::EventTrack::BinaryEvent::value)
     .def_readonly("last_value", &MjType::EventTrack::BinaryEvent::last_value)
@@ -214,7 +224,7 @@ PYBIND11_MODULE(bind, m) {
         );
       },
       [](py::tuple t) { // __setstate__
-        constexpr bool debug = true;
+        constexpr bool debug = false;
         if (debug)
           std::cout << "unpickling MjType::EventTrack::BinaryEvent now\n";
 
@@ -233,8 +243,9 @@ PYBIND11_MODULE(bind, m) {
       }
     ))
     ;
+  }
 
-  py::class_<MjType::EventTrack::LinearEvent>(m, "LinearEvent")
+  {py::class_<MjType::EventTrack::LinearEvent>(m, "LinearEvent")
 
     .def_readonly("value", &MjType::EventTrack::LinearEvent::value)
     .def_readonly("last_value", &MjType::EventTrack::LinearEvent::last_value)
@@ -255,7 +266,7 @@ PYBIND11_MODULE(bind, m) {
         );
       },
       [](py::tuple t) { // __setstate__
-        constexpr bool debug = true;
+        constexpr bool debug = false;
         if (debug)
           std::cout << "unpickling MjType::EventTrack::LinearEvent now\n";
 
@@ -274,9 +285,10 @@ PYBIND11_MODULE(bind, m) {
       }
     ))
     ;
+  }
 
   // tracking of important events in the simulation
-  py::class_<MjType::EventTrack>(m, "EventTrack")
+  {py::class_<MjType::EventTrack>(m, "EventTrack")
 
     .def(py::init<>())
     .def("print", &MjType::EventTrack::print)
@@ -345,18 +357,20 @@ PYBIND11_MODULE(bind, m) {
       }
     ))
     ;
+  }
 
   // class for outputing test results and event tracking
-  py::class_<MjType::TestReport>(m, "TestReport")
+  {py::class_<MjType::TestReport>(m, "TestReport")
 
     .def(py::init<>())
     .def_readonly("object_name", &MjType::TestReport::object_name)
     .def_readonly("cumulative_reward", &MjType::TestReport::cumulative_reward)
     .def_readonly("cnt", &MjType::TestReport::cnt)
     ;
+  }
 
   // set up sensor type so python can interact and change them
-  py::class_<MjType::Sensor>(m, "Sensor")
+  {py::class_<MjType::Sensor>(m, "Sensor")
 
     .def(py::init<float, bool, int>())
     .def("set", &MjType::Sensor::set)
@@ -383,9 +397,10 @@ PYBIND11_MODULE(bind, m) {
       }
     ))
     ;
+  }
 
   // set up binary reward type so python can interact and change them
-  py::class_<MjType::BinaryReward>(m, "BinaryReward")
+  {py::class_<MjType::BinaryReward>(m, "BinaryReward")
 
     .def(py::init<float, bool, int>())
     .def("set", &MjType::BinaryReward::set)
@@ -412,9 +427,10 @@ PYBIND11_MODULE(bind, m) {
       }
     ))
     ;
+  }
 
   // set up linear reward type so python can edit them
-  py::class_<MjType::LinearReward>(m, "LinearReward")
+  {py::class_<MjType::LinearReward>(m, "LinearReward")
 
     .def(py::init<float, bool, int, float, float, float>())
     .def("set", &MjType::LinearReward::set)
@@ -445,28 +461,132 @@ PYBIND11_MODULE(bind, m) {
       }
     ))
     ;
+  }
+
+  // setting up goals events
+  {py::class_<MjType::Goal::Event>(m, "Event")
+    .def(py::init<>())
+    .def_readwrite("involved", &MjType::Goal::Event::involved)
+    .def_readwrite("state", &MjType::Goal::Event::state)
+    .def_readwrite("value", &MjType::Goal::Event::value)
+
+    // pickle support
+    .def(py::pickle(
+      [](const MjType::Goal::Event e) { // __getstate___
+        /* return a tuple that fully encodes the state of the object */
+        return py::make_tuple(e.involved, e.state, e.value);
+      },
+      [](py::tuple t) { // __setstate__
+
+        if (t.size() != 3)
+          throw std::runtime_error("MjType::Goal::Event py::pickle got invalid state");
+
+        // create new c++ instance with old data
+        MjType::Goal::Event out;
+
+        out.involved = t[0].cast<bool>();
+        out.state = t[1].cast<bool>();
+        out.value = t[2].cast<float>();
+
+        return out;
+      }
+    ))
+
+    ;
+  }
+
+  {py::class_<MjType::Goal>(m, "Goal")
+    .def(py::init<>())
+
+    #define XX(name, type, value)
+    #define SS(name, in_use, norm, readrate)
+    #define BR(name, reward, done, trigger) \
+              .def_readwrite(#name, &MjType::Goal::name)
+
+    #define LR(name, reward, done, trigger, min, max, overshoot) \
+              .def_readwrite(#name, &MjType::Goal::name)
+
+      // run the macro to create the binding code
+      LUKE_MJSETTINGS
+
+    #undef XX
+    #undef SS
+    #undef BR
+    #undef LR
+
+    // pickle support
+    .def(py::pickle(
+      [](const MjType::Goal &g) { // __getstate___
+        /* return a tuple that fully encodes the state of the object */
+        return py::make_tuple(
+          
+          #define XX(name, type, value)
+          #define SS(name, in_use, norm, readrate)
+          #define BR(name, reward, done, trigger) g.name,
+          #define LR(name, reward, done, trigger, min, max, overshoot) g.name,
+            // run the macro to create the binding code
+            LUKE_MJSETTINGS
+          #undef XX
+          #undef SS
+          #undef BR
+          #undef LR
+
+          // dummy value as macro above always uses trailing comma
+          0.0
+        );
+      },
+      [](py::tuple t) { // __setstate__
+
+        // create new c++ instance with old settings
+        MjType::Goal g;
+
+        int i = 0;
+
+        // expand the tuple elements and type cast them with a macro
+        #define XX(name, type, value)
+        #define SS(name, in_use, norm, readrate)
+        #define BR(name, reward, done, trigger) \
+                  g.name = t[i].cast<MjType::Goal::Event>(); ++i;
+        #define LR(name, reward, done, trigger, min, max, overshoot) \
+                  g.name = t[i].cast<MjType::Goal::Event>(); ++i;
+          // run the macro to create the code
+          LUKE_MJSETTINGS
+        #undef XX
+        #undef SS
+        #undef BR
+        #undef LR
+
+        return g;
+      }
+    ))
+
+    ;
+  }
 
   // three classes to extract detailed curve fit data from the simulation
-  py::class_<MjType::CurveFitData::PoseData::FingerData>(m, "FingerData")
+  {py::class_<MjType::CurveFitData::PoseData::FingerData>(m, "FingerData")
     .def(py::init<>())
     .def_readwrite("x", &MjType::CurveFitData::PoseData::FingerData::x)
     .def_readwrite("y", &MjType::CurveFitData::PoseData::FingerData::y)
     .def_readwrite("coeff", &MjType::CurveFitData::PoseData::FingerData::coeff)
     .def_readwrite("errors", &MjType::CurveFitData::PoseData::FingerData::errors)
     ;
+  }
 
-  py::class_<MjType::CurveFitData::PoseData>(m, "PoseData")
+  {py::class_<MjType::CurveFitData::PoseData>(m, "PoseData")
     .def(py::init<>())
     .def_readwrite("f1", &MjType::CurveFitData::PoseData::f1)
     .def_readwrite("f2", &MjType::CurveFitData::PoseData::f2)
     .def_readwrite("f3", &MjType::CurveFitData::PoseData::f3)
     ;
+  }
 
-  py::class_<MjType::CurveFitData>(m, "CurveFitData")
+  {py::class_<MjType::CurveFitData>(m, "CurveFitData")
 
     .def(py::init<>())
     .def_readwrite("entries", &MjType::CurveFitData::entries)
     ;
+  }
 
   /* py::overload_cast requires c++14 */
 

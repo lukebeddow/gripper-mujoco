@@ -110,6 +110,8 @@ void run_test(int num_episodes, int step_cap, int reload_rate)
 
 int main(int argc, char** argv)
 {
+  /* ----- run a test of 10 learning steps ----- */
+
   // precompiled settings
   int num_episodes = 10;
   int step_cap = 30;
@@ -119,41 +121,12 @@ int main(int argc, char** argv)
 
   return 0;
 
-  std::string path = "/home/luke/gripper_repo_ws/src/gripper_v2/"
-    "gripper_description/urdf/mujoco/";
-  std::string gripper_file = "gripper_mujoco.xml";
-  std::string panda_file = "panda_mujoco.xml";
-  std::string both_file = "panda_and_gripper_mujoco.xml";
-  std::string task_file = "gripper_task.xml";
+  /* ----- load the gripper, generic testing ----- */
 
-  std::string filepath = path + "task/gripper_task_0.xml";
+  std::string relpath = "task/gripper_task_0.xml";
 
-  // if we receive command line arguments
-  if (argc > 1) {
-    if (not strcmp(argv[1], "gripper")) {
-    filepath = path + gripper_file;
-    }
-    else if (not strcmp(argv[1], "panda")) {
-        filepath = path + panda_file;
-    }
-    else if (not strcmp(argv[1], "both")) {
-        filepath = path + both_file;
-    }
-    else if (not strcmp(argv[1], "task")) {
-        filepath = path + task_file;
-        if (argc > 2) {
-            filepath = path + "/task/gripper_task_" + argv[2] + ".xml";
-        }
-    }
-    else {
-        printf("Command line argument not valid, ignored\n");
-    }
-  }
-  else {
-    printf("No command line arguments detected, using default model\n");
-  }
-
-  MjClass mjObj(filepath);
+  MjClass mjObj;
+  mjObj.load_relative(relpath);
 
   mjObj.spawn_object(0);
 
@@ -161,6 +134,32 @@ int main(int argc, char** argv)
     mjObj.step();
     // mjObj.render();
   }
+
+  MjType::Goal goal;
+  MjClass mj;
+
+  goal.step_num.involved = true;
+  goal.lifted.involved = true;
+  goal.stable_height.involved = true;
+  goal.finger_force.involved = true;
+  goal.oob.involved = true;
+
+  goal.step_num.state = true;
+  goal.oob.state = true;
+  goal.finger_force.state = true;
+
+  goal.print();
+
+  std::cout << mjObj.reward(goal) << '\n';
+
+  std::vector<float> test { -1, 1, 1, -1, -1 };
+  goal.unvectorise(test);
+
+  goal.print();
+
+  std::cout << mjObj.reward(goal) << '\n';
+
+  return 0;
 
   return 0;
 }

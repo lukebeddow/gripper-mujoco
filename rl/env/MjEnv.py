@@ -10,7 +10,7 @@ pathhere = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, pathhere)
 
 # with env in path, we can now import the shared cpp library
-from mjpy.bind import MjClass, calc_rewards, add_events, EventTrack
+from mjpy.bind import MjClass
 
 import time
 import gym
@@ -89,6 +89,9 @@ class MjEnv(gym.Env):
 
     # auto generated parameters
     self._update_n_actions_obs()
+
+    # reset any lingering goal defaults
+    self.mj.reset_goal()
 
     # initialise tracking variables
     self.track = MjEnv.Track()
@@ -173,13 +176,13 @@ class MjEnv(gym.Env):
     """
     Add two events and return the sum
     """
-    return add_events(e1, e2)
+    return self.mj.add_events(e1, e2)
 
   def _calc_rewards(self, event):
     """
     Calculate a reward from a set of events
     """
-    return calc_rewards(event)
+    return self.mj.reward(event)
 
   def _get_machine(self):
     """
@@ -236,12 +239,31 @@ class MjEnv(gym.Env):
     """
     return self.mj.get_event_state()
 
+  def _get_desired_goal(self):
+    """
+    Get the current desired goal in the simulation
+    """
+    return self.mj.get_goal()
+
+  def _assess_goal(self, state):
+    """
+    Assess goal performance given a state vector
+    """
+    return self.mj.assess_goal(state)
+
   def _reward(self):
     """
     Calculate the reward on this step
     """
 
     return self.mj.reward()
+
+  def _goal_reward(self, goal, state):
+    """
+    Calculate the reward based on a state and goal
+    """
+
+    return self.mj.reward(goal, state)
 
   def _spawn_object(self):
     """
@@ -346,12 +368,19 @@ class MjEnv(gym.Env):
       raise RuntimeError("step has been called with done=true, use reset()")
 
     self.track.current_step += 1
-
+    
     self._take_action(action)
     obs = self._next_observation()
-    state = self._event_state()
     reward = self._reward()
     done = self._is_done()
+
+    # what method are we using
+    if self.mj.set.use_HER:
+      state = self._event_state()
+      goal = self._assess_goal(state)
+      to_return = (obs, reward, done, state, goal)
+    else:
+      to_return = (obs, reward, done)
 
     self.track.last_action = action
     self.track.last_reward = reward
@@ -366,7 +395,7 @@ class MjEnv(gym.Env):
 
     if self.log_level > 1: print("MjEnv step() time was ", t1 - t0)
 
-    return obs, reward, done, {}
+    return to_return
 
   def reset(self):
     """

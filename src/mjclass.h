@@ -271,6 +271,7 @@ namespace MjType
     float reward;            // numerical reward value
     int done;                // instances of this behaviour in a row to terminate sim
     int trigger;             // instances of this behaviour in a row to trigger reward
+    bool goal = false;       // is this reward a goal in HER
 
     BinaryReward(float reward, int done, int trigger)
       : reward(reward), done(done), trigger(trigger) {}
@@ -290,6 +291,7 @@ namespace MjType
     float max;               // max value for the behaviour (1)
     float overshoot;         // -1 = saturate above max, >max = linear decay from max-overshoot
     float value = 0;         // container to store the value which triggers reward
+    bool goal = false;       // is this reward a goal in HER
 
     LinearReward(float reward, int done, int trigger, float min, float max, float overshoot)
       : reward(reward), done(done), trigger(trigger), min(min), max(max), overshoot(overshoot) {}
@@ -299,6 +301,61 @@ namespace MjType
       min = min_; max = max_; overshoot_ = overshoot_;
     }
 
+  };
+
+  // goals for the simulation for hindsight experience replay (HER)
+  struct Goal {
+
+    struct Event {
+      // are events registered as goals and if so what is their state
+      bool involved = false;
+      bool state = false;
+      float value = 0.0;
+    };
+
+    float goal_reward = 1;
+
+    // create an event for each reward, default none involved
+    #define XX(NAME, TYPE, VALUE)
+    #define SS(NAME, USED, NORMALISE, READ_RATE)
+    #define BR(NAME, REWARD, DONE, TRIGGER) Event NAME;
+    #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) Event NAME;
+      // run the macro to create the code
+      LUKE_MJSETTINGS
+    #undef XX
+    #undef SS
+    #undef BR
+    #undef LR
+
+    // functions
+    std::vector<float> vectorise();
+    void unvectorise(std::vector<float> vec);
+    void print();
+
+    void reset(bool reset_involved = false)
+    {
+      /* reset the goal */
+
+      #define XX(NAME, TYPE, VALUE)
+      #define SS(NAME, USED, NORMALISE, READ_RATE)
+      #define BR(NAME, REWARD, DONE, TRIGGER)                                  \
+                NAME.state = false;                                            \
+                NAME.value = 0.0;                                              \
+                if (reset_involved) { NAME.involved = false; }                    
+
+      #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)             \
+                NAME.state = false;                                            \
+                NAME.value = 0.0;                                              \
+                if (reset_involved) { NAME.involved = false; }                    
+
+        // run the macro to create the code
+        LUKE_MJSETTINGS
+
+      #undef XX
+      #undef SS
+      #undef BR
+      #undef LR
+    }
   };
 
   // settings structure fully read/write exposed to python
@@ -482,6 +539,7 @@ public:
 
   /* ----- parameters that are unchanged with reset() ----- */
 
+  // mujoco model and data pointers
   mjModel* model;
   mjData* data;
 
@@ -516,12 +574,14 @@ public:
 
   std::string current_load_path;                // xml path of currently loaded model
   
+  // reward goal (if using)
+  MjType::Goal goal;
 
   /* ----- variables that are reset ----- */
 
   // standard class variables
-  std::vector<int> action_options;    // possible action codes
   int n_actions;                      // number of possible actions
+  std::vector<int> action_options;    // possible action codes
 
   // storage containers for state data
   luke::SlidingWindow<luke::gfloat> x_motor_position { gauge_buffer_size };
@@ -593,9 +653,15 @@ public:
   bool is_done();
   std::vector<luke::gfloat> get_observation();
   std::vector<float> get_event_state();
+  std::vector<float> get_goal();
+  std::vector<float> assess_goal();
+  std::vector<float> assess_goal(std::vector<float> event_vec);
   float reward();
   float reward(MjType::EventTrack event);
   float reward(std::vector<float> event_vec);
+  float reward(MjType::Goal goal);
+  float reward(MjType::EventTrack event, MjType::Goal goal);
+  float reward(std::vector<float> goal_vec, std::vector<float> event_vec);
   int get_n_actions();
   int get_n_obs();
 
@@ -607,6 +673,8 @@ public:
   void validate_curve();
   void tick();
   float tock();
+  MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2);
+  void reset_goal();
 
 }; // class MjClass
 
@@ -615,8 +683,11 @@ float linear_reward(float val, float min, float max, float overshoot);
 float normalise_between(float val, float min, float max);
 void update_events(MjType::EventTrack& events, MjType::Settings& settings);
 float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings);
-MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2);
-
-// void add_events(int e1, int e2);
+float goal_rewards(MjType::EventTrack& events, MjType::Settings& settings,
+  MjType::Goal goal);
+void change_goal(MjType::Goal& goal, std::vector<float> event_vec, 
+  MjType::Settings settings);
+void change_goal(MjType::Goal& goal, MjType::EventTrack event, 
+  MjType::Settings settings);
 
 #endif // MJCLASS_H_

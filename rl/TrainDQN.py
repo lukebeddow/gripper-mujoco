@@ -158,28 +158,134 @@ class TrainDQN():
   Transition = namedtuple('Transition',
                           ('state', 'action', 'next_state', 'reward'))
 
+  HER_Transition = namedtuple('Transition',
+                    ('obs', 'action', 'next_obs', 'reward', 'goal', 'state'))                        
+
   class ReplayMemory(object):
 
-    def __init__(self, capacity):
+    def __init__(self, capacity, device, HER=None):
       self.memory = deque([], maxlen=capacity)
+      self.device = device
+      self.HER = True if HER is True else False
+      if self.HER:
+        self.temp_memory = []
 
     def push(self, *args):
       """Save a transition"""
-      self.memory.append(TrainDQN.Transition(*args))
+      if self.HER:
+        self.temp_memory.append(TrainDQN.HER_Transition(*args))
+      else:
+        self.memory.append(TrainDQN.Transition(*args))
+
+    def to_torch(self, data, dtype=None):
+      """
+      Convert some data to a torch tensor
+      """
+      if dtype == None: dtype = torch.float32
+
+      return torch.tensor(np.array([data]), device=self.device, dtype=dtype)
 
     def sample(self, batch_size):
-      return random.sample(self.memory, batch_size)
+      if self.HER:
+        # first get a random sample
+        batch = random.sample(self.memory, batch_size)
+        # now we want to transform the sample
+        HER_sample = []
+        # turn every transition into a regular sample
+        for item in batch:
+          HER_sample.append(self.HER_to_standard(item))
+        return HER_sample
+      else: return random.sample(self.memory, batch_size)
 
     def __len__(self):
       return len(self.memory)
 
-    def to(self, device):
-      """Move to a device"""
-      for (s1, a, s2, r) in self.memory:
-        s1.to(device)
-        a.to(device)
-        s2.to(device)
-        r.to(device)
+    def to_device(self, tuple_of_tensors):
+      """Moves a transition to a device"""
+      lst = []
+      for item in tuple_of_tensors:
+        lst.append(item.to(self.device))
+      if self.HER: return TrainDQN.HER_Transition(*tuple(lst))
+      else: return TrainDQN.Transition(*tuple(lst))
+
+    def all_to(self, device):
+      """Move entire replay memory to a device"""
+      for i, item in enumerate(self.memory):
+        self.memory[i] = self.to_device(item, device)
+      self.device = device
+
+    def end_HER_episode(self, goal_reward_fcn):
+      # transfer transitions from temporary buffer to proper memory
+      for i, item in enumerate(self.temp_memory):
+
+        # first save the transition with the desired goal (as is)
+        self.memory.append(item)
+
+        # ensure this tuple is now on the cpu
+        item = self.to_device(item)
+
+        # prepare to get the goals
+        goals = []
+
+        # 1 final: use the goal state at the end of the episode
+        # 2 future: k states after this one in the episode
+        # 3 episode: k states from the episode full stop
+        # 4 random: k states from any episode
+
+        # for testing
+        self.goal_method = "future"
+        self.k = 4
+
+        if self.goal_method == "final":
+          goals.append(self.temp_memory[-1].goal)
+
+        elif self.goal_method == "future":
+          if len(self.temp_memory) - i < self.k:
+            k = len(self.temp_memory) - i
+          else: k = self.k
+          for _ in range(k):
+            rand = random.randint(i, len(self.temp_memory) - 1)
+            goals.append(self.temp_memory[rand].goal)
+
+        elif self.goal_method == "episode":
+          for _ in range(self.k):
+            rand = random.randint(0, len(self.temp_memory))
+            goals.append(self.temp_memory[rand].goal)
+
+        elif self.goal_method == "random":
+          raise RuntimeError("random HER replay is not supported currently")
+
+        for new_goal in goals:
+
+          # convert to python lists (moves to cpu as well)
+          listgoal = new_goal[0].tolist()
+          full_state = item.state[0].tolist()
+
+          # change to the new goals and recalculate the reward
+          new_reward = goal_reward_fcn(listgoal, full_state)
+          new_reward = self.to_torch(new_reward)
+
+          new_sample = self.to_device(
+            TrainDQN.HER_Transition(
+              item.obs, item.action, item.next_obs,
+              new_reward, new_goal, item.state
+            )
+          )
+
+          # save the new transition
+          self.memory.append(new_sample)
+      
+      # wipe the temporary buffer
+      self.temp = []
+
+    def HER_to_standard(self, HER_trans):
+      """Change a HER transition to a normal one"""
+      dim = 1
+      state = torch.cat((HER_trans.obs, HER_trans.goal), dim)
+      action = HER_trans.action
+      next_state = torch.cat((HER_trans.next_obs, HER_trans.goal), dim)
+      reward = HER_trans.reward
+      return TrainDQN.Transition(state, action, next_state, reward)
 
   def __init__(self, save_suffix=None, device=None, notimestamp=None, 
                use_wandb=None, wandb_name=None, no_plot=None, log_level=None):
@@ -213,6 +319,7 @@ class TrainDQN():
       global plt
       import matplotlib.pyplot as plt
       self.fig, self.axs = plt.subplots(2, 1)
+      self.no_plot = False
       
     # print important info
     if self.log_level > 0:
@@ -227,6 +334,9 @@ class TrainDQN():
 
     # update the environment with correct numbers of actions and observations
     self.env._update_n_actions_obs()
+
+    # are we using HER
+    self.use_HER = self.env.mj.set.use_HER
 
     # create networks
     if network == None:
@@ -244,7 +354,9 @@ class TrainDQN():
     # configure optimiser and memory replay
     self.optimiser = optim.RMSprop(self.policy_net.parameters(), 
                                    lr=self.params.learning_rate)
-    self.memory = TrainDQN.ReplayMemory(self.params.memory_replay)
+
+    self.memory = TrainDQN.ReplayMemory(self.params.memory_replay, self.device,
+                                        HER=self.use_HER)
 
     # prepare for saving and loading
     self.modelsaver = ModelSaver('models/dqn/' + self.policy_net.name())
@@ -257,6 +369,7 @@ class TrainDQN():
 
     # print important info
     print("Using model:", self.policy_net.name())
+    print("Using HER:", self.use_HER)
 
   def to_torch(self, data, dtype=None):
     """
@@ -266,7 +379,7 @@ class TrainDQN():
 
     return torch.tensor(np.array([data]), device=self.device, dtype=dtype)
 
-  def select_action(self, state, decay_num):
+  def select_action(self, state, decay_num, test=None):
 
     sample = random.random()
 
@@ -275,7 +388,7 @@ class TrainDQN():
       * (math.exp(-1. * decay_num / self.params.eps_decay)))
 
     # if we will not choose randomly
-    if sample > eps_threshold:
+    if sample > eps_threshold or test:
       with torch.no_grad():
         # t.max(1) returns largest column value of each row
         # [1] is second column of max result, the index of max element
@@ -294,7 +407,8 @@ class TrainDQN():
 
     self.track.calc_moving_average()
 
-    if self.no_plot:
+    # plt.pause() currently results in segfault
+    if self.no_plot or True:
       return
 
     # clear figure
@@ -484,9 +598,11 @@ class TrainDQN():
     Optimise the policy
     """
 
-    # only optimise when enough memory is built up
-    if (len(self.memory)) < self.params.min_memory_replay: # self.params.batch_size
-      return
+    # # only optimise when enough memory is built up
+    # if (len(self.memory)) < self.params.min_memory_replay: # self.params.batch_size
+    #   return
+
+    if len(self.memory) < self.params.batch_size: return
 
     transitions = self.memory.sample(self.params.batch_size)
 
@@ -539,6 +655,89 @@ class TrainDQN():
 
     return
 
+  def run_episode(self, i_episode, test=None):
+    """
+    Perform one episode of training or testing
+    """
+
+    # for debugging, show memory usage
+    if i_episode % 100 == 0:
+      theheap = guph.heap()
+      print("Heap total size is", theheap.size, "(", theheap.size / 10e6, "GB)")
+
+    # initialise environment and state
+    obs = self.env.reset()
+    obs = self.to_torch(obs)
+
+    if self.use_HER:
+      goal = self.env._get_desired_goal()
+      goal = self.to_torch(goal)
+
+    # count up through actions
+    for t in count():
+
+      t_step_start = time.time()
+
+      if self.log_level > 1: print("Episode", i_episode, "action", t)
+
+      # select and perform an action
+      if self.use_HER:
+        HER_obs = torch.cat((obs, goal), dim=1)
+        action = self.select_action(HER_obs, decay_num=i_episode, test=test)
+      else:
+        action = self.select_action(obs, decay_num=i_episode, test=test)
+
+      # step with this action and receive output data
+      step_data = self.env.step(action.item())
+
+      step_data_torch = []
+      for i in range(len(step_data)):
+        step_data_torch.append(self.to_torch(step_data[i]))
+
+      # step with this action and receive sample data for this transition
+      if self.use_HER:
+        (new_obs, reward, done, state, goal) = step_data_torch
+        transition_sample = (obs, action, new_obs, reward, goal, state)
+      else:
+        (new_obs, reward, done) = step_data_torch
+        transition_sample = (obs, action, new_obs, reward)
+      
+      # render the new environment
+      self.env.render()
+
+      # perform one step of the optimisation on the policy network
+      if test != True:
+        self.track.actions_done += 1
+        self.memory.push(*transition_sample) # the * unpacks tuple to func args
+        self.optimise_model()
+
+      obs = new_obs
+
+      t_step_end = time.time()
+
+      if self.log_level > 1: print("Time for action in TrainDQN", t_step_end - t_step_start, 
+                                    "seconds")
+
+      # check if this episode is over and log if we aren't testing
+      if done and test != True:
+
+        # save training data and plot it
+        self.track.episodes_done = i_episode + 1
+        self.track.train_episodes = np.append(self.track.train_episodes, i_episode)
+        self.track.train_durations = np.append(self.track.train_durations, t + 1)
+        self.track.train_rewards = np.append(self.track.train_rewards, self.env.track.cumulative_reward)
+        self.plot()
+
+        # save to wandb
+        if self.use_wandb:
+          self.track.log_wandb(self.params.wandb_freq_s)
+
+        # if using HER, wrap up the episode
+        if self.use_HER:
+          self.memory.end_HER_episode(self.env._goal_reward)
+
+        break
+
   def train(self, network=None, i_start=None):
     """
     Train the model for the desired number of episodes
@@ -554,8 +753,9 @@ class TrainDQN():
       # create a new folder to save training results in
       self.modelsaver.new_folder(label=self.machine, suffix=self.save_suffix, 
                                  notimestamp=self.notimestamp)
-      # save record of the training time hyperparameters
+      # save record of the training time hyperparameters and cpp library
       self.save_hyperparameters()
+      self.modelsaver.copy_files("/home/luke/mymujoco/rl/env/mjpy/", "bind.so")
     else:
       # save a record of the training restart
       continue_label = f"Training is continuing from episode {i_start} with these hyperparameters\n"
@@ -564,67 +764,72 @@ class TrainDQN():
 
     # begin training episodes
     for i_episode in range(i_start, self.params.num_episodes):
-      
+
       if self.log_level > 0: print("Begin training episode", i_episode)
 
-      # for debugging, show memory usage
-      if i_episode % 100 == 0:
-        theheap = guph.heap()
-        print("Heap total size is", theheap.size, "(", theheap.size / 10e6, "GB)")
+      self.run_episode(i_episode)
 
-      # initialise environment and state
-      obs = self.env.reset()
-      obs = self.to_torch(obs)
+      # # for debugging, show memory usage
+      # if i_episode % 100 == 0:
+      #   theheap = guph.heap()
+      #   print("Heap total size is", theheap.size, "(", theheap.size / 10e6, "GB)")
 
-      # count up through actions
-      for t in count():
+      # # initialise environment and state
+      # obs = self.env.reset()
+      # obs = self.to_torch(obs)
 
-        t_step_start = time.time()
+      # # count up through actions
+      # for t in count():
 
-        if self.log_level > 1: print("Episode", i_episode, "action", t)
+      #   t_step_start = time.time()
 
-        # select and perform an action
+      #   if self.log_level > 1: print("Episode", i_episode, "action", t)
 
-        # QUESTION: how to decay epsilon
-        # action = self.select_action(obs, decay_num=self.track.actions_done)
-        action = self.select_action(obs, decay_num=i_episode)
+      #   # select and perform an action
+      #   action = self.select_action(obs, decay_num=i_episode)
 
-        new_obs, reward, done, _ = self.env.step(action.item())
-        new_obs = self.to_torch(new_obs)
-        reward = self.to_torch(reward)
+      #   # step with this action and receive output data
+      #   step_return = self.env.step(action.item())
+      #   for item in step_return: self.to_torch(item)
 
-        self.track.actions_done += 1
+      #   # store transition data in memory
+      #   if self.env.mj.set.use_HER:
+      #     (new_obs, reward, done, state, goal) = step_return
+      #     self.memory.push(obs, action, new_obs, reward, state, goal)
+      #   else:
+      #     (new_obs, reward, done) = step_return
+      #     self.memory.push(obs, action, new_obs, reward)
+
+      #   self.track.actions_done += 1
         
-        # render the new environment
-        self.env.render()
+      #   # render the new environment
+      #   self.env.render()
 
-        # store this new transition in memory
-        self.memory.push(obs, action, new_obs, reward)
-        obs = new_obs
+      #   obs = new_obs
 
-        # perform one step of the optimisation on the policy network
-        self.optimise_model()
+      #   # perform one step of the optimisation on the policy network
+      #   self.optimise_model()
 
-        t_step_end = time.time()
+      #   t_step_end = time.time()
 
-        if self.log_level > 1: print("Time for action in TrainDQN", t_step_end - t_step_start, 
-                                     "seconds")
+      #   if self.log_level > 1: print("Time for action in TrainDQN", t_step_end - t_step_start, 
+      #                                "seconds")
 
-        # check if this episode is over
-        if done:
+      #   # check if this episode is over
+      #   if done:
 
-          # save training data and plot it
-          self.track.episodes_done = i_episode + 1
-          self.track.train_episodes = np.append(self.track.train_episodes, i_episode)
-          self.track.train_durations = np.append(self.track.train_durations, t + 1)
-          self.track.train_rewards = np.append(self.track.train_rewards, self.env.track.cumulative_reward)
-          self.plot()
+      #     # save training data and plot it
+      #     self.track.episodes_done = i_episode + 1
+      #     self.track.train_episodes = np.append(self.track.train_episodes, i_episode)
+      #     self.track.train_durations = np.append(self.track.train_durations, t + 1)
+      #     self.track.train_rewards = np.append(self.track.train_rewards, self.env.track.cumulative_reward)
+      #     self.plot()
 
-          # save to wandb
-          if self.use_wandb:
-            self.track.log_wandb(self.params.wandb_freq_s)
+      #     # save to wandb
+      #     if self.use_wandb:
+      #       self.track.log_wandb(self.params.wandb_freq_s)
 
-          break
+      #     break
 
       # update the target network every target_update episodes
       if i_episode % self.params.target_update == 0:
@@ -678,28 +883,30 @@ class TrainDQN():
 
         if self.log_level > 1: ("Test episode", i_episode, "action", t)
 
-        # choose the best action
-        with torch.no_grad():
-          # t.max(1) returns largest column value of each row
-          # [1] is second column of max result, the index of max element
-          # view(1, 1) selects this element which has max expected reward
-          action = self.target_net(obs).max(1)[1].view(1, 1)
+        self.run_episode(i_episode, test=True)
 
-        # select and perform an action
-        obs, reward, done, _ = self.env.step(action.item())
-        obs = self.to_torch(obs)
-        reward = self.to_torch(reward)
+        # # choose the best action
+        # with torch.no_grad():
+        #   # t.max(1) returns largest column value of each row
+        #   # [1] is second column of max result, the index of max element
+        #   # view(1, 1) selects this element which has max expected reward
+        #   action = self.target_net(obs).max(1)[1].view(1, 1)
+
+        # # select and perform an action
+        # obs, reward, done, _ = self.env.step(action.item())
+        # obs = self.to_torch(obs)
+        # reward = self.to_torch(reward)
         
-        # render the new environment
-        self.env.render()
+        # # render the new environment
+        # self.env.render()
 
-        # check if this episode is over, if so plot and break
-        if done:
-          # # don't capture this data here for testing, it is done seperately
-          # self.episode_durations.append(t + 1)
-          # self.episode_rewards.append(self.env.track.cumulative_reward)
-          # self.plot()
-          break
+        # # check if this episode is over, if so plot and break
+        # if done:
+        #   # # don't capture this data here for testing, it is done seperately
+        #   # self.episode_durations.append(t + 1)
+        #   # self.episode_rewards.append(self.env.track.cumulative_reward)
+        #   # self.plot()
+        #   break
 
     # end of testing
 
@@ -791,7 +998,7 @@ class TrainDQN():
     self.target_net.load_state_dict(self.policy_net.state_dict())
 
     # move to the current device
-    self.memory.to(self.device)
+    self.memory.all_to(self.device)
     self.policy_net.to(self.device)
     self.target_net.to(self.device)
 
@@ -845,27 +1052,33 @@ if __name__ == "__main__":
   # model.params.wandb_freq_s = 5
   # model.env.mj.set.action_motor_steps = 350
 
+  # if we want to configure HER
+  model.env.mj.set.use_HER = True
+  model.env.mj.goal.step_num.involved = True
+  model.env.mj.goal.lifted.involved = True
+  model.env.mj.goal.object_contact.involved = True
+
   # now set up the network, ready for training
-  net = networks.DQN_2L60
+  net = networks.DQN_3L60
   model.init(net)
 
   # ----- load ----- #
 
   # load
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/" + model.policy_net.name() + "/"
-  # foldername = "train_luke-PC_06-05-22-17:57_array_5"
-  # model.load(id=None, folderpath=folderpath, foldername=foldername)
+  # foldername = "train_luke-PC_13-05-22-17:56_array_1"
+  # model.load(id=3, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
   # # train
-  # model.env.disable_rendering = False
-  # model.env.mj.set.debug = True
-  # model.train()
+  model.env.disable_rendering = False
+  model.env.mj.set.debug = True
+  model.train()
 
   # # continue training
-  # folderpath = "/home/luke/cluster/rl/models/dqn/" + model.policy_net.name() + "/"
-  # foldername = "train_cluster_29-04-2022-12:51_array_4"
+  # folderpath = "/home/luke/mymujoco/rl/models/dqn/" + model.policy_net.name() + "/"
+  # foldername = "train_luke-PC_13-05-22-17:56_array_1"
   # model.continue_training(foldername, folderpath=folderpath)
 
   # ----- visualise ----- #
@@ -875,31 +1088,34 @@ if __name__ == "__main__":
   # model.plot()
   # plt.show()
 
+  # ----- apply reward configuration ----- #
+
   # import array_training_DQN
   # model = array_training_DQN.apply_to_all_models(model)
-  # model = array_training_DQN.make_rewards_negative(model)
-  # model.env.max_episode_steps = 200
+  # model.env.max_episode_steps = 300
+  # model.env.mj.set.scale_rewards(100 / model.env.max_episode_steps)
   # model.env.mj.set.motor_state_sensor.read_rate = -2
   # model.env.mj.set.axial_gauge.in_use = True
   # model.env.mj.set.wrist_sensor_Z.in_use = True
+  # model = array_training_DQN.new_rewards(model)
 
   # # test
-  model.env.mj.set.debug = True
-  model.env.disable_rendering = False
-  model.env.test_trials_per_obj = 1
-  model.env.test_obj_limit = 1
+  # model.env.mj.set.debug = True
+  # model.env.disable_rendering = False
+  # model.env.test_trials_per_obj = 1
+  # model.env.test_obj_limit = 10
   # model.env.max_episode_steps = 20
   # model.env.mj.set.step_num.set          (0,      70,   1)
   # model.env.mj.set.exceed_limits.set     (-0.005, True,   10)
   # model.env.mj.set.exceed_axial.set      (-0.005, True,   10,    3.0,  6.0,  -1)
   # model.env.mj.set.exceed_lateral.set    (-0.005, True,   10,    4.0,  6.0,  -1)
-  test_data = model.test()
+  # test_data = model.test()
 
-  # save results
-  test_report = model.create_test_report(test_data)
-  model.modelsaver.new_folder(label="DQN_testing")
-  model.save_hyperparameters(labelstr=f"Loaded model path: {model.modelsaver.last_loadpath}\n")
-  model.save(txtstring=test_report, txtlabel="test_results_demo")
+  # # save results
+  # test_report = model.create_test_report(test_data)
+  # model.modelsaver.new_folder(label="DQN_testing")
+  # model.save_hyperparameters(labelstr=f"Loaded model path: {model.modelsaver.last_loadpath}\n")
+  # model.save(txtstring=test_report, txtlabel="test_results_demo")
   
 
 
