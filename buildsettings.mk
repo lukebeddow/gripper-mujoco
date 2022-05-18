@@ -152,9 +152,9 @@ MJCF_PATH = /home/luke/mymujoco/mjcf
 
 # local machine library locations
 PYTHON_PATH = /usr/include/python3.6m
-PYBIND_PATH = /home/luke/pybind11
+PYBIND_PATH = /home/luke/mymujoco/libs/pybind11
 ARMA_PATH = # none, use system library
-MUJOCO_PATH = /home/luke/mujoco-2.1.5
+MUJOCO_PATH = /home/luke/mymujoco/libs/mujoco/mujoco-2.1.5
 RENDER_PATH = # none, use system library
 CORE_LIBS = -L$(MUJOCO_PATH)/lib -lmujoco -larmadillo 
 RENDER_LIBS = -lglfw

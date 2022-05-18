@@ -9,3 +9,4 @@ bin/
 *.pickle
 *.pyc
 **/wandb/
+libs/
