@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
 from datetime import datetime
-# import pickle
 import dill as pickle
 import os
+import sys
+import shutil
 
 class ModelSaver:
 
@@ -21,7 +22,8 @@ class ModelSaver:
 
     # if we are given a root, we can use abs paths not relative
     if not root:
-      self.root = None
+      # assume the root is the path to the current running files
+      self.root = pathhere = os.path.dirname(os.path.abspath(__file__)) + "/"
       use_root = False
     else:
       if self.root[-1] != '/': self.root += '/'
@@ -353,6 +355,28 @@ class ModelSaver:
         print(f"Saved also: {txtname}")
 
     return savepath + savename
+
+  def copy_files(self, copyfilepath, copyfilename, copyto=None):
+    """
+    Copy a file from one location to the default save location.
+    """
+
+    copypath = self.root + self.path
+
+    if self.in_folder: copypath += self.folder
+
+    if copyto != None:
+      copypath = copyto
+
+    if copypath[-1] != '/': copypath += '/'
+
+    try:
+      shutil.copyfile(copyfilepath + copyfilename, copypath + copyfilename)
+    except FileNotFoundError as e:
+      print(f"Copyfile has failed, check you are running in mymujoco/rl, error message is {e}")
+      return None
+
+    return self.path
 
   def load(self, folderpath=None, foldername=None, id=None):
     """
