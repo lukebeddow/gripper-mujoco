@@ -51,12 +51,18 @@ class TrainDQN():
 
   class ReplayMemory(object):
 
-    def __init__(self, capacity, device, HER=None):
+    def __init__(self, capacity, device, HER=None, HERMethod="final", k=4):
       self.memory = deque([], maxlen=capacity)
       self.device = device
       self.HER = True if HER is True else False
       if self.HER:
         self.temp_memory = []
+        self.HER_method = HERMethod
+        if self.HER_method not in ["final", "episode", "random", "future"]:
+          print(f"The chosen HER method of '{HERMethod}' is not supported. Setting "
+            "to default of 'final'")
+          self.HER_method = "final"
+        self.k = k
 
     def push(self, *args):
       """Save a transition"""
@@ -103,6 +109,8 @@ class TrainDQN():
       self.device = device
 
     def end_HER_episode(self, goal_reward_fcn):
+      """Move samples from temp_memory to proper memory and add HER goals"""
+
       # transfer transitions from temporary buffer to proper memory
       for i, item in enumerate(self.temp_memory):
 
@@ -120,14 +128,10 @@ class TrainDQN():
         # 3 episode: k states from the episode full stop
         # 4 random: k states from any episode
 
-        # for testing
-        self.goal_method = "future"
-        self.k = 4
-
-        if self.goal_method == "final":
+        if self.HER_method == "final":
           goals.append(self.temp_memory[-1].goal)
 
-        elif self.goal_method == "future":
+        elif self.HER_method == "future":
           if len(self.temp_memory) - i < self.k:
             k = len(self.temp_memory) - i
           else: k = self.k
@@ -135,12 +139,12 @@ class TrainDQN():
             rand = random.randint(i, len(self.temp_memory) - 1)
             goals.append(self.temp_memory[rand].goal)
 
-        elif self.goal_method == "episode":
+        elif self.HER_method == "episode":
           for _ in range(self.k):
             rand = random.randint(0, len(self.temp_memory))
             goals.append(self.temp_memory[rand].goal)
 
-        elif self.goal_method == "random":
+        elif self.HER_method == "random":
           raise RuntimeError("random HER replay is not supported currently")
 
         for new_goal in goals:
@@ -866,15 +870,10 @@ class TrainDQN():
       # check if this episode is over and log if we aren't testing
       if done and test != True:
 
-        # save training data and plot it
+        # save training data
         self.track.log_episode(self.env.track.cumulative_reward, t + 1)
-        # self.track.episodes_done = i_episode + 1
-        # self.track.train_episodes = np.append(self.track.train_episodes, i_episode)
-        # self.track.train_durations = np.append(self.track.train_durations, t + 1)
-        # self.track.train_rewards = np.append(self.track.train_rewards, self.env.track.cumulative_reward)
-        # self.plot()
 
-        # if plotting
+        # plot to the screen
         if self.no_plot == False:
           self.track.plot()
 
@@ -916,70 +915,7 @@ class TrainDQN():
     for i_episode in range(i_start, self.params.num_episodes):
 
       if self.log_level > 0: print("Begin training episode", i_episode)
-
       self.run_episode(i_episode)
-
-      # # for debugging, show memory usage
-      # if i_episode % 100 == 0:
-      #   theheap = guph.heap()
-      #   print("Heap total size is", theheap.size, "(", theheap.size / 10e6, "GB)")
-
-      # # initialise environment and state
-      # obs = self.env.reset()
-      # obs = self.to_torch(obs)
-
-      # # count up through actions
-      # for t in count():
-
-      #   t_step_start = time.time()
-
-      #   if self.log_level > 1: print("Episode", i_episode, "action", t)
-
-      #   # select and perform an action
-      #   action = self.select_action(obs, decay_num=i_episode)
-
-      #   # step with this action and receive output data
-      #   step_return = self.env.step(action.item())
-      #   for item in step_return: self.to_torch(item)
-
-      #   # store transition data in memory
-      #   if self.env.mj.set.use_HER:
-      #     (new_obs, reward, done, state, goal) = step_return
-      #     self.memory.push(obs, action, new_obs, reward, state, goal)
-      #   else:
-      #     (new_obs, reward, done) = step_return
-      #     self.memory.push(obs, action, new_obs, reward)
-
-      #   self.track.actions_done += 1
-        
-      #   # render the new environment
-      #   self.env.render()
-
-      #   obs = new_obs
-
-      #   # perform one step of the optimisation on the policy network
-      #   self.optimise_model()
-
-      #   t_step_end = time.time()
-
-      #   if self.log_level > 1: print("Time for action in TrainDQN", t_step_end - t_step_start, 
-      #                                "seconds")
-
-      #   # check if this episode is over
-      #   if done:
-
-      #     # save training data and plot it
-      #     self.track.episodes_done = i_episode + 1
-      #     self.track.train_episodes = np.append(self.track.train_episodes, i_episode)
-      #     self.track.train_durations = np.append(self.track.train_durations, t + 1)
-      #     self.track.train_rewards = np.append(self.track.train_rewards, self.env.track.cumulative_reward)
-      #     self.plot()
-
-      #     # save to wandb
-      #     if self.use_wandb:
-      #       self.track.log_wandb(self.params.wandb_freq_s)
-
-      #     break
 
       # update the target network every target_update episodes
       if i_episode % self.params.target_update == 0:
@@ -1016,6 +952,7 @@ class TrainDQN():
     # begin test mode
     self.env.start_test()
 
+    # begin testing
     for i_episode in count():
 
       # check whether the test has completed
@@ -1024,41 +961,11 @@ class TrainDQN():
 
       if self.log_level > 0: print("Begin test episode", i_episode)
 
-      # initialise environment and state
-      obs = self.env.reset()
-      obs = self.to_torch(obs)
-
       # count up through actions
       for t in count():
-
         if self.log_level > 1: ("Test episode", i_episode, "action", t)
-
         self.run_episode(i_episode, test=True)
 
-        # # choose the best action
-        # with torch.no_grad():
-        #   # t.max(1) returns largest column value of each row
-        #   # [1] is second column of max result, the index of max element
-        #   # view(1, 1) selects this element which has max expected reward
-        #   action = self.target_net(obs).max(1)[1].view(1, 1)
-
-        # # select and perform an action
-        # obs, reward, done, _ = self.env.step(action.item())
-        # obs = self.to_torch(obs)
-        # reward = self.to_torch(reward)
-        
-        # # render the new environment
-        # self.env.render()
-
-        # # check if this episode is over, if so plot and break
-        # if done:
-        #   # # don't capture this data here for testing, it is done seperately
-        #   # self.episode_durations.append(t + 1)
-        #   # self.episode_rewards.append(self.env.track.cumulative_reward)
-        #   # self.plot()
-        #   break
-
-    # end of testing
 
     # get the test data out
     test_data = self.env.test_trials
@@ -1190,9 +1097,10 @@ if __name__ == "__main__":
 
   use_wandb = False
   force_device = "cpu"
+  no_plot = True
 
   model = TrainDQN(device=force_device, use_wandb=use_wandb,
-                   wandb_name=None)
+                   wandb_name=None, no_plot=no_plot)
 
   # if we want to adjust parameters
   # model.params.num_episodes = 11
