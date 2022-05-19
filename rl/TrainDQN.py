@@ -26,118 +26,6 @@ class TrainDQN():
   This class handles testing and training of a deep q-network
   """
 
-  class Tracker:
-
-    def __init__(self):
-      """
-      Class which tracks key data during training and logs to wandb
-      """
-      # parameters to set
-      self.moving_avg_num = 50
-      self.plot_raw = False
-      self.plot_avg = True
-      self.plot_test_reward = True
-      self.plot_test_duration = True
-      self.plot_test_metrics = True
-      # general
-      self.actions_done = 0
-      self.episodes_done = 0
-      self.last_log = 0
-      # training data
-      self.train_episodes = np.array([], dtype=np.int32)
-      self.train_rewards = np.array([], dtype=np.float64)
-      self.train_durations = np.array([], dtype=np.int32)
-      self.episodes_avg = np.array([], dtype=np.int32)
-      self.rewards_avg = np.array([], dtype=np.float64)
-      self.durations_avg = np.array([], dtype=np.float64)
-      # test data
-      self.test_episodes = np.array([], dtype=np.int32)
-      self.test_rewards = np.array([], dtype=np.float64)
-      self.test_durations = np.array([], dtype=np.int32)
-      self.avg_p_lifted = np.array([], dtype=np.float64)
-      self.avg_p_contact = np.array([], dtype=np.float64)
-      self.avg_p_palm_force = np.array([], dtype=np.float64)
-      self.avg_p_exceed_limits = np.array([], dtype=np.float64)
-      self.avg_p_exceed_axial = np.array([], dtype=np.float64)
-      self.avg_p_exceed_lateral = np.array([], dtype=np.float64)
-      self.avg_p_exceed_palm = np.array([], dtype=np.float64)
-      
-    def calc_moving_average(self):
-      # save the rewards and durations moving averages
-      if len(self.train_episodes) > self.moving_avg_num:
-        self.durations_avg = np.convolve(self.train_durations, np.ones(self.moving_avg_num), 'valid') / self.moving_avg_num
-        self.rewards_avg = np.convolve(self.train_rewards, np.ones(self.moving_avg_num), 'valid') / self.moving_avg_num
-        x = int(self.moving_avg_num / 2)
-        self.episodes_avg = self.train_episodes[x - 1:-x]
-
-    def plot_wandb(self, xdata, ydata, xlabel, ylabel, title):
-      # plot data to weights and biases
-      data = [[x, y] for (x, y) in zip(xdata, ydata)]
-      table = wandb.Table(data=data, columns=[xlabel, ylabel])
-      wandb.log({title + " plot" : wandb.plot.line(table, xlabel, ylabel, title=title)})
-
-    def log_wandb(self, log_frequency):
-
-      # if enough time has elapsed for another data upload
-      if (self.last_log + log_frequency < time.time()):
-
-        E = "Episode"
-        R = "Reward"
-        D = "Duration"
-
-        # create plots of raw reward and duration data
-        if self.plot_raw:
-          self.plot_wandb(self.train_episodes, self.train_rewards, E, R, "Raw rewards")
-          self.plot_wandb(self.train_episodes, self.train_durations, E, D, "Raw durations")
-
-        # create plots for average rewards and durations
-        if self.plot_avg:
-          self.plot_wandb(self.episodes_avg, self.rewards_avg, E, R, 
-                          f"Average rewards ({self.moving_avg_num} samples)")
-          self.plot_wandb(self.episodes_avg, self.durations_avg, E, D, 
-                          f"Average durations ({self.moving_avg_num} samples)")
-
-        # plot the test time reward
-        if self.plot_test_reward:
-          self.plot_wandb(self.test_episodes, self.test_rewards, E, R, "Test rewards")
-
-        # plot the test time duration
-        if self.plot_test_duration:
-          self.plot_wandb(self.test_episodes, self.test_durations, E, D, "Test durations")
-          
-        if self.plot_test_metrics:
-          # define performance metrics to examine
-          good_metrics = [
-            [self.avg_p_lifted, "% Lifted"],
-            [self.avg_p_contact, "% Contact"],
-            [self.avg_p_palm_force, "% Palm contact"]
-          ]
-          bad_metrics = [
-            [self.avg_p_exceed_limits, "% Exceed limits"],
-            [self.avg_p_exceed_axial, "% Exceed axial force"],
-            [self.avg_p_exceed_lateral, "% Exceed bending"],
-            [self.avg_p_exceed_palm, "% Exceed palm force"]
-          ]
-
-          # create test results plots
-          wandb.log({"Test good performance metrics" : wandb.plot.line_series(
-            xs=[self.test_episodes for i in range(len(good_metrics))],
-            ys=[x[0] for x in good_metrics],
-            keys=[x[1] for x in good_metrics],
-            title="Test good performance metrics", xname="Training episodes"
-          )})
-          wandb.log({"Test bad performance metrics" : wandb.plot.line_series(
-            xs=[self.test_episodes for i in range(len(bad_metrics))],
-            ys=[x[0] for x in bad_metrics],
-            keys=[x[1] for x in bad_metrics],
-            title="Test bad performance metrics", xname="Training episodes"
-          )})
-
-        # finish by recording the last log time
-        self.last_log = time.time()
-
-      return
-
   @dataclass
   class Parameters:
     batch_size: int = 128           # initial 128
@@ -287,6 +175,264 @@ class TrainDQN():
       reward = HER_trans.reward
       return TrainDQN.Transition(state, action, next_state, reward)
 
+  class Tracker:
+
+    def __init__(self):
+      """
+      Class which tracks key data during training and logs to wandb
+      """
+      # parameters to set
+      self.moving_avg_num = 50
+      self.static_avg_num = self.moving_avg_num
+      self.plot_raw = False
+      self.plot_moving_avg = False
+      self.plot_static_avg = True
+      self.plot_test_raw = True
+      self.plot_test_metrics = True
+      # general
+      self.actions_done = 0
+      self.episodes_done = 0
+      self.last_log = 0
+      # training data
+      numpy_float = np.float32
+      self.train_episodes = np.array([], dtype=np.int32)
+      self.train_rewards = np.array([], dtype=numpy_float)
+      self.train_durations = np.array([], dtype=np.int32)
+      self.episodes_avg = np.array([], dtype=np.int32)
+      self.rewards_avg = np.array([], dtype=numpy_float)
+      self.durations_avg = np.array([], dtype=numpy_float)
+      self.averaged_episodes = np.array([], dtype=np.int32)
+      self.averaged_rewards = np.array([], dtype=numpy_float)
+      self.averaged_durations = np.array([], dtype=numpy_float)
+      # test data
+      self.test_episodes = np.array([], dtype=np.int32)
+      self.test_rewards = np.array([], dtype=numpy_float)
+      self.test_durations = np.array([], dtype=np.int32)
+      self.avg_p_lifted = np.array([], dtype=numpy_float)
+      self.avg_p_contact = np.array([], dtype=numpy_float)
+      self.avg_p_palm_force = np.array([], dtype=numpy_float)
+      self.avg_p_exceed_limits = np.array([], dtype=numpy_float)
+      self.avg_p_exceed_axial = np.array([], dtype=numpy_float)
+      self.avg_p_exceed_lateral = np.array([], dtype=numpy_float)
+      self.avg_p_exceed_palm = np.array([], dtype=numpy_float)
+      # misc
+      self.fig = None
+      self.axs = None
+      
+    def log_episode(self, reward, duration):
+      """Log data from the last episode"""
+
+      self.train_episodes = np.append(self.train_episodes, self.episodes_done)
+      self.train_durations = np.append(self.train_durations, duration)
+      self.train_rewards = np.append(self.train_rewards, reward)
+      self.episodes_done += 1
+
+      # update average information
+      self.calc_moving_average()
+      self.calc_static_average()
+
+    def calc_moving_average(self):
+      """Save the rewards and durations moving averages"""
+      if len(self.train_episodes) > self.moving_avg_num:
+        self.durations_avg = np.convolve(self.train_durations, np.ones(self.moving_avg_num), 'valid') / self.moving_avg_num
+        self.rewards_avg = np.convolve(self.train_rewards, np.ones(self.moving_avg_num), 'valid') / self.moving_avg_num
+        x = int(self.moving_avg_num / 2)
+        self.episodes_avg = self.train_episodes[x - 1:-x]
+
+    def calc_static_average(self):
+      """Average rewards and durations to reduce data points"""
+      num_avg_points = len(self.averaged_rewards) * self.static_avg_num
+      if num_avg_points + self.static_avg_num < len(self.train_episodes):
+        unaveraged_r = self.train_rewards[num_avg_points:]
+        unaveraged_d = self.train_durations[num_avg_points:]
+        num_points_to_avg = len(unaveraged_r) // self.static_avg_num
+        for i in range(num_points_to_avg):
+          avg_e = self.train_episodes[num_avg_points + i * (self.static_avg_num // 2)]
+          avg_r = np.mean(unaveraged_r[i * self.static_avg_num : (i + 1) * self.static_avg_num])
+          avg_d = np.mean(unaveraged_d[i * self.static_avg_num : (i + 1) * self.static_avg_num])
+          self.averaged_episodes = np.append(self.averaged_episodes, avg_e)
+          self.averaged_rewards = np.append(self.averaged_rewards, avg_r)
+          self.averaged_durations = np.append(self.averaged_rewards, avg_d)
+
+    def plot_wandb(self, xdata, ydata, xlabel, ylabel, title):
+      # plot data to weights and biases
+      data = [[x, y] for (x, y) in zip(xdata, ydata)]
+      table = wandb.Table(data=data, columns=[xlabel, ylabel])
+      wandb.log({title + " plot" : wandb.plot.line(table, xlabel, ylabel, title=title)})
+
+    def plot_matplotlib(self, xdata, ydata, ylabel, title, axs, label=None):
+      """Plot a matplotlib 2x1 subplot"""
+      axs.plot(xdata, ydata, label=label)
+      axs.set_title(title, fontstyle="italic")
+      axs.set(ylabel=ylabel)
+
+    def plot(self):
+      """Plot a matplotlib figure"""
+
+      if self.fig is None:
+        # multiple figures
+        self.fig = []
+        self.axs = []
+        if self.plot_raw: 
+          fig1, axs1 = plt.subplots(2, 1)
+          self.fig.append(fig1)
+          self.axs.append(axs1)
+        if self.plot_moving_avg:
+          fig2, axs2 = plt.subplots(2, 1)
+          self.fig.append(fig2)
+          self.axs.append(axs2)
+        if self.plot_static_avg:
+          fig3, axs3 = plt.subplots(2, 1)
+          self.fig.append(fig3)
+          self.axs.append(axs3)
+        if self.plot_test_raw:
+          fig4, axs4 = plt.subplots(2, 1)
+          self.fig.append(fig4)
+          self.axs.append(axs4)
+        if self.plot_test_metrics:
+          fig5, axs5 = plt.subplots(2, 1)
+          self.fig.append(fig5)
+          self.axs.append(axs5)
+
+      ind = 0
+
+      E = "Episode"
+      R = "Reward"
+      D = "Duration"
+
+      # clear all axes
+      for pairs in self.axs:
+        for axis in pairs:
+          axis.clear()
+
+      if self.plot_raw:
+        self.plot_matplotlib(self.train_episodes, self.train_durations, D,
+                             "Raw durations", self.axs[ind][0])
+        self.plot_matplotlib(self.train_episodes, self.train_durations, R,
+                             "Raw episodes", self.axs[ind][1])
+        self.fig[ind].subplots_adjust(hspace=0.4)
+        ind += 1
+
+      if self.plot_moving_avg:
+        self.plot_matplotlib(self.train_episodes, self.durations_avg, D,
+                             f"Durations moving average ({self.moving_avg_num} samples)", 
+                             self.axs[ind][0])
+        self.plot_matplotlib(self.train_episodes, self.rewards_avg, R,
+                             f"Rewards moving average ({self.moving_avg_num} samples)", 
+                             self.axs[ind][1])
+        self.fig[ind].subplots_adjust(hspace=0.4)
+        ind += 1
+
+      if self.plot_static_avg:
+        self.plot_matplotlib(self.averaged_episodes, self.averaged_durations, D,
+                             f"Durations static average ({self.static_avg_num} samples)", 
+                             self.axs[ind][0])
+        self.plot_matplotlib(self.averaged_episodes, self.averaged_rewards, R,
+                             f"Rewards static average ({self.static_avg_num} samples)", 
+                             self.axs[ind][1])
+        self.fig[ind].subplots_adjust(hspace=0.4)
+        ind += 1
+
+      if self.plot_test_raw:
+        self.plot_matplotlib(self.test_episodes, self.test_durations, D,
+                             "Test durations", self.axs[ind][0])
+        self.plot_matplotlib(self.test_episodes, self.test_rewards, R,
+                             "Test rewards", self.axs[ind][1])
+        self.fig[ind].subplots_adjust(hspace=0.4)
+        ind += 1
+
+      if self.plot_test_metrics:
+        # good metrics
+        self.plot_matplotlib(self.test_episodes, self.avg_p_lifted, "% steps",
+                             "Test good metrics", self.axs[ind][0], label="Lifted")
+        self.plot_matplotlib(self.test_episodes, self.avg_p_contact, "% steps",
+                             "Test good metrics", self.axs[ind][0], label="Any contact")
+        self.plot_matplotlib(self.test_episodes, self.avg_p_palm_force, "% steps",
+                             "Test good metrics", self.axs[ind][0], label="Palm contact")
+        self.axs[ind][0].legend()
+        # bad metrics
+        self.plot_matplotlib(self.test_episodes, self.avg_p_exceed_limits, "% steps",
+                             "Test bad metrics", self.axs[ind][1], label="Exceed limits")
+        self.plot_matplotlib(self.test_episodes, self.avg_p_exceed_axial, "% steps",
+                             "Test bad metrics", self.axs[ind][1], label="Exceed axial force")
+        self.plot_matplotlib(self.test_episodes, self.avg_p_exceed_lateral, "% steps",
+                             "Test bad metrics", self.axs[ind][1], label="Exceed bending")
+        self.plot_matplotlib(self.test_episodes, self.avg_p_exceed_palm, "% steps",
+                             "Test bad metrics", self.axs[ind][1], label="Exceed palm force")
+        self.axs[ind][1].legend()
+        self.fig[ind].subplots_adjust(hspace=0.4)
+        ind += 1
+
+      plt.pause(0.001)
+
+      return
+
+    def log_wandb(self, log_frequency):
+
+      # if enough time has elapsed for another data upload
+      if (self.last_log + log_frequency < time.time()):
+
+        E = "Episode"
+        R = "Reward"
+        D = "Duration"
+
+        # create plots of raw reward and duration data
+        if self.plot_raw:
+          self.plot_wandb(self.train_episodes, self.train_rewards, E, R, "Raw rewards")
+          self.plot_wandb(self.train_episodes, self.train_durations, E, D, "Raw durations")
+
+        # create plots for a moving average of rewards and durations
+        if self.plot_moving_avg:
+          self.plot_wandb(self.episodes_avg, self.rewards_avg, E, R, 
+                          f"Rewards moving average ({self.moving_avg_num} samples)")
+          self.plot_wandb(self.episodes_avg, self.durations_avg, E, D, 
+                          f"Durations moving average ({self.moving_avg_num} samples)")
+
+        # create plots for a static average of rewards and durations
+        if self.plot_static_avg:
+          self.plot_wandb(self.averaged_episodes, self.averaged_rewards, E, R,
+                          f"Rewards static average ({self.static_avg_num} samples)")
+          self.plot_wandb(self.averaged_episodes, self.averaged_rewards, E, D,
+                          f"Durations static average ({self.static_avg_num} samples)")
+
+        # plot the test time reward
+        if self.plot_test_raw:
+          self.plot_wandb(self.test_episodes, self.test_rewards, E, R, "Test rewards")
+          self.plot_wandb(self.test_episodes, self.test_durations, E, D, "Test durations")
+          
+        if self.plot_test_metrics:
+          # define performance metrics to examine
+          good_metrics = [
+            [self.avg_p_lifted, "% Lifted"],
+            [self.avg_p_contact, "% Contact"],
+            [self.avg_p_palm_force, "% Palm contact"]
+          ]
+          bad_metrics = [
+            [self.avg_p_exceed_limits, "% Exceed limits"],
+            [self.avg_p_exceed_axial, "% Exceed axial force"],
+            [self.avg_p_exceed_lateral, "% Exceed bending"],
+            [self.avg_p_exceed_palm, "% Exceed palm force"]
+          ]
+
+          # create test results plots
+          wandb.log({"Test good performance metrics" : wandb.plot.line_series(
+            xs=[self.test_episodes for i in range(len(good_metrics))],
+            ys=[x[0] for x in good_metrics],
+            keys=[x[1] for x in good_metrics],
+            title="Test good performance metrics", xname="Training episodes"
+          )})
+          wandb.log({"Test bad performance metrics" : wandb.plot.line_series(
+            xs=[self.test_episodes for i in range(len(bad_metrics))],
+            ys=[x[0] for x in bad_metrics],
+            keys=[x[1] for x in bad_metrics],
+            title="Test bad performance metrics", xname="Training episodes"
+          )})
+
+        # finish by recording the last log time
+        self.last_log = time.time()
+
+      return
+
   def __init__(self, save_suffix=None, device=None, notimestamp=None, 
                use_wandb=None, wandb_name=None, no_plot=None, log_level=None):
 
@@ -318,6 +464,7 @@ class TrainDQN():
     else:
       global plt
       import matplotlib.pyplot as plt
+      plt.ion()
       self.fig, self.axs = plt.subplots(2, 1)
       self.no_plot = False
       
@@ -404,8 +551,6 @@ class TrainDQN():
     """
     Create a plot to track the training data
     """
-
-    self.track.calc_moving_average()
 
     # plt.pause() currently results in segfault
     if self.no_plot or True:
@@ -722,11 +867,16 @@ class TrainDQN():
       if done and test != True:
 
         # save training data and plot it
-        self.track.episodes_done = i_episode + 1
-        self.track.train_episodes = np.append(self.track.train_episodes, i_episode)
-        self.track.train_durations = np.append(self.track.train_durations, t + 1)
-        self.track.train_rewards = np.append(self.track.train_rewards, self.env.track.cumulative_reward)
-        self.plot()
+        self.track.log_episode(self.env.track.cumulative_reward, t + 1)
+        # self.track.episodes_done = i_episode + 1
+        # self.track.train_episodes = np.append(self.track.train_episodes, i_episode)
+        # self.track.train_durations = np.append(self.track.train_durations, t + 1)
+        # self.track.train_rewards = np.append(self.track.train_rewards, self.env.track.cumulative_reward)
+        # self.plot()
+
+        # if plotting
+        if self.no_plot == False:
+          self.track.plot()
 
         # save to wandb
         if self.use_wandb:
