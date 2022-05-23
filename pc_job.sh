@@ -9,7 +9,7 @@ if [ "$#" -eq 0 ]; then
     echo No arguments specified, using default which is: $ARRAY_INDEXES
 else
     ARRAY_INDEXES=( "$@" )
-    echo Arguments specified were: $ARRAY_INDEXES
+    echo PC job arguments specified were: $ARRAY_INDEXES
 fi
 
 # current time for naming training files
@@ -31,7 +31,7 @@ for I in ${ARRAY_INDEXES[@]}
 do
     python3 array_training_DQN.py $I $LUKE_JOB_SUBMIT_TIME \
     >> $LOG_FOLDER/train_luke-PC_${LUKE_JOB_SUBMIT_TIME}_${I}.txt &
-    echo Submitted job: train_luke-PC_${LUKE_JOB_SUBMIT_TIME}_${I}
+    echo Submitted job: luke-PC_A${I}_${LUKE_JOB_SUBMIT_TIME}
 done
 
 echo All jobs submitted

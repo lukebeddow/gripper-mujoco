@@ -8,91 +8,177 @@ from gym import make
 from TrainDQN import TrainDQN
 import networks
 
-def mixed_rewards(model):
-  # mixture of positive and negative rewards
+def set_penalties(model, value, done=False, trigger=1):
+  """
+  Set penalty rewards with given value, alongside defaults
+  """
 
-  # binary rewards                       reward   done   trigger
-  model.env.mj.set.step_num.set          (0.00,   False,   1)
-  model.env.mj.set.lifted.set            (0.002,  False,   1)
-  model.env.mj.set.target_height.set     (0.002,  False,   1)
-  model.env.mj.set.object_stable.set     (0.002,  False,   1)
-
-  # linear rewards                       reward   done   trigger min   max  overshoot
-  model.env.mj.set.finger_force.set      (0.002,  False,   1,    0.2,  1.0,  -1)
-  model.env.mj.set.palm_force.set        (0.002,  False,   1,    1.0,  6.0,  -1)
-
-  # penalties                            reward   done   trigger min   max  overshoot
-  model.env.mj.set.exceed_limits.set     (-0.005, 5,       1)
-  model.env.mj.set.exceed_axial.set      (-0.005, 5,       1,    3.0,  6.0,  -1)
-  model.env.mj.set.exceed_lateral.set    (-0.005, 5,       1,    4.0,  6.0,  -1)
-  model.env.mj.set.exceed_palm.set       (-0.005, 5,       1,    6.0,  10.0, -1)
-
-  # end criteria                         reward   done   trigger
-  model.env.mj.set.stable_height.set     (0.0,    True,    1)
-  model.env.mj.set.oob.set               (-1.0,   True,    1)
-
-  # terminate episode when reward drops below -1.01, also cap at this value
-  model.env.mj.set.quit_on_reward_below = -10000
-  model.env.mj.set.quit_reward_capped = True
+  # penalties                            reward   done   trigger  min   max  overshoot
+  model.env.mj.set.exceed_limits.set     (value,  done,  trigger)
+  model.env.mj.set.exceed_axial.set      (value,  done,  trigger, 3.0,  6.0,  -1)
+  model.env.mj.set.exceed_lateral.set    (value,  done,  trigger, 4.0,  6.0,  -1)
+  model.env.mj.set.exceed_palm.set       (value,  done,  trigger, 6.0,  10.0, -1)
 
   return model
 
-def new_rewards(model):
-  # shift the rewards to always be negative
+def set_bonuses(model, value):
+  """
+  Set bonus rewards with a given value
+  """
 
   # binary rewards                       reward   done   trigger
-  model.env.mj.set.step_num.set          (-0.01,  False,   1)
-  model.env.mj.set.lifted.set            (0.005,  False,   1)
-  model.env.mj.set.target_height.set     (0.005,  False,   1)
+  model.env.mj.set.lifted.set            (value,  False,   1)
+  model.env.mj.set.target_height.set     (value,  False,   1)
+  model.env.mj.set.object_stable.set     (value,  False,   1)
   
   # linear rewards                       reward   done   trigger min   max  overshoot
-  model.env.mj.set.finger_force.set      (0.005,  False,   1,    0.2,  1.0,  -1)
-  model.env.mj.set.palm_force.set        (0.005,  False,   1,    1.0,  6.0,  -1)
-
-  # penalties                            reward   done   trigger min   max  overshoot
-  model.env.mj.set.exceed_limits.set     (-0.002, False,   1)
-  model.env.mj.set.exceed_axial.set      (-0.002, False,   1,    3.0,  6.0,  -1)
-  model.env.mj.set.exceed_lateral.set    (-0.002, False,   1,    4.0,  6.0,  -1)
-  model.env.mj.set.exceed_palm.set       (-0.002, False,   1,    6.0,  10.0, -1)
-
-  # end criteria                         reward   done   trigger
-  model.env.mj.set.object_stable.set     (1.0,    True,    1)
-  model.env.mj.set.oob.set               (-1.0,   True,    1)
-
-  # terminate episode when reward drops below -1.01, also cap at this value
-  model.env.mj.set.quit_on_reward_below = -1.0
-  model.env.mj.set.quit_reward_capped = True
+  model.env.mj.set.finger_force.set      (value,  False,   1,    0.2,  1.0,  -1)
+  model.env.mj.set.palm_force.set        (value,  False,   1,    1.0,  6.0,  -1)
 
   return model
 
-def sparse_rewards(model):
+def setup_HER(model, use=True, style="basic", mode="final", k=4):
   """
-  Have strong but sparse reward signals
+  Set the goal for the simulation and enable HER
   """
 
-  # binary rewards                       reward   done   trigger
-  model.env.mj.set.step_num.set          (0,      False,   1)
-  model.env.mj.set.lifted.set            (0,      False,   1)
-  model.env.mj.set.target_height.set     (0,      False,   1)
+  if use == False:
+    model.env.mj.set.use_HER = False
+    return model
+
+  # enable HER and set the mode
+  model.env.mj.set.use_HER = True
+  model.HER_mode = mode
+  model.HER_k = k
+
+  # set the HER goal reward style
+  model.env.mj.set.goal_reward = 1.0
+  model.env.mj.set.divide_goal_reward = True
+
+  if style == "basic":
+    model.env.mj.goal.lifted.involved = True
+    model.env.mj.goal.object_contact.involved = True
+    model.env.mj.goal.finger_force.involved = True
+    model.env.mj.goal.palm_force.involved = True
+    model.env.mj.goal.object_stable.involved = True
+    model.env.mj.goal.target_height.involved = True
+    model.env.mj.goal.stable_height.involved = True
+
+  else:
+    raise RuntimeError("style was not set to a valid option in setup_HER()")
+
+  model.wandb_note += f"HER goal style: '{style}', mode: '{mode}', k: {k}\n"
+
+  return model
+
+def create_reward_function(model, style="negative", options=[]):
+  """
+  Set the reward structure for the learning, with different style options
+  """
+
+  if style == "negative":
+    # reward each step                     reward   done   trigger
+    model.env.mj.set.step_num.set          (-0.01,  False,   1)
+    # penalties and bonuses
+    model = set_bonuses(model, 0.002)
+    model = set_penalties(model, -0.002,
+                          done=5 if "terminate_early" in options else False)
+    # scale based on steps allowed per episode
+    model.env.mj.set.scale_rewards(100 / model.env.max_episode_steps)
+    # end criteria                         reward   done   trigger
+    model.env.mj.set.stable_height.set     (0.0,    True,    1)
+    model.env.mj.set.oob.set               (-1.0,   True,    1)
+    # termination with poor reward
+    model.env.mj.set.quit_on_reward_below = -1.0 if "cap" in options else -1e5
+    model.env.mj.set.quit_reward_capped = True
+
+  elif style == "mixed":
+    # reward each step                     reward   done   trigger
+    model.env.mj.set.step_num.set          (0.0,    False,   1)
+    # penalties and bonuses
+    model = set_bonuses(model, 0.002)
+    model = set_penalties(model, -0.005,  
+                          done=5 if "terminate_early" in options else False)
+    # scale based on steps allowed per episode
+    model.env.mj.set.scale_rewards(100 / model.env.max_episode_steps)
+    # end criteria                         reward   done   trigger
+    model.env.mj.set.stable_height.set     (1.0,    True,    1)
+    model.env.mj.set.oob.set               (-1.0,   True,    1)
+    # termination with poor reward
+    model.env.mj.set.quit_on_reward_below = -1.0 if "cap" in options else -1e5
+    model.env.mj.set.quit_reward_capped = True
+
+  elif style == "mixed_v2":
+    # reward each step                     reward   done   trigger
+    model.env.mj.set.step_num.set          (-0.01,  False,   1)
+    # penalties and bonuses
+    model = set_bonuses(model, 0.005)
+    model = set_penalties(model, -0.002,  
+                          done=5 if "terminate_early" in options else False)
+    # scale based on steps allowed per episode
+    model.env.mj.set.scale_rewards(100 / model.env.max_episode_steps)
+    # end criteria                         reward   done   trigger
+    model.env.mj.set.stable_height.set     (1.0,    True,    1)
+    model.env.mj.set.oob.set               (-1.0,   True,    1)
+    # termination with poor reward
+    model.env.mj.set.quit_on_reward_below = -1.0 if "cap" in options else -1e5
+    model.env.mj.set.quit_reward_capped = True
+
+  elif style == "sparse":
+    # reward each step                     reward   done   trigger
+    model.env.mj.set.step_num.set          (0.0,    False,   1)
+    # penalties and bonuses
+    model = set_bonuses(model, 0.0)
+    model = set_penalties(model, 0.0,  
+                          done=5 if "terminate_early" in options else False)
+    # scale based on steps allowed per episode
+    model.env.mj.set.scale_rewards(100 / model.env.max_episode_steps)
+    # end criteria                         reward   done   trigger
+    model.env.mj.set.object_stable.set     (1.0,    True,    1)
+    model.env.mj.set.oob.set               (0.0,    True,    1)
+    # termination with poor reward
+    model.env.mj.set.quit_on_reward_below = -1.0 if "cap" in options else -1e5
+    model.env.mj.set.quit_reward_capped = True
   
-  # linear rewards                       reward   done   trigger min   max  overshoot
-  model.env.mj.set.finger_force.set      (0.0,    False,   1,    0.2,  1.0,  -1)
-  model.env.mj.set.palm_force.set        (0.0,    False,   1,    1.0,  6.0,  -1)
+  else:
+    raise RuntimeError("style was not set to a valid option in create_reward_function()")
 
-  # penalties                            reward   done   trigger min   max  overshoot
-  model.env.mj.set.exceed_limits.set     (0.0,    False,   1)
-  model.env.mj.set.exceed_axial.set      (0.0,    False,   1,    3.0,  6.0,  -1)
-  model.env.mj.set.exceed_lateral.set    (0.0,    False,   1,    4.0,  6.0,  -1)
-  model.env.mj.set.exceed_palm.set       (0.0,    False,   1,    6.0,  10.0, -1)
+  model.wandb_note += f"Reward style: '{style}', options: [ "
+  for extra in options: model.wandb_note += f"'{extra}' "
+  model.wandb_note += "]\n"
 
-  # end criteria                         reward   done   trigger
-  model.env.mj.set.object_stable.set     (1,      True,   1)
-  model.env.mj.set.stable_height.set     (0.0,    False,    1)
-  model.env.mj.set.oob.set               (0,      True,    1)
+  return model
 
-  # terminate episode when reward drops below -1.01, also cap at this value
-  model.env.mj.set.quit_on_reward_below = -10000
-  model.env.mj.set.quit_reward_capped = True
+def add_sensors(model, num=10, sensor_mode=1, state_mode=0):
+  """
+  Add a number of sensors
+  """
+
+  # what sensing mode (0=raw data, 1=change, 2=average)
+  model.env.mj.set.sensor_sample_mode = sensor_mode
+  model.env.mj.set.state_sample_mode = state_mode
+
+  # default: state sensor and bending gauge sensor
+  model.env.mj.set.motor_state_sensor.in_use = True
+  model.env.mj.set.motor_state_sensor.read_rate = -1
+  model.env.mj.set.bending_gauge.in_use = True
+
+  # state sensor with two readings (current, prev)
+  if num >= 1: model.env.mj.set.motor_state_sensor.read_rate = -2
+
+  # palm force sensor
+  if num >= 2: model.env.mj.set.palm_sensor.in_use = True
+
+  # wrist z force sensor
+  if num >= 3: model.env.mj.set.wrist_sensor_Z.in_use = True
+
+  # wrist xy force sensor
+  if num >= 4: model.env.mj.set.wrist_sensor_XY.in_use = True
+
+  # finger axial gauges
+  if num >= 5: model.env.mj.set.axial_gauge.in_use = True
+
+  model.wandb_note += f"Num sensors: {num}, state mode: {state_mode}, sensor mode: {sensor_mode}\n"
 
   return model
 
@@ -125,7 +211,8 @@ def finger_only_lifting(model):
 
 def apply_to_all_models(model):
   """
-  Settings we want to apply to every single running model
+  Settings we want to apply to every single running model. This can also be used
+  as a reference for which options are possible to change.
   """
 
   # set up the object set
@@ -134,7 +221,7 @@ def apply_to_all_models(model):
   # number of steps in an episode
   model.env.max_episode_steps = 200
 
-  # ensure we know what parameters we are using
+  # set the default hyperparameters
   model.params.batch_size = 128
   model.params.learning_rate = 0.01
   model.params.gamma = 0.999
@@ -182,6 +269,11 @@ def apply_to_all_models(model):
   model.env.mj.set.sensor_sample_mode = 1
   model.env.mj.set.state_sample_mode = 0
 
+  # turn off all HER by default
+  model.env.mj.set.use_HER = False
+  model.env.mj.set.goal_reward = 1.0
+  model.env.mj.set.divide_goal_reward = True
+
   # wipe all rewards so none trigger
   model.env.mj.set.wipe_rewards()
 
@@ -203,7 +295,7 @@ if __name__ == "__main__":
     timestamp = ""
     notimestamp = None
 
-  save_suffix = f"{timestamp}_array_{inputarg}"
+  save_suffix = f"A{inputarg}_{timestamp}"
 
   print("Input argument: ", inputarg)
   print("Timestamp is:", timestamp)
@@ -218,249 +310,204 @@ if __name__ == "__main__":
     model.device = "cpu"
 
   # create the name of the run and configure for wandb
-  run_name = f"train_{model.machine}_{save_suffix}"
+  run_name = f"{model.machine}_{save_suffix}"
   model.wandb_name = run_name
   
   model.log_level = 1
 
-  print("This run will be saved as", run_name)
+  print("This run will be saved as:", run_name)
 
-  if inputarg <= 5:
+  # ----- 3 layer network ----- #
+  if inputarg <= 9:
 
-    # now form the network
+    # now form the network and define max episode steps
     network = networks.DQN_3L60
+    model.env.max_episode_steps = 250
 
-    model.env.max_episode_steps = 300
-    model.env.mj.set.scale_rewards(100 / model.env.max_episode_steps)
-    model.env.mj.set.motor_state_sensor.read_rate = -2
-    model.env.mj.set.axial_gauge.in_use = True
-    model.env.mj.set.wrist_sensor_Z.in_use = True
+    model.wandb_note += f"Network: {network.name}"
 
+    # learning rate 0.0001
     if inputarg == 1:
-      model.wandb_note = "new rewards lr=0.001"
+      model = create_reward_function(model, style="sparse", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
+      model.params.learning_rate = 0.0001
+      model.wandb_note += "Learning rate 0.0001\n"
+      model.train(network)
+
+    elif inputarg == 2:
+      model = create_reward_function(model, style="sparse", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.0001
+      model.wandb_note += "Learning rate 0.0001\n"
+      model.train(network)
+
+    elif inputarg == 3:
+      model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.0001
+      model.wandb_note += "Learning rate 0.0001\n"
+      model.train(network)
+
+    # learning rate 0.001
+    elif inputarg == 4:
+      model = create_reward_function(model, style="sparse", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
       model.params.learning_rate = 0.001
-      model = new_rewards(model)
-      model.train(network)
-
-    elif inputarg == 2:
-      model.wandb_note = "new rewards lr=0.005"
-      model.params.learning_rate = 0.005
-      model = new_rewards(model)
-      model.train(network)
-
-    elif inputarg == 3:
-      model.wandb_note = "new rewards lr=0.010"
-      model.params.learning_rate = 0.010
-      model = new_rewards(model)
-      model.train(network)
-
-    elif inputarg == 4:
-      model.wandb_note = "new rewards lr=0.05"
-      model.params.learning_rate = 0.05
-      model = new_rewards(model)
+      model.wandb_note += "Learning rate 0.001\n"
       model.train(network)
 
     elif inputarg == 5:
-      model.wandb_note = "new rewards lr=0.1"
-      model.params.learning_rate = 0.1
-      model = new_rewards(model)
+      model = create_reward_function(model, style="sparse", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.001
+      model.wandb_note += "Learning rate 0.001\n"
       model.train(network)
 
-  exit()
-
-  # if inputarg <= 5:
-
-  #   # now form the network
-  #   network = networks.DQN_2L60
-
-  #   model.env.max_episode_steps = 200
-  #   model.env.mj.set.motor_state_sensor.read_rate = -2
-  #   model.env.mj.set.axial_gauge.in_use = True
-  #   model.env.mj.set.wrist_sensor_Z.in_use = True
-
-  #   if inputarg == 1:
-  #     model.wandb_note = "10x negative rewards, DQN_2L60"
-  #     model = make_rewards_negative(model)
-  #     model.env.mj.set.scale_rewards(10)
-  #     model.train(network)
-
-  #   elif inputarg == 2:
-  #     model.wandb_note = "100x negative rewards, DQN_2L60"
-  #     model = make_rewards_negative(model)
-  #     model.env.mj.set.scale_rewards(100)
-  #     model.train(network)
-
-  #   elif inputarg == 3:
-  #     model.wandb_note = "10x mixed rewards, DQN_2L60"
-  #     model = mixed_rewards(model)
-  #     model.env.mj.set.scale_rewards(10)
-  #     model.train(network)
-
-  #   elif inputarg == 4:
-  #     model.wandb_note = "100x mixed rewards, DQN_2L60"
-  #     model = mixed_rewards(model)
-  #     model.env.mj.set.scale_rewards(100)
-  #     model.train(network)
-
-  # exit()
-
-  # ----- 1 - 5, default network, negative rewards, vary number of sensors ----- #
-  if inputarg <= 5:
-
-    # apply settings
-    model = make_rewards_negative(model)
-
-    # now form the network
-    network = networks.DQN_2L60
-
-    # ----- adjust the rewards and step number ----- #
-    if inputarg == 1:
-      model.env.max_episode_steps = 200
-      model.wandb_note = "No extra sensors, 2 layer network"
+    elif inputarg == 6:
+      model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.001
+      model.wandb_note += "Learning rate 0.001\n"
       model.train(network)
 
-    elif inputarg == 2:
-      model.env.max_episode_steps = 200
-      model.env.mj.set.motor_state_sensor.read_rate = -2
-      model.train(network)
-
-    elif inputarg == 3:
-      model.env.max_episode_steps = 200
-      model.env.mj.set.motor_state_sensor.read_rate = -2
-      model.env.mj.set.axial_gauge.in_use = True
-      model.train(network)
-
-    elif inputarg == 4:
-      model.env.max_episode_steps = 200
-      model.env.mj.set.motor_state_sensor.read_rate = -2
-      model.env.mj.set.axial_gauge.in_use = True
-      model.env.mj.set.wrist_sensor_Z.in_use = True
-      model.train(network)
-
-    elif inputarg == 5:
-      model.env.max_episode_steps = 200
-      model.env.mj.set.motor_state_sensor.read_rate = -2
-      model.env.mj.set.axial_gauge.in_use = True
-      model.env.mj.set.wrist_sensor_Z.in_use = True
-      model.env.mj.set.wrist_sensor_XY.in_use = True
-      model.train(network)
-
-  # ----- 6 - 10, deeper network, negative rewards, vary number of sensors ----- #
-  elif inputarg > 5 and inputarg <= 10:
-
-    # create training instance and apply settings
-    model = make_rewards_negative(model)
-
-    # now form the network
-    network = networks.DQN_3L60
-
-    # ----- adjust the rewards and step number ----- #
-    if inputarg == 6:
-      model.env.max_episode_steps = 200
-      model.train(network)
-
+    # learning rate 0.01
     elif inputarg == 7:
-      model.env.max_episode_steps = 200
-      model.env.mj.set.motor_state_sensor.read_rate = -2
+      model = create_reward_function(model, style="sparse", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
+      model.params.learning_rate = 0.01
+      model.wandb_note += "Learning rate 0.01\n"
       model.train(network)
 
     elif inputarg == 8:
-      model.env.max_episode_steps = 200
-      model.env.mj.set.motor_state_sensor.read_rate = -2
-      model.env.mj.set.axial_gauge.in_use = True
+      model = create_reward_function(model, style="sparse", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.01
+      model.wandb_note += "Learning rate 0.01\n"
       model.train(network)
 
     elif inputarg == 9:
-      model.env.max_episode_steps = 200
-      model.env.mj.set.motor_state_sensor.read_rate = -2
-      model.env.mj.set.axial_gauge.in_use = True
-      model.env.mj.set.wrist_sensor_Z.in_use = True
+      model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.01
+      model.wandb_note += "Learning rate 0.01\n"
       model.train(network)
 
-    elif inputarg == 10:
-      model.env.max_episode_steps = 200
-      model.env.mj.set.motor_state_sensor.read_rate = -2
-      model.env.mj.set.axial_gauge.in_use = True
-      model.env.mj.set.wrist_sensor_Z.in_use = True
-      model.env.mj.set.wrist_sensor_XY.in_use = True
+  # ----- 4 layer network ----- #
+  elif inputarg >= 10 and inputarg <= 18:
+
+    # now form the network and define max episode steps
+    network = networks.DQN_4L60
+    model.env.max_episode_steps = 250
+
+    model.wandb_note += f"Network: {network.name}"
+
+    # learning rate 0.0001
+    if inputarg == 10:
+      model = create_reward_function(model, style="sparse", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
+      model.params.learning_rate = 0.0001
+      model.wandb_note += "Learning rate 0.0001\n"
       model.train(network)
 
-  # ----- 11 - 15, default network, mixed rewards, vary sensors ----- #
-  elif inputarg > 10 and inputarg <= 15:
-
-    # create training instance and apply settings
-    model = mixed_rewards(model)
-
-    # now form the network
-    network = networks.DQN_2L60
-
-    # ----- adjust the rewards and step number ----- #
-    if inputarg == 11:
-      model.env.max_episode_steps = 200
+    elif inputarg == 11:
+      model = create_reward_function(model, style="sparse", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.0001
+      model.wandb_note += "Learning rate 0.0001\n"
       model.train(network)
 
     elif inputarg == 12:
-      model.env.max_episode_steps = 200
-      model.env.mj.set.motor_state_sensor.read_rate = -2
+      model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.0001
+      model.wandb_note += "Learning rate 0.0001\n"
       model.train(network)
 
+    # learning rate 0.001
     elif inputarg == 13:
-      model.env.max_episode_steps = 200
-      model.env.mj.set.motor_state_sensor.read_rate = -2
-      model.env.mj.set.axial_gauge.in_use = True
+      model = create_reward_function(model, style="sparse", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
+      model.params.learning_rate = 0.001
+      model.wandb_note += "Learning rate 0.001\n"
       model.train(network)
 
     elif inputarg == 14:
-      model.env.max_episode_steps = 200
-      model.env.mj.set.motor_state_sensor.read_rate = -2
-      model.env.mj.set.axial_gauge.in_use = True
-      model.env.mj.set.wrist_sensor_Z.in_use = True
+      model = create_reward_function(model, style="sparse", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.001
+      model.wandb_note += "Learning rate 0.001\n"
       model.train(network)
 
     elif inputarg == 15:
-      model.env.max_episode_steps = 200
-      model.env.mj.set.motor_state_sensor.read_rate = -2
-      model.env.mj.set.axial_gauge.in_use = True
-      model.env.mj.set.wrist_sensor_Z.in_use = True
-      model.env.mj.set.wrist_sensor_XY.in_use = True
+      model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.001
+      model.wandb_note += "Learning rate 0.001\n"
       model.train(network)
 
-  # ----- 16 - 20, deeper network, mixed rewards, vary sensors ----- #
-  elif inputarg > 15 and inputarg <= 20:
-
-    # create training instance and apply settings
-    model = mixed_rewards(model)
-
-    # now form the network
-    network = networks.DQN_3L60
-
-    # ----- adjust the rewards and step number ----- #
-    if inputarg == 16:
-      model.env.max_episode_steps = 200
+    # learning rate 0.01
+    elif inputarg == 16:
+      model = create_reward_function(model, style="sparse", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
+      model.params.learning_rate = 0.01
+      model.wandb_note += "Learning rate 0.01\n"
       model.train(network)
 
     elif inputarg == 17:
-      model.env.max_episode_steps = 200
-      model.env.mj.set.motor_state_sensor.read_rate = -2
+      model = create_reward_function(model, style="sparse", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.01
+      model.wandb_note += "Learning rate 0.01\n"
       model.train(network)
 
     elif inputarg == 18:
-      model.env.max_episode_steps = 200
-      model.env.mj.set.motor_state_sensor.read_rate = -2
-      model.env.mj.set.axial_gauge.in_use = True
+      model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.01
+      model.wandb_note += "Learning rate 0.01\n"
       model.train(network)
 
-    elif inputarg == 19:
-      model.env.max_episode_steps = 200
-      model.env.mj.set.motor_state_sensor.read_rate = -2
-      model.env.mj.set.axial_gauge.in_use = True
-      model.env.mj.set.wrist_sensor_Z.in_use = True
+  # ----- sphere only training ----- #
+
+  elif inputarg >= 19 and inputarg <= 20:
+
+    # now form the network and define max episode steps
+    network = networks.DQN_3L60
+    model.env.max_episode_steps = 250
+    model.env._load_object_set(name="set1_sphereonly_120")
+
+    model.wandb_note += f"Network: {network.name}"
+
+    if inputarg == 19:
+      model = create_reward_function(model, style="mixed_v2", options=["cap"])
+      model = add_sensors(model, num=0, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.001
+      model.wandb_note += "Learning rate 0.001\n"
       model.train(network)
 
     elif inputarg == 20:
-      model.env.max_episode_steps = 200
-      model.env.mj.set.motor_state_sensor.read_rate = -2
-      model.env.mj.set.axial_gauge.in_use = True
-      model.env.mj.set.wrist_sensor_Z.in_use = True
-      model.env.mj.set.wrist_sensor_XY.in_use = True
+      model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
+      model = add_sensors(model, num=0, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.001
+      model.wandb_note += "Learning rate 0.001\n"
       model.train(network)

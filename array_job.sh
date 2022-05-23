@@ -1,8 +1,8 @@
 # These are flags you must include - Two memory and one runtime.
 # Runtime is either seconds or hours:min:sec
 
-#$ -l tmem=8G
-#$ -l h_vmem=8G
+#$ -l tmem=12G
+#$ -l h_vmem=12G
 #$ -l h_rt=95:59:0 
 
 # Some important notes
@@ -11,7 +11,7 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N ArrayTrainDQN_13
+#$ -N ArrayTrainDQN_15
 #$ -t 1-20
 
 # The code you want to run now goes here.
