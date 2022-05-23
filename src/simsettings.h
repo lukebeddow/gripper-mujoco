@@ -29,7 +29,11 @@
   XX(  debug,                   bool,     true)     /* print debug info to terminal */\
   XX(  mujoco_timestep,         float,    0.002)    /* sim timestep in seconds - default 0.002 */\
   XX(  curve_validation,        bool,     false)    /* save finger curve data for testing */\
+  /*
+  HER settings */\
   XX(  use_HER,                 bool,     false)    /* use hindsight experience replay (HER) */\
+  XX(  goal_reward,             float,    1.0)      /* reward for achieving a goal */\
+  XX(  divide_goal_reward,      bool,     true)     /* if multiple goals, do we split goal reward betwen them */\
   /*
   get_observation() settings    (NB: sample modes: 0=raw, 1=change, 2=average) */\
   XX(  sensor_sample_mode,      int,      1)        /* how to sample sensor observations, see MjType::Sample*/\

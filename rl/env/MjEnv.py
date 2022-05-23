@@ -69,7 +69,7 @@ class MjEnv(gym.Env):
     self.object_position_noise_mm = 10
     self.disable_rendering = True
     self.task_reload_chance = 1 / 40.
-    self.log_level = 2
+    self.log_level = 0
 
     # user defined testing parameters
     self.test_in_progress = False
@@ -165,6 +165,10 @@ class MjEnv(gym.Env):
 
     self.n_actions = self.mj.get_n_actions()
     self.n_obs = self.mj.get_n_obs()
+
+    # for testing
+    print("n_actions is", self.n_actions)
+    print("n_obs is", self.n_obs)
 
   def _make_event_track(self):
     """

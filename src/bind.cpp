@@ -468,17 +468,16 @@ PYBIND11_MODULE(bind, m) {
     .def(py::init<>())
     .def_readwrite("involved", &MjType::Goal::Event::involved)
     .def_readwrite("state", &MjType::Goal::Event::state)
-    .def_readwrite("value", &MjType::Goal::Event::value)
 
     // pickle support
     .def(py::pickle(
       [](const MjType::Goal::Event e) { // __getstate___
         /* return a tuple that fully encodes the state of the object */
-        return py::make_tuple(e.involved, e.state, e.value);
+        return py::make_tuple(e.involved, e.state);
       },
       [](py::tuple t) { // __setstate__
 
-        if (t.size() != 3)
+        if (t.size() != 2)
           throw std::runtime_error("MjType::Goal::Event py::pickle got invalid state");
 
         // create new c++ instance with old data
@@ -486,7 +485,6 @@ PYBIND11_MODULE(bind, m) {
 
         out.involved = t[0].cast<bool>();
         out.state = t[1].cast<bool>();
-        out.value = t[2].cast<float>();
 
         return out;
       }
@@ -497,6 +495,7 @@ PYBIND11_MODULE(bind, m) {
 
   {py::class_<MjType::Goal>(m, "Goal")
     .def(py::init<>())
+    .def("print", &MjType::Goal::print)
 
     #define XX(name, type, value)
     #define SS(name, in_use, norm, readrate)

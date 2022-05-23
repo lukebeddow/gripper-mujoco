@@ -66,12 +66,6 @@ void MjClass::init()
   // get the objects available for grasping
   env_.object_names = luke::get_objects();
 
-  // default goal
-  goal.lifted.involved = true;
-  goal.object_contact.involved = true;
-  goal.finger_force.involved = true;
-  goal.stable_height.involved = true;
-  goal.object_stable.involved = true;
 }
 
 void MjClass::init(mjModel* m, mjData* d)
@@ -289,7 +283,6 @@ void MjClass::step()
   luke::after_step(model, data);
 
   // check for new sensor data
-  // monitor_gauges();
   monitor_sensors();
 
   if (s_.render_on_step) {
@@ -938,7 +931,7 @@ std::vector<float> MjClass::get_goal()
       " MjClass.goal.<eventname>.involved = True\n");
   }
 
-  return goal.vectorise();
+  return goal_vec;
 }
 
 std::vector<float> MjClass::assess_goal()
@@ -958,9 +951,7 @@ std::vector<float> MjClass::assess_goal(std::vector<float> event_vec)
 
   change_goal(new_goal, event_vec, s_);
 
-  std::vector<float> goal_vec = new_goal.vectorise();
-
-  return goal_vec;
+  return new_goal.vectorise();
 }
 
 void MjClass::reset_object()
@@ -1549,6 +1540,12 @@ float goal_rewards(MjType::EventTrack& events, MjType::Settings& settings,
   /* calculate rewards based on goals in HER */
 
   float reward = 0;
+  float goal_reward = settings.goal_reward;
+
+  // is the reward evenly split between multiple goals
+  if (settings.divide_goal_reward) {
+    goal_reward /= goal.vectorise().size();
+  }
 
   // general and sensor settings not used
   #define XX(NAME, TYPE, VALUE)
@@ -1561,8 +1558,8 @@ float goal_rewards(MjType::EventTrack& events, MjType::Settings& settings,
                 and goal.NAME.involved and goal.NAME.state) {                   \
               if (settings.debug)                                               \
                 std::printf("%s triggered, reward += %.4f\n",                   \
-                  "goal: " #NAME, settings.NAME.reward);                        \
-              reward += goal.goal_reward;                                       \
+                  "goal: " #NAME, goal_reward);                                 \
+              reward += goal_reward;                                            \
             }
         
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)  \
@@ -1570,8 +1567,8 @@ float goal_rewards(MjType::EventTrack& events, MjType::Settings& settings,
                 and goal.NAME.involved and goal.NAME.state) {                   \
               if (settings.debug)                                               \
                 std::printf("%s triggered, reward += %.4f\n",                   \
-                  "goal: " #NAME, settings.NAME.reward);                        \
-              reward += goal.goal_reward;                                       \
+                  "goal: " #NAME, goal_reward);                                 \
+              reward += goal_reward;                                            \
             }
             
     // run the macro to create the code
@@ -1644,7 +1641,7 @@ void MjType::EventTrack::unvectorise(std::vector<float> in)
   #undef LR
 }
 
-std::vector<float> MjType::Goal::vectorise()
+std::vector<float> MjType::Goal::vectorise() const
 {
   /* return a vector of the goal state */
 
@@ -1754,6 +1751,7 @@ void change_goal(MjType::Goal& goal, MjType::EventTrack event,
   #undef SS
   #undef BR
   #undef LR
+
 }
 
 // end

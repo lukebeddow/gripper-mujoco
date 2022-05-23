@@ -310,7 +310,6 @@ namespace MjType
       // are events registered as goals and if so what is their state
       bool involved = false;
       bool state = false;
-      float value = 0.0;
     };
 
     float goal_reward = 1;
@@ -328,7 +327,7 @@ namespace MjType
     #undef LR
 
     // functions
-    std::vector<float> vectorise();
+    std::vector<float> vectorise() const;
     void unvectorise(std::vector<float> vec);
     void print();
 
@@ -340,12 +339,10 @@ namespace MjType
       #define SS(NAME, USED, NORMALISE, READ_RATE)
       #define BR(NAME, REWARD, DONE, TRIGGER)                                  \
                 NAME.state = false;                                            \
-                NAME.value = 0.0;                                              \
                 if (reset_involved) { NAME.involved = false; }                    
 
       #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)             \
                 NAME.state = false;                                            \
-                NAME.value = 0.0;                                              \
                 if (reset_involved) { NAME.involved = false; }                    
 
         // run the macro to create the code

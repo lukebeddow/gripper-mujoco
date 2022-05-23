@@ -202,12 +202,12 @@ class TrainDQN():
       self.train_episodes = np.array([], dtype=np.int32)
       self.train_rewards = np.array([], dtype=numpy_float)
       self.train_durations = np.array([], dtype=np.int32)
-      self.episodes_avg = np.array([], dtype=np.int32)
-      self.rewards_avg = np.array([], dtype=numpy_float)
-      self.durations_avg = np.array([], dtype=numpy_float)
-      self.averaged_episodes = np.array([], dtype=np.int32)
-      self.averaged_rewards = np.array([], dtype=numpy_float)
-      self.averaged_durations = np.array([], dtype=numpy_float)
+      self.avgR_episodes = np.array([], dtype=np.int32)
+      self.avgR_rewards = np.array([], dtype=numpy_float)
+      self.avgR_durations = np.array([], dtype=numpy_float)
+      self.avgS_episodes = np.array([], dtype=np.int32)
+      self.avgS_rewards = np.array([], dtype=numpy_float)
+      self.avgS_durations = np.array([], dtype=numpy_float)
       # test data
       self.test_episodes = np.array([], dtype=np.int32)
       self.test_rewards = np.array([], dtype=numpy_float)
@@ -238,25 +238,26 @@ class TrainDQN():
     def calc_moving_average(self):
       """Save the rewards and durations moving averages"""
       if len(self.train_episodes) > self.moving_avg_num:
-        self.durations_avg = np.convolve(self.train_durations, np.ones(self.moving_avg_num), 'valid') / self.moving_avg_num
-        self.rewards_avg = np.convolve(self.train_rewards, np.ones(self.moving_avg_num), 'valid') / self.moving_avg_num
+        self.avgR_durations = np.convolve(self.train_durations, np.ones(self.moving_avg_num), 'valid') / self.moving_avg_num
+        self.avgR_rewards = np.convolve(self.train_rewards, np.ones(self.moving_avg_num), 'valid') / self.moving_avg_num
         x = int(self.moving_avg_num / 2)
-        self.episodes_avg = self.train_episodes[x - 1:-x]
+        self.avgR_episodes = self.train_episodes[x - 1:-x]
 
     def calc_static_average(self):
       """Average rewards and durations to reduce data points"""
-      num_avg_points = len(self.averaged_rewards) * self.static_avg_num
+      num_avg_points = len(self.avgS_rewards) * self.static_avg_num
       if num_avg_points + self.static_avg_num < len(self.train_episodes):
         unaveraged_r = self.train_rewards[num_avg_points:]
         unaveraged_d = self.train_durations[num_avg_points:]
         num_points_to_avg = len(unaveraged_r) // self.static_avg_num
         for i in range(num_points_to_avg):
-          avg_e = self.train_episodes[num_avg_points + i * (self.static_avg_num // 2)]
+          avg_e = self.train_episodes[
+            num_avg_points + (i * self.static_avg_num) + (self.static_avg_num // 2)]
           avg_r = np.mean(unaveraged_r[i * self.static_avg_num : (i + 1) * self.static_avg_num])
           avg_d = np.mean(unaveraged_d[i * self.static_avg_num : (i + 1) * self.static_avg_num])
-          self.averaged_episodes = np.append(self.averaged_episodes, avg_e)
-          self.averaged_rewards = np.append(self.averaged_rewards, avg_r)
-          self.averaged_durations = np.append(self.averaged_rewards, avg_d)
+          self.avgS_episodes = np.append(self.avgS_episodes, avg_e)
+          self.avgS_rewards = np.append(self.avgS_rewards, avg_r)
+          self.avgS_durations = np.append(self.avgS_durations, avg_d)
 
     def plot_wandb(self, xdata, ydata, xlabel, ylabel, title):
       # plot data to weights and biases
@@ -318,20 +319,20 @@ class TrainDQN():
         ind += 1
 
       if self.plot_moving_avg:
-        self.plot_matplotlib(self.train_episodes, self.durations_avg, D,
+        self.plot_matplotlib(self.train_episodes, self.avgR_durations, D,
                              f"Durations moving average ({self.moving_avg_num} samples)", 
                              self.axs[ind][0])
-        self.plot_matplotlib(self.train_episodes, self.rewards_avg, R,
+        self.plot_matplotlib(self.train_episodes, self.avgR_rewards, R,
                              f"Rewards moving average ({self.moving_avg_num} samples)", 
                              self.axs[ind][1])
         self.fig[ind].subplots_adjust(hspace=0.4)
         ind += 1
 
       if self.plot_static_avg:
-        self.plot_matplotlib(self.averaged_episodes, self.averaged_durations, D,
+        self.plot_matplotlib(self.avgS_episodes, self.avgS_durations, D,
                              f"Durations static average ({self.static_avg_num} samples)", 
                              self.axs[ind][0])
-        self.plot_matplotlib(self.averaged_episodes, self.averaged_rewards, R,
+        self.plot_matplotlib(self.avgS_episodes, self.avgS_rewards, R,
                              f"Rewards static average ({self.static_avg_num} samples)", 
                              self.axs[ind][1])
         self.fig[ind].subplots_adjust(hspace=0.4)
@@ -387,16 +388,16 @@ class TrainDQN():
 
         # create plots for a moving average of rewards and durations
         if self.plot_moving_avg:
-          self.plot_wandb(self.episodes_avg, self.rewards_avg, E, R, 
+          self.plot_wandb(self.avgR_episodes, self.avgR_rewards, E, R, 
                           f"Rewards moving average ({self.moving_avg_num} samples)")
-          self.plot_wandb(self.episodes_avg, self.durations_avg, E, D, 
+          self.plot_wandb(self.avgR_episodes, self.avgR_durations, E, D, 
                           f"Durations moving average ({self.moving_avg_num} samples)")
 
         # create plots for a static average of rewards and durations
         if self.plot_static_avg:
-          self.plot_wandb(self.averaged_episodes, self.averaged_rewards, E, R,
+          self.plot_wandb(self.avgS_episodes, self.avgS_rewards, E, R,
                           f"Rewards static average ({self.static_avg_num} samples)")
-          self.plot_wandb(self.averaged_episodes, self.averaged_rewards, E, D,
+          self.plot_wandb(self.avgS_episodes, self.avgS_durations, E, D,
                           f"Durations static average ({self.static_avg_num} samples)")
 
         # plot the test time reward
@@ -412,7 +413,6 @@ class TrainDQN():
             [self.avg_p_palm_force, "% Palm contact"]
           ]
           bad_metrics = [
-            [self.avg_p_exceed_limits, "% Exceed limits"],
             [self.avg_p_exceed_axial, "% Exceed axial force"],
             [self.avg_p_exceed_lateral, "% Exceed bending"],
             [self.avg_p_exceed_palm, "% Exceed palm force"]
@@ -462,6 +462,10 @@ class TrainDQN():
     self.wandb_name = wandb_name
     self.wandb_note = ""
 
+    # HER option defaults
+    self.HER_mode = None
+    self.HER_k = None
+
     # if we are plotting graphs during this training
     if no_plot == True:
       self.no_plot = True
@@ -507,10 +511,11 @@ class TrainDQN():
                                    lr=self.params.learning_rate)
 
     self.memory = TrainDQN.ReplayMemory(self.params.memory_replay, self.device,
-                                        HER=self.use_HER)
+                                        HER=self.use_HER, HERMethod=self.HER_mode,
+                                        k=self.HER_k)
 
     # prepare for saving and loading
-    self.modelsaver = ModelSaver('models/dqn/' + self.policy_net.name())
+    self.modelsaver = ModelSaver('models/dqn/' + self.policy_net.name)
 
     # save weights and biases
     if self.use_wandb:
@@ -519,7 +524,7 @@ class TrainDQN():
                  notes=self.wandb_note + "\n\n" + self.env._get_cpp_settings())
 
     # print important info
-    print("Using model:", self.policy_net.name())
+    print("Using model:", self.policy_net.name)
     print("Using HER:", self.use_HER)
 
   def to_torch(self, data, dtype=None):
@@ -868,7 +873,10 @@ class TrainDQN():
                                     "seconds")
 
       # check if this episode is over and log if we aren't testing
-      if done and test != True:
+      if done:
+
+        # if we are testing, no data is logged
+        if test: break
 
         # save training data
         self.track.log_episode(self.env.track.cumulative_reward, t + 1)
@@ -992,7 +1000,7 @@ class TrainDQN():
     param_str += f"""Hyperparameters at training time:\n\n"""
 
     # add in some important information
-    param_str += "Network name: " + self.policy_net.name() + "\n"
+    param_str += "Network name: " + self.policy_net.name + "\n"
     param_str += "Save time and date: " + time_stamp + "\n"
     param_str += "Running on machine: " + self.machine + "\n"
 
@@ -1022,7 +1030,7 @@ class TrainDQN():
     # data structure we will save
     to_save = (core_data, tupledata)
 
-    savepath = self.modelsaver.save(self.policy_net.name(), pyobj=to_save, 
+    savepath = self.modelsaver.save(self.policy_net.name, pyobj=to_save, 
                                     txtstr=txtstring, txtlabel=txtlabel)
 
 
@@ -1065,7 +1073,6 @@ class TrainDQN():
 
     # return the path of the loaded model
     return self.modelsaver.last_loadpath
-
   def continue_training(self, foldername, folderpath=None, new_endpoint=None):
     """
     Load a model and then continue training it
@@ -1090,7 +1097,6 @@ class TrainDQN():
     # begin the training at the given starting point (always uses most recent pickle)
     self.train(i_start=self.track.episodes_done)
 
-
 if __name__ == "__main__":
   
   # ----- prepare ----- #
@@ -1109,6 +1115,11 @@ if __name__ == "__main__":
   # model.env.max_episode_steps = 20
   # model.params.wandb_freq_s = 5
   # model.env.mj.set.action_motor_steps = 350
+  # model.env.disable_rendering = False
+  model.env.test_trials_per_obj = 1
+  model.env.test_obj_limit = 10
+  # model.env.max_episode_steps = 20
+  # model.env.mj.set.step_num.set   
 
   # if we want to configure HER
   model.env.mj.set.use_HER = True
@@ -1116,26 +1127,23 @@ if __name__ == "__main__":
   model.env.mj.goal.lifted.involved = True
   model.env.mj.goal.object_contact.involved = True
 
-  # now set up the network, ready for training
-  net = networks.DQN_3L60
-  model.init(net)
-
   # ----- load ----- #
 
   # load
-  # folderpath = "/home/luke/mymujoco/rl/models/dqn/" + model.policy_net.name() + "/"
+  # folderpath = "/home/luke/mymujoco/rl/models/dqn/" + model.policy_net.name + "/"
   # foldername = "train_luke-PC_13-05-22-17:56_array_1"
   # model.load(id=3, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
   # # train
+  net = networks.DQN_3L60
   model.env.disable_rendering = False
-  model.env.mj.set.debug = True
-  model.train()
+  model.env.mj.set.debug = False
+  model.train(network=net)
 
   # # continue training
-  # folderpath = "/home/luke/mymujoco/rl/models/dqn/" + model.policy_net.name() + "/"
+  # folderpath = "/home/luke/mymujoco/rl/models/dqn/" + model.policy_net.name + "/"
   # foldername = "train_luke-PC_13-05-22-17:56_array_1"
   # model.continue_training(foldername, folderpath=folderpath)
 
