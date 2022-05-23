@@ -28,6 +28,8 @@ class DQN_60x60(nn.Module):
 
 class DQN_2L60(nn.Module):
 
+  name = "DQN_2L60"
+
   def __init__(self, inputs, outputs, device):
     super(DQN_2L60, self).__init__()
     self.device = device
@@ -36,10 +38,6 @@ class DQN_2L60(nn.Module):
     self.linear3 = torch.nn.Linear(60, outputs)
     self.activation = torch.nn.ReLU()
     self.softmax = torch.nn.Softmax(dim=1)
-
-  def name(self):
-    # needed for the 'save' and 'load' functions
-    return "DQN_2L60"
 
   def forward(self, x):
     x = x.to(self.device)
@@ -54,6 +52,8 @@ class DQN_2L60(nn.Module):
 
 class DQN_3L60(nn.Module):
 
+  name = "DQN_3L60"
+
   def __init__(self, inputs, outputs, device):
     super(DQN_3L60, self).__init__()
     self.device = device
@@ -64,9 +64,33 @@ class DQN_3L60(nn.Module):
     self.activation = torch.nn.ReLU()
     self.softmax = torch.nn.Softmax(dim=1)
 
-  def name(self):
-    # needed for the 'save' and 'load' functions
-    return "DQN_3L60"
+  def forward(self, x):
+    x = x.to(self.device)
+    x = self.linear1(x)
+    x = self.activation(x)
+    x = self.linear2(x)
+    x = self.activation(x)
+    x = self.linear3(x)
+    x = self.activation(x)
+    x = self.linear4(x)
+    x = self.softmax(x)
+
+    return x
+
+class DQN_4L60(nn.Module):
+
+  name = "DQN_4L60"
+
+  def __init__(self, inputs, outputs, device):
+    super(DQN_4L60, self).__init__()
+    self.device = device
+    self.linear1 = torch.nn.Linear(inputs, 60)
+    self.linear2 = torch.nn.Linear(60, 60)
+    self.linear3 = torch.nn.Linear(60, 60)
+    self.linear4 = torch.nn.Linear(60, 60)
+    self.linear5 = torch.nn.Linear(60, outputs)
+    self.activation = torch.nn.ReLU()
+    self.softmax = torch.nn.Softmax(dim=1)
 
   def forward(self, x):
     x = x.to(self.device)
@@ -77,6 +101,8 @@ class DQN_3L60(nn.Module):
     x = self.linear3(x)
     x = self.activation(x)
     x = self.linear4(x)
+    x = self.activation(x)
+    x = self.linear5(x)
     x = self.softmax(x)
 
     return x
@@ -100,19 +126,19 @@ class DQN_3L60(nn.Module):
 #     global filepath, filename
 #     i = 1
 
-#     folderpath = filepath + net.name() + "/"
+#     folderpath = filepath + net.name + "/"
 #     if not os.path.exists(folderpath):
 #       os.makedirs(folderpath)
 #       if log_level > 1: print(f"Created a new directory called {folderpath}")
 
-#     file = folderpath + filename.format(net.name(), i)
+#     file = folderpath + filename.format(net.name, i)
 
 #     while os.path.exists(file):
 #         i += 1
-#         file = folderpath + filename.format(net.name(), i)
+#         file = folderpath + filename.format(net.name, i)
 
 #     if log_level > 0:
-#       print("Saving file {} with pickle".format(filename.format(net.name(), i)))
+#       print("Saving file {} with pickle".format(filename.format(net.name, i)))
 
 #     # with open(file, 'wb') as f:
 #     #     pickle.dump(net, f)
