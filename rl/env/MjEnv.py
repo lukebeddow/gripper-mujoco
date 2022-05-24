@@ -10,7 +10,7 @@ pathhere = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, pathhere)
 
 # with env in path, we can now import the shared cpp library
-from mjpy.bind import MjClass
+from mjpy.bind import MjClass, EventTrack
 
 import time
 import gym

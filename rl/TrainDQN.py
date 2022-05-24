@@ -2,6 +2,7 @@
 
 import math
 import random
+import os
 import time
 from datetime import datetime
 import numpy as np
@@ -40,7 +41,7 @@ class TrainDQN():
     min_memory_replay: int = 5000   # initial 5000
 
     save_freq: int = 1000
-    test_freq: int = 1000
+    test_freq: int = 1
     wandb_freq_s: int = 30
 
   Transition = namedtuple('Transition',
@@ -437,8 +438,8 @@ class TrainDQN():
 
       return
 
-  def __init__(self, save_suffix=None, device=None, notimestamp=None, 
-               use_wandb=None, wandb_name=None, no_plot=None, log_level=None):
+  def __init__(self, run_name=None, save_suffix=None, device=None, notimestamp=None, 
+               use_wandb=None, no_plot=None, log_level=None):
 
     # define key training parameters
     self.params = TrainDQN.Parameters()
@@ -453,13 +454,14 @@ class TrainDQN():
     # configure options
     if device != None: self.device = device
     else: self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    self.run_name = run_name
     self.save_suffix = save_suffix
     self.notimestamp = notimestamp
     self.log_level = 1 if log_level is None else log_level
 
     # wandb options
     self.use_wandb = use_wandb if use_wandb is not None else True
-    self.wandb_name = wandb_name
+    self.wandb_name = run_name
     self.wandb_note = ""
 
     # HER option defaults
@@ -815,7 +817,7 @@ class TrainDQN():
     """
 
     # for debugging, show memory usage
-    if i_episode % 100 == 0:
+    if i_episode % 100 == 0 and not test:
       theheap = guph.heap()
       print("Heap total size is", theheap.size, "(", theheap.size / 10e6, "GB)")
 
@@ -908,11 +910,12 @@ class TrainDQN():
     if i_start == None or i_start == 0:
       i_start = 0
       # create a new folder to save training results in
-      self.modelsaver.new_folder(label=self.machine, suffix=self.save_suffix, 
-                                 notimestamp=self.notimestamp)
+      self.modelsaver.new_folder(name=self.run_name, label=self.machine, 
+                                 suffix=self.save_suffix, notimestamp=self.notimestamp)
       # save record of the training time hyperparameters and cpp library
       self.save_hyperparameters()
-      self.modelsaver.copy_files("/home/luke/mymujoco/rl/env/mjpy/", "bind.so")
+      path_to_lib = os.path.dirname(os.path.abspath(__file__)) + "/env/mjpy/"
+      self.modelsaver.copy_files(path_to_lib, "bind.so")
     else:
       # save a record of the training restart
       continue_label = f"Training is continuing from episode {i_start} with these hyperparameters\n"
@@ -969,10 +972,8 @@ class TrainDQN():
 
       if self.log_level > 0: print("Begin test episode", i_episode)
 
-      # count up through actions
-      for t in count():
-        if self.log_level > 1: ("Test episode", i_episode, "action", t)
-        self.run_episode(i_episode, test=True)
+      if self.log_level > 1: ("Test episode", i_episode, "action", t)
+      self.run_episode(i_episode, test=True)
 
 
     # get the test data out
@@ -1105,8 +1106,7 @@ if __name__ == "__main__":
   force_device = "cpu"
   no_plot = True
 
-  model = TrainDQN(device=force_device, use_wandb=use_wandb,
-                   wandb_name=None, no_plot=no_plot)
+  model = TrainDQN(device=force_device, use_wandb=use_wandb, no_plot=no_plot)
 
   # if we want to adjust parameters
   # model.params.num_episodes = 11

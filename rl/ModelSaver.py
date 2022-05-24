@@ -18,7 +18,7 @@ class ModelSaver:
     self.file_ext = ".pickle"        # saved file extension for pickled files
     self.file_num = "{:03d}"         # digit format for saving files with numbers
     self.date_str = "%d-%m-%Y-%H:%M" # date string, must be seperated by '-'
-    self.folder_names = "train_{}/"  # name of created folders, then formatted with date
+    self.folder_names = "train_{}/"  # default name of created folders, then formatted with date
 
     # if we are given a root, we can use abs paths not relative
     if not root:
@@ -241,7 +241,7 @@ class ModelSaver:
     print("Found the most recent file:", recent_folder + "/" + file_in_folder)
     return recent_folder + "/" + file_in_folder
 
-  def new_folder(self, label=None, suffix=None, notimestamp=None):
+  def new_folder(self, name=None, label=None, suffix=None, notimestamp=None):
     """
     Create a new training folder
     """
@@ -251,24 +251,33 @@ class ModelSaver:
 
     save_label = ""
 
-    # add in a user specified label -> train_{label}
-    if label != None:
-      save_label += label
+    folder_name = ""
 
-    # add in a timestamp unless told not to -> train_{DD-MM-YYYY-hr:min}
-    if notimestamp != True:
-      now = datetime.now()
-      time_stamp = now.strftime(self.date_str)
-      if not save_label.endswith('_') and len(save_label) > 0: save_label += '_'
-      save_label += time_stamp
+    # if we have been given a full name for the folder
+    if name != None:
+      folder_name = name
 
-    # add in a user specified suffix -> train_{DD-MM-YYYY-hr:min}_{suffix}
-    if suffix != None:
-      if not save_label.endswith('_') and len(save_label) > 0: save_label += '_'
-      save_label += suffix
+    # else auto generate a name for the folder using given label information
+    else:
 
-    # create the folder name
-    folder_name = self.folder_names.format(save_label)
+      # add in a user specified label -> train_{label}
+      if label != None:
+        save_label += label
+
+      # add in a timestamp unless told not to -> train_{DD-MM-YYYY-hr:min}
+      if notimestamp != True:
+        now = datetime.now()
+        time_stamp = now.strftime(self.date_str)
+        if not save_label.endswith('_') and len(save_label) > 0: save_label += '_'
+        save_label += time_stamp
+
+      # add in a user specified suffix -> train_{DD-MM-YYYY-hr:min}_{suffix}
+      if suffix != None:
+        if not save_label.endswith('_') and len(save_label) > 0: save_label += '_'
+        save_label += suffix
+
+      # create the folder name
+      folder_name = self.folder_names.format(save_label)
 
     # create the new folder
     if not os.path.exists(self.path + folder_name):

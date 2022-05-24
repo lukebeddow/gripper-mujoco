@@ -312,6 +312,7 @@ if __name__ == "__main__":
   # create the name of the run and configure for wandb
   run_name = f"{model.machine}_{save_suffix}"
   model.wandb_name = run_name
+  model.run_name = run_name
   
   model.log_level = 1
 
@@ -324,7 +325,7 @@ if __name__ == "__main__":
     network = networks.DQN_3L60
     model.env.max_episode_steps = 250
 
-    model.wandb_note += f"Network: {network.name}"
+    model.wandb_note += f"Network: {network.name}\n"
 
     # learning rate 0.0001
     if inputarg == 1:
@@ -408,7 +409,7 @@ if __name__ == "__main__":
     network = networks.DQN_4L60
     model.env.max_episode_steps = 250
 
-    model.wandb_note += f"Network: {network.name}"
+    model.wandb_note += f"Network: {network.name}\n"
 
     # learning rate 0.0001
     if inputarg == 10:
@@ -494,7 +495,7 @@ if __name__ == "__main__":
     model.env.max_episode_steps = 250
     model.env._load_object_set(name="set1_sphereonly_120")
 
-    model.wandb_note += f"Network: {network.name}"
+    model.wandb_note += f"Network: {network.name}\n"
 
     if inputarg == 19:
       model = create_reward_function(model, style="mixed_v2", options=["cap"])

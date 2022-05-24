@@ -165,3 +165,31 @@ DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
 MAKEFLAGS += -j8 # jN => use N parallel cores
 
 endif
+
+# ----- compiling on the lab desktop PC ----- #
+ifeq ($(filter lab-old, $(MAKECMDGOALS)), lab-old)
+
+# set this command goal as a phony target (important)
+.PHONY: lab-old
+
+# what machine are we compiling for
+MACHINE = luke-PC
+
+# mjcf files location (model files like gripper/objects)
+MJCF_PATH = /home/luke/mymujoco/mjcf
+
+# local machine library locations
+PYTHON_PATH = /usr/include/python3.6m
+PYBIND_PATH = /home/luke/mymujoco/libs/pybind11
+ARMA_PATH = # none, use system library
+MUJOCO_PATH = /home/luke/mymujoco/libs/mujoco/mujoco210
+RENDER_PATH = # none, use system library
+CORE_LIBS = -L$(MUJOCO_PATH)/bin -lmujoco210 -larmadillo 
+RENDER_LIBS = -lGL -lglew $(MUJOCO_PATH)/bin/libglfw.so.3
+DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
+						 -DLUKE_MACHINE='"$(MACHINE)"'
+
+# extras
+MAKEFLAGS += -j8 # jN => use N parallel cores
+
+endif
