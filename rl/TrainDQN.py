@@ -972,9 +972,7 @@ class TrainDQN():
 
       if self.log_level > 0: print("Begin test episode", i_episode)
 
-      if self.log_level > 1: ("Test episode", i_episode, "action", t)
       self.run_episode(i_episode, test=True)
-
 
     # get the test data out
     test_data = self.env.test_trials
@@ -1109,6 +1107,7 @@ if __name__ == "__main__":
   model = TrainDQN(device=force_device, use_wandb=use_wandb, no_plot=no_plot)
 
   # if we want to adjust parameters
+  # model.log_level = 2
   # model.params.num_episodes = 11
   # model.params.test_freq = 10
   # model.env.test_trials_per_obj = 1
@@ -1122,7 +1121,7 @@ if __name__ == "__main__":
   # model.env.mj.set.step_num.set   
 
   # if we want to configure HER
-  model.env.mj.set.use_HER = True
+  model.env.mj.set.use_HER = False
   model.env.mj.goal.step_num.involved = True
   model.env.mj.goal.lifted.involved = True
   model.env.mj.goal.object_contact.involved = True

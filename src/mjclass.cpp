@@ -180,6 +180,8 @@ void MjClass::load(std::string model_path)
   data = NULL;
   model = NULL;
 
+  std::cout << "Loading xml at path: " << model_path << '\n';
+
   // load the model from an XML file
   char error[500] = "";
   model = mj_loadXML(model_path.c_str(), 0, error, 500);

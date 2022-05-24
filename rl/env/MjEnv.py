@@ -120,13 +120,14 @@ class MjEnv(gym.Env):
     elif test:
       # get the random test xml file
       r = np.random.randint(self.training_xmls, self.training_xmls + self.testing_xmls)
+      r = 1
       filename = self.task_xml_template.format(r)
     else:
       # get a random task xml file
       r = np.random.randint(0, self.training_xmls)
       filename = self.task_xml_template.format(r)
 
-    if self.log_level > 1: print("loading xml: ", filename)
+    if True or self.log_level > 1: print("loading xml: ", filename)
 
     # load the new task xml (old model/data are deleted)
     self.mj.load_relative(self.task_xml_folder + '/' + filename)
