@@ -1,7 +1,8 @@
 <mujoco xmlns:xacro="http://ros.org/wiki/xacro">
 
   <!-- 1. Extract dionary of settings -->
-  <xacro:property name="yamlpath" value="/home/luke/gripper_repo_ws/src/gripper_v2/gripper_description/urdf/mujoco/mjcf/mjcf_include"/>
+  <!-- <xacro:property name="yamlpath" value="/home/luke/grippertest/gripper_description/mujoco/mjcf/mjcf_include"/> -->
+  <xacro:property name="yamlpath" value="."/> <!-- ie look in current directory -->
   <xacro:property name="yamlname" value="define_objects.yaml"/>
   <xacro:property name="mydict" value="${xacro.load_yaml(yamlpath + '/' + yamlname)}"/>
 

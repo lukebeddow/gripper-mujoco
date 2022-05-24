@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <mujoco model="panda">
     <compiler angle="radian" meshdir="./meshes_mujoco/"/>
-    <size njmax="3000" nconmax="800"/>
+    <size njmax="3200" nconmax="800"/>
     <asset>
         <mesh name="panda visual link0" file="panda visual link0.stl"/>
         <mesh name="panda collision link0" file="panda collision link0.stl"/>
