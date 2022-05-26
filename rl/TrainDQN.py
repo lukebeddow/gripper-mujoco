@@ -29,19 +29,27 @@ class TrainDQN():
 
   @dataclass
   class Parameters:
-    batch_size: int = 128           # initial 128
-    learning_rate: float = 0.01     # initial 0.01
-    gamma: float = 0.999            # initial 0.999
-    eps_start: float = 0.9          # initial 0.9
-    eps_end: float = 0.05           # initial 0.05
-    eps_decay: int = 1000           # initial 200 (currently !episodes! to get exp(-1)*eps)
-    target_update: int = 100        # initial 10
-    num_episodes: int = 10000       # initial 40
-    memory_replay: int = 10000      # initial 10000
-    min_memory_replay: int = 5000   # initial 5000
 
+    # key learning hyperparameters
+    batch_size: int = 128  
+    learning_rate: float = 0.0001
+    gamma: float = 0.999 
+    eps_start: float = 0.9
+    eps_end: float = 0.05
+    eps_decay: int = 1000
+    target_update: int = 100
+    num_episodes: int = 10000
+    memory_replay: int = 10000
+    min_memory_replay: int = 5000
+
+    # HER settings
+    use_HER: bool = False
+    HER_mode: str = "final"
+    HER_k: int = 4          
+
+    # data logging settings
     save_freq: int = 1000
-    test_freq: int = 1
+    test_freq: int = 1000
     wandb_freq_s: int = 30
 
   Transition = namedtuple('Transition',
@@ -49,6 +57,9 @@ class TrainDQN():
 
   HER_Transition = namedtuple('Transition',
                     ('obs', 'action', 'next_obs', 'reward', 'goal', 'state'))                        
+
+  Save_Tuple = namedtuple('Save_Tuple',
+    ('policy_net', 'params', 'memory', 'env', 'track', 'modelsaver', 'extra'))
 
   class ReplayMemory(object):
 
@@ -105,9 +116,9 @@ class TrainDQN():
 
     def all_to(self, device):
       """Move entire replay memory to a device"""
-      for i, item in enumerate(self.memory):
-        self.memory[i] = self.to_device(item, device)
       self.device = device
+      for i, item in enumerate(self.memory):
+        self.memory[i] = self.to_device(item)
 
     def end_HER_episode(self, goal_reward_fcn):
       """Move samples from temp_memory to proper memory and add HER goals"""
@@ -187,7 +198,7 @@ class TrainDQN():
       Class which tracks key data during training and logs to wandb
       """
       # parameters to set
-      self.moving_avg_num = 50
+      self.moving_avg_num = 100
       self.static_avg_num = self.moving_avg_num
       self.plot_raw = False
       self.plot_moving_avg = False
@@ -452,6 +463,7 @@ class TrainDQN():
     self.machine = self.env._get_machine()
 
     # configure options
+    self.savedir = "models/dqn/"
     if device != None: self.device = device
     else: self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     self.run_name = run_name
@@ -461,8 +473,11 @@ class TrainDQN():
 
     # wandb options
     self.use_wandb = use_wandb if use_wandb is not None else True
-    self.wandb_name = run_name
+    self.run_name = run_name
     self.wandb_note = ""
+    self.wandb_project = "luke-gripper-mujoco"
+    self.wandb_entity = "lbeddow"
+    self.wandb_group = None
 
     # HER option defaults
     self.HER_mode = None
@@ -482,22 +497,24 @@ class TrainDQN():
     if self.log_level > 0:
       print("Using machine:", self.machine)
       print("Using device:", self.device)
-      print("Using wandb:", self.use_wandb)
 
   def init(self, network):
     """
     Create the networks
     """
 
-    # update the environment with correct numbers of actions and observations
-    self.env._update_n_actions_obs()
+    # are we using HER (python OVERRIDES cpp)
+    self.env.mj.set.use_HER = self.params.use_HER
 
-    # are we using HER
-    self.use_HER = self.env.mj.set.use_HER
+    # now update the environment with correct numbers of actions and observations
+    self.env._update_n_actions_obs()
 
     # create networks
     if network == None:
       raise RuntimeError("TrainDQN network must be specified")
+    elif network == "loaded":
+      # no need to load networks
+      pass
     else:
       # use the network passed as input
       self.policy_net = network(self.env.n_obs, self.env.n_actions,
@@ -506,28 +523,30 @@ class TrainDQN():
                                 self.device).to(self.device)
 
 
-    self.target_net.load_state_dict(self.policy_net.state_dict())
+      self.target_net.load_state_dict(self.policy_net.state_dict())
+
+      self.memory = TrainDQN.ReplayMemory(self.params.memory_replay, self.device,
+                      HER=self.params.use_HER, HERMethod=self.params.HER_mode,
+                      k=self.params.HER_k)
+
+      # prepare for saving and loading
+      self.modelsaver = ModelSaver(self.savedir + self.policy_net.name)
 
     # configure optimiser and memory replay
     self.optimiser = optim.RMSprop(self.policy_net.parameters(), 
                                    lr=self.params.learning_rate)
 
-    self.memory = TrainDQN.ReplayMemory(self.params.memory_replay, self.device,
-                                        HER=self.use_HER, HERMethod=self.HER_mode,
-                                        k=self.HER_k)
-
-    # prepare for saving and loading
-    self.modelsaver = ModelSaver('models/dqn/' + self.policy_net.name)
-
     # save weights and biases
     if self.use_wandb:
-      wandb.init(project="luke-gripper-mujoco", entity="lbeddow", 
-                 name=self.wandb_name, config=asdict(self.params),
-                 notes=self.wandb_note + "\n\n" + self.env._get_cpp_settings())
+      wandb.init(project=self.wandb_project, entity=self.wandb_entity, 
+                 name=self.run_name, config=asdict(self.params),
+                 notes=self.wandb_note, group=self.wandb_group)
 
     # print important info
     print("Using model:", self.policy_net.name)
-    print("Using HER:", self.use_HER)
+    print("Using HER:", self.params.use_HER)
+    print("Using wandb:", self.use_wandb)
+    print("Run name:", self.run_name)
 
   def to_torch(self, data, dtype=None):
     """
@@ -825,7 +844,7 @@ class TrainDQN():
     obs = self.env.reset()
     obs = self.to_torch(obs)
 
-    if self.use_HER:
+    if self.params.use_HER:
       goal = self.env._get_desired_goal()
       goal = self.to_torch(goal)
 
@@ -837,7 +856,7 @@ class TrainDQN():
       if self.log_level > 1: print("Episode", i_episode, "action", t)
 
       # select and perform an action
-      if self.use_HER:
+      if self.params.use_HER:
         HER_obs = torch.cat((obs, goal), dim=1)
         action = self.select_action(HER_obs, decay_num=i_episode, test=test)
       else:
@@ -851,7 +870,7 @@ class TrainDQN():
         step_data_torch.append(self.to_torch(step_data[i]))
 
       # step with this action and receive sample data for this transition
-      if self.use_HER:
+      if self.params.use_HER:
         (new_obs, reward, done, state, goal) = step_data_torch
         transition_sample = (obs, action, new_obs, reward, goal, state)
       else:
@@ -892,7 +911,7 @@ class TrainDQN():
           self.track.log_wandb(self.params.wandb_freq_s)
 
         # if using HER, wrap up the episode
-        if self.use_HER:
+        if self.params.use_HER:
           self.memory.end_HER_episode(self.env._goal_reward)
 
         break
@@ -925,7 +944,10 @@ class TrainDQN():
     # begin training episodes
     for i_episode in range(i_start, self.params.num_episodes):
 
-      if self.log_level > 0: print("Begin training episode", i_episode)
+      if self.log_level > 0: 
+        # print("Begin training episode", i_episode)
+        self.env.mj.print(f"Begin training episode {i_episode}")
+
       self.run_episode(i_episode)
 
       # update the target network every target_update episodes
@@ -970,7 +992,9 @@ class TrainDQN():
       if self.env.test_completed:
         break
 
-      if self.log_level > 0: print("Begin test episode", i_episode)
+      if self.log_level > 0: 
+        # print("Begin test episode", i_episode)
+        self.env.mj.print(f"Begin test episode {i_episode}")
 
       self.run_episode(i_episode, test=True)
 
@@ -1023,15 +1047,27 @@ class TrainDQN():
     Save the model policy network, return save path
     """
 
+    # save_data = TrainDQN.Save_Tuple()
+    # save_data.policy_net = self.policy_net
+    # save_data.params = self.params
+    # save_data.memory = self.memory
+    # save_data.env = self.env
+    # save_data.track = self.track
+    # save_data.modelsaver = self.modelsaver
+
     # save all needed internal data to continue training with
-    core_data = (self.policy_net, self.params, self.memory, self.env) # add self.env
+    core_data = (
+      self.policy_net,  # neural network parameters
+      self.params,      # hyperparameters
+      self.memory,      # memory replay buffer
+      self.env
+    )
 
     # data structure we will save
-    to_save = (core_data, tupledata)
+    save_data = (core_data, tupledata)
 
-    savepath = self.modelsaver.save(self.policy_net.name, pyobj=to_save, 
+    savepath = self.modelsaver.save(self.policy_net.name, pyobj=save_data, 
                                     txtstr=txtstring, txtlabel=txtlabel)
-
 
     return savepath
 
@@ -1039,6 +1075,16 @@ class TrainDQN():
     """
     Load the most recent model, overwrite current networks
     """
+
+    # load_data = TrainDQN.Save_Tuple()
+    # load_data = self.modelsaver.load(id=id, folderpath=folderpath, 
+    #                                  foldername=foldername)
+    # self.policy_net = load_data.policy_net
+    # self.params = load_data.params
+    # self.memory = load_data.memory
+    # self.env = load_data.env
+    # self.track = load_data.track
+    # self.modelsaver = load_data.modelsaver
 
     # load the model
     (core, tupledata) = self.modelsaver.load(id=id, folderpath=folderpath, 
@@ -1055,7 +1101,7 @@ class TrainDQN():
     self.loaded_test_data = tupledata[1]
 
     # reload environment
-    self.env._load_xml # segfault without this
+    self.env._load_xml() # segfault without this
 
     # reinitialise to prepare for further training
     self.target_net = deepcopy(core[0])
@@ -1066,16 +1112,20 @@ class TrainDQN():
     self.policy_net.to(self.device)
     self.target_net.to(self.device)
 
-    # re-initialise optimiser
-    self.optimiser = optim.RMSprop(self.policy_net.parameters(), 
-                                   lr=self.params.learning_rate)
+    # re-initialise the class
+    self.init(network="loaded")
 
     # return the path of the loaded model
     return self.modelsaver.last_loadpath
-  def continue_training(self, foldername, folderpath=None, new_endpoint=None):
+  
+  def continue_training(self, foldername, folderpath, new_endpoint=None,
+                        network=None):
     """
     Load a model and then continue training it
     """
+
+    self.run_name = foldername + "_continued"
+    self.modelsaver = ModelSaver(folderpath)
 
     # load the most recent model in the given folder
     self.load(foldername=foldername, folderpath=folderpath)
@@ -1115,36 +1165,38 @@ if __name__ == "__main__":
   # model.params.wandb_freq_s = 5
   # model.env.mj.set.action_motor_steps = 350
   # model.env.disable_rendering = False
-  model.env.test_trials_per_obj = 1
-  model.env.test_obj_limit = 10
+  # model.env.test_trials_per_obj = 1
+  # model.env.test_obj_limit = 10
   # model.env.max_episode_steps = 20
   # model.env.mj.set.step_num.set   
 
   # if we want to configure HER
-  model.env.mj.set.use_HER = False
+  model.env.mj.set.use_HER = True
   model.env.mj.goal.step_num.involved = True
   model.env.mj.goal.lifted.involved = True
   model.env.mj.goal.object_contact.involved = True
 
   # ----- load ----- #
 
-  # load
+  # # load
+  # net = networks.DQN_3L60
+  # model.init(net)
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/" + model.policy_net.name + "/"
-  # foldername = "train_luke-PC_13-05-22-17:56_array_1"
-  # model.load(id=3, folderpath=folderpath, foldername=foldername)
+  # foldername = "luke-PC_A3_24-05-22-18:19"
+  # model.load(id=None, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
-  # # train
+  # train
   net = networks.DQN_3L60
-  model.env.disable_rendering = False
-  model.env.mj.set.debug = False
+  model.env.disable_rendering = True
+  model.env.mj.set.debug = True
   model.train(network=net)
 
   # # continue training
-  # folderpath = "/home/luke/mymujoco/rl/models/dqn/" + model.policy_net.name + "/"
-  # foldername = "train_luke-PC_13-05-22-17:56_array_1"
-  # model.continue_training(foldername, folderpath=folderpath)
+  # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
+  # foldername = "luke-PC_A3_24-05-22-18:19"
+  # model.continue_training(foldername, folderpath)
 
   # ----- visualise ----- #
 
@@ -1164,7 +1216,7 @@ if __name__ == "__main__":
   # model.env.mj.set.wrist_sensor_Z.in_use = True
   # model = array_training_DQN.new_rewards(model)
 
-  # # test
+  # test
   # model.env.mj.set.debug = True
   # model.env.disable_rendering = False
   # model.env.test_trials_per_obj = 1

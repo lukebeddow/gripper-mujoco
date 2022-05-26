@@ -180,7 +180,8 @@ void MjClass::load(std::string model_path)
   data = NULL;
   model = NULL;
 
-  std::cout << "Loading xml at path: " << model_path << '\n';
+  if (s_.debug)
+    std::cout << "Loading xml at path: " << model_path << '\n';
 
   // load the model from an XML file
   char error[500] = "";
@@ -926,7 +927,7 @@ std::vector<float> MjClass::get_goal()
 {
   /* get a vector form of the current goal*/
 
-  std::vector<float> goal_vec = goal.vectorise();
+  std::vector<float> goal_vec = goal_.vectorise();
 
   if (goal_vec.size() == 0) {
     throw std::runtime_error("MjClass::goal is empty, it can be set with"
@@ -949,7 +950,7 @@ std::vector<float> MjClass::assess_goal(std::vector<float> event_vec)
 {
   /* assess which goals are accomplished given an event vector */
 
-  MjType::Goal new_goal(goal);
+  MjType::Goal new_goal(goal_);
 
   change_goal(new_goal, event_vec, s_);
 
@@ -1006,10 +1007,10 @@ float MjClass::reward()
 
   // how are we calculating the reward
   if (s_.use_HER) {
-    transition_reward = reward(goal);
+    transition_reward = goal_rewards(env_.cnt, s_, goal_);
   }
   else {
-    transition_reward = reward(env_.cnt);
+    transition_reward = calc_rewards(env_.cnt, s_);
   }
    
   // useful for testing, this value is not used in python
@@ -1052,7 +1053,7 @@ float MjClass::reward(std::vector<float> goal_vec, std::vector<float> event_vec)
   MjType::EventTrack event;
   event.unvectorise(event_vec);
 
-  MjType::Goal goal;
+  MjType::Goal goal(goal_);
   goal.unvectorise(goal_vec);
 
   return goal_rewards(event, s_, goal);
@@ -1177,7 +1178,7 @@ void MjClass::reset_goal()
 {
   /* wipe the desired goal completely */
 
-  goal.reset(true);
+  goal_.reset(true);
 }
 
 /* ------ utility functions ----- */
@@ -1557,16 +1558,16 @@ float goal_rewards(MjType::EventTrack& events, MjType::Settings& settings,
      eg instead of using TRIGGER we need to use settings.NAME.trigger */
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)                                \
             if (events.NAME.row >= settings.NAME.trigger                        \
-                and goal.NAME.involved and goal.NAME.state) {                   \
+                and goal.NAME.involved) {                   \
               if (settings.debug)                                               \
                 std::printf("%s triggered, reward += %.4f\n",                   \
                   "goal: " #NAME, goal_reward);                                 \
               reward += goal_reward;                                            \
-            }
+            }                                                                   
         
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)  \
             if (events.NAME.row >= settings.NAME.trigger                        \
-                and goal.NAME.involved and goal.NAME.state) {                   \
+                and goal.NAME.involved) {                   \
               if (settings.debug)                                               \
                 std::printf("%s triggered, reward += %.4f\n",                   \
                   "goal: " #NAME, goal_reward);                                 \
@@ -1581,7 +1582,7 @@ float goal_rewards(MjType::EventTrack& events, MjType::Settings& settings,
   #undef BR
   #undef LR
 
-  return false;
+  return reward;
 }
 
 std::vector<float> MjType::EventTrack::vectorise()

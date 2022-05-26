@@ -572,7 +572,7 @@ public:
   std::string current_load_path;                // xml path of currently loaded model
   
   // reward goal (if using)
-  MjType::Goal goal;
+  MjType::Goal goal_;
 
   /* ----- variables that are reset ----- */
 
@@ -672,6 +672,7 @@ public:
   float tock();
   MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2);
   void reset_goal();
+  void print(std::string s) { std::printf("%s\n", s.c_str()); }
 
 }; // class MjClass
 

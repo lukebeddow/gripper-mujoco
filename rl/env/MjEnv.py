@@ -120,14 +120,13 @@ class MjEnv(gym.Env):
     elif test:
       # get the random test xml file
       r = np.random.randint(self.training_xmls, self.training_xmls + self.testing_xmls)
-      r = 1
       filename = self.task_xml_template.format(r)
     else:
       # get a random task xml file
       r = np.random.randint(0, self.training_xmls)
       filename = self.task_xml_template.format(r)
 
-    if True or self.log_level > 1: print("loading xml: ", filename)
+    if self.log_level > 1: print("loading xml: ", filename)
 
     # load the new task xml (old model/data are deleted)
     self.mj.load_relative(self.task_xml_folder + '/' + filename)
@@ -267,7 +266,6 @@ class MjEnv(gym.Env):
     """
     Calculate the reward based on a state and goal
     """
-
     return self.mj.reward(goal, state)
 
   def _spawn_object(self):
@@ -376,15 +374,19 @@ class MjEnv(gym.Env):
     
     self._take_action(action)
     obs = self._next_observation()
-    reward = self._reward()
     done = self._is_done()
 
     # what method are we using
     if self.mj.set.use_HER:
       state = self._event_state()
       goal = self._assess_goal(state)
+      reward = 0.0
+      if done or not self.mj.set.reward_on_end_only:
+        # do we only award a reward when the episode ends
+        reward = self._goal_reward(state, goal)
       to_return = (obs, reward, done, state, goal)
     else:
+      reward = self._reward()
       to_return = (obs, reward, done)
 
     self.track.last_action = action

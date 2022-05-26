@@ -34,6 +34,7 @@
   XX(  use_HER,                 bool,     false)    /* use hindsight experience replay (HER) */\
   XX(  goal_reward,             float,    1.0)      /* reward for achieving a goal */\
   XX(  divide_goal_reward,      bool,     true)     /* if multiple goals, do we split goal reward betwen them */\
+  XX(  reward_on_end_only,      bool,     true)     /* give goal reward only on episode end */\
   /*
   get_observation() settings    (NB: sample modes: 0=raw, 1=change, 2=average) */\
   XX(  sensor_sample_mode,      int,      1)        /* how to sample sensor observations, see MjType::Sample*/\

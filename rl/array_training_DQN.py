@@ -3,8 +3,6 @@
 import sys
 from time import sleep
 from datetime import datetime
-
-from gym import make
 from TrainDQN import TrainDQN
 import networks
 
@@ -47,9 +45,9 @@ def setup_HER(model, use=True, style="basic", mode="final", k=4):
     return model
 
   # enable HER and set the mode
-  model.env.mj.set.use_HER = True
-  model.HER_mode = mode
-  model.HER_k = k
+  model.params.use_HER = True # python setting OVERRIDES cpp
+  model.params.HER_mode = mode
+  model.params.HER_k = k
 
   # set the HER goal reward style
   model.env.mj.set.goal_reward = 1.0
@@ -235,6 +233,9 @@ def apply_to_all_models(model):
   model.params.save_freq = 2_000
   model.params.test_freq = 2_000
   model.params.wandb_freq_s = 300
+  model.params.use_HER = False # python setting OVERRIDES cpp
+  model.params.HER_mode = "final"
+  model.params.HER_k = 4
 
   # ensure debug mode is off
   model.env.log_level = 0
@@ -270,49 +271,64 @@ def apply_to_all_models(model):
   model.env.mj.set.state_sample_mode = 0
 
   # turn off all HER by default
-  model.env.mj.set.use_HER = False
+  # model.env.mj.set.use_HER = False
   model.env.mj.set.goal_reward = 1.0
   model.env.mj.set.divide_goal_reward = True
+  model.env.mj.set.reward_on_end_only = True
 
   # wipe all rewards so none trigger
   model.env.mj.set.wipe_rewards()
 
   return model
 
+def continue_training(model, run_name, network_name):
+  """
+  Continue the training of a model
+  """
+
+  new_endpoint = 40000
+  model.wandb_note += f"Continuing training until new endpoint of {new_endpoint} episodes\n"
+  model.continue_training(run_name, model.savedir + "/" + network_name,
+                          new_endpoint=new_endpoint)
+
+  # we are finished when training has finished
+  exit()
+
 if __name__ == "__main__":
 
   # key settings
-  use_wandb = True
+  use_wandb = False
   no_plot = True
 
   # extract input arguments
   inputarg = int(sys.argv[1])
+  timestamp = sys.argv[2]
 
-  if len(sys.argv) > 1:
-    timestamp = sys.argv[2]
-    notimestamp = True
+  # check if we are continuing a training
+  if len(sys.argv) > 2 and sys.argv[2] == "continue":
+    resume_training = True
   else:
-    timestamp = ""
-    notimestamp = None
+    resume_training = False
 
   save_suffix = f"A{inputarg}_{timestamp}"
 
   print("Input argument: ", inputarg)
   print("Timestamp is:", timestamp)
+  print("Resume training is:", resume_training)
 
   # create and configure the model to default
-  model = TrainDQN(notimestamp=notimestamp, save_suffix=save_suffix,
-                   use_wandb=use_wandb, no_plot=no_plot)
+  model = TrainDQN(use_wandb=use_wandb, no_plot=no_plot)
   model = apply_to_all_models(model)
 
   # cpu training only on cluster or PC
   if model.machine in ["cluster", "luke-PC"]: 
     model.device = "cpu"
 
-  # create the name of the run and configure for wandb
+  # create the name of the run and configure model for wandb
   run_name = f"{model.machine}_{save_suffix}"
   model.wandb_name = run_name
   model.run_name = run_name
+  model.wandb_group = timestamp[:8] # include only day-month-year
   
   model.log_level = 1
 
@@ -321,114 +337,59 @@ if __name__ == "__main__":
   # ----- 3 layer network ----- #
   if inputarg <= 9:
 
-    # now form the network and define max episode steps
+    # now form the network
     network = networks.DQN_3L60
-    model.env.max_episode_steps = 250
-
     model.wandb_note += f"Network: {network.name}\n"
 
-    # learning rate 0.0001
+    # if we are resuming training
+    if resume_training: continue_training(model, run_name, network.name)
+
+    # set parameters
+    model.env.max_episode_steps = 250
+    
+    # learning rate 0.00001
     if inputarg == 1:
       model = create_reward_function(model, style="sparse", options=[])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
       model = setup_HER(model, use=True, style="basic", mode="final", k=4)
-      model.params.learning_rate = 0.0001
-      model.wandb_note += "Learning rate 0.0001\n"
+      model.params.learning_rate = 0.00001
+      model.wandb_note += "Learning rate 0.00001\n"
       model.train(network)
 
     elif inputarg == 2:
       model = create_reward_function(model, style="sparse", options=[])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
       model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.0001
-      model.wandb_note += "Learning rate 0.0001\n"
+      model.params.learning_rate = 0.00001
+      model.wandb_note += "Learning rate 0.00001\n"
       model.train(network)
 
     elif inputarg == 3:
       model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
       model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.0001
-      model.wandb_note += "Learning rate 0.0001\n"
+      model.params.learning_rate = 0.00001
+      model.wandb_note += "Learning rate 0.00001\n"
       model.train(network)
 
-    # learning rate 0.001
+    # learning rate 0.0001
     elif inputarg == 4:
       model = create_reward_function(model, style="sparse", options=[])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
       model = setup_HER(model, use=True, style="basic", mode="final", k=4)
-      model.params.learning_rate = 0.001
-      model.wandb_note += "Learning rate 0.001\n"
+      model.params.learning_rate = 0.0001
+      model.wandb_note += "Learning rate 0.0001\n"
       model.train(network)
 
     elif inputarg == 5:
       model = create_reward_function(model, style="sparse", options=[])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
       model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.001
-      model.wandb_note += "Learning rate 0.001\n"
+      model.params.learning_rate = 0.0001
+      model.wandb_note += "Learning rate 0.0001\n"
       model.train(network)
 
     elif inputarg == 6:
-      model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
-      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.001
-      model.wandb_note += "Learning rate 0.001\n"
-      model.train(network)
-
-    # learning rate 0.01
-    elif inputarg == 7:
-      model = create_reward_function(model, style="sparse", options=[])
-      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
-      model.params.learning_rate = 0.01
-      model.wandb_note += "Learning rate 0.01\n"
-      model.train(network)
-
-    elif inputarg == 8:
-      model = create_reward_function(model, style="sparse", options=[])
-      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.01
-      model.wandb_note += "Learning rate 0.01\n"
-      model.train(network)
-
-    elif inputarg == 9:
-      model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
-      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.01
-      model.wandb_note += "Learning rate 0.01\n"
-      model.train(network)
-
-  # ----- 4 layer network ----- #
-  elif inputarg >= 10 and inputarg <= 18:
-
-    # now form the network and define max episode steps
-    network = networks.DQN_4L60
-    model.env.max_episode_steps = 250
-
-    model.wandb_note += f"Network: {network.name}\n"
-
-    # learning rate 0.0001
-    if inputarg == 10:
-      model = create_reward_function(model, style="sparse", options=[])
-      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
-      model.params.learning_rate = 0.0001
-      model.wandb_note += "Learning rate 0.0001\n"
-      model.train(network)
-
-    elif inputarg == 11:
-      model = create_reward_function(model, style="sparse", options=[])
-      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.0001
-      model.wandb_note += "Learning rate 0.0001\n"
-      model.train(network)
-
-    elif inputarg == 12:
       model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
       model = setup_HER(model, use=False)
@@ -437,78 +398,133 @@ if __name__ == "__main__":
       model.train(network)
 
     # learning rate 0.001
-    elif inputarg == 13:
+    elif inputarg == 7:
       model = create_reward_function(model, style="sparse", options=[])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
       model = setup_HER(model, use=True, style="basic", mode="final", k=4)
       model.params.learning_rate = 0.001
       model.wandb_note += "Learning rate 0.001\n"
+      model.train(network)
+
+    elif inputarg == 8:
+      model = create_reward_function(model, style="sparse", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.001
+      model.wandb_note += "Learning rate 0.001\n"
+      model.train(network)
+
+    elif inputarg == 9:
+      model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.001
+      model.wandb_note += "Learning rate 0.001\n"
+      model.train(network)
+
+  # ----- 4 layer network ----- #
+  elif inputarg >= 10 and inputarg <= 18:
+
+    # now form the network
+    network = networks.DQN_4L60
+    model.wandb_note += f"Network: {network.name}\n"
+
+    # if we are resuming training
+    if resume_training: continue_training(model, run_name, network.name)
+
+    # set parameters
+    model.env.max_episode_steps = 250
+
+    # learning rate 0.00001
+    if inputarg == 10:
+      model = create_reward_function(model, style="sparse", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
+      model.params.learning_rate = 0.00001
+      model.wandb_note += "Learning rate 0.00001\n"
+      model.train(network)
+
+    elif inputarg == 11:
+      model = create_reward_function(model, style="sparse", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.00001
+      model.wandb_note += "Learning rate 0.00001\n"
+      model.train(network)
+
+    elif inputarg == 12:
+      model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.00001
+      model.wandb_note += "Learning rate 0.00001\n"
+      model.train(network)
+
+    # learning rate 0.0001
+    elif inputarg == 13:
+      model = create_reward_function(model, style="sparse", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
+      model.params.learning_rate = 0.0001
+      model.wandb_note += "Learning rate 0.0001\n"
       model.train(network)
 
     elif inputarg == 14:
       model = create_reward_function(model, style="sparse", options=[])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
       model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.001
-      model.wandb_note += "Learning rate 0.001\n"
+      model.params.learning_rate = 0.0001
+      model.wandb_note += "Learning rate 0.0001\n"
       model.train(network)
 
     elif inputarg == 15:
       model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
       model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.001
-      model.wandb_note += "Learning rate 0.001\n"
+      model.params.learning_rate = 0.0001
+      model.wandb_note += "Learning rate 0.0001\n"
       model.train(network)
 
-    # learning rate 0.01
+    # learning rate 0.001
     elif inputarg == 16:
       model = create_reward_function(model, style="sparse", options=[])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
       model = setup_HER(model, use=True, style="basic", mode="final", k=4)
-      model.params.learning_rate = 0.01
-      model.wandb_note += "Learning rate 0.01\n"
+      model.params.learning_rate = 0.001
+      model.wandb_note += "Learning rate 0.001\n"
       model.train(network)
 
     elif inputarg == 17:
       model = create_reward_function(model, style="sparse", options=[])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
       model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.01
-      model.wandb_note += "Learning rate 0.01\n"
+      model.params.learning_rate = 0.001
+      model.wandb_note += "Learning rate 0.001\n"
       model.train(network)
 
     elif inputarg == 18:
       model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
       model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.01
-      model.wandb_note += "Learning rate 0.01\n"
-      model.train(network)
-
-  # ----- sphere only training ----- #
-
-  elif inputarg >= 19 and inputarg <= 20:
-
-    # now form the network and define max episode steps
-    network = networks.DQN_3L60
-    model.env.max_episode_steps = 250
-    model.env._load_object_set(name="set1_sphereonly_120")
-
-    model.wandb_note += f"Network: {network.name}\n"
-
-    if inputarg == 19:
-      model = create_reward_function(model, style="mixed_v2", options=["cap"])
-      model = add_sensors(model, num=0, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=False)
       model.params.learning_rate = 0.001
       model.wandb_note += "Learning rate 0.001\n"
       model.train(network)
 
-    elif inputarg == 20:
-      model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
-      model = add_sensors(model, num=0, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.001
-      model.wandb_note += "Learning rate 0.001\n"
-      model.train(network)
+  # # ----- sphere only training ----- #
+
+  # elif inputarg >= 19 and inputarg <= 20:
+
+  #   # now form the network
+  #   network = networks.DQN_3L60
+  #   model.wandb_note += f"Network: {network.name}\n"
+
+  #   # if we are resuming training
+  #   if resume_training: continue_training(model, run_name, network.name)
+
+  #   elif inputarg == 20:
+  #     model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
+  #     model = add_sensors(model, num=0, sensor_mode=1, state_mode=0)
+  #     model = setup_HER(model, use=False)
+  #     model.params.learning_rate = 0.001
+  #     model.wandb_note += "Learning rate 0.001\n"
+  #     model.train(network)
