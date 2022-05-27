@@ -297,7 +297,7 @@ def continue_training(model, run_name, network_name):
 if __name__ == "__main__":
 
   # key settings
-  use_wandb = False
+  use_wandb = True
   no_plot = True
 
   # extract input arguments

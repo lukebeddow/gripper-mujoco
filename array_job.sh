@@ -12,7 +12,7 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N ArrayTrainDQN_17
+#$ -N ArrayTrainDQN_18
 #$ -t 1-18
 
 # The code you want to run now goes here.

@@ -1,5 +1,10 @@
 # bash script to run several trainings on the lab PC
 
+# from: https://stackoverflow.com/questions/1401002/how-to-trick-an-application-into-thinking-its-stdout-is-a-terminal-not-a-pipe
+faketty() {
+    script -qfc "$(printf "%q " "$@")" /dev/null
+}
+
 # where to save terminal output to
 LOG_FOLDER=/home/luke/training_logs
 
@@ -47,7 +52,7 @@ echo Saving logs to $LOG_FOLDER/
 for I in ${ARRAY_INDEXES[@]}
 do
     JOB_NAME=luke-PC_A${I}_${LUKE_JOB_SUBMIT_TIME}
-    stdbuf -o L python3 array_training_DQN.py $I $LUKE_JOB_SUBMIT_TIME $CONTINUE \
+    faketty python3 array_training_DQN.py $I $LUKE_JOB_SUBMIT_TIME $CONTINUE \
     > $LOG_FOLDER/$JOB_NAME.txt &
     echo Submitted job: $JOB_NAME
 done

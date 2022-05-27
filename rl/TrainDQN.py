@@ -325,8 +325,8 @@ class TrainDQN():
       if self.plot_raw:
         self.plot_matplotlib(self.train_episodes, self.train_durations, D,
                              "Raw durations", self.axs[ind][0])
-        self.plot_matplotlib(self.train_episodes, self.train_durations, R,
-                             "Raw episodes", self.axs[ind][1])
+        self.plot_matplotlib(self.train_episodes, self.train_rewards, R,
+                             "Raw rewards", self.axs[ind][1])
         self.fig[ind].subplots_adjust(hspace=0.4)
         ind += 1
 
@@ -368,8 +368,6 @@ class TrainDQN():
                              "Test good metrics", self.axs[ind][0], label="Palm contact")
         self.axs[ind][0].legend()
         # bad metrics
-        self.plot_matplotlib(self.test_episodes, self.avg_p_exceed_limits, "% steps",
-                             "Test bad metrics", self.axs[ind][1], label="Exceed limits")
         self.plot_matplotlib(self.test_episodes, self.avg_p_exceed_axial, "% steps",
                              "Test bad metrics", self.axs[ind][1], label="Exceed axial force")
         self.plot_matplotlib(self.test_episodes, self.avg_p_exceed_lateral, "% steps",
@@ -489,7 +487,6 @@ class TrainDQN():
     else:
       global plt
       import matplotlib.pyplot as plt
-      plt.ion()
       self.fig, self.axs = plt.subplots(2, 1)
       self.no_plot = False
       
@@ -583,46 +580,10 @@ class TrainDQN():
     """
 
     # plt.pause() currently results in segfault
-    if self.no_plot or True:
+    if self.no_plot:
       return
 
-    # clear figure
-    self.axs[0].clear()
-    self.axs[1].clear()
-
-    # plot
-    self.axs[0].plot(self.track.train_episodes, self.track.train_durations, label="Raw")
-    self.axs[1].plot(self.track.train_episodes, self.track.train_rewards, label="Raw")
-    self.axs[0].plot(self.track.test_episodes, self.track.test_durations, "r*", label="Test")
-    self.axs[1].plot(self.track.test_episodes, self.track.test_rewards, "r*", label="Test")
-
-    # # plot moving average
-    # if len(self.track.train_durations) > self.moving_avg_num:
-    #   x = int(self.moving_avg_num / 2)
-    #   self.axs[0].plot(self.track.train_episodes[x - 1:-x], durations_avg, label="Average")
-    #   self.axs[1].plot(self.track.train_episodes[x - 1:-x], rewards_avg, label="Average")
-
-    # plot moving average
-    self.axs[0].plot(self.track.episodes_avg, self.track.durations_avg, label="Average")
-    self.axs[1].plot(self.track.episodes_avg, self.track.rewards_avg, label="Average")
-
-    # label
-    # self.fig.tight_layout(rect=[0, 0.03, 0, 0.9]) # warning: not applied
-    self.fig.subplots_adjust(hspace=0.4)
-    self.axs[0].set_title("Episode durations", fontstyle="italic")
-    self.axs[1].set_title("Episode rewards", fontstyle="italic")
-    self.axs[0].set(ylabel="Duration")
-    self.axs[1].set(ylabel="Reward")
-    self.axs[0].legend(loc="lower left")
-    self.axs[1].legend(loc="upper left")
-
-    if pltname != None:
-      self.fig.suptitle(pltname)
-
-    # show on screen
-    # self.fig.tight_layout(rect=[0, 0, 0, 0.9])
-    # self.fig.show()
-    plt.pause(0.001)
+    self.track.plot()
 
   def create_test_report(self, test_data, i_episode=None):
     """
@@ -959,7 +920,7 @@ class TrainDQN():
         test_data = self.test()
         # process test data
         test_report = self.create_test_report(test_data, i_episode=i_episode)
-        additional_data = (self.track, test_data)
+        additional_data = (test_data)
         # save the result
         self.save(txtstring=test_report, txtlabel="test_results", 
                   tupledata=additional_data)
@@ -1047,24 +1008,28 @@ class TrainDQN():
     Save the model policy network, return save path
     """
 
-    # save_data = TrainDQN.Save_Tuple()
-    # save_data.policy_net = self.policy_net
-    # save_data.params = self.params
-    # save_data.memory = self.memory
-    # save_data.env = self.env
-    # save_data.track = self.track
-    # save_data.modelsaver = self.modelsaver
+    if True:
 
-    # save all needed internal data to continue training with
-    core_data = (
-      self.policy_net,  # neural network parameters
-      self.params,      # hyperparameters
-      self.memory,      # memory replay buffer
-      self.env
-    )
+      save_data = TrainDQN.Save_Tuple(
+        policy_net = self.policy_net,
+        params = self.params,
+        memory = self.memory,
+        env = self.env,
+        track = self.track,
+        modelsaver = self.modelsaver,
+        extra = tupledata
+      )
 
-    # data structure we will save
-    save_data = (core_data, tupledata)
+    else:
+      # save all needed internal data to continue training with
+      save_data = (
+        self.policy_net,  # neural network parameters
+        self.params,      # hyperparameters
+        self.memory,      # memory replay buffer
+        self.env,         # environment and simulation settings
+        self.track,       # logged data
+        (tupledata)       # extra data stored      
+      )
 
     savepath = self.modelsaver.save(self.policy_net.name, pyobj=save_data, 
                                     txtstr=txtstring, txtlabel=txtlabel)
@@ -1076,35 +1041,42 @@ class TrainDQN():
     Load the most recent model, overwrite current networks
     """
 
-    # load_data = TrainDQN.Save_Tuple()
-    # load_data = self.modelsaver.load(id=id, folderpath=folderpath, 
-    #                                  foldername=foldername)
-    # self.policy_net = load_data.policy_net
-    # self.params = load_data.params
-    # self.memory = load_data.memory
-    # self.env = load_data.env
-    # self.track = load_data.track
-    # self.modelsaver = load_data.modelsaver
-
     # load the model
-    (core, tupledata) = self.modelsaver.load(id=id, folderpath=folderpath, 
+    load_data = self.modelsaver.load(id=id, folderpath=folderpath, 
                                              foldername=foldername)
 
-    # extract core data
-    self.policy_net = core[0]
-    self.params = core[1]
-    self.memory = core[2]
-    self.env = core[3]
+    if True:
 
-    # extract additional data
-    self.track = tupledata[0]
-    self.loaded_test_data = tupledata[1]
+      self.policy_net = load_data.policy_net
+      self.params = load_data.params
+      self.memory = load_data.memory
+      self.env = load_data.env
+      self.track = load_data.track
+      
+      if load_data.extra != None:
+        self.loaded_test_data = self.extra[0]
+
+    else:
+
+      # extract load_data data
+      self.policy_net = load_data[0]
+      self.params = load_data[1]
+      self.memory = load_data[2]
+      self.env = load_data[3]
+      self.track = load_data[4]
+
+      # extract additional data
+      # self.track = tupledata[0]
+      try:
+        self.loaded_test_data = load_data[5][0]
+      except TypeError:
+        self.loaded_test_data = None
 
     # reload environment
     self.env._load_xml() # segfault without this
 
     # reinitialise to prepare for further training
-    self.target_net = deepcopy(core[0])
+    self.target_net = deepcopy(self.policy_net)
     self.target_net.load_state_dict(self.policy_net.state_dict())
 
     # move to the current device
@@ -1152,7 +1124,7 @@ if __name__ == "__main__":
 
   use_wandb = False
   force_device = "cpu"
-  no_plot = True
+  no_plot = False
 
   model = TrainDQN(device=force_device, use_wandb=use_wandb, no_plot=no_plot)
 
@@ -1161,7 +1133,7 @@ if __name__ == "__main__":
   # model.params.num_episodes = 11
   # model.params.test_freq = 10
   # model.env.test_trials_per_obj = 1
-  # model.env.max_episode_steps = 20
+  model.env.max_episode_steps = 20
   # model.params.wandb_freq_s = 5
   # model.env.mj.set.action_motor_steps = 350
   # model.env.disable_rendering = False
@@ -1170,19 +1142,19 @@ if __name__ == "__main__":
   # model.env.max_episode_steps = 20
   # model.env.mj.set.step_num.set   
 
-  # if we want to configure HER
-  model.env.mj.set.use_HER = True
-  model.env.mj.goal.step_num.involved = True
-  model.env.mj.goal.lifted.involved = True
-  model.env.mj.goal.object_contact.involved = True
+  # # if we want to configure HER
+  # model.env.mj.set.use_HER = True
+  # model.env.mj.goal.step_num.involved = True
+  # model.env.mj.goal.lifted.involved = True
+  # model.env.mj.goal.object_contact.involved = True
 
   # ----- load ----- #
 
   # # load
   # net = networks.DQN_3L60
   # model.init(net)
-  # folderpath = "/home/luke/mymujoco/rl/models/dqn/" + model.policy_net.name + "/"
-  # foldername = "luke-PC_A3_24-05-22-18:19"
+  # folderpath = "/home/luke/mymujoco/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
+  # foldername = "train_luke-PC_27-05-2022-11:29"
   # model.load(id=None, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
@@ -1190,7 +1162,7 @@ if __name__ == "__main__":
   # train
   net = networks.DQN_3L60
   model.env.disable_rendering = True
-  model.env.mj.set.debug = True
+  model.env.mj.set.debug = False
   model.train(network=net)
 
   # # continue training
@@ -1200,10 +1172,10 @@ if __name__ == "__main__":
 
   # ----- visualise ----- #
 
-  # visualise training performance
-  # plt.ion()
-  # model.plot()
-  # plt.show()
+  # # visualise training performance
+  plt.ioff()
+  model.track.plot()
+  plt.show()
 
   # ----- apply reward configuration ----- #
 
