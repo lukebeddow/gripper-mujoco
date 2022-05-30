@@ -105,9 +105,9 @@ PYBIND11_MODULE(bind, m) {
 
         // set the variables (must be same order as tuple above)
         if (t.size() >= 2) mjobj.current_load_path = t[1].cast<std::string>();
-        if (t.size() >= 3) mjobj.model_folder_path = t[2].cast<std::string>();
+        // if (t.size() >= 3) mjobj.model_folder_path = t[2].cast<std::string>();
         if (t.size() >= 4) mjobj.object_set_name = t[3].cast<std::string>();
-        if (t.size() >= 5) mjobj.machine = t[4].cast<std::string>();
+        // if (t.size() >= 5) mjobj.machine = t[4].cast<std::string>();
         if (t.size() >= 6) mjobj.goal_ = t[5].cast<MjType::Goal>();
 
         return mjobj;
