@@ -227,7 +227,7 @@ def apply_to_all_models(model):
   model.params.eps_end = 0.05
   model.params.eps_decay = 2000
   model.params.target_update = 100
-  model.params.num_episodes = 20_000
+  model.params.num_episodes = 10_000
   model.params.memory_replay = 20_000
   model.params.min_memory_replay = 5_000
   model.params.save_freq = 2_000
