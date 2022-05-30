@@ -10,21 +10,20 @@ if __name__ == "__main__":
   # ----- set parameters ----- #
 
   # what network
-  net = networks.DQN_3L60
+  net = networks.DQN_4L60
 
   # what training session
-  training = "train_cluster_29-04"
+  training = "27-05-22-11:49"
 
   # ----- plot ----- #
 
-  cluster = False
-  model = TrainDQN(cluster=cluster)
+  model = TrainDQN(use_wandb=False)
   model.init(net)
 
   plt.ion()
 
-  folderpath = "/home/luke/cluster/rl/models/dqn/" + model.policy_net.name() + "/"
-  dirs = [x for x in os.listdir(folderpath) if x.startswith(training)]
+  folderpath = "/home/luke/cluster/rl/models/dqn/DQN_3L60/"
+  dirs = [x for x in os.listdir(folderpath) if x.endswith(training)]
   print("dirs to check in are:", dirs)
 
   for d in dirs:

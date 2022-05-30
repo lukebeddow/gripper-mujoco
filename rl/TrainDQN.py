@@ -180,7 +180,9 @@ class TrainDQN():
           self.memory.append(new_sample)
       
       # wipe the temporary buffer
-      self.temp = []
+      self.temp_memory = []
+
+      pass
 
     def HER_to_standard(self, HER_trans):
       """Change a HER transition to a normal one"""
@@ -283,8 +285,15 @@ class TrainDQN():
       axs.set_title(title, fontstyle="italic")
       axs.set(ylabel=ylabel)
 
-    def plot(self):
+    def plot(self, plttitle=None):
       """Plot a matplotlib figure"""
+
+      try:
+        import matplotlib.pyplot as plt
+      except ModuleNotFoundError as e:
+        print("matplotlib module not found in Track.plot(), returning")
+        print(e)
+        return
 
       if self.fig is None:
         # multiple figures
@@ -318,7 +327,9 @@ class TrainDQN():
       D = "Duration"
 
       # clear all axes
-      for pairs in self.axs:
+      for i, pairs in enumerate(self.axs):
+        if plttitle is not None:
+          self.fig[i].suptitle(plttitle)
         for axis in pairs:
           axis.clear()
 
@@ -583,7 +594,7 @@ class TrainDQN():
     if self.no_plot:
       return
 
-    self.track.plot()
+    self.track.plot(plttitle=pltname)
 
   def create_test_report(self, test_data, i_episode=None):
     """
@@ -906,8 +917,8 @@ class TrainDQN():
     for i_episode in range(i_start, self.params.num_episodes):
 
       if self.log_level > 0: 
-        # print("Begin training episode", i_episode)
-        self.env.mj.print(f"Begin training episode {i_episode}")
+        print("Begin training episode", i_episode)
+        # self.env.mj.print(f"Begin training episode {i_episode}")
 
       self.run_episode(i_episode)
 
@@ -954,8 +965,8 @@ class TrainDQN():
         break
 
       if self.log_level > 0: 
-        # print("Begin test episode", i_episode)
-        self.env.mj.print(f"Begin test episode {i_episode}")
+        print("Begin test episode", i_episode)
+        # self.env.mj.print(f"Begin test episode {i_episode}")
 
       self.run_episode(i_episode, test=True)
 
@@ -1054,23 +1065,25 @@ class TrainDQN():
       self.track = load_data.track
       
       if load_data.extra != None:
-        self.loaded_test_data = self.extra[0]
+        self.loaded_test_data = load_data.extra[0]
 
     else:
+
+      (load_data, extra) = load_data
 
       # extract load_data data
       self.policy_net = load_data[0]
       self.params = load_data[1]
       self.memory = load_data[2]
       self.env = load_data[3]
-      self.track = load_data[4]
+      # self.track = load_data[4]
 
       # extract additional data
       # self.track = tupledata[0]
-      try:
-        self.loaded_test_data = load_data[5][0]
-      except TypeError:
-        self.loaded_test_data = None
+      # try:
+      #   self.loaded_test_data = extra[0]
+      # except TypeError:
+      #   self.loaded_test_data = None
 
     # reload environment
     self.env._load_xml() # segfault without this
@@ -1124,7 +1137,7 @@ if __name__ == "__main__":
 
   use_wandb = False
   force_device = "cpu"
-  no_plot = False
+  no_plot = True
 
   model = TrainDQN(device=force_device, use_wandb=use_wandb, no_plot=no_plot)
 
@@ -1142,28 +1155,28 @@ if __name__ == "__main__":
   # model.env.max_episode_steps = 20
   # model.env.mj.set.step_num.set   
 
-  # # if we want to configure HER
-  # model.env.mj.set.use_HER = True
-  # model.env.mj.goal.step_num.involved = True
-  # model.env.mj.goal.lifted.involved = True
-  # model.env.mj.goal.object_contact.involved = True
+  # if we want to configure HER
+  model.params.use_HER = True
+  model.env.mj.goal.step_num.involved = True
+  model.env.mj.goal.lifted.involved = True
+  model.env.mj.goal.object_contact.involved = True
 
   # ----- load ----- #
 
-  # # load
-  # net = networks.DQN_3L60
-  # model.init(net)
-  # folderpath = "/home/luke/mymujoco/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
-  # foldername = "train_luke-PC_27-05-2022-11:29"
-  # model.load(id=None, folderpath=folderpath, foldername=foldername)
+  # load
+  net = networks.DQN_3L60
+  model.init(net)
+  folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
+  foldername = "luke-PC_A3_24-05-22-18:19"
+  model.load(id=None, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
-  # train
-  net = networks.DQN_3L60
-  model.env.disable_rendering = True
-  model.env.mj.set.debug = False
-  model.train(network=net)
+  # # train
+  # net = networks.DQN_3L60
+  # model.env.disable_rendering = True
+  # model.env.mj.set.debug = False
+  # model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
@@ -1173,9 +1186,9 @@ if __name__ == "__main__":
   # ----- visualise ----- #
 
   # # visualise training performance
-  plt.ioff()
-  model.track.plot()
-  plt.show()
+  # plt.ioff()
+  # model.track.plot()
+  # plt.show()
 
   # ----- apply reward configuration ----- #
 
@@ -1188,17 +1201,19 @@ if __name__ == "__main__":
   # model.env.mj.set.wrist_sensor_Z.in_use = True
   # model = array_training_DQN.new_rewards(model)
 
+  input("press enter to continue ")
+
   # test
   # model.env.mj.set.debug = True
-  # model.env.disable_rendering = False
-  # model.env.test_trials_per_obj = 1
+  model.env.disable_rendering = False
+  model.env.test_trials_per_obj = 1
   # model.env.test_obj_limit = 10
-  # model.env.max_episode_steps = 20
+  model.env.max_episode_steps = 100
   # model.env.mj.set.step_num.set          (0,      70,   1)
   # model.env.mj.set.exceed_limits.set     (-0.005, True,   10)
   # model.env.mj.set.exceed_axial.set      (-0.005, True,   10,    3.0,  6.0,  -1)
   # model.env.mj.set.exceed_lateral.set    (-0.005, True,   10,    4.0,  6.0,  -1)
-  # test_data = model.test()
+  test_data = model.test()
 
   # # save results
   # test_report = model.create_test_report(test_data)
