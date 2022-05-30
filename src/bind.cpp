@@ -14,8 +14,8 @@ PYBIND11_MODULE(bind, m) {
   // module functions
   m.def("calc_rewards", &calc_rewards);
   m.def("goal_rewards", &goal_rewards);
-  m.def("change_goal", static_cast<void (*)(MjType::Goal&, std::vector<float>, MjType::Settings)>(&change_goal));
-  m.def("change_goal", static_cast<void (*)(MjType::Goal&, MjType::EventTrack, MjType::Settings)>(&change_goal));
+  m.def("score_goal", static_cast<MjType::Goal (*)(MjType::Goal, std::vector<float>, MjType::Settings)>(&score_goal));
+  m.def("score_goal", static_cast<MjType::Goal (*)(MjType::Goal, MjType::EventTrack, MjType::Settings)>(&score_goal));
 
   // main module class
   {py::class_<MjClass>(m, "MjClass")
@@ -501,6 +501,7 @@ PYBIND11_MODULE(bind, m) {
   {py::class_<MjType::Goal>(m, "Goal")
     .def(py::init<>())
     .def("print", &MjType::Goal::print)
+    .def("get_goal_info", &MjType::Goal::get_goal_info)
 
     #define XX(name, type, value)
     #define SS(name, in_use, norm, readrate)

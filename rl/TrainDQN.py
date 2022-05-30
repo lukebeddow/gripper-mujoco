@@ -182,8 +182,6 @@ class TrainDQN():
       # wipe the temporary buffer
       self.temp_memory = []
 
-      pass
-
     def HER_to_standard(self, HER_trans):
       """Change a HER transition to a normal one"""
       dim = 1
@@ -1067,6 +1065,7 @@ class TrainDQN():
       if load_data.extra != None:
         self.loaded_test_data = load_data.extra[0]
 
+    # keep this code for backwards compatibility, switch True->False above
     else:
 
       (load_data, extra) = load_data
@@ -1160,23 +1159,25 @@ if __name__ == "__main__":
   model.env.mj.goal.step_num.involved = True
   model.env.mj.goal.lifted.involved = True
   model.env.mj.goal.object_contact.involved = True
+  model.env.mj.goal.ground_force.involved = True
+  model.env.mj.goal.palm_force.involved = True
 
   # ----- load ----- #
 
-  # load
-  net = networks.DQN_3L60
-  model.init(net)
-  folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
-  foldername = "luke-PC_A3_24-05-22-18:19"
-  model.load(id=None, folderpath=folderpath, foldername=foldername)
+  # # load
+  # net = networks.DQN_3L60
+  # model.init(net)
+  # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
+  # foldername = "luke-PC_A3_24-05-22-18:19"
+  # model.load(id=None, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
-  # # train
-  # net = networks.DQN_3L60
-  # model.env.disable_rendering = True
-  # model.env.mj.set.debug = False
-  # model.train(network=net)
+  # train
+  net = networks.DQN_3L60
+  model.env.disable_rendering = True
+  model.env.mj.set.debug = False
+  model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"

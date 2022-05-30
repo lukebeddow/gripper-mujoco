@@ -163,6 +163,11 @@ void MjClass::configure_settings()
     }
   }
 
+  // // update the goal given the settings
+  // goal_.goal_reward = s_.goal_reward;
+  // goal_.binary_goal = s_.binary_goal_vector;
+
+
   // safety check
   if (s_.motor_state_sensor.read_rate >= 0)
     throw std::runtime_error("motor_state_sensor read_rate must be a negative number");
@@ -519,11 +524,12 @@ void MjClass::update_env()
   env_.grp.finger2_force = forces.all.finger2_local;
   env_.grp.finger3_force = forces.all.finger3_local;
 
-  // calculate finger and palm force magnitudes
+  // calculate finger and palm force magnitudes on the object
   float finger1_force_mag = env_.obj.finger1_force.magnitude3();
   float finger2_force_mag = env_.obj.finger2_force.magnitude3();
   float finger3_force_mag = env_.obj.finger3_force.magnitude3();
   float palm_force_mag = env_.obj.palm_force.magnitude3();
+  float ground_force_mag = env_.obj.ground_force.magnitude3();
 
   // get palm force on object (x = axial in local frame, +ve for compression)
   env_.obj.palm_axial_force = +1 * env_.obj.palm_force[0];
@@ -548,7 +554,7 @@ void MjClass::update_env()
   env_.cnt.step_num.value = true;
 
   // lifted is true if ground force is 0 and lift distance is exceeded
-  if (env_.obj.ground_force.magnitude3() < ftol)
+  if (ground_force_mag < ftol)
     env_.cnt.lifted.value = true;
 
   // check if the object has gone out of bounds
@@ -595,9 +601,17 @@ void MjClass::update_env()
   env_.cnt.palm_force.value = env_.obj.palm_axial_force * env_.cnt.lifted.value; // must be lifted
   env_.cnt.exceed_palm.value = env_.obj.palm_axial_force;
   env_.cnt.finger_force.value = env_.obj.avg_finger_force;
+  
+  // testing for linear goals
+  env_.cnt.finger1_force.value = finger1_force_mag;
+  env_.cnt.finger2_force.value = finger2_force_mag;
+  env_.cnt.finger3_force.value = finger3_force_mag;
+  env_.cnt.ground_force.value = ground_force_mag;
 
   // update the counts of these events
   update_events(env_.cnt, s_);
+
+  std::cout << "ground force is " << env_.cnt.ground_force.last_value << '\n';
 
   if (s_.debug) env_.cnt.print();
 
@@ -950,9 +964,7 @@ std::vector<float> MjClass::assess_goal(std::vector<float> event_vec)
 {
   /* assess which goals are accomplished given an event vector */
 
-  MjType::Goal new_goal(goal_);
-
-  change_goal(new_goal, event_vec, s_);
+  MjType::Goal new_goal = score_goal(goal_, event_vec, s_);
 
   return new_goal.vectorise();
 }
@@ -1646,7 +1658,7 @@ void MjType::EventTrack::unvectorise(std::vector<float> in)
 
 std::vector<float> MjType::Goal::vectorise() const
 {
-  /* return a vector of the goal state */
+  /* return a vector of the goal state, which must map from [-1,+1]*/
 
   std::vector<float> out;
 
@@ -1655,14 +1667,16 @@ std::vector<float> MjType::Goal::vectorise() const
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (NAME.involved) {                                               \
-              if (NAME.state) out.push_back(1);                                \
-              else out.push_back(-1);                                          \
+              if (NAME.state > 1) out.push_back(1);                            \
+              else if (NAME.state < -1) out.push_back(-1);                     \
+              else out.push_back(NAME.state);                                  \
             }
 
   #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)                 \
             if (NAME.involved) {                                               \
-              if (NAME.state) out.push_back(1);                                \
-              else out.push_back(-1);                                          \
+              if (NAME.state > 1) out.push_back(1);                            \
+              else if (NAME.state < -1) out.push_back(-1);                     \
+              else out.push_back(NAME.state);                                  \
             }
 
     // run the macro to create the code
@@ -1687,14 +1701,14 @@ void MjType::Goal::unvectorise(std::vector<float> vec)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (NAME.involved) {                                               \
-              if (vec[i] > 0) { NAME.state = true; i++; }                      \
-              else { NAME.state = false; i++; }                                \
+              NAME.state = vec[i];                                             \
+              i++;                                                             \
             }
 
   #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)                 \
             if (NAME.involved) {                                               \
-              if (vec[i] > 0) { NAME.state = true; i++; }                      \
-              else { NAME.state = false; i++; }                                \
+              NAME.state = vec[i];                                             \
+              i++;                                                             \
             }
 
     // run the macro to create the code
@@ -1713,7 +1727,7 @@ void MjType::Goal::print()
   luke::print_vec(vectorise(), "Goal vector");
 }
 
-void change_goal(MjType::Goal& goal, std::vector<float> event_vec, 
+MjType::Goal score_goal(MjType::Goal const goal, std::vector<float> event_vec, 
   MjType::Settings settings)
 {
   /* change the goal to fit with the observed events */
@@ -1721,30 +1735,56 @@ void change_goal(MjType::Goal& goal, std::vector<float> event_vec,
   MjType::EventTrack event;
   event.unvectorise(event_vec);
 
-  change_goal(goal, event, settings);
+  return score_goal(goal, event, settings);
 }
 
-void change_goal(MjType::Goal& goal, MjType::EventTrack event, 
+MjType::Goal score_goal(MjType::Goal const goal, MjType::EventTrack event, 
   MjType::Settings settings)
 {
   /* change the goal to fit with the observed events */
 
-  goal.reset();
+  MjType::Goal new_goal;
 
   #define XX(NAME, TYPE, VALUE)
   #define SS(NAME, USED, NORMALISE, READ_RATE)
 
-  #define BR(NAME, REWARD, DONE, TRIGGER)                               \
-            if (goal.NAME.involved) {                                   \
-              if (event.NAME.row >= settings.NAME.trigger) {            \
-                goal.NAME.state = true;                                 \
-              }                                                         \
+  #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
+            if (goal.NAME.involved) {                                          \
+              new_goal.NAME.involved = true;                                   \
+              if (event.NAME.row >= settings.NAME.trigger) {                   \
+                new_goal.NAME.state = 1.0;                                     \
+              }                                                                \
+              else {                                                           \
+                new_goal.NAME.state = -1.0;                                    \
+              }                                                                \
+            } \
+            else { \
+              new_goal.NAME.involved = false; \
+              new_goal.NAME.state = -1.0; \
             }
-  #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)          \
-            if (goal.NAME.involved) {                                   \
-              if (event.NAME.row >= settings.NAME.trigger) {            \
-                goal.NAME.state = true;                                 \
-              }                                                         \
+
+  #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)                 \
+            if (goal.NAME.involved) {                                          \
+              new_goal.NAME.involved = true;                                   \
+              if (event.NAME.row >= settings.NAME.trigger) {                   \
+                if (settings.binary_goal_vector) {                             \
+                  new_goal.NAME.state = 1.0;                                   \
+                }                                                              \
+                else {                                                         \
+                  float fraction = linear_reward(event.NAME.last_value,        \
+                    settings.NAME.min, settings.NAME.max,                      \
+                    settings.NAME.overshoot);                                  \
+                  /* map [0,1] to [-1,1] */                                    \
+                  new_goal.NAME.state = (2 * fraction - 1);                    \
+                }                                                              \
+              }                                                                \
+              else {                                                           \
+                new_goal.NAME.state = -1.0;                                    \
+              }                                                                \
+            } \
+            else { \
+              new_goal.NAME.involved = false; \
+              new_goal.NAME.state = -1.0; \
             }
 
     // run the macro to create the code
@@ -1755,6 +1795,46 @@ void change_goal(MjType::Goal& goal, MjType::EventTrack event,
   #undef BR
   #undef LR
 
+  return new_goal;
+}
+
+std::string MjType::Goal::get_goal_info()
+{
+  /* get information about which goals are active */
+
+  std::string goal_info = "HER goal uses the following events { ";
+
+  int num = vectorise().size();
+  int i = 0;
+
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, USED, NORMALISE, READ_RATE)
+
+  #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
+            if (NAME.involved) {                                               \
+              goal_info += #NAME;                                              \
+              i++;                                                             \
+              if (i < num) { goal_info += ", "; }                              \
+            }
+
+  #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)                 \
+            if (NAME.involved) {                                               \
+              goal_info += #NAME;                                              \
+              i++;                                                             \
+              if (i < num) { goal_info += ", "; }                              \
+            }
+
+    // run the macro to create the code
+    LUKE_MJSETTINGS
+
+  #undef XX
+  #undef SS
+  #undef BR
+  #undef LR
+
+  goal_info += " }\n";
+
+  return goal_info;
 }
 
 // end

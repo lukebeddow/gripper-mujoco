@@ -201,7 +201,13 @@ class MjEnv(gym.Env):
     Return a string of all the cpp simulation settings
     """
 
-    return self.mj.set.get_settings()
+    cpp_settings = self.mj.set.get_settings()
+
+    if self.mj.set.use_HER:
+      her_settings = self.mj.goal.get_goal_info()
+      cpp_settings += "\n" + her_settings
+
+    return cpp_settings
 
   def _take_action(self, action):
     """
