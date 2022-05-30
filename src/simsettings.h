@@ -96,9 +96,9 @@
   LR(  exceed_lateral,          -0.05,    false,    1,    4.0,  6.0,  -1)     /* exceed lateral finger force limit */\
   LR(  exceed_palm,             -0.05,    false,    1,    6.0,  10.0, -1)     /* exceed palm force limit */\
   /* testing extras for goals */\
-  LR(  finger1_force,           0.0,      false,    1,    0.0,  10.0, -1)     /* finger 1 force */\
-  LR(  finger2_force,           0.0,      false,    1,    0.0,  10.0, -1)     /* finger 2 force */\
-  LR(  finger3_force,           0.0,      false,    1,    0.0,  10.0, -1)     /* finger 3 force */\
+  LR(  finger1_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 1 force */\
+  LR(  finger2_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 2 force */\
+  LR(  finger3_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 3 force */\
   LR(  ground_force,            0.0,      false,    1,    0.0,   2.0, -1)     /* ground force on object */\
   LR(  grasp_metric,            0.0,      false,    1,    0.0,  10.0, -1)     /* grasping metric score */\
 

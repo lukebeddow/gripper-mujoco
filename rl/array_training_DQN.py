@@ -54,6 +54,7 @@ def setup_HER(model, use=True, style="basic", mode="final", k=4):
   model.env.mj.set.divide_goal_reward = True
 
   if style == "basic":
+    model.env.mj.set.binary_goal_vector = True
     model.env.mj.goal.lifted.involved = True
     model.env.mj.goal.object_contact.involved = True
     model.env.mj.goal.finger_force.involved = True
@@ -61,6 +62,19 @@ def setup_HER(model, use=True, style="basic", mode="final", k=4):
     model.env.mj.goal.object_stable.involved = True
     model.env.mj.goal.target_height.involved = True
     model.env.mj.goal.stable_height.involved = True
+
+  elif style == "forces":
+    model.env.mj.set.binary_goal_vector = False
+    # turn on the linear events for the gripper forces
+    model.env.mj.goal.finger1_force.involved = True
+    model.env.mj.goal.finger2_force.involved = True
+    model.env.mj.goal.finger3_force.involved = True
+    model.env.mj.goal.palm_force.involved = True
+    # specify the thresholds               reward   done   trigger min   max  overshoot
+    model.env.mj.set.finger1_force.set     (0.0,    False,   1,    0.0,  2.0,  6.0)
+    model.env.mj.set.finger2_force.set     (0.0,    False,   1,    0.0,  2.0,  6.0)
+    model.env.mj.set.finger3_force.set     (0.0,    False,   1,    0.0,  2.0,  6.0)
+    model.env.mj.set.palm_force.set        (0.0,    False,   1,    0.0,  3.0,  6.0)
 
   else:
     raise RuntimeError("style was not set to a valid option in setup_HER()")
@@ -133,6 +147,22 @@ def create_reward_function(model, style="negative", options=[]):
     model.env.mj.set.scale_rewards(100 / model.env.max_episode_steps)
     # end criteria                         reward   done   trigger
     model.env.mj.set.object_stable.set     (1.0,    True,    1)
+    model.env.mj.set.oob.set               (0.0,    True,    1)
+    # termination with poor reward
+    model.env.mj.set.quit_on_reward_below = -1.0 if "cap" in options else -1e5
+    model.env.mj.set.quit_reward_capped = True
+
+  elif style == "sparse_no_rewards":
+    # reward each step                     reward   done   trigger
+    model.env.mj.set.step_num.set          (0.0,    False,   1)
+    # penalties and bonuses
+    model = set_bonuses(model, 0.0)
+    model = set_penalties(model, 0.0,  
+                          done=5 if "terminate_early" in options else False)
+    # scale based on steps allowed per episode
+    model.env.mj.set.scale_rewards(100 / model.env.max_episode_steps)
+    # end criteria                         reward   done   trigger
+    model.env.mj.set.object_stable.set     (0.0,    True,    1)
     model.env.mj.set.oob.set               (0.0,    True,    1)
     # termination with poor reward
     model.env.mj.set.quit_on_reward_below = -1.0 if "cap" in options else -1e5
@@ -275,6 +305,7 @@ def apply_to_all_models(model):
   model.env.mj.set.goal_reward = 1.0
   model.env.mj.set.divide_goal_reward = True
   model.env.mj.set.reward_on_end_only = True
+  model.env.mj.set.binary_goal_vector = True
 
   # wipe all rewards so none trigger
   model.env.mj.set.wipe_rewards()
@@ -357,6 +388,14 @@ if __name__ == "__main__":
       model.train(network)
 
     elif inputarg == 2:
+      model = create_reward_function(model, style="sparse_no_rewards", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=True, style="forces", mode="final", k=4)
+      model.params.learning_rate = 0.00001
+      model.wandb_note += "Learning rate 0.00001\n"
+      model.train(network)
+
+    elif inputarg == 3:
       model = create_reward_function(model, style="sparse", options=[])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
       model = setup_HER(model, use=False)
@@ -364,13 +403,13 @@ if __name__ == "__main__":
       model.wandb_note += "Learning rate 0.00001\n"
       model.train(network)
 
-    elif inputarg == 3:
-      model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
-      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.00001
-      model.wandb_note += "Learning rate 0.00001\n"
-      model.train(network)
+    # elif inputarg == 3:
+    #   model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
+    #   model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+    #   model = setup_HER(model, use=False)
+    #   model.params.learning_rate = 0.00001
+    #   model.wandb_note += "Learning rate 0.00001\n"
+    #   model.train(network)
 
     # learning rate 0.0001
     elif inputarg == 4:
@@ -382,6 +421,14 @@ if __name__ == "__main__":
       model.train(network)
 
     elif inputarg == 5:
+      model = create_reward_function(model, style="sparse_no_rewards", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=True, style="forces", mode="final", k=4)
+      model.params.learning_rate = 0.0001
+      model.wandb_note += "Learning rate 0.0001\n"
+      model.train(network)
+
+    elif inputarg == 6:
       model = create_reward_function(model, style="sparse", options=[])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
       model = setup_HER(model, use=False)
@@ -389,13 +436,13 @@ if __name__ == "__main__":
       model.wandb_note += "Learning rate 0.0001\n"
       model.train(network)
 
-    elif inputarg == 6:
-      model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
-      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.0001
-      model.wandb_note += "Learning rate 0.0001\n"
-      model.train(network)
+    # elif inputarg == 6:
+    #   model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
+    #   model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+    #   model = setup_HER(model, use=False)
+    #   model.params.learning_rate = 0.0001
+    #   model.wandb_note += "Learning rate 0.0001\n"
+    #   model.train(network)
 
     # learning rate 0.001
     elif inputarg == 7:

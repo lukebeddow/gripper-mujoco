@@ -611,8 +611,6 @@ void MjClass::update_env()
   // update the counts of these events
   update_events(env_.cnt, s_);
 
-  std::cout << "ground force is " << env_.cnt.ground_force.last_value << '\n';
-
   if (s_.debug) env_.cnt.print();
 
   // // for testing
@@ -1570,7 +1568,7 @@ float goal_rewards(MjType::EventTrack& events, MjType::Settings& settings,
      eg instead of using TRIGGER we need to use settings.NAME.trigger */
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)                                \
             if (events.NAME.row >= settings.NAME.trigger                        \
-                and goal.NAME.involved) {                   \
+                and goal.NAME.involved) {                                       \
               if (settings.debug)                                               \
                 std::printf("%s triggered, reward += %.4f\n",                   \
                   "goal: " #NAME, goal_reward);                                 \
@@ -1579,11 +1577,23 @@ float goal_rewards(MjType::EventTrack& events, MjType::Settings& settings,
         
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)  \
             if (events.NAME.row >= settings.NAME.trigger                        \
-                and goal.NAME.involved) {                   \
-              if (settings.debug)                                               \
-                std::printf("%s triggered, reward += %.4f\n",                   \
-                  "goal: " #NAME, goal_reward);                                 \
-              reward += goal_reward;                                            \
+                and goal.NAME.involved) {                                       \
+              if (settings.binary_goal_vector) {                                \
+                if (settings.debug)                                             \
+                  std::printf("%s triggered, reward += %.4f\n",                 \
+                    "goal: " #NAME, goal_reward);                               \
+                reward += goal_reward;                                          \
+              }                                                                 \
+              else {                                                            \
+                float fraction = linear_reward(events.NAME.last_value,          \
+                    settings.NAME.min, settings.NAME.max,                       \
+                    settings.NAME.overshoot);                                   \
+                float reward_to_give = fraction * goal_reward;                  \
+                if (settings.debug)                                             \
+                  std::printf("%s triggered with value %.1f, reward += %.4f\n", \
+                    "goal: " #NAME, events.NAME.last_value, reward_to_give);    \
+                reward += reward_to_give;                                       \
+              }                                                                 \
             }
             
     // run the macro to create the code
