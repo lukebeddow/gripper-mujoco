@@ -34,6 +34,8 @@
   XX(  use_HER,                 bool,     false)    /* use hindsight experience replay (HER) */\
   XX(  goal_reward,             float,    1.0)      /* reward for achieving a goal */\
   XX(  divide_goal_reward,      bool,     true)     /* if multiple goals, do we split goal reward betwen them */\
+  XX(  reward_on_end_only,      bool,     true)     /* give goal reward only on episode end */\
+  XX(  binary_goal_vector,      bool,     false)    /* do we use only binary goals */\
   /*
   get_observation() settings    (NB: sample modes: 0=raw, 1=change, 2=average) */\
   XX(  sensor_sample_mode,      int,      1)        /* how to sample sensor observations, see MjType::Sample*/\
@@ -92,8 +94,13 @@
   LR(  palm_force,              0.05,     false,    1,    1.0,  3.0,  6.0)    /* palm force applied */\
   LR(  exceed_axial,            -0.05,    false,    1,    2.0,  6.0,  -1)     /* exceed axial finger force limit */\
   LR(  exceed_lateral,          -0.05,    false,    1,    4.0,  6.0,  -1)     /* exceed lateral finger force limit */\
-  LR(  exceed_palm,             -0.05,    false,    1,    6.0,  10.0, -1)     /* exceed palm force limit */
-  
+  LR(  exceed_palm,             -0.05,    false,    1,    6.0,  10.0, -1)     /* exceed palm force limit */\
+  /* testing extras for goals */\
+  LR(  finger1_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 1 force */\
+  LR(  finger2_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 2 force */\
+  LR(  finger3_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 3 force */\
+  LR(  ground_force,            0.0,      false,    1,    0.0,   2.0, -1)     /* ground force on object */\
+  LR(  grasp_metric,            0.0,      false,    1,    0.0,  10.0, -1)     /* grasping metric score */\
 
 // end of user defined simulation settings
 

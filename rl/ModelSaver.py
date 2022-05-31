@@ -46,7 +46,11 @@ class ModelSaver:
 
     # create directories if they don't already exist
     if not os.path.exists(self.path):
-      os.makedirs(self.path)
+        try:
+          os.makedirs(self.path)
+        except FileExistsError:
+          # file must have just been created
+          pass
 
   def get_file_num(self, file):
     """

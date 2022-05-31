@@ -201,7 +201,13 @@ class MjEnv(gym.Env):
     Return a string of all the cpp simulation settings
     """
 
-    return self.mj.set.get_settings()
+    cpp_settings = self.mj.set.get_settings()
+
+    if self.mj.set.use_HER:
+      her_settings = self.mj.goal.get_goal_info()
+      cpp_settings += "\n" + her_settings
+
+    return cpp_settings
 
   def _take_action(self, action):
     """
@@ -266,7 +272,6 @@ class MjEnv(gym.Env):
     """
     Calculate the reward based on a state and goal
     """
-
     return self.mj.reward(goal, state)
 
   def _spawn_object(self):
@@ -375,15 +380,19 @@ class MjEnv(gym.Env):
     
     self._take_action(action)
     obs = self._next_observation()
-    reward = self._reward()
     done = self._is_done()
 
     # what method are we using
     if self.mj.set.use_HER:
       state = self._event_state()
       goal = self._assess_goal(state)
+      reward = 0.0
+      if done or not self.mj.set.reward_on_end_only:
+        # do we only award a reward when the episode ends
+        reward = self._goal_reward(state, goal)
       to_return = (obs, reward, done, state, goal)
     else:
+      reward = self._reward()
       to_return = (obs, reward, done)
 
     self.track.last_action = action

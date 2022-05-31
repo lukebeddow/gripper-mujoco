@@ -2,6 +2,8 @@
 #include "pybind11/stl.h"
 #include "mjclass.h"
 
+constexpr bool debug_bind = false;
+
 namespace py = pybind11;
 
 // create a python module, called bind (must be saved in bind.so)
@@ -12,8 +14,8 @@ PYBIND11_MODULE(bind, m) {
   // module functions
   m.def("calc_rewards", &calc_rewards);
   m.def("goal_rewards", &goal_rewards);
-  m.def("change_goal", static_cast<void (*)(MjType::Goal&, std::vector<float>, MjType::Settings)>(&change_goal));
-  m.def("change_goal", static_cast<void (*)(MjType::Goal&, MjType::EventTrack, MjType::Settings)>(&change_goal));
+  m.def("score_goal", static_cast<MjType::Goal (*)(MjType::Goal, std::vector<float>, MjType::Settings)>(&score_goal));
+  m.def("score_goal", static_cast<MjType::Goal (*)(MjType::Goal, MjType::EventTrack, MjType::Settings)>(&score_goal));
 
   // main module class
   {py::class_<MjClass>(m, "MjClass")
@@ -69,10 +71,11 @@ PYBIND11_MODULE(bind, m) {
     .def("get_test_report", &MjClass::get_test_report)
     .def("add_events", &MjClass::add_events)
     .def("reset_goal", &MjClass::reset_goal)
+    .def("print", &MjClass::print)
 
     // exposed variables
     .def_readwrite("set", &MjClass::s_)
-    .def_readwrite("goal", &MjClass::goal)
+    .def_readwrite("goal", &MjClass::goal_)
     .def_readwrite("model_folder_path", &MjClass::model_folder_path)
     .def_readwrite("object_set_name", &MjClass::object_set_name)
     .def_readonly("machine", &MjClass::machine)
@@ -88,12 +91,13 @@ PYBIND11_MODULE(bind, m) {
           mjobj.current_load_path,    // path of currently loaded model
           mjobj.model_folder_path,    // path to the mjcf models folder
           mjobj.object_set_name,      // name of object set in use
-          mjobj.machine               // machine library is compiled for
+          mjobj.machine,              // machine library is compiled for
+          mjobj.goal_                 // event goal, if using HER
         );
       },
       [](py::tuple t) { // __setstate__
 
-        if (t.size() != 5 and t.size() != 2) // 2 is OLD version, delete later
+        if (t.size() != 5 and t.size() != 6) // 5 is OLD version, delete later
           throw std::runtime_error("mjclass py::pickle got invalid state (tuple size wrong)");
 
         // create new c++ instance with old settings
@@ -101,9 +105,10 @@ PYBIND11_MODULE(bind, m) {
 
         // set the variables (must be same order as tuple above)
         if (t.size() >= 2) mjobj.current_load_path = t[1].cast<std::string>();
-        if (t.size() >= 3) mjobj.model_folder_path = t[2].cast<std::string>();
+        // if (t.size() >= 3) mjobj.model_folder_path = t[2].cast<std::string>();
         if (t.size() >= 4) mjobj.object_set_name = t[3].cast<std::string>();
-        if (t.size() >= 5) mjobj.machine = t[4].cast<std::string>();
+        // if (t.size() >= 5) mjobj.machine = t[4].cast<std::string>();
+        if (t.size() >= 6) mjobj.goal_ = t[5].cast<MjType::Goal>();
 
         return mjobj;
       }
@@ -165,8 +170,8 @@ PYBIND11_MODULE(bind, m) {
         );
       },
       [](py::tuple t) { // __setstate__
-        constexpr bool debug = false;
-        if (debug)
+        
+        if (debug_bind)
           std::cout << "unpickling MjType::Settings now\n";
 
         // create new c++ instance
@@ -193,7 +198,7 @@ PYBIND11_MODULE(bind, m) {
         // example snippet using dummy
         out.dummy = t[i].cast<bool>(); ++i;
 
-        if (debug)
+        if (debug_bind)
           std::cout << "unpickling MjType::Settings finished, i is " << i
             << ", size of tuple is " << t.size() << '\n';
 
@@ -224,8 +229,8 @@ PYBIND11_MODULE(bind, m) {
         );
       },
       [](py::tuple t) { // __setstate__
-        constexpr bool debug = false;
-        if (debug)
+        
+        if (debug_bind)
           std::cout << "unpickling MjType::EventTrack::BinaryEvent now\n";
 
         // create new c++ instance
@@ -236,7 +241,7 @@ PYBIND11_MODULE(bind, m) {
         out.abs = t[3].cast<int>();
         out.percent = t[4].cast<float>();
 
-        if (debug)
+        if (debug_bind)
           std::cout << "unpickling MjType::EventTrack::BinaryEvent finished\n";
 
         return out;
@@ -266,8 +271,8 @@ PYBIND11_MODULE(bind, m) {
         );
       },
       [](py::tuple t) { // __setstate__
-        constexpr bool debug = false;
-        if (debug)
+        
+        if (debug_bind)
           std::cout << "unpickling MjType::EventTrack::LinearEvent now\n";
 
         // create new c++ instance
@@ -278,7 +283,7 @@ PYBIND11_MODULE(bind, m) {
         out.abs = t[3].cast<int>();
         out.percent = t[4].cast<float>();
 
-        if (debug)
+        if (debug_bind)
           std::cout << "unpickling MjType::EventTrack::LinearEvent finished\n";
 
         return out;
@@ -496,6 +501,7 @@ PYBIND11_MODULE(bind, m) {
   {py::class_<MjType::Goal>(m, "Goal")
     .def(py::init<>())
     .def("print", &MjType::Goal::print)
+    .def("get_goal_info", &MjType::Goal::get_goal_info)
 
     #define XX(name, type, value)
     #define SS(name, in_use, norm, readrate)

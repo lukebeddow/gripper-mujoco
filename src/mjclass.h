@@ -309,10 +309,8 @@ namespace MjType
     struct Event {
       // are events registered as goals and if so what is their state
       bool involved = false;
-      bool state = false;
+      float state = false; // should be from [-1 to +1], <0=false, >0=true
     };
-
-    float goal_reward = 1;
 
     // create an event for each reward, default none involved
     #define XX(NAME, TYPE, VALUE)
@@ -330,6 +328,7 @@ namespace MjType
     std::vector<float> vectorise() const;
     void unvectorise(std::vector<float> vec);
     void print();
+    std::string get_goal_info();
 
     void reset(bool reset_involved = false)
     {
@@ -338,11 +337,11 @@ namespace MjType
       #define XX(NAME, TYPE, VALUE)
       #define SS(NAME, USED, NORMALISE, READ_RATE)
       #define BR(NAME, REWARD, DONE, TRIGGER)                                  \
-                NAME.state = false;                                            \
+                NAME.state = -1.0;                                             \
                 if (reset_involved) { NAME.involved = false; }                    
 
       #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)             \
-                NAME.state = false;                                            \
+                NAME.state = -1.0;                                             \
                 if (reset_involved) { NAME.involved = false; }                    
 
         // run the macro to create the code
@@ -572,7 +571,7 @@ public:
   std::string current_load_path;                // xml path of currently loaded model
   
   // reward goal (if using)
-  MjType::Goal goal;
+  MjType::Goal goal_;
 
   /* ----- variables that are reset ----- */
 
@@ -672,6 +671,7 @@ public:
   float tock();
   MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2);
   void reset_goal();
+  void print(std::string s) { std::printf("%s\n", s.c_str()); }
 
 }; // class MjClass
 
@@ -682,9 +682,9 @@ void update_events(MjType::EventTrack& events, MjType::Settings& settings);
 float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings);
 float goal_rewards(MjType::EventTrack& events, MjType::Settings& settings,
   MjType::Goal goal);
-void change_goal(MjType::Goal& goal, std::vector<float> event_vec, 
+MjType::Goal score_goal(MjType::Goal const goal, std::vector<float> event_vec, 
   MjType::Settings settings);
-void change_goal(MjType::Goal& goal, MjType::EventTrack event, 
+MjType::Goal score_goal(MjType::Goal const goal, MjType::EventTrack event, 
   MjType::Settings settings);
 
 #endif // MJCLASS_H_
