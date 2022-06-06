@@ -249,7 +249,7 @@ def apply_to_all_models(model):
   # number of steps in an episode
   model.env.max_episode_steps = 200
 
-  # set the default hyperparameters
+  # key learning hyperparameters
   model.params.batch_size = 128
   model.params.learning_rate = 0.01
   model.params.gamma = 0.999
@@ -258,14 +258,21 @@ def apply_to_all_models(model):
   model.params.eps_decay = 2000
   model.params.target_update = 100
   model.params.num_episodes = 10_000
+  model.params.optimiser = "adam"
+  model.params.adam_beta1 = 0.9
+  model.params.adam_beta2 = 0.999
+
+  # memory replay and HER
   model.params.memory_replay = 20_000
   model.params.min_memory_replay = 5_000
-  model.params.save_freq = 2_000
-  model.params.test_freq = 2_000
-  model.params.wandb_freq_s = 300
   model.params.use_HER = False # python setting OVERRIDES cpp
   model.params.HER_mode = "final"
   model.params.HER_k = 4
+
+  # data logging
+  model.params.save_freq = 2_000
+  model.params.test_freq = 2_000
+  model.params.wandb_freq_s = 300
 
   # ensure debug mode is off
   model.env.log_level = 0

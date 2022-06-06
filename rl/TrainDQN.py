@@ -39,12 +39,15 @@ class TrainDQN():
     eps_decay: int = 1000
     target_update: int = 100
     num_episodes: int = 10000
+    optimiser: str = "adam" # or "rmsprop"
+    adam_beta1: float = 0.9
+    adam_beta2: float = 0.999
+
+    # memory replay and HER settings
     memory_replay: int = 10000
     min_memory_replay: int = 5000
-
-    # HER settings
     use_HER: bool = False
-    HER_mode: str = "final"
+    HER_mode: str = "final" # or 'future' or 'episode'
     HER_k: int = 4          
 
     # data logging settings
@@ -456,8 +459,8 @@ class TrainDQN():
 
       return
 
-  def __init__(self, run_name=None, save_suffix=None, device=None, notimestamp=None, 
-               use_wandb=None, no_plot=None, log_level=None):
+  def __init__(self, run_name=None, device=None, use_wandb=None, no_plot=None,
+               log_level=None):
 
     # define key training parameters
     self.params = TrainDQN.Parameters()
@@ -469,22 +472,27 @@ class TrainDQN():
     # what machine are we on
     self.machine = self.env._get_machine()
 
+    # set run name and group name if not specified
+    if run_name is None:
+      run_name = self.machine + "_" + datetime.now().strftime("%H:%M")
+    if group_name is None:
+      group_name = datetime.now().strftime("%d-%m-%Y")
+
     # configure options
-    self.savedir = "models/dqn/"
+    self.run_name = run_name
+    self.group_name = group_name
+    self.savedir = "models/dqn/" + group_name
     if device != None: self.device = device
     else: self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    self.run_name = run_name
-    self.save_suffix = save_suffix
-    self.notimestamp = notimestamp
     self.log_level = 1 if log_level is None else log_level
 
     # wandb options
     self.use_wandb = use_wandb if use_wandb is not None else True
-    self.run_name = run_name
+    self.wandb_name = run_name
+    self.wandb_group = group_name
     self.wandb_note = ""
     self.wandb_project = "luke-gripper-mujoco"
     self.wandb_entity = "lbeddow"
-    self.wandb_group = None
 
     # HER option defaults
     self.HER_mode = None
@@ -536,16 +544,26 @@ class TrainDQN():
                       k=self.params.HER_k)
 
       # prepare for saving and loading
-      self.modelsaver = ModelSaver(self.savedir + self.policy_net.name)
+      self.modelsaver = ModelSaver(self.savedir)
 
-    # configure optimiser and memory replay
-    self.optimiser = optim.RMSprop(self.policy_net.parameters(), 
-                                   lr=self.params.learning_rate)
+    # configure optimiser
+    if self.params.optimiser.lower() == "rmsprop":
+      self.optimiser = optim.RMSprop(self.policy_net.parameters(), 
+                                     lr=self.params.learning_rate)
+    elif self.params.optimiser.lower() == "adam":
+      self.optimiser = optim.Adam(self.policy_net.parameters(),
+                                  lr=self.params.learning_rate,
+                                  betas=(self.params.adam_beta1,
+                                         self.params.adam_beta2))
+    else:
+      print("No valid optimiser name defined! Using RMSProp")
+      self.optimiser = optim.RMSprop(self.policy_net.parameters(), 
+                                     lr=self.params.learning_rate)
 
     # save weights and biases
     if self.use_wandb:
       wandb.init(project=self.wandb_project, entity=self.wandb_entity, 
-                 name=self.run_name, config=asdict(self.params),
+                 name=self.wandb_name, config=asdict(self.params),
                  notes=self.wandb_note, group=self.wandb_group)
 
     # print important info
@@ -553,6 +571,7 @@ class TrainDQN():
     print("Using HER:", self.params.use_HER)
     print("Using wandb:", self.use_wandb)
     print("Run name:", self.run_name)
+    print("Group name:", self.group_name)
 
   def to_torch(self, data, dtype=None):
     """
@@ -900,8 +919,7 @@ class TrainDQN():
     if i_start == None or i_start == 0:
       i_start = 0
       # create a new folder to save training results in
-      self.modelsaver.new_folder(name=self.run_name, label=self.machine, 
-                                 suffix=self.save_suffix, notimestamp=self.notimestamp)
+      self.modelsaver.new_folder(name=self.group_name, notimestamp=True)
       # save record of the training time hyperparameters and cpp library
       self.save_hyperparameters()
       path_to_lib = os.path.dirname(os.path.abspath(__file__)) + "/env/mjpy/"
@@ -1053,7 +1071,7 @@ class TrainDQN():
 
     # load the model
     load_data = self.modelsaver.load(id=id, folderpath=folderpath, 
-                                             foldername=foldername)
+                                     foldername=foldername)
 
     if True:
 
