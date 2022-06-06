@@ -54,14 +54,19 @@ def setup_HER(model, use=True, style="basic", mode="final", k=4):
   model.env.mj.set.divide_goal_reward = True
 
   if style == "basic":
+    # binary events
     model.env.mj.set.binary_goal_vector = True
     model.env.mj.goal.lifted.involved = True
     model.env.mj.goal.object_contact.involved = True
-    model.env.mj.goal.finger_force.involved = True
-    model.env.mj.goal.palm_force.involved = True
     model.env.mj.goal.object_stable.involved = True
     model.env.mj.goal.target_height.involved = True
     model.env.mj.goal.stable_height.involved = True
+    # linear events
+    model.env.mj.goal.finger_force.involved = True
+    model.env.mj.goal.palm_force.involved = True
+    # specify the thresholds               reward   done   trigger min   max  overshoot
+    model.env.mj.set.finger_force.set      (0.0,    False,   1,    1.0,  2.0,  6.0)
+    model.env.mj.set.palm_force.set        (0.0,    False,   1,    1.0,  3.0,  6.0)
 
   elif style == "forces":
     model.env.mj.set.binary_goal_vector = False
@@ -319,14 +324,17 @@ def apply_to_all_models(model):
 
   return model
 
-def continue_training(model, run_name, network_name):
+def continue_training(model, run_name, group_name):
   """
   Continue the training of a model
   """
 
+  print("Continuing training in group:", group_name)
+  print("Continuing training of run:", run_name)
+
   new_endpoint = 40000
   model.wandb_note += f"Continuing training until new endpoint of {new_endpoint} episodes\n"
-  model.continue_training(run_name, model.savedir + "/" + network_name,
+  model.continue_training(run_name, model.savedir + "/" + group_name,
                           new_endpoint=new_endpoint)
 
   # we are finished when training has finished
@@ -334,9 +342,29 @@ def continue_training(model, run_name, network_name):
 
 if __name__ == "__main__":
 
+  """
+  This script should be called as follows:
+
+  Option A: start a series of trainings right now:
+    $ ./array_training_DQN.py <number> $(date +%d-%m-%y-%H:%M)
+
+  Option B: continue a series of trainings from a previous time:
+    $ ./array_training_DQN.py <number> <timestamp> continue 
+
+  where: <number> is used to specify what training regime the user wants. This
+         script saves this number as 'inputarg' and it is used with if...elif...
+         to determine what settings are used in the training.
+         <timestamp> is the training time in the format '%d-%m-%y-%H:%M' as
+         can be achieved with the linux 'date' command as seen above.
+
+  eg: ./array_training_DQN.py 2 $(date +%d-%m-%y-%H:%M)
+      ./array_training_DQN.py 5 22-06-2022-11:51
+  """
+
   # key settings
   use_wandb = True
   no_plot = True
+  log_level = 1
 
   # extract input arguments
   inputarg = int(sys.argv[1])
@@ -348,29 +376,29 @@ if __name__ == "__main__":
   else:
     resume_training = False
 
-  save_suffix = f"A{inputarg}_{timestamp}"
+  save_suffix = f"A{inputarg}_{timestamp[-5:]}" # only include hr:min
 
   print("Input argument: ", inputarg)
   print("Timestamp is:", timestamp)
   print("Resume training is:", resume_training)
 
   # create and configure the model to default
-  model = TrainDQN(use_wandb=use_wandb, no_plot=no_plot)
+  model = TrainDQN(use_wandb=use_wandb, no_plot=no_plot, log_level=log_level)
   model = apply_to_all_models(model)
 
   # cpu training only on cluster or PC
   if model.machine in ["cluster", "luke-PC"]: 
     model.device = "cpu"
 
-  # create the name of the run and configure model for wandb
-  run_name = f"{model.machine}_{save_suffix}"
-  model.wandb_name = run_name
-  model.run_name = run_name
-  model.wandb_group = timestamp[:8] # include only day-month-year
-  
-  model.log_level = 1
+  # override default run/group names
+  model.run_name = f"{model.machine}_{save_suffix}"
+  model.group_name = timestamp[:8] # include only day-month-year
 
-  print("This run will be saved as:", run_name)
+  # if we are resuming training (currently can only resume on the SAME machine)
+  if resume_training: continue_training(model, model.run_name, model.group_name)
+
+  print("Run group name is:", model.group_name)
+  print("This run will be saved as:", model.run_name)
 
   # ----- 3 layer network ----- #
   if inputarg <= 9:
@@ -379,9 +407,6 @@ if __name__ == "__main__":
     network = networks.DQN_3L60
     model.wandb_note += f"Network: {network.name}\n"
 
-    # if we are resuming training
-    if resume_training: continue_training(model, run_name, network.name)
-
     # set parameters
     model.env.max_episode_steps = 250
     
@@ -389,15 +414,15 @@ if __name__ == "__main__":
     if inputarg == 1:
       model = create_reward_function(model, style="sparse", options=[])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
+      model = setup_HER(model, use=False)
       model.params.learning_rate = 0.00001
       model.wandb_note += "Learning rate 0.00001\n"
       model.train(network)
 
     elif inputarg == 2:
-      model = create_reward_function(model, style="sparse_no_rewards", options=[])
+      model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=True, style="forces", mode="final", k=4)
+      model = setup_HER(model, use=False)
       model.params.learning_rate = 0.00001
       model.wandb_note += "Learning rate 0.00001\n"
       model.train(network)
@@ -405,7 +430,15 @@ if __name__ == "__main__":
     elif inputarg == 3:
       model = create_reward_function(model, style="sparse", options=[])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=False)
+      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
+      model.params.learning_rate = 0.00001
+      model.wandb_note += "Learning rate 0.00001\n"
+      model.train(network)
+
+    elif inputarg == 4:
+      model = create_reward_function(model, style="sparse_no_rewards", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=True, style="forces", mode="final", k=4)
       model.params.learning_rate = 0.00001
       model.wandb_note += "Learning rate 0.00001\n"
       model.train(network)
@@ -417,7 +450,7 @@ if __name__ == "__main__":
     #   model.params.learning_rate = 0.00001
     #   model.wandb_note += "Learning rate 0.00001\n"
     #   model.train(network)
-
+    """
     # learning rate 0.0001
     elif inputarg == 4:
       model = create_reward_function(model, style="sparse", options=[])
@@ -475,6 +508,7 @@ if __name__ == "__main__":
       model.params.learning_rate = 0.001
       model.wandb_note += "Learning rate 0.001\n"
       model.train(network)
+    """
 
   # ----- 4 layer network ----- #
   elif inputarg >= 10 and inputarg <= 18:
@@ -482,9 +516,6 @@ if __name__ == "__main__":
     # now form the network
     network = networks.DQN_4L60
     model.wandb_note += f"Network: {network.name}\n"
-
-    # if we are resuming training
-    if resume_training: continue_training(model, run_name, network.name)
 
     # set parameters
     model.env.max_episode_steps = 250

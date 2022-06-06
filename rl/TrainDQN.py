@@ -459,8 +459,8 @@ class TrainDQN():
 
       return
 
-  def __init__(self, run_name=None, device=None, use_wandb=None, no_plot=None,
-               log_level=None):
+  def __init__(self, run_name=None, group_name=None, device=None, use_wandb=None, 
+               no_plot=None, log_level=None):
 
     # define key training parameters
     self.params = TrainDQN.Parameters()
@@ -476,20 +476,18 @@ class TrainDQN():
     if run_name is None:
       run_name = self.machine + "_" + datetime.now().strftime("%H:%M")
     if group_name is None:
-      group_name = datetime.now().strftime("%d-%m-%Y")
+      group_name = datetime.now().strftime("%d-%m-%y")
 
     # configure options
     self.run_name = run_name
     self.group_name = group_name
-    self.savedir = "models/dqn/" + group_name
+    self.savedir = "models/dqn/"
     if device != None: self.device = device
     else: self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     self.log_level = 1 if log_level is None else log_level
 
     # wandb options
     self.use_wandb = use_wandb if use_wandb is not None else True
-    self.wandb_name = run_name
-    self.wandb_group = group_name
     self.wandb_note = ""
     self.wandb_project = "luke-gripper-mujoco"
     self.wandb_entity = "lbeddow"
@@ -544,7 +542,7 @@ class TrainDQN():
                       k=self.params.HER_k)
 
       # prepare for saving and loading
-      self.modelsaver = ModelSaver(self.savedir)
+      self.modelsaver = ModelSaver(self.savedir + self.group_name)
 
     # configure optimiser
     if self.params.optimiser.lower() == "rmsprop":
@@ -563,8 +561,8 @@ class TrainDQN():
     # save weights and biases
     if self.use_wandb:
       wandb.init(project=self.wandb_project, entity=self.wandb_entity, 
-                 name=self.wandb_name, config=asdict(self.params),
-                 notes=self.wandb_note, group=self.wandb_group)
+                 name=self.run_name, config=asdict(self.params),
+                 notes=self.wandb_note, group=self.group_name)
 
     # print important info
     print("Using model:", self.policy_net.name)
@@ -866,7 +864,7 @@ class TrainDQN():
       else:
         (new_obs, reward, done) = step_data_torch
         transition_sample = (obs, action, new_obs, reward)
-      
+
       # render the new environment
       self.env.render()
 
@@ -919,11 +917,10 @@ class TrainDQN():
     if i_start == None or i_start == 0:
       i_start = 0
       # create a new folder to save training results in
-      self.modelsaver.new_folder(name=self.group_name, notimestamp=True)
-      # save record of the training time hyperparameters and cpp library
+      self.modelsaver.new_folder(name=self.run_name, notimestamp=True)
+      # save record of the training time hyperparameters and important files
       self.save_hyperparameters()
-      path_to_lib = os.path.dirname(os.path.abspath(__file__)) + "/env/mjpy/"
-      self.modelsaver.copy_files(path_to_lib, "bind.so")
+      self.save_important_files()
     else:
       # save a record of the training restart
       continue_label = f"Training is continuing from episode {i_start} with these hyperparameters\n"
@@ -931,7 +928,7 @@ class TrainDQN():
       self.save_hyperparameters(labelstr=continue_label, name=hypername)
 
     # begin training episodes
-    for i_episode in range(i_start, self.params.num_episodes):
+    for i_episode in range(i_start + 1, self.params.num_episodes + 1):
 
       if self.log_level > 0: 
         print("Begin training episode", i_episode)
@@ -966,7 +963,7 @@ class TrainDQN():
     self.env.render()
     self.env.close()
 
-  def test(self):
+  def test(self, pause_each_episode=None):
     """
     Test the target net performance, return a test report
     """
@@ -975,7 +972,7 @@ class TrainDQN():
     self.env.start_test()
 
     # begin testing
-    for i_episode in count():
+    for i_episode in count(1):
 
       # check whether the test has completed
       if self.env.test_completed:
@@ -984,6 +981,8 @@ class TrainDQN():
       if self.log_level > 0: 
         print("Begin test episode", i_episode)
         # self.env.mj.print(f"Begin test episode {i_episode}")
+
+      if pause_each_episode == True: input("Press enter to continue")
 
       self.run_episode(i_episode, test=True)
 
@@ -1008,6 +1007,9 @@ class TrainDQN():
     if name == None:
       name = "hyperparameters"
 
+    if self.wandb_note != "":
+      param_str += "Wandb note\n" + self.wandb_note + "\n"
+
     # capture parameters info
     param_str += f"""Hyperparameters at training time:\n\n"""
 
@@ -1017,7 +1019,7 @@ class TrainDQN():
     param_str += "Running on machine: " + self.machine + "\n"
 
     # convert parameters to a string
-    param_str += "Parameters dataclass:\n"
+    param_str += "\nParameters dataclass:\n"
     param_str += str(asdict(self.params))
 
     # swap commas for newlines for prettier printing
@@ -1030,6 +1032,19 @@ class TrainDQN():
                                     txtonly=True)
 
     return savepath
+
+  def save_important_files(self):
+    """
+    Hardcoded function to save some important files in case we need to continue training
+    """
+
+    path = os.path.dirname(os.path.abspath(__file__)) + "/"
+    self.modelsaver.copy_files(path + "env/mjpy/", "bind.so")
+    self.modelsaver.copy_files(path + "env/", "MjEnv.py")
+    self.modelsaver.copy_files(path, "TrainDQN.py")
+    self.modelsaver.copy_files(path, "array_training_DQN.py")
+
+    return
 
   def save(self, txtstring=None, txtlabel=None, tupledata=None):
     """
@@ -1164,7 +1179,7 @@ if __name__ == "__main__":
   # model.params.num_episodes = 11
   # model.params.test_freq = 10
   # model.env.test_trials_per_obj = 1
-  model.env.max_episode_steps = 20
+  # model.env.max_episode_steps = 20
   # model.params.wandb_freq_s = 5
   # model.env.mj.set.action_motor_steps = 350
   # model.env.disable_rendering = False
@@ -1173,30 +1188,30 @@ if __name__ == "__main__":
   # model.env.max_episode_steps = 20
   # model.env.mj.set.step_num.set   
 
-  # if we want to configure HER
-  model.params.use_HER = True
-  model.env.mj.goal.step_num.involved = True
-  model.env.mj.goal.lifted.involved = True
-  model.env.mj.goal.object_contact.involved = True
-  model.env.mj.goal.ground_force.involved = True
-  model.env.mj.goal.palm_force.involved = True
+  # # if we want to configure HER
+  # model.params.use_HER = True
+  # model.env.mj.goal.step_num.involved = True
+  # model.env.mj.goal.lifted.involved = True
+  # model.env.mj.goal.object_contact.involved = True
+  # model.env.mj.goal.ground_force.involved = True
+  # model.env.mj.goal.palm_force.involved = True
 
   # ----- load ----- #
 
-  # # load
-  # net = networks.DQN_3L60
-  # model.init(net)
-  # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
-  # foldername = "luke-PC_A3_24-05-22-18:19"
-  # model.load(id=None, folderpath=folderpath, foldername=foldername)
+  # load
+  net = networks.DQN_3L60
+  model.init(net)
+  folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
+  foldername = "luke-PC_A2_31-05-22-15:22"
+  model.load(id=None, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
-  # train
-  net = networks.DQN_3L60
-  model.env.disable_rendering = True
-  model.env.mj.set.debug = False
-  model.train(network=net)
+  # # train
+  # net = networks.DQN_3L60
+  # model.env.disable_rendering = True
+  # model.env.mj.set.debug = False
+  # model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
@@ -1221,19 +1236,17 @@ if __name__ == "__main__":
   # model.env.mj.set.wrist_sensor_Z.in_use = True
   # model = array_training_DQN.new_rewards(model)
 
-  input("press enter to continue ")
-
   # test
-  # model.env.mj.set.debug = True
+  model.env.mj.set.debug = True
   model.env.disable_rendering = False
   model.env.test_trials_per_obj = 1
   # model.env.test_obj_limit = 10
-  model.env.max_episode_steps = 100
+  model.env.max_episode_steps = 300
   # model.env.mj.set.step_num.set          (0,      70,   1)
   # model.env.mj.set.exceed_limits.set     (-0.005, True,   10)
   # model.env.mj.set.exceed_axial.set      (-0.005, True,   10,    3.0,  6.0,  -1)
   # model.env.mj.set.exceed_lateral.set    (-0.005, True,   10,    4.0,  6.0,  -1)
-  test_data = model.test()
+  test_data = model.test(pause_each_episode=True)
 
   # # save results
   # test_report = model.create_test_report(test_data)

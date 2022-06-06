@@ -227,7 +227,8 @@ class MjEnv(gym.Env):
 
     # if we have exceeded our time limit
     if self.track.current_step >= self.max_episode_steps:
-      if self.log_level > 1: print("max number of episode steps exceeded, done = true")
+      if self.log_level > 1 or self.mj.set.debug: 
+        print("is_done() = true (in python) as max step number exceeded")
       return True
 
     # check the cpp side
@@ -389,7 +390,7 @@ class MjEnv(gym.Env):
       reward = 0.0
       if done or not self.mj.set.reward_on_end_only:
         # do we only award a reward when the episode ends
-        reward = self._goal_reward(state, goal)
+        reward = self._goal_reward(goal, state)
       to_return = (obs, reward, done, state, goal)
     else:
       reward = self._reward()

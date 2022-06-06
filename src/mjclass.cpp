@@ -167,6 +167,8 @@ void MjClass::configure_settings()
   // goal_.goal_reward = s_.goal_reward;
   // goal_.binary_goal = s_.binary_goal_vector;
 
+  // enforce HER goals to trigger at 1 always
+  default_goal_event_triggering();
 
   // safety check
   if (s_.motor_state_sensor.read_rate >= 0)
@@ -717,44 +719,56 @@ void MjClass::set_action(int action)
 
   int action_code = action_options[action];
 
-  // // testing::print
+  // // for testing
   // luke::print_vec(action_options, "action options");
   // std::cout << "The action code is " << action_code << '\n';
+
+  if (s_.debug) std::cout << "Action number " << action << " received, name = ";
 
   switch (action_code) {
 
     case MjType::Action::x_motor_positive:
+      if (s_.debug) std::cout << "x_motor_positive";
       wl = luke::move_gripper_target_step(s_.action_motor_steps, 0, 0);
       break;
     case MjType::Action::x_motor_negative:
+      if (s_.debug) std::cout << "x_motor_negative";
       wl = luke::move_gripper_target_step(-s_.action_motor_steps, 0, 0);
       break;
 
     case MjType::Action::prismatic_positive:
+      if (s_.debug) std::cout << "prismatic_positive";
       wl = luke::move_gripper_target_step(s_.action_motor_steps, s_.action_motor_steps, 0);
       break;
     case MjType::Action::prismatic_negative:
+      if (s_.debug) std::cout << "prismatic_negative";
       wl = luke::move_gripper_target_step(-s_.action_motor_steps, -s_.action_motor_steps, 0);
       break;
 
     case MjType::Action::y_motor_positive:
+      if (s_.debug) std::cout << "y_motor_positive";
       wl = luke::move_gripper_target_step(0, s_.action_motor_steps, 0);
       break;
     case MjType::Action::y_motor_negative:
+      if (s_.debug) std::cout << "y_motor_negative";
       wl = luke::move_gripper_target_step(0, -s_.action_motor_steps, 0);
       break;
 
     case MjType::Action::z_motor_positive:
+      if (s_.debug) std::cout << "z_motor_positive";
       wl = luke::move_gripper_target_step(0, 0, s_.action_motor_steps);
       break;
     case MjType::Action::z_motor_negative:
+      if (s_.debug) std::cout << "z_motor_negative";
       wl = luke::move_gripper_target_step(0, 0, -s_.action_motor_steps);
       break;
 
     case MjType::Action::height_positive:
+      if (s_.debug) std::cout << "height_positive";
       wl = luke::move_base_target_m(0, 0, s_.action_base_translation);
       break;
     case MjType::Action::height_negative:
+      if (s_.debug) std::cout << "height_negative";
       wl = luke::move_base_target_m(0, 0, -s_.action_base_translation);
       break;
 
@@ -769,6 +783,9 @@ void MjClass::set_action(int action)
   // bool exceed_limits = not wl;
   // env_.cnt.exceed_limits *= exceed_limits;  // wipe to zero if false
   // env_.cnt.exceed_limits += exceed_limits;  // increment by one if true
+
+  if (s_.debug)
+    std::cout << ", within_limits = " << wl << '\n';
 
   env_.cnt.exceed_limits.value = not wl;
 }
@@ -788,14 +805,14 @@ bool MjClass::is_done()
               if (s_.debug) std::cout << "is_done() = true, "                   \
                 << #NAME << " limit of " << s_.NAME.done << " exceeded\n";      \
               return true;                                                      \
-            }                                                                   \
+            }                                                                   
    
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)  \
             if (s_.NAME.done and env_.cnt.NAME.row >= s_.NAME.done) {           \
               if (s_.debug) std::cout << "is_done() = true, "                   \
                 << #NAME << " limit of " << s_.NAME.done << " exceeded\n";      \
               return true;                                                      \
-            }                                                                   \
+            }                                                                   
             
     // run the macro to create the code
     LUKE_MJSETTINGS
@@ -1017,7 +1034,9 @@ float MjClass::reward()
 
   // how are we calculating the reward
   if (s_.use_HER) {
-    transition_reward = goal_rewards(env_.cnt, s_, goal_);
+    // transition_reward = goal_rewards(env_.cnt, s_, goal_);
+    throw std::runtime_error("reward() was called with s_.use_HER = true, "
+      "this is currently disabled, please called reward(goal, state) instead\n");
   }
   else {
     transition_reward = calc_rewards(env_.cnt, s_);
@@ -1036,24 +1055,9 @@ float MjClass::reward()
   }
 
   if (s_.debug)
-    std::cout << "Transition reward is: " << transition_reward 
-      << ", cumulative reward is " << env_.cumulative_reward << '\n';
+    std::cout << "Cumulative cpp reward is " << env_.cumulative_reward << '\n';
 
   return transition_reward;
-}
-
-float MjClass::reward(MjType::EventTrack event)
-{
-  /* calculate rewards using the inbuilt settings */
-
-  return calc_rewards(event, s_);
-}
-
-float MjClass::reward(MjType::Goal goal)
-{
-  /* calculate the reward with respect to a goal */
-
-  return reward(env_.cnt, goal);
 }
 
 float MjClass::reward(std::vector<float> goal_vec, std::vector<float> event_vec)
@@ -1066,24 +1070,15 @@ float MjClass::reward(std::vector<float> goal_vec, std::vector<float> event_vec)
   MjType::Goal goal(goal_);
   goal.unvectorise(goal_vec);
 
-  return goal_rewards(event, s_, goal);
-}
+  float transition_reward = goal_rewards(event, s_, goal);
 
-float MjClass::reward(MjType::EventTrack event, MjType::Goal goal)
-{
-  /* calculate the reward with respect to a goal */
+  // useful for testing, this value is not used in python
+  env_.cumulative_reward += transition_reward;
 
-  return goal_rewards(event, s_, goal);
-}
+  if (s_.debug)
+    std::cout << "Cumulative cpp reward is " << env_.cumulative_reward << '\n';
 
-float MjClass::reward(std::vector<float> event_vec)
-{
-  /* calculate rewards using an event vector */
-
-  MjType::EventTrack event;
-  event.unvectorise(event_vec);
-
-  return reward(event);
+  return transition_reward;
 }
 
 int MjClass::get_n_actions()
@@ -1189,6 +1184,31 @@ void MjClass::reset_goal()
   /* wipe the desired goal completely */
 
   goal_.reset(true);
+}
+
+void MjClass::default_goal_event_triggering()
+{
+  /* set all goal event triggers to default */
+
+  // this value should not be changed
+  constexpr int default_trigger = 1;
+
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, USED, NORMALISE, READ_RATE)
+
+  #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
+            if (goal_.NAME.involved) { s_.NAME.trigger = default_trigger; }    
+
+  #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)                 \
+            if (goal_.NAME.involved) { s_.NAME.trigger = default_trigger; }    
+
+    // run the macro to create the code
+    LUKE_MJSETTINGS
+    
+  #undef XX
+  #undef SS 
+  #undef BR
+  #undef LR
 }
 
 /* ------ utility functions ----- */
@@ -1544,6 +1564,10 @@ float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings)
   //   reward += scaled_reward;
   // }
 
+  if (settings.debug) {
+    std::cout << "Transition reward is: " << reward << '\n';
+  }
+
   return reward;
 }
 
@@ -1560,6 +1584,11 @@ float goal_rewards(MjType::EventTrack& events, MjType::Settings& settings,
     goal_reward /= goal.vectorise().size();
   }
 
+  if (settings.debug) {
+    std::cout << "Reward given per goal is: " << goal_reward << '\n';
+    std::cout << "Goal performance is: "; goal.print_verbose();
+  }
+
   // general and sensor settings not used
   #define XX(NAME, TYPE, VALUE)
   #define SS(NAME, USE, NORM, READRATE)
@@ -1573,7 +1602,7 @@ float goal_rewards(MjType::EventTrack& events, MjType::Settings& settings,
                 std::printf("%s triggered, reward += %.4f\n",                   \
                   "goal: " #NAME, goal_reward);                                 \
               reward += goal_reward;                                            \
-            }                                                                   
+            }                                                               
         
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)  \
             if (events.NAME.row >= settings.NAME.trigger                        \
@@ -1594,7 +1623,7 @@ float goal_rewards(MjType::EventTrack& events, MjType::Settings& settings,
                     "goal: " #NAME, events.NAME.last_value, reward_to_give);    \
                 reward += reward_to_give;                                       \
               }                                                                 \
-            }
+            }         
             
     // run the macro to create the code
     LUKE_MJSETTINGS
@@ -1603,6 +1632,10 @@ float goal_rewards(MjType::EventTrack& events, MjType::Settings& settings,
   #undef SS
   #undef BR
   #undef LR
+
+  if (settings.debug) {
+    std::cout << "Goal transition reward is: " << reward << '\n';
+  }
 
   return reward;
 }
@@ -1642,6 +1675,11 @@ void MjType::EventTrack::unvectorise(std::vector<float> in)
   // reset ourselves first, to prevent mixed data
   reset();
 
+  if (in.size() != vectorise().size()) {
+    throw std::runtime_error("EventTrack::unvectorise() input not correct length"
+      ", check to make sure the right vector has been passed");
+  }
+
   int i = 0;
 
   #define XX(NAME, TYPE, VALUE)
@@ -1664,6 +1702,7 @@ void MjType::EventTrack::unvectorise(std::vector<float> in)
   #undef SS 
   #undef BR
   #undef LR
+
 }
 
 std::vector<float> MjType::Goal::vectorise() const
@@ -1704,6 +1743,11 @@ void MjType::Goal::unvectorise(std::vector<float> vec)
 {
   /* fill in the goal object with the vector values */
 
+  if (vec.size() != vectorise().size()) {
+    throw std::runtime_error("Goal::unvectorise() input not correct length"
+      ", check to make sure the right vector has been passed");
+  }
+
   int i = 0;
 
   #define XX(NAME, TYPE, VALUE)
@@ -1737,6 +1781,29 @@ void MjType::Goal::print()
   luke::print_vec(vectorise(), "Goal vector");
 }
 
+void MjType::Goal::print_verbose()
+{
+  /* print a goal including the name of each field */
+
+  std::vector<float> values = vectorise();
+  std::vector<std::string> names = goal_names();
+
+  int num = values.size() - 1;
+
+  std::cout << "Goal = value; ";
+
+  for (int i = 0; i < num; i++) {
+    std::cout << names[i] << " = " << values[i] << "; ";
+  }
+
+  if (num > 0) {
+    std::cout << names[num] << " = " << values[num] << "\n";
+  }
+  else {
+    std::cout << "no active goals\n";
+  }
+}
+
 MjType::Goal score_goal(MjType::Goal const goal, std::vector<float> event_vec, 
   MjType::Settings settings)
 {
@@ -1767,10 +1834,10 @@ MjType::Goal score_goal(MjType::Goal const goal, MjType::EventTrack event,
               else {                                                           \
                 new_goal.NAME.state = -1.0;                                    \
               }                                                                \
-            } \
-            else { \
-              new_goal.NAME.involved = false; \
-              new_goal.NAME.state = -1.0; \
+            }                                                                  \
+            else {                                                             \
+              new_goal.NAME.involved = false;                                  \
+              new_goal.NAME.state = -1.0;                                      \
             }
 
   #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)                 \
@@ -1791,10 +1858,10 @@ MjType::Goal score_goal(MjType::Goal const goal, MjType::EventTrack event,
               else {                                                           \
                 new_goal.NAME.state = -1.0;                                    \
               }                                                                \
-            } \
-            else { \
-              new_goal.NAME.involved = false; \
-              new_goal.NAME.state = -1.0; \
+            }                                                                  \
+            else {                                                             \
+              new_goal.NAME.involved = false;                                  \
+              new_goal.NAME.state = -1.0;                                      \
             }
 
     // run the macro to create the code
@@ -1806,6 +1873,32 @@ MjType::Goal score_goal(MjType::Goal const goal, MjType::EventTrack event,
   #undef LR
 
   return new_goal;
+}
+
+std::vector<std::string> MjType::Goal::goal_names()
+{
+  /* get the names of the currently active goals */
+
+  std::vector<std::string> goal_names;
+
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, USED, NORMALISE, READ_RATE)
+
+  #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
+            if (NAME.involved) { goal_names.push_back(#NAME); }
+
+  #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)                 \
+            if (NAME.involved) { goal_names.push_back(#NAME); }
+
+    // run the macro to create the code
+    LUKE_MJSETTINGS
+
+  #undef XX
+  #undef SS
+  #undef BR
+  #undef LR
+
+  return goal_names;
 }
 
 std::string MjType::Goal::get_goal_info()

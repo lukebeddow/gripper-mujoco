@@ -328,6 +328,8 @@ namespace MjType
     std::vector<float> vectorise() const;
     void unvectorise(std::vector<float> vec);
     void print();
+    void print_verbose();
+    std::vector<std::string> goal_names();
     std::string get_goal_info();
 
     void reset(bool reset_involved = false)
@@ -653,10 +655,6 @@ public:
   std::vector<float> assess_goal();
   std::vector<float> assess_goal(std::vector<float> event_vec);
   float reward();
-  float reward(MjType::EventTrack event);
-  float reward(std::vector<float> event_vec);
-  float reward(MjType::Goal goal);
-  float reward(MjType::EventTrack event, MjType::Goal goal);
   float reward(std::vector<float> goal_vec, std::vector<float> event_vec);
   int get_n_actions();
   int get_n_obs();
@@ -672,6 +670,7 @@ public:
   MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2);
   void reset_goal();
   void print(std::string s) { std::printf("%s\n", s.c_str()); }
+  void default_goal_event_triggering();
 
 }; // class MjClass
 

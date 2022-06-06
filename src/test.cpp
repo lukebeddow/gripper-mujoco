@@ -150,16 +150,14 @@ int main(int argc, char** argv)
 
   goal.print();
 
-  std::cout << mjObj.reward(goal) << '\n';
+  // std::cout << mjObj.reward(goal) << '\n';
 
   std::vector<float> test { -1, 1, 1, -1, -1 };
   goal.unvectorise(test);
 
   goal.print();
 
-  std::cout << mjObj.reward(goal) << '\n';
-
-  return 0;
+  // std::cout << mjObj.reward(goal) << '\n';
 
   return 0;
 }

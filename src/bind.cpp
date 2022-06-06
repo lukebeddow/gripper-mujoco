@@ -56,10 +56,6 @@ PYBIND11_MODULE(bind, m) {
     .def("assess_goal", static_cast<std::vector<float> (MjClass::*)()>(&MjClass::assess_goal))
     .def("assess_goal", static_cast<std::vector<float> (MjClass::*)(std::vector<float>)>(&MjClass::assess_goal))
     .def("reward", static_cast<float (MjClass::*)()>(&MjClass::reward))
-    .def("reward", static_cast<float (MjClass::*)(MjType::EventTrack)>(&MjClass::reward))
-    .def("reward", static_cast<float (MjClass::*)(std::vector<float>)>(&MjClass::reward))
-    .def("reward", static_cast<float (MjClass::*)(MjType::Goal)>(&MjClass::reward))
-    .def("reward", static_cast<float (MjClass::*)(MjType::EventTrack event, MjType::Goal goal)>(&MjClass::reward))
     .def("reward", static_cast<float (MjClass::*)(std::vector<float>, std::vector<float>)>(&MjClass::reward))
     .def("get_n_actions", &MjClass::get_n_actions)
     .def("get_n_obs", &MjClass::get_n_obs)
@@ -72,6 +68,7 @@ PYBIND11_MODULE(bind, m) {
     .def("add_events", &MjClass::add_events)
     .def("reset_goal", &MjClass::reset_goal)
     .def("print", &MjClass::print)
+    .def("default_goal_event_triggering", &MjClass::default_goal_event_triggering)
 
     // exposed variables
     .def_readwrite("set", &MjClass::s_)
@@ -501,6 +498,7 @@ PYBIND11_MODULE(bind, m) {
   {py::class_<MjType::Goal>(m, "Goal")
     .def(py::init<>())
     .def("print", &MjType::Goal::print)
+    .def("print_verbose", &MjType::Goal::print_verbose)
     .def("get_goal_info", &MjType::Goal::get_goal_info)
 
     #define XX(name, type, value)
