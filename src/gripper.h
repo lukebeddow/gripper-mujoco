@@ -131,7 +131,7 @@ public:
     return (update_z() ? in_lim : false);
   }
   bool set_xyz_m(double x_m, double y_m, double z_m) {
-    x = x_m; y = x_m; z = z_m; return update();
+    x = x_m; y = y_m; z = z_m; return update();
   }
   bool set_xyz_m_deg(double x_m, double th_deg, double z_m) {
     x = x_m; bool in_lim = set_th_deg(th_deg); z = z_m; 
