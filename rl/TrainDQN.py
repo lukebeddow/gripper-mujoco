@@ -743,11 +743,12 @@ class TrainDQN():
     Optimise the policy
     """
 
-    # # only optimise when enough memory is built up
-    # if (len(self.memory)) < self.params.min_memory_replay: # self.params.batch_size
-    #   return
-
+    # only proceed if we have enough memory for a batch
     if len(self.memory) < self.params.batch_size: return
+
+    # only begin to optimise when enough memory is built up
+    if (len(self.memory)) < self.params.min_memory_replay: # self.params.batch_size
+      return
 
     transitions = self.memory.sample(self.params.batch_size)
 
