@@ -376,7 +376,8 @@ if __name__ == "__main__":
   else:
     resume_training = False
 
-  save_suffix = f"A{inputarg}_{timestamp[-5:]}" # only include hr:min
+  # save_suffix = f"A{inputarg}_{timestamp[-5:]}" # only include hr:min
+  save_suffix = f"{timestamp[-5:]}_A{inputarg}" # only include hr:min
 
   print("Input argument: ", inputarg)
   print("Timestamp is:", timestamp)
@@ -401,7 +402,7 @@ if __name__ == "__main__":
   print("This run will be saved as:", model.run_name)
 
   # ----- 3 layer network ----- #
-  if inputarg <= 9:
+  if inputarg <= 10:
 
     # now form the network
     network = networks.DQN_3L60
@@ -420,7 +421,7 @@ if __name__ == "__main__":
       model.train(network)
 
     elif inputarg == 2:
-      model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
+      model = create_reward_function(model, style="negative", options=["terminate_early", "cap"])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
       model = setup_HER(model, use=False)
       model.params.learning_rate = 0.00001
@@ -428,9 +429,9 @@ if __name__ == "__main__":
       model.train(network)
 
     elif inputarg == 3:
-      model = create_reward_function(model, style="sparse", options=[])
+      model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
+      model = setup_HER(model, use=False)
       model.params.learning_rate = 0.00001
       model.wandb_note += "Learning rate 0.00001\n"
       model.train(network)
@@ -438,36 +439,20 @@ if __name__ == "__main__":
     elif inputarg == 4:
       model = create_reward_function(model, style="sparse_no_rewards", options=[])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=True, style="forces", mode="final", k=4)
+      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
       model.params.learning_rate = 0.00001
       model.wandb_note += "Learning rate 0.00001\n"
-      model.train(network)
-
-    # elif inputarg == 3:
-    #   model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
-    #   model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-    #   model = setup_HER(model, use=False)
-    #   model.params.learning_rate = 0.00001
-    #   model.wandb_note += "Learning rate 0.00001\n"
-    #   model.train(network)
-    """
-    # learning rate 0.0001
-    elif inputarg == 4:
-      model = create_reward_function(model, style="sparse", options=[])
-      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
-      model.params.learning_rate = 0.0001
-      model.wandb_note += "Learning rate 0.0001\n"
       model.train(network)
 
     elif inputarg == 5:
       model = create_reward_function(model, style="sparse_no_rewards", options=[])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
       model = setup_HER(model, use=True, style="forces", mode="final", k=4)
-      model.params.learning_rate = 0.0001
-      model.wandb_note += "Learning rate 0.0001\n"
+      model.params.learning_rate = 0.00001
+      model.wandb_note += "Learning rate 0.00001\n"
       model.train(network)
 
+    # learning rate 0.0001
     elif inputarg == 6:
       model = create_reward_function(model, style="sparse", options=[])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
@@ -476,140 +461,142 @@ if __name__ == "__main__":
       model.wandb_note += "Learning rate 0.0001\n"
       model.train(network)
 
-    # elif inputarg == 6:
-    #   model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
-    #   model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-    #   model = setup_HER(model, use=False)
-    #   model.params.learning_rate = 0.0001
-    #   model.wandb_note += "Learning rate 0.0001\n"
-    #   model.train(network)
-
-    # learning rate 0.001
     elif inputarg == 7:
-      model = create_reward_function(model, style="sparse", options=[])
+      model = create_reward_function(model, style="negative", options=["terminate_early", "cap"])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
-      model.params.learning_rate = 0.001
-      model.wandb_note += "Learning rate 0.001\n"
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.0001
+      model.wandb_note += "Learning rate 0.0001\n"
       model.train(network)
 
     elif inputarg == 8:
-      model = create_reward_function(model, style="sparse", options=[])
-      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.001
-      model.wandb_note += "Learning rate 0.001\n"
-      model.train(network)
-
-    elif inputarg == 9:
       model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
       model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.001
-      model.wandb_note += "Learning rate 0.001\n"
+      model.params.learning_rate = 0.0001
+      model.wandb_note += "Learning rate 0.0001\n"
       model.train(network)
-    """
 
-  # ----- 4 layer network ----- #
-  elif inputarg >= 10 and inputarg <= 18:
+    elif inputarg == 9:
+      model = create_reward_function(model, style="sparse_no_rewards", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
+      model.params.learning_rate = 0.0001
+      model.wandb_note += "Learning rate 0.0001\n"
+      model.train(network)
+
+    elif inputarg == 10:
+      model = create_reward_function(model, style="sparse_no_rewards", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=True, style="forces", mode="final", k=4)
+      model.params.learning_rate = 0.0001
+      model.wandb_note += "Learning rate 0.0001\n"
+      model.train(network)
+
+  # ----- half the amount of movement of each action, double number episode steps ----- #
+  elif inputarg >= 11 and inputarg <= 15:
 
     # now form the network
-    network = networks.DQN_4L60
+    network = networks.DQN_3L60
+    model.wandb_note += f"Network: {network.name}\n"
+
+    # set parameters
+    model.env.max_episode_steps = 500
+    model.env.mj.set.action_motor_steps = 100
+    model.env.mj.set.action_base_translation = 1e-3
+    model.env.mj.set.sim_steps_per_action = 100
+
+    # learning rate 0.00001
+    if inputarg == 11:
+      model = create_reward_function(model, style="sparse", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.00001
+      model.wandb_note += "Half action effects\n"
+      model.train(network)
+
+    elif inputarg == 12:
+      model = create_reward_function(model, style="negative", options=["terminate_early", "cap"])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.00001
+      model.wandb_note += "Half action effects\n"
+      model.train(network)
+
+    elif inputarg == 13:
+      model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=False)
+      model.params.learning_rate = 0.00001
+      model.wandb_note += "Half action effects\n"
+      model.train(network)
+
+    elif inputarg == 14:
+      model = create_reward_function(model, style="sparse_no_rewards", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
+      model.params.learning_rate = 0.00001
+      model.wandb_note += "Half action effects\n"
+      model.train(network)
+
+    elif inputarg == 15:
+      model = create_reward_function(model, style="sparse_no_rewards", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=True, style="forces", mode="final", k=4)
+      model.params.learning_rate = 0.00001
+      model.wandb_note += "Half action effects\n"
+      model.train(network)
+
+  # ----- slow target net updates ----- #
+  elif inputarg >= 16 and inputarg <= 20:
+
+    # now form the network
+    network = networks.DQN_3L60
     model.wandb_note += f"Network: {network.name}\n"
 
     # set parameters
     model.env.max_episode_steps = 250
-
+    model.params.target_update = 500
+    
     # learning rate 0.00001
-    if inputarg == 10:
-      model = create_reward_function(model, style="sparse", options=[])
-      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
-      model.params.learning_rate = 0.00001
-      model.wandb_note += "Learning rate 0.00001\n"
-      model.train(network)
-
-    elif inputarg == 11:
+    if inputarg == 16:
       model = create_reward_function(model, style="sparse", options=[])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
       model = setup_HER(model, use=False)
       model.params.learning_rate = 0.00001
       model.wandb_note += "Learning rate 0.00001\n"
-      model.train(network)
-
-    elif inputarg == 12:
-      model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
-      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.00001
-      model.wandb_note += "Learning rate 0.00001\n"
-      model.train(network)
-
-    # learning rate 0.0001
-    elif inputarg == 13:
-      model = create_reward_function(model, style="sparse", options=[])
-      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
-      model.params.learning_rate = 0.0001
-      model.wandb_note += "Learning rate 0.0001\n"
-      model.train(network)
-
-    elif inputarg == 14:
-      model = create_reward_function(model, style="sparse", options=[])
-      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.0001
-      model.wandb_note += "Learning rate 0.0001\n"
-      model.train(network)
-
-    elif inputarg == 15:
-      model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
-      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.0001
-      model.wandb_note += "Learning rate 0.0001\n"
-      model.train(network)
-
-    # learning rate 0.001
-    elif inputarg == 16:
-      model = create_reward_function(model, style="sparse", options=[])
-      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
-      model.params.learning_rate = 0.001
-      model.wandb_note += "Learning rate 0.001\n"
       model.train(network)
 
     elif inputarg == 17:
-      model = create_reward_function(model, style="sparse", options=[])
+      model = create_reward_function(model, style="negative", options=["terminate_early", "cap"])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
       model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.001
-      model.wandb_note += "Learning rate 0.001\n"
+      model.params.learning_rate = 0.00001
+      model.wandb_note += "Learning rate 0.00001\n"
       model.train(network)
 
     elif inputarg == 18:
       model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
       model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
       model = setup_HER(model, use=False)
-      model.params.learning_rate = 0.001
-      model.wandb_note += "Learning rate 0.001\n"
+      model.params.learning_rate = 0.00001
+      model.wandb_note += "Learning rate 0.00001\n"
       model.train(network)
 
-  # # ----- sphere only training ----- #
+    elif inputarg == 19:
+      model = create_reward_function(model, style="sparse_no_rewards", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=True, style="basic", mode="final", k=4)
+      model.params.learning_rate = 0.00001
+      model.wandb_note += "Learning rate 0.00001\n"
+      model.train(network)
 
-  # elif inputarg >= 19 and inputarg <= 20:
+    elif inputarg == 20:
+      model = create_reward_function(model, style="sparse_no_rewards", options=[])
+      model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+      model = setup_HER(model, use=True, style="forces", mode="final", k=4)
+      model.params.learning_rate = 0.00001
+      model.wandb_note += "Learning rate 0.00001\n"
+      model.train(network)
 
-  #   # now form the network
-  #   network = networks.DQN_3L60
-  #   model.wandb_note += f"Network: {network.name}\n"
-
-  #   # if we are resuming training
-  #   if resume_training: continue_training(model, run_name, network.name)
-
-  #   elif inputarg == 20:
-  #     model = create_reward_function(model, style="mixed_v2", options=["terminate_early", "cap"])
-  #     model = add_sensors(model, num=0, sensor_mode=1, state_mode=0)
-  #     model = setup_HER(model, use=False)
-  #     model.params.learning_rate = 0.001
-  #     model.wandb_note += "Learning rate 0.001\n"
-  #     model.train(network)
+   

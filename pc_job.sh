@@ -34,7 +34,7 @@ else
         echo The following jobs will be continued:
         for I in ${ARRAY_INDEXES[@]}
         do
-            echo luke-PC_A${I}_${LUKE_JOB_SUBMIT_TIME}
+            echo luke-PC_${LUKE_JOB_SUBMIT_TIME}_A${I}
         done
         
     else
