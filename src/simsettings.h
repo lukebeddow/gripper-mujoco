@@ -68,6 +68,7 @@
   2. Sensors
       name                      used      normalise read-rate   (NB: -ve read-rate gives -n_readings) */\
   SS(  motor_state_sensor,      true,     0,        -2)     /* xyz motor states, normalise is ignored */\
+  SS(  base_state_sensor,       true,     0,        -2)     /* base position state, normalise is ignored)*/\
   SS(  bending_gauge,           true,     100.0,    10)     /* strain gauge to measure finger bending */\
   SS(  axial_gauge,             true,     3.0,      10)     /* strain gauge to measure axial finger strain */\
   SS(  palm_sensor,             true,     8.0,      10)     /* palm force sensor */\

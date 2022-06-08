@@ -172,7 +172,11 @@ void MjClass::configure_settings()
 
   // safety check
   if (s_.motor_state_sensor.read_rate >= 0)
-    throw std::runtime_error("motor_state_sensor read_rate must be a negative number");
+    throw std::runtime_error("base_state_sensor read_rate must be a negative number"
+      ", read_rate = -1 means return 1 reading per read, -2 means 2 readings etc");
+  if (s_.base_state_sensor.read_rate >= 0)
+    throw std::runtime_error("base_state_sensor read_rate must be a negative number"
+      ", read_rate = -1 means return 1 reading per read, -2 means 2 readings etc");
 }
 
 /* ----- core functionality ----- */
@@ -267,6 +271,7 @@ void MjClass::reset()
   s_.wrist_sensor_XY.reset();
   s_.wrist_sensor_Z.reset();
   s_.motor_state_sensor.reset();
+  s_.base_state_sensor.reset();
 
   // reset data structures
   env_.reset();
@@ -481,23 +486,26 @@ void MjClass::monitor_sensors()
 
 void MjClass::sense_gripper_state()
 {
-  /* save the gripper xyz motor state position */
+  /* save the end target state position of the gripper and base */
 
   // get position we think each motor should be (NOT luke::get_gripper_state(data)!)
-  std::vector<luke::gfloat> xyz_pos = luke::get_target_state();
+  std::vector<luke::gfloat> state_vec = luke::get_target_state();
 
   // normalise { x, y, z } joint values
-  xyz_pos[0] = normalise_between(
-    xyz_pos[0], luke::Gripper::xy_min, luke::Gripper::xy_max);
-  xyz_pos[1] = normalise_between(
-    xyz_pos[1], luke::Gripper::xy_min, luke::Gripper::xy_max);
-  xyz_pos[2] = normalise_between(
-    xyz_pos[2], luke::Gripper::z_min, luke::Gripper::z_max);
+  state_vec[0] = normalise_between(
+    state_vec[0], luke::Gripper::xy_min, luke::Gripper::xy_max);
+  state_vec[1] = normalise_between(
+    state_vec[1], luke::Gripper::xy_min, luke::Gripper::xy_max);
+  state_vec[2] = normalise_between(
+    state_vec[2], luke::Gripper::z_min, luke::Gripper::z_max);
+  state_vec[3] = normalise_between(
+    state_vec[3], luke::Target::base_lims_min[0], luke::Target::base_lims_max[0]);
 
   // save reading
-  x_motor_position.add(xyz_pos[0]);
-  y_motor_position.add(xyz_pos[1]);
-  z_motor_position.add(xyz_pos[2]);
+  x_motor_position.add(state_vec[0]);
+  y_motor_position.add(state_vec[1]);
+  z_motor_position.add(state_vec[2]);
+  z_base_position.add(state_vec[3]);
 }
 
 void MjClass::update_env()
@@ -711,9 +719,10 @@ void MjClass::action_step()
   return;
 }
 
-void MjClass::set_action(int action)
+std::vector<float> MjClass::set_action(int action)
 {
-  /* sets an action in the simulation, but does not step at all */
+  /* sets an action in the simulation, but does not step at all. Returns the
+  new state vector */
 
   bool wl = true; // within limits
 
@@ -788,6 +797,9 @@ void MjClass::set_action(int action)
     std::cout << ", within_limits = " << wl << '\n';
 
   env_.cnt.exceed_limits.value = not wl;
+
+  // get the target state and return it
+  return luke::get_target_state();
 }
 
 bool MjClass::is_done()
@@ -940,6 +952,17 @@ std::vector<luke::gfloat> MjClass::get_observation()
     observation.insert(observation.end(), s1.begin(), s1.end());
     observation.insert(observation.end(), s2.begin(), s2.end());
     observation.insert(observation.end(), s3.begin(), s3.end());
+  }
+
+  // get base state
+  if (s_.base_state_sensor.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> base = 
+      (s_.base_state_sensor.*stateFcnPtr)(z_base_position, time_per_step);
+
+    // insert data into observation output
+    observation.insert(observation.end(), base.begin(), base.end());
   }
   
   return observation;
@@ -1417,6 +1440,25 @@ void MjType::Settings::wipe_rewards()
             NAME.overshoot = -1;
   
     // run the macro and wipe the rewards
+    LUKE_MJSETTINGS
+  
+  #undef XX
+  #undef SS
+  #undef BR
+  #undef LR
+}
+
+void MjType::Settings::disable_sensors()
+{
+  /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
+     eg instead of using TRIGGER we need to use s_.NAME.trigger */
+
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, DONTUSE1, DONTUSE2, DONTUSE3) NAME.in_use = false;
+  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
+  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
+  
+    // run the macro and disable all the sensors
     LUKE_MJSETTINGS
   
   #undef XX

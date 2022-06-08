@@ -1086,20 +1086,19 @@ bool move_base_target_m(double x, double y, double z)
   /* move the base target in x, y, z */
 
   /* only z motion currently implemented */
-
-  // old: this wasn't here, we used luke::Target::base_lims_min/max
-  constexpr std::array<double, 6> base_lims_max {0.1, 1, 1, 1, 1, 1};
-  constexpr std::array<double, 6> base_lims_min {-0.1, -1, -1, -1, -1, -1};
-
   target_.base[0] += z;
 
+  // check limits: currently ONLY uses [0] for base z
+  double z_min = luke::Target::base_lims_min[0];
+  double z_max = luke::Target::base_lims_max[0];
+
   // check if we have gone outside the limits
-  if (target_.base[0] > base_lims_max[0]) {
-    target_.base[0] = base_lims_max[0];
+  if (target_.base[0] > z_max) {
+    target_.base[0] = z_max;
     return false;
   }
-  if (target_.base[0] < base_lims_min[0]) {
-    target_.base[0] = base_lims_min[0];
+  if (target_.base[0] < z_min) {
+    target_.base[0] = z_min;
     return false;
   }
 
@@ -1405,14 +1404,17 @@ std::vector<gfloat> get_target_state()
 {
   /* Get the state of the gripper target */
 
-  // target_.end.update();
-  gfloat x = target_.end.x;
-  gfloat y = target_.end.y; // or theta?
-  gfloat z = target_.end.z;
+  return target_.get_target_m();
 
-  std::vector<gfloat> target_joint_values = { x, y, z };
+  // // old code
+  // // target_.end.update();
+  // gfloat x = target_.end.x;
+  // gfloat y = target_.end.y; // or theta?
+  // gfloat z = target_.end.z;
 
-  return target_joint_values;
+  // std::vector<gfloat> target_joint_values = { x, y, z };
+
+  // return target_joint_values;
 }
 
 /* ----- environment ----- */
