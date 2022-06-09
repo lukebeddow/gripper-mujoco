@@ -41,6 +41,10 @@ public:
   constexpr static double z_gear = 1;
   constexpr static double z_steps_per_rev = 400;
 
+  // home position - user set
+  constexpr static double xy_home = 131e-3;
+  constexpr static double z_home = 4.88e-3;
+
   // hard gripper limits - user set
   constexpr static double xy_min =  50e-3;
   constexpr static double xy_max = 140e-3;
@@ -71,10 +75,10 @@ public:
   /* ----- Member functions ----- */
 
   // constructor
-  Gripper() : x(xy_max), y(xy_max), z(z_min) { update(); } // default position
+  Gripper() : x(xy_home), y(xy_home), z(z_home) { update(); } // default position
 
   // reset to default
-  void reset() { x = xy_max; y = xy_max; z = z_min; update(); }
+  void reset() { x = xy_home; y = xy_home; z = z_home; update(); }
 
   // convert y position to and from angle, take note of chosen sign convention
   double calc_y(double th_rad) { return x + sign * leadscrew_dist * sin(th_rad); }
