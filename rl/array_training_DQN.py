@@ -332,9 +332,9 @@ def continue_training(model, run_name, group_name):
   print("Continuing training in group:", group_name)
   print("Continuing training of run:", run_name)
 
-  new_endpoint = 40000
+  new_endpoint = 20000
   model.wandb_note += f"Continuing training until new endpoint of {new_endpoint} episodes\n"
-  model.continue_training(run_name, model.savedir + "/" + group_name,
+  model.continue_training(run_name, model.savedir + group_name + "/",
                           new_endpoint=new_endpoint)
 
   # we are finished when training has finished
@@ -366,12 +366,15 @@ if __name__ == "__main__":
   no_plot = True
   log_level = 1
 
+  # print all the inputs we have received
+  print("Script inputs are:", sys.argv[1:])
+
   # extract input arguments
   inputarg = int(sys.argv[1])
   timestamp = sys.argv[2]
 
   # check if we are continuing a training
-  if len(sys.argv) > 2 and sys.argv[2] == "continue":
+  if len(sys.argv) > 3 and sys.argv[3] == "continue":
     resume_training = True
   else:
     resume_training = False
@@ -379,7 +382,7 @@ if __name__ == "__main__":
   # save_suffix = f"A{inputarg}_{timestamp[-5:]}" # only include hr:min
   save_suffix = f"{timestamp[-5:]}_A{inputarg}" # only include hr:min
 
-  print("Input argument: ", inputarg)
+  print("Input argument:", inputarg)
   print("Timestamp is:", timestamp)
   print("Resume training is:", resume_training)
 
