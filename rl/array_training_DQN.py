@@ -215,30 +215,62 @@ def add_sensors(model, num=10, sensor_mode=1, state_mode=0):
 
   return model
 
-def finger_only_lifting(model):
+def simplest_sphere_lifting(model):
   # try only to lift objects with the fingers
 
-  model.env.mj.set.use_palm_action = False
+  # set up the object set
+  model.env._load_object_set(name="set1_sphereonly_120")
+
+  # data logging
+  model.params.save_freq = 500
+  model.params.test_freq = 2_000
+  model.params.wandb_freq_s = 300
+
+  # what actions are we using
+  model.env.mj.set.paired_motor_X_step = True
+  model.env.mj.set.use_palm_action = True
+  model.env.mj.set.use_height_action = False
+
+  # what sensing mode (0=raw data, 1=change, 2=average)
+  model.env.mj.set.sensor_sample_mode = 1
+  model.env.mj.set.state_sample_mode = 0
+
+  # reward each step                     reward   done   trigger
+  model.env.mj.set.step_num.set          (0,      False,   1)
+
+  # penalties and bonuses
+  pvalue = -0.025
+  pdone = 5
+  rvalue = 0.05
+
+  # penalties                            reward   done   trigger  min   max  overshoot
+  model.env.mj.set.exceed_limits.set     (pvalue, pdone,   1)
+  model.env.mj.set.exceed_axial.set      (pvalue, pdone,   1,     3.0,  6.0,  -1)
+  model.env.mj.set.exceed_lateral.set    (pvalue, pdone,   1,     4.0,  6.0,  -1)
+  model.env.mj.set.exceed_palm.set       (pvalue, pdone,   1,     6.0,  10.0, -1)
 
   # binary rewards                       reward   done   trigger
-  model.env.mj.set.step_num.set          (-0.01,  False,   1)
-  model.env.mj.set.lifted.set            (0.005,  False,   1)
+  model.env.mj.set.lifted.set            (rvalue, False,   1)
+  model.env.mj.set.target_height.set     (rvalue, False,   1)
+  # model.env.mj.set.object_stable.set     (rvalue, False,   1)
   
   # linear rewards                       reward   done   trigger min   max  overshoot
-  model.env.mj.set.finger_force.set      (0.005,  False,   1,    0.2,  1.0,  -1)
+  model.env.mj.set.finger_force.set      (rvalue, False,   1,    0.2,  1.0,  -1)
+  model.env.mj.set.palm_force.set        (rvalue, False,   1,    1.0,  6.0,  -1)
 
-  # penalties                            reward   done   trigger min   max  overshoot
-  model.env.mj.set.exceed_limits.set     (-0.005, False,   1)
-  model.env.mj.set.exceed_axial.set      (-0.005, False,   1,    3.0,  6.0,  -1)
-  model.env.mj.set.exceed_lateral.set    (-0.005, False,   1,    4.0,  6.0,  -1)
+  # scale based on steps allowed per episode
+  model.env.mj.set.scale_rewards(100 / model.env.max_episode_steps)
 
   # end criteria                         reward   done   trigger
-  model.env.mj.set.target_height.set     (0.0,    True,    1)
-  model.env.mj.set.oob.set               (-1.0,   True,    1)
+  # model.env.mj.set.stable_height.set     (0.0,    True,    1)
+  model.env.mj.set.object_stable.set     (rvalue, True,    1)
+  model.env.mj.set.oob.set               (-100.0, True,    1)
 
-  # terminate episode when reward drops below -1.01, also cap at this value
-  model.env.mj.set.quit_on_reward_below = -2.01
+  # termination with poor reward
+  model.env.mj.set.quit_on_reward_below = -1
   model.env.mj.set.quit_reward_capped = True
+
+  model.wandb_note += "Simplest sphere lifting\n"
 
   return model
 
@@ -256,7 +288,7 @@ def apply_to_all_models(model):
 
   # key learning hyperparameters
   model.params.batch_size = 128
-  model.params.learning_rate = 0.01
+  model.params.learning_rate = 0.0001
   model.params.gamma = 0.999
   model.params.eps_start = 0.9
   model.params.eps_end = 0.05
@@ -299,15 +331,6 @@ def apply_to_all_models(model):
   model.env.mj.set.use_palm_action = True
   model.env.mj.set.use_height_action = True
 
-  # remove all extra sensors
-  model.env.mj.set.motor_state_sensor.in_use = True
-  model.env.mj.set.motor_state_sensor.read_rate = -1 # -2 means 2 readings, current + prev
-  model.env.mj.set.bending_gauge.in_use = True
-  model.env.mj.set.axial_gauge.in_use = False
-  model.env.mj.set.palm_sensor.in_use = False
-  model.env.mj.set.wrist_sensor_XY.in_use = False
-  model.env.mj.set.wrist_sensor_Z.in_use = False
-
   # what sensing mode (0=raw data, 1=change, 2=average)
   model.env.mj.set.sensor_sample_mode = 1
   model.env.mj.set.state_sample_mode = 0
@@ -321,6 +344,13 @@ def apply_to_all_models(model):
 
   # wipe all rewards so none trigger
   model.env.mj.set.wipe_rewards()
+
+  # disable use of all sensors, then add back defaults
+  model.env.mj.set.disable_sensors()
+  model.env.mj.set.motor_state_sensor.in_use = True
+  model.env.mj.set.motor_state_sensor.read_rate = -1
+  model.env.mj.set.base_state_sensor.read_rate = -1
+  model.env.mj.set.bending_gauge.in_use = True
 
   return model
 
@@ -400,6 +430,19 @@ if __name__ == "__main__":
 
   print("Run group name is:", model.group_name)
   print("This run will be saved as:", model.run_name)
+
+  # TEMPORARY TESTING
+  if inputarg == 1:
+
+    network = networks.DQN_2L60
+    model.wandb_note = f"Network: {network.name}\n"
+    model.env_max_episode_steps = 100
+    model = simplest_sphere_lifting(model)
+    model.params.learning_rate = 0.0001
+    model.wandb_note += "Learning rate 0.0001\n"
+    model.train(network)
+
+    exit()
 
   # ----- 3 layer network ----- #
   if inputarg <= 10:

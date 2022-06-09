@@ -117,7 +117,7 @@ struct JointSettings {
 
   // key dimensions and details
   struct {
-    double finger_length = 210e-3;
+    double finger_length = 235e-3;
     double segment_length = 0;                        // runtime depends
   } dim;
 

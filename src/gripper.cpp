@@ -70,6 +70,18 @@ bool Gripper::update_xy()
   // update our saved record of the finger angle
   th = new_th;
 
+  // finally, check that the fingertips are not overlapping too much
+  double th_lim = calc_max_fingertip_angle();
+  if (th < th_lim) {
+    if (debug) {
+      std::cout << "Gripper received xy values that exceed fingertip radius limit = "
+        << fingertip_radius_min << ", angle capped at = " << th_lim << "\n";
+    }
+    y = calc_y(th_lim);
+    th = th_lim;
+    within_limits = false;
+  } 
+
   // update the motor step counts
   step.x = get_x_step();
   step.y = get_y_step();

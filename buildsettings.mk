@@ -21,12 +21,15 @@ MJCF_PATH = /home/luke/mymujoco/mjcf
 PYTHON_PATH = /usr/include/python3.6m
 PYBIND_PATH = /home/luke/pybind11
 ARMA_PATH = # none, use system library
-MUJOCO_PATH = /home/luke/.mujoco/mujoco210
+MUJOCO_PATH = /home/luke/mujoco-2.1.5
 RENDER_PATH = # none, use system library
-CORE_LIBS = -L$(MUJOCO_PATH)/bin -lmujoco210 -larmadillo
-RENDER_LIBS = -lGL -lglew $(MUJOCO_PATH)/bin/libglfw.so.3
+CORE_LIBS = -L$(MUJOCO_PATH)/lib -lmujoco -larmadillo
+RENDER_LIBS = -lglfw
 DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
 						 -DLUKE_MACHINE='"$(MACHINE)"'
+
+# extras
+MAKEFLAGS += -j8 # jN => use N parallel cores
 
 # ----- compiling on the cluster with the old mujoco version ----- #
 ifeq ($(filter cluster-old, $(MAKECMDGOALS)), cluster-old)
