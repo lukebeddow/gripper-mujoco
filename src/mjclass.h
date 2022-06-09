@@ -380,6 +380,7 @@ namespace MjType
     // function definitions
     std::string get_settings();
     void wipe_rewards();
+    void disable_sensors();
     void scale_rewards(float scale); 
 
   };
@@ -585,6 +586,7 @@ public:
   luke::SlidingWindow<luke::gfloat> x_motor_position { gauge_buffer_size };
   luke::SlidingWindow<luke::gfloat> y_motor_position { gauge_buffer_size };
   luke::SlidingWindow<luke::gfloat> z_motor_position { gauge_buffer_size };
+  luke::SlidingWindow<luke::gfloat> z_base_position { gauge_buffer_size };
   
   // create storage containers for sensor data
   luke::SlidingWindow<luke::gfloat> finger1_gauge { gauge_buffer_size };
@@ -644,7 +646,7 @@ public:
 
   // learning functions
   void action_step();
-  void set_action(int action);
+  std::vector<float> set_action(int action);
   void reset_object();
   void spawn_object(int index);
   void spawn_object(int index, double xpos, double ypos);

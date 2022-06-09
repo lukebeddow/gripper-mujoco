@@ -238,8 +238,8 @@ struct Target {
 
   Gripper end;                        // final target destination
   Gripper next;                       // target at the next step
-  std::array<double, 6> base {};      // target of base joints
-  std::array<double, 7> panda {};     // target for panda joints
+  std::array<double, 6> base {};      // target of base joints (only [0] used for z)
+  std::array<double, 7> panda {};     // target for panda joints (never used)
 
   // these two fields are NOT currently used anywhere, see: move_base_target_m()
   static constexpr std::array<double, 6> base_lims_max {0.1, 1, 1, 1, 1, 1};
@@ -250,6 +250,22 @@ struct Target {
     next.reset();
     base.fill(0);
     panda.fill(0);
+  }
+
+  std::vector<gfloat> get_target_m()
+  {
+    /* returns in metres the end target in the pattern:
+      { gripper_x, gripper_y, gripper_z, base_z }
+    */
+
+    std::vector<gfloat> out { 
+      (gfloat) end.get_x_m(), 
+      (gfloat) end.get_y_m(), 
+      (gfloat) end.get_z_m(), 
+      (gfloat) base[0]
+    };
+
+    return out;
   }
 };
 

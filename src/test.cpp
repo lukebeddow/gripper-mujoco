@@ -112,6 +112,59 @@ int main(int argc, char** argv)
 {
   /* ----- run a test of 10 learning steps ----- */
 
+  luke::Gripper grip;
+
+  grip.set_xy_mm(100, 100);
+
+  std::cout << "Gripper set to (100, 100)\n";
+  std::cout << "Gripper is (" << grip.get_x_mm() << ", " << grip.get_y_mm() << ")\n";
+  std::cout << "Fingertip radius is " << grip.calc_fingertip_radius() * 1e3 << "mm\n";
+  std::cout << "Max fingertip angle is " << grip.calc_max_fingertip_angle() * luke::Gripper::to_deg << "deg\n\n";
+
+  grip.set_xy_mm(100, 90);
+
+  std::cout << "Gripper set to (100, 90)\n";
+  std::cout << "Gripper is (" << grip.get_x_mm() << ", " << grip.get_y_mm() << ")\n";
+  std::cout << "Fingertip radius is " << grip.calc_fingertip_radius() * 1e3 << "mm\n";
+  std::cout << "Max fingertip angle is " << grip.calc_max_fingertip_angle() * luke::Gripper::to_deg << "deg\n\n";
+
+  grip.set_xy_mm(90, 90);
+
+  std::cout << "Gripper set to (90, 90)\n";
+  std::cout << "Gripper is (" << grip.get_x_mm() << ", " << grip.get_y_mm() << ")\n";
+  std::cout << "Fingertip radius is " << grip.calc_fingertip_radius() * 1e3 << "mm\n";
+  std::cout << "Max fingertip angle is " << grip.calc_max_fingertip_angle() * luke::Gripper::to_deg << "deg\n\n";
+
+  grip.set_xy_mm(90, 80);
+
+  std::cout << "Gripper set to (90, 80)\n";
+  std::cout << "Gripper is (" << grip.get_x_mm() << ", " << grip.get_y_mm() << ")\n";
+  std::cout << "Fingertip radius is " << grip.calc_fingertip_radius() * 1e3 << "mm\n";
+  std::cout << "Max fingertip angle is " << grip.calc_max_fingertip_angle() * luke::Gripper::to_deg << "deg\n\n";
+
+  grip.set_xy_mm(60, 50);
+
+  std::cout << "Gripper set to (60, 50)\n";
+  std::cout << "Gripper is (" << grip.get_x_mm() << ", " << grip.get_y_mm() << ")\n";
+  std::cout << "Fingertip radius is " << grip.calc_fingertip_radius() * 1e3 << "mm\n";
+  std::cout << "Max fingertip angle is " << grip.calc_max_fingertip_angle() * luke::Gripper::to_deg << "deg\n\n";
+
+  grip.set_th_deg(7.40615);
+
+  std::cout << "Gripper set to 7.40615 deg\n";
+  std::cout << "Gripper is (60, ?, 0) with angle " << grip.get_th_deg() << "deg\n";
+  std::cout << "Fingertip radius is " << grip.calc_fingertip_radius() * 1e3 << "mm\n";
+  std::cout << "Max fingertip angle is " << grip.calc_max_fingertip_angle() * luke::Gripper::to_deg << "deg\n\n";
+
+  grip.set_xy_mm(50, 50);
+
+  std::cout << "Gripper set to (50, 50)\n";
+  std::cout << "Gripper is (50, 50, 0)\n";
+  std::cout << "Fingertip radius is " << grip.calc_fingertip_radius() * 1e3 << "mm\n";
+  std::cout << "Max fingertip angle is " << grip.calc_max_fingertip_angle() * luke::Gripper::to_deg << "deg\n\n";
+
+  return 0;
+
   // precompiled settings
   int num_episodes = 10;
   int step_cap = 30;

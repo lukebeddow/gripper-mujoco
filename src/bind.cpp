@@ -119,6 +119,7 @@ PYBIND11_MODULE(bind, m) {
     .def(py::init<>())
     .def("get_settings", &MjType::Settings::get_settings)
     .def("wipe_rewards", &MjType::Settings::wipe_rewards)
+    .def("disable_sensors", &MjType::Settings::disable_sensors)
     .def("scale_rewards", &MjType::Settings::scale_rewards)
 
     // use a macro to create code snippets for all of the settings

@@ -1201,8 +1201,9 @@ if __name__ == "__main__":
   # load
   net = networks.DQN_3L60
   model.init(net)
-  folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
-  foldername = "luke-PC_A2_31-05-22-15:22"
+  folderpath = "/home/luke/mymujoco/rl/models/dqn/08-06-22/"# + model.policy_net.name + "/"
+  foldername = "luke-laptop_13:14_A1"
+  model.device = "cuda"
   model.load(id=None, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
@@ -1241,12 +1242,12 @@ if __name__ == "__main__":
   model.env.disable_rendering = False
   model.env.test_trials_per_obj = 1
   # model.env.test_obj_limit = 10
-  model.env.max_episode_steps = 300
+  model.env.max_episode_steps = 200
   # model.env.mj.set.step_num.set          (0,      70,   1)
   # model.env.mj.set.exceed_limits.set     (-0.005, True,   10)
   # model.env.mj.set.exceed_axial.set      (-0.005, True,   10,    3.0,  6.0,  -1)
   # model.env.mj.set.exceed_lateral.set    (-0.005, True,   10,    4.0,  6.0,  -1)
-  test_data = model.test(pause_each_episode=True)
+  test_data = model.test(pause_each_episode=False)
 
   # # save results
   # test_report = model.create_test_report(test_data)

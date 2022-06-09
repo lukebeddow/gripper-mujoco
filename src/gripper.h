@@ -20,38 +20,45 @@ public:
   /* the urdf uses inward -ve, the real gripper uses inward +ve */
   constexpr static int sign = 1;
 
-  // handy for angular conversions
-  constexpr static double pi = 3.1415926535987;
-  constexpr static double to_rad = pi / 180.0;
-  constexpr static double to_deg = 180.0 / pi;
+  // are we in debug mode
+  constexpr static bool debug = false;
 
-  // gripper physical constants
+  // handy constants
+  constexpr static double to_rad = M_PI / 180.0;
+  constexpr static double to_deg = 180.0 / M_PI;
+  constexpr static double limit_tol = 1e-4;     // for floating point limit checks
+
+  // gripper physical constants - user set
   constexpr static double leadscrew_dist = 35e-3;
-  
+  constexpr static double finger_length = 235e-3;
+  constexpr static double hook_length = 35e-3;
+
   constexpr static double xy_lead = 4;
   constexpr static double xy_gear = 1.5;
   constexpr static double xy_steps_per_rev = 400;
-  constexpr static double xy_step_m = xy_lead / (xy_gear * xy_steps_per_rev * 1e3);
 
   constexpr static double z_lead = 4.8768;
   constexpr static double z_gear = 1;
   constexpr static double z_steps_per_rev = 400;
-  constexpr static double z_step_m = z_lead / (z_gear * z_steps_per_rev * 1e3);
 
-  // gripper limits
+  // hard gripper limits - user set
   constexpr static double xy_min =  50e-3;
   constexpr static double xy_max = 140e-3;
   constexpr static double z_min = 0e-3;
   constexpr static double z_max = 160e-3;
-  constexpr static double th_min = -40 * to_rad;
-  constexpr static double th_max = 40 * to_rad;
-  constexpr static double xy_max_force = 20;
-  constexpr static double z_max_force = 10;
 
-  // misc
-  constexpr static double limit_tol = 1e-4;     // for floating point limit checks
-  constexpr static bool debug = false;
+  // safety limits - user set
+  double th_min = -40 * to_rad;
+  double th_max = 40 * to_rad;
+  double xy_max_force = 20;
+  double z_max_force = 10;
+  double fingertip_radius_min = -5e-3;
 
+  // auto generated constants
+  constexpr static double hypotenuse = sqrt(pow(finger_length, 2) + pow(hook_length, 2));
+  constexpr static double resting_angle = atan(hook_length / finger_length);
+  constexpr static double xy_step_m = xy_lead / (xy_gear * xy_steps_per_rev * 1e3);
+  constexpr static double z_step_m = z_lead / (z_gear * z_steps_per_rev * 1e3);
 
   // motor positions in metres
   double x, y, z;
@@ -72,6 +79,14 @@ public:
   // convert y position to and from angle, take note of chosen sign convention
   double calc_y(double th_rad) { return x + sign * leadscrew_dist * sin(th_rad); }
   double calc_th(double x, double y) { return atan((y - x) / leadscrew_dist) * sign; }
+
+  // checking fingertip radius
+  double calc_fingertip_radius() { 
+    return x - hypotenuse * sin(resting_angle - th * sign);
+  }
+  double calc_max_fingertip_angle() { 
+    return (asin((fingertip_radius_min - x) / hypotenuse) + resting_angle) * sign;
+  }
 
   // getter functions
   double get_x_m() { return x; }
