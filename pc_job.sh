@@ -1,5 +1,12 @@
 # bash script to run several trainings on the lab PC
 
+# to run a new training from array_training.py and train args 1,2,3 use:
+#   $ ./pc_job.sh 1 2 3
+
+# to continue a training from array_training.py and train args 1,2,3 use:
+#   $ ./pc_job.sh continue 07-06-22-16:34 1 2 3
+#   
+
 # from: https://stackoverflow.com/questions/1401002/how-to-trick-an-application-into-thinking-its-stdout-is-a-terminal-not-a-pipe
 faketty() {
     script -qfc "$(printf "%q " "$@")" /dev/null
