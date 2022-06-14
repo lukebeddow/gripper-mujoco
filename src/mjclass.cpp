@@ -1065,7 +1065,7 @@ float MjClass::reward()
     transition_reward = calc_rewards(env_.cnt, s_);
   }
    
-  // useful for testing, this value is not used in python
+  // this value is not used in python
   env_.cumulative_reward += transition_reward;
 
   // if we are capping the maximum cumulative negative reward
@@ -1074,6 +1074,15 @@ float MjClass::reward()
       // reduce the reward to not put us below the cap
       transition_reward += s_.quit_on_reward_below - env_.cumulative_reward - ftol;
       env_.cumulative_reward = s_.quit_on_reward_below - ftol;
+    }
+  }
+
+  // if we are capping the maximum cumulative positive reward
+  if (env_.cumulative_reward > s_.quit_on_reward_above) {
+    if (s_.quit_reward_capped) {
+      // reduce the reward to not put us above the cap
+      transition_reward += s_.quit_on_reward_above - env_.cumulative_reward - ftol;
+      env_.cumulative_reward = s_.quit_on_reward_above - ftol;
     }
   }
 

@@ -21,6 +21,7 @@ from env.MjEnv import MjEnv
 from ModelSaver import ModelSaver
 
 from guppy import hpy; guph = hpy()
+from pympler import muppy, asizeof
 
 class TrainDQN():
   """
@@ -824,9 +825,13 @@ class TrainDQN():
     """
 
     # for debugging, show memory usage
-    if i_episode % 100 == 0 and not test:
+    if i_episode % 100 == 1 and not test:
       theheap = guph.heap()
       print("Heap total size is", theheap.size, "(", theheap.size / 10e6, "GB)")
+      print("The replay memory size is", asizeof.asizeof(self.memory), "B",
+        "with length", len(self.memory))
+      print("The environment size is", asizeof.asizeof(self.env), "B")
+      guph.heap()
 
     # initialise environment and state
     obs = self.env.reset()
@@ -1051,28 +1056,15 @@ class TrainDQN():
     Save the model policy network, return save path
     """
 
-    if True:
-
-      save_data = TrainDQN.Save_Tuple(
-        policy_net = self.policy_net,
-        params = self.params,
-        memory = self.memory,
-        env = self.env,
-        track = self.track,
-        modelsaver = self.modelsaver,
-        extra = tupledata
-      )
-
-    else:
-      # save all needed internal data to continue training with
-      save_data = (
-        self.policy_net,  # neural network parameters
-        self.params,      # hyperparameters
-        self.memory,      # memory replay buffer
-        self.env,         # environment and simulation settings
-        self.track,       # logged data
-        (tupledata)       # extra data stored      
-      )
+    save_data = TrainDQN.Save_Tuple(
+      policy_net = self.policy_net,
+      params = self.params,
+      memory = self.memory,
+      env = self.env,
+      track = self.track,
+      modelsaver = self.modelsaver,
+      extra = tupledata
+    )
 
     savepath = self.modelsaver.save(self.policy_net.name, pyobj=save_data, 
                                     txtstr=txtstring, txtlabel=txtlabel)
@@ -1088,35 +1080,14 @@ class TrainDQN():
     load_data = self.modelsaver.load(id=id, folderpath=folderpath, 
                                      foldername=foldername)
 
-    if True:
-
-      self.policy_net = load_data.policy_net
-      self.params = load_data.params
-      self.memory = load_data.memory
-      self.env = load_data.env
-      self.track = load_data.track
+    self.policy_net = load_data.policy_net
+    self.params = load_data.params
+    self.memory = load_data.memory
+    self.env = load_data.env
+    self.track = load_data.track
       
-      if load_data.extra != None:
-        self.loaded_test_data = load_data.extra[0]
-
-    # keep this code for backwards compatibility, switch True->False above
-    else:
-
-      (load_data, extra) = load_data
-
-      # extract load_data data
-      self.policy_net = load_data[0]
-      self.params = load_data[1]
-      self.memory = load_data[2]
-      self.env = load_data[3]
-      # self.track = load_data[4]
-
-      # extract additional data
-      # self.track = tupledata[0]
-      # try:
-      #   self.loaded_test_data = extra[0]
-      # except TypeError:
-      #   self.loaded_test_data = None
+    if load_data.extra != None:
+      self.loaded_test_data = load_data.extra[0]
 
     # reload environment
     self.env._load_xml() # segfault without this
@@ -1198,13 +1169,13 @@ if __name__ == "__main__":
 
   # ----- load ----- #
 
-  # load
-  net = networks.DQN_3L60
-  model.init(net)
-  folderpath = "/home/luke/mymujoco/rl/models/dqn/08-06-22/"# + model.policy_net.name + "/"
-  foldername = "luke-laptop_13:14_A1"
-  model.device = "cuda"
-  model.load(id=None, folderpath=folderpath, foldername=foldername)
+  # # load
+  # net = networks.DQN_3L60
+  # model.init(net)
+  # folderpath = "/home/luke/cluster/rl/models/dqn/07-06-22/"# + model.policy_net.name + "/"
+  # foldername = "cluster_16:34_A18"
+  # # model.device = "cuda"
+  # model.load(id=None, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 

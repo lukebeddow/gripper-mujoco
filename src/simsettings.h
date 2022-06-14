@@ -50,6 +50,7 @@
   is_done() settings */\
   XX(  quit_on_reward_below,    float,    -1.01)    /* done=true if reward drops below this value */\
   XX(  quit_reward_capped,      bool,     true)     /* cap reward at quit_on_reward_below */\
+  XX(  quit_on_reward_above,    float,    1.01)     /* done=true if reward rises above this value */\
   /* 
   set_action() settings */\
   XX(  action_motor_steps,      int,      100)      /* stepper motor steps per action */\
