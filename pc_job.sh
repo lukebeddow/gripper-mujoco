@@ -1,59 +1,58 @@
 # bash script to run several trainings on the lab PC
 
 # to run a new training from array_training.py and train args 1,2,3 use:
-#   $ ./pc_job.sh 1 2 3
+#   $ ./pc_job.sh -j "1 2 3"
 
 # to continue a training from array_training.py and train args 1,2,3 use:
-#   $ ./pc_job.sh continue 07-06-22-16:34 1 2 3
+#   $ ./pc_job.sh -j "1 2 3" -c y -t 07-06-22-16:34 -m luke-PC
 #   
 
 helpFunction()
 {
-   echo ""
-   echo "Usage: $0 -d direction -c command"
-   echo -e "\t-j jobs to run, eg 1,2,3,4"
-   echo -e "\t-c continue, include if training is continuing"
-   echo -e "\t-m machine, if continuing, on what machine eg luke-PC"
-   echo -e "\t-t timestamp, what is the timestamp of the training eg 07-12-22-15:34"
+   echo -e "\nUsage:"
+   echo -e "Run jobs 1-4:\t $0 -j '1 2 3 4'"
+   echo -e "Continue 1-4:\t $0 -j '1 2 3 4' -c -t old_timestamp"
+   echo -e "\nOptions:"
+   echo -e "\t -j ['ARGS'] jobs to run (need to be in quotes), eg -j '1 2 3 4'"
+   echo -e "\t -c continue previous training"
+   echo -e "\t -m [ARG] machine, if continuing, on what machine eg -m luke-PC"
+   echo -e "\t -t [ARG] timestamp in form dd-mm-yy-hr:mn eg -t 07-12-22-15:34"
+   echo -e "\t -h print help information"
    exit 1 # exit script after printing help
 }
 
 # defaults
 continue=false
-default_machine=luke-PC
+machine=luke-PC
+timestamp=$(date +%d-%m-%y-%H:%M)
 
-while getopts "j:c:m:t:" opt
+# where to save terminal output to
+LOG_FOLDER=/home/luke/training_logs
+
+# a colon after a flag character indicates it expects an argument
+while getopts "j:cm:t:h" opt
 do
    case "$opt" in
-      j ) jobs="$OPTARG" ;;
-      c ) continue=true ;;
-      m ) machine="$OPTARG" ;;
-      t ) timestamp="$OPTARG" ;;
-      ? ) helpFunction ;; # print helpFunction in case parameter is non-existent
+      j ) jobs="$OPTARG" ; echo Jobs input are $jobs ;;
+      c ) continue=true ; echo Continue has been set to true ;;
+      m ) machine="$OPTARG" ; echo Machine has been specified as $machine ;;
+      t ) timestamp="$OPTARG" ; echo Timestamp has been specified as $timestamp ;;
+      h ) helpFunction ;; # help flag
+    #   ? ) helpFunction ;; # print helpFunction in case parameter is non-existent
    esac
 done
 
-# print helpFunction in case parameters are empty
+# if jobs are not specified
 if [ -z "$jobs" ]
 then
-   echo "All or some of the parameters are empty";
-   helpFunction
+    echo Incorrect inputs, jobs to do must be specified with -j flag
+    helpFunction
 fi
-
-# echo parameter selection to the user
-echo "Echoing user inputs:"
-echo "jobs are: $jobs"
-echo "continue is: $continue"
-echo "machine is: $machine"
-echo "timestamp is:" $timestamp
 
 # from: https://stackoverflow.com/questions/1401002/how-to-trick-an-application-into-thinking-its-stdout-is-a-terminal-not-a-pipe
 faketty() {
     script -qfc "$(printf "%q " "$@")" /dev/null
 }
-
-# where to save terminal output to
-LOG_FOLDER=/home/luke/training_logs
 
 # add mujoco to the shared library path
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/mujoco-2.1.5/lib
@@ -61,18 +60,9 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/mujoco-2.1.5/lib
 # navigate to correct directory
 cd ~/mymujoco/rl
 
-# if a timestamp is not specified use current time
-if [ -z "$timestamp" ]
-then
-    LUKE_JOB_SUBMIT_TIME=$(date +%d-%m-%y-%H:%M)
-else
-    LUKE_JOB_SUBMIT_TIME="$timestamp"
-fi
-
 # if we are continuing training
 if [ $continue = true ]
 then
-
     # on what machine are we continuing
     if [ -z "$machine" ]
     then
@@ -82,67 +72,15 @@ then
     fi
 fi
 
-# if a machine is specified, override
-if [ -z "$machine" ]
-then
-   machine="$default_machine"
-fi
-
-#     # parse arguments
-#     CONTINUE="$1"
-#     LUKE_JOB_SUBMIT_TIME="$2"
-#     ARRAY_INDEXES=( "${*:3}" )
-
-#     # echo information to the terminal
-#     echo PC job instructed to continue training
-#     echo The following jobs will be continued:
-#     for I in ${ARRAY_INDEXES[@]}
-#     do
-#         echo luke-PC_${LUKE_JOB_SUBMIT_TIME}_A${I}
-#     done
-    
-# else
-#     ARRAY_INDEXES=( "$*" )
-# fi
-
+# extract the job indicies
 ARRAY_INDEXES=("$jobs")
 
 # echo information to the terminal
-echo The following jobs will be done:
+echo -e "\nThe following jobs will be done:"
 for I in ${ARRAY_INDEXES[@]}
 do
-    echo ${machine}_${LUKE_JOB_SUBMIT_TIME}_A${I}
+    echo ${machine}_${timestamp}_A${I}
 done
-
-echo CONTINUE is $CONTINUE
-
-# exit
-
-# # take input arguments into an array, if specified
-# if [ "$#" -eq 0 ]; then
-#     echo No arguments specified
-#     exit
-# else
-#     if [ "$1" == "continue" ]; then
-
-#         # parse arguments
-#         CONTINUE="$1"
-#         LUKE_JOB_SUBMIT_TIME="$2"
-#         ARRAY_INDEXES=( "${*:3}" )
-
-#         # echo information to the terminal
-#         echo PC job instructed to continue training
-#         echo The following jobs will be continued:
-#         for I in ${ARRAY_INDEXES[@]}
-#         do
-#             echo luke-PC_${LUKE_JOB_SUBMIT_TIME}_A${I}
-#         done
-        
-#     else
-#         ARRAY_INDEXES=( "$*" )
-#     fi
-#     echo PC job arguments specified were: $ARRAY_INDEXES
-# fi
 
 # wrapper to catch ctrl+c and kill all background processes
 trap 'trap - SIGINT && kill 0' SIGINT
@@ -152,8 +90,8 @@ echo Saving logs to $LOG_FOLDER/
 
 for I in ${ARRAY_INDEXES[@]}
 do
-    JOB_NAME=${machine}_${LUKE_JOB_SUBMIT_TIME}_A${I}
-    faketty python3 array_training_DQN.py $I $LUKE_JOB_SUBMIT_TIME $CONTINUE \
+    JOB_NAME=${machine}_${timestamp}_A${I}
+    faketty python3 array_training_DQN.py $I $timestamp $CONTINUE \
     > $LOG_FOLDER/$JOB_NAME.txt &
     echo Submitted job: $JOB_NAME
 done
