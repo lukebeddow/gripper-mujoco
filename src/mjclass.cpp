@@ -88,6 +88,13 @@ void MjClass::configure_settings()
 {
   /* apply simulation settings */
 
+  // set gauge calibrations
+  calibrate_.offset.g1 = 0.70e6;
+  calibrate_.offset.g2 = -0.60e6;
+  calibrate_.offset.g3 = -0.56e6;
+  calibrate_.scale.g1 = calibrate_.scale.g2 = calibrate_.scale.g3 = 1.258e-6;
+  calibrate_.norm.g1 = calibrate_.norm.g2 = calibrate_.norm.g3 = 2;
+
   // set the simulation timestep
   model->opt.timestep = s_.mujoco_timestep;
 
@@ -162,10 +169,6 @@ void MjClass::configure_settings()
       throw std::runtime_error("s_.state_sample_mode not set to legal value");
     }
   }
-
-  // // update the goal given the settings
-  // goal_.goal_reward = s_.goal_reward;
-  // goal_.binary_goal = s_.binary_goal_vector;
 
   // enforce HER goals to trigger at 1 always
   default_goal_event_triggering();
@@ -277,6 +280,9 @@ void MjClass::reset()
   env_.reset();
   MjType::TestReport blank_report;
   testReport_ = blank_report;
+
+  // reset variables for use with real gripper
+  samples_since_last_obs = 0;
 
   // empty any curve validation data
   if (s_.curve_validation) {
@@ -788,11 +794,6 @@ std::vector<float> MjClass::set_action(int action)
    
   }
 
-  // // save if we exceeded limits
-  // bool exceed_limits = not wl;
-  // env_.cnt.exceed_limits *= exceed_limits;  // wipe to zero if false
-  // env_.cnt.exceed_limits += exceed_limits;  // increment by one if true
-
   if (s_.debug)
     std::cout << ", within_limits = " << wl << '\n';
 
@@ -1128,6 +1129,121 @@ int MjClass::get_n_obs()
   return obs_size;
 }
 
+/* ----- real gripper functions ----- */
+
+std::vector<float> MjClass::get_finger_gauge_data()
+{
+  /* report the most recent gauge data */
+
+  std::vector<float> out;
+
+  out.push_back(finger1_gauge.read_element());
+  out.push_back(finger2_gauge.read_element());
+  out.push_back(finger3_gauge.read_element());
+
+  return out;
+}
+
+void MjClass::input_real_data(std::vector<float> state_data, 
+  std::vector<float> sensor_data, float timestamp)
+{
+  /* insert real data */
+
+  // flag to ensure we configure before running with real data
+  static bool configured = false;
+  if (not configured) {
+    configure_settings();
+    configured = true;
+  }
+
+  // count data inputs
+  samples_since_last_obs += 1;
+
+  // add state data
+  int i = 0;
+
+  if (s_.motor_state_sensor.in_use) {
+
+    // normalise and save state data
+    state_data[i] = normalise_between(
+      state_data[i], luke::Gripper::xy_min, luke::Gripper::xy_max);
+    x_motor_position.add(state_data[i]); ++i;
+
+    state_data[i] = normalise_between(
+      state_data[i], luke::Gripper::xy_min, luke::Gripper::xy_max);
+    y_motor_position.add(state_data[i]); ++i;
+
+    state_data[i] = normalise_between(
+      state_data[i], luke::Gripper::xy_min, luke::Gripper::xy_max);
+    z_motor_position.add(state_data[i]); ++i;
+
+  }
+  
+  if (s_.base_state_sensor.in_use) {
+
+    state_data[i] = normalise_between(
+      state_data[i], luke::Target::base_lims_min[0], luke::Target::base_lims_max[0]);
+    z_base_position.add(state_data[i]); ++i;
+
+  }
+
+  // add sensor data
+  int j = 0;
+
+  if (s_.bending_gauge.in_use) {
+
+    // scale, normalise, and save gauge data
+    sensor_data[j] = (sensor_data[j] + calibrate_.offset.g1) * calibrate_.scale.g1;
+    sensor_data[j] = normalise_between(
+      sensor_data[j], -calibrate_.norm.g1, calibrate_.norm.g1);
+    finger1_gauge.add(sensor_data[j]); ++j;
+
+    sensor_data[j] = (sensor_data[j] + calibrate_.offset.g2) * calibrate_.scale.g2;
+    sensor_data[j] = normalise_between(
+      sensor_data[j], -calibrate_.norm.g2, calibrate_.norm.g2);
+    finger2_gauge.add(sensor_data[j]); ++j;
+  
+    sensor_data[j] = (sensor_data[j] + calibrate_.offset.g3) * calibrate_.scale.g3;
+    sensor_data[j] = normalise_between(
+      sensor_data[j], -calibrate_.norm.g3, calibrate_.norm.g3);
+    finger3_gauge.add(sensor_data[j]); ++j;
+
+  }
+
+  if (s_.palm_sensor.in_use) {
+
+    // scale, normalise, and save gauge data
+    sensor_data[j] = (sensor_data[j] + calibrate_.offset.palm) * calibrate_.scale.palm;
+    sensor_data[j] = normalise_between(
+      sensor_data[j], -calibrate_.norm.palm, calibrate_.norm.palm);
+    palm_sensor.add(sensor_data[j]); ++j;
+
+  }
+
+  // add timestamp data - not used currently
+  gauge_timestamps.add(timestamp);
+  palm_timestamps.add(timestamp);
+
+}
+
+std::vector<float> MjClass::get_real_observation()
+{
+  /* get an observation of real data - n_samples_since_last should be inclusive, 
+  so if before we had [0,1,2] and now we have [0,1,2,3,4,5] then n=4 */
+
+  // add +1 so that n_samples is inclusive of the last data point
+  samples_since_last_obs += 1;
+
+  // short-circuit timings to get set number of readings instead
+  s_.bending_gauge.read_rate = -1 * samples_since_last_obs;
+  s_.palm_sensor.read_rate = -1 * samples_since_last_obs;
+
+  // reset as we are about to return an observation
+  samples_since_last_obs = 0;
+
+  return get_observation();
+}
+
 /* ----- misc ----- */
 
 void MjClass::tick()
@@ -1455,6 +1571,25 @@ void MjType::Settings::disable_sensors()
 
   #define XX(NAME, TYPE, VALUE)
   #define SS(NAME, DONTUSE1, DONTUSE2, DONTUSE3) NAME.in_use = false;
+  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
+  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
+  
+    // run the macro and disable all the sensors
+    LUKE_MJSETTINGS
+  
+  #undef XX
+  #undef SS
+  #undef BR
+  #undef LR
+}
+
+void MjType::Settings::set_use_normalisation(bool set_as)
+{
+  /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
+     eg instead of using TRIGGER we need to use s_.NAME.trigger */
+
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, DONTUSE1, DONTUSE2, DONTUSE3) NAME.use_normalisation = set_as;
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
   
