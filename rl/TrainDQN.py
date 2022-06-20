@@ -21,6 +21,7 @@ from env.MjEnv import MjEnv
 from ModelSaver import ModelSaver
 
 from guppy import hpy; guph = hpy()
+from pympler import muppy, asizeof
 
 class TrainDQN():
   """
@@ -208,6 +209,8 @@ class TrainDQN():
       self.plot_static_avg = True
       self.plot_test_raw = True
       self.plot_test_metrics = True
+      self.plot_success_rate = True
+      self.success_rate_metric = "stable height"
       # general
       self.actions_done = 0
       self.episodes_done = 0
@@ -234,6 +237,11 @@ class TrainDQN():
       self.avg_p_exceed_axial = np.array([], dtype=numpy_float)
       self.avg_p_exceed_lateral = np.array([], dtype=numpy_float)
       self.avg_p_exceed_palm = np.array([], dtype=numpy_float)
+      self.avg_lifted = np.array([], dtype=numpy_float)
+      self.avg_stable = np.array([], dtype=numpy_float)
+      self.avg_oob = np.array([], dtype=numpy_float)
+      self.avg_target_height = np.array([], dtype=numpy_float)
+      self.avg_stable_height = np.array([], dtype=numpy_float)
       # misc
       self.fig = None
       self.axs = None
@@ -320,6 +328,10 @@ class TrainDQN():
           fig5, axs5 = plt.subplots(2, 1)
           self.fig.append(fig5)
           self.axs.append(axs5)
+        if self.plot_success_rate:
+          fig6, axs6 = plt.subplots(1, 1)
+          self.fig.append(fig6)
+          self.axs.append([axs6, axs6]) # add paired to hold the pattern
 
       ind = 0
 
@@ -390,6 +402,24 @@ class TrainDQN():
         self.fig[ind].subplots_adjust(hspace=0.4)
         ind += 1
 
+      if self.plot_success_rate:
+          # what metric are we using to determine success rate
+          if self.success_rate_metric == "stable height":
+            success_rate_vector = self.avg_stable_height
+          elif self.success_rate_metric == "target height":
+            success_rate_vector = self.avg_target_height
+          elif self.success_rate_metric == "lifted":
+            success_rate_vector = self.avg_lifted
+          elif self.success_rate_metric == "stable":
+            success_rate_vector = self.avg_stable
+          else:
+            print(f"{self.success_rate_metric} is not valid, Track used 'stable height' instead")
+            success_rate_vector = self.avg_stable_height
+          # plot
+          self.plot_matplotlib(self.test_episodes, success_rate_vector, "Success rate",
+                        f"Success rate (metric: {self.success_rate_metric})", self.axs[ind][0])
+          ind += 1        
+
       plt.pause(0.001)
 
       return
@@ -453,6 +483,24 @@ class TrainDQN():
             keys=[x[1] for x in bad_metrics],
             title="Test bad performance metrics", xname="Training episodes"
           )})
+
+        # create plots of success rate
+        if self.plot_success_rate:
+          # what metric are we using to determine success rate
+          if self.success_rate_metric == "stable height":
+            success_rate_vector = self.avg_stable_height
+          elif self.success_rate_metric == "target height":
+            success_rate_vector = self.avg_target_height
+          elif self.success_rate_metric == "lifted":
+            success_rate_vector = self.avg_lifted
+          elif self.success_rate_metric == "stable":
+            success_rate_vector = self.avg_stable
+          else:
+            print(f"{self.success_rate_metric} is not valid, Track used 'stable height' instead")
+            success_rate_vector = self.avg_stable_height
+          # plot
+          self.plot_wandb(self.test_episodes, success_rate_vector, E, "Success rate", 
+                          f"Success rate (metric: {self.success_rate_metric})")
 
         # finish by recording the last log time
         self.last_log = time.time()
@@ -616,7 +664,8 @@ class TrainDQN():
     Process the test data from a finished test
     """
 
-    print_out = False
+    # do we print the test report in the terminal
+    print_out = True
 
     len_data = len(test_data)
     num_trials = self.env.test_trials_per_obj
@@ -644,10 +693,12 @@ class TrainDQN():
       "Object name", "Reward", "Steps", "Palm f", "Fing.f", "lft", "stb", "oob", "t.h", "s.h", "%Lt", "%Cn", "%PF", "%XL", "%XA", "%XT", "%XP"
     )
 
+    # create intro text and column header text
     start_str = f"Starting test on {num_obj} objects, with {num_trials} trials each"
     if i_episode != None: start_str += f", after {i_episode} training steps"
-    output_str += start_str + "\n"
-    output_str += "\n" + first_row
+    start_str += "\n\n" + first_row
+
+    output_str += start_str
 
     if print_out: print(start_str)
 
@@ -715,18 +766,21 @@ class TrainDQN():
     # update the percentage values for the entire test
     total_counter.calculate_percentage()
 
+    # prepare to divide by total test episdoes to calculate float averges
+    N = float(num_trials * num_obj)
+
     # add the overall averages to the test report string
     end_str = res_str.format(
       "\nOverall averages per object: ", 
       mean_reward, 
-      total_counter.step_num.abs / float(num_trials * num_obj),
-      total_counter.palm_force.last_value / float(num_trials * num_obj),
-      total_counter.finger_force.last_value / float(num_trials * num_obj),
-      total_counter.lifted.last_value / float(num_trials * num_obj), 
-      total_counter.object_stable.last_value / float(num_trials * num_obj), 
-      total_counter.oob.last_value / float(num_trials * num_obj), 
-      total_counter.target_height.last_value / float(num_trials * num_obj), 
-      total_counter.stable_height.last_value / float(num_trials * num_obj),
+      total_counter.step_num.abs / N,
+      total_counter.palm_force.last_value / N,
+      total_counter.finger_force.last_value / N,
+      total_counter.lifted.last_value / N, 
+      total_counter.object_stable.last_value / N, 
+      total_counter.oob.last_value / N, 
+      total_counter.target_height.last_value / N, 
+      total_counter.stable_height.last_value / N,
       total_counter.lifted.percent,
       total_counter.object_contact.percent,
       total_counter.palm_force.percent,
@@ -739,7 +793,7 @@ class TrainDQN():
     # save test results if we are mid-training
     if i_episode != None:
       self.track.test_episodes = np.append(self.track.test_episodes, i_episode)
-      self.track.test_durations = np.append(self.track.test_durations, total_counter.step_num.abs / float(num_trials * num_obj))
+      self.track.test_durations = np.append(self.track.test_durations, total_counter.step_num.abs / N)
       self.track.test_rewards = np.append(self.track.test_rewards, mean_reward)
       self.track.avg_p_lifted = np.append(self.track.avg_p_lifted, total_counter.lifted.percent)
       self.track.avg_p_contact = np.append(self.track.avg_p_contact, total_counter.object_contact.percent)
@@ -748,6 +802,11 @@ class TrainDQN():
       self.track.avg_p_exceed_axial = np.append(self.track.avg_p_exceed_axial, total_counter.exceed_axial.percent)
       self.track.avg_p_exceed_lateral = np.append(self.track.avg_p_exceed_lateral, total_counter.exceed_lateral.percent)
       self.track.avg_p_exceed_palm = np.append(self.track.avg_p_exceed_palm, total_counter.exceed_palm.percent)
+      self.track.avg_lifted = np.append(self.track.avg_lifted, total_counter.lifted.last_value / N)
+      self.track.avg_stable = np.append(self.track.avg_stable, total_counter.object_stable.last_value / N)
+      self.track.avg_oob = np.append(self.track.avg_oob, total_counter.oob.last_value / N)
+      self.track.avg_target_height = np.append(self.track.avg_target_height, total_counter.target_height.last_value / N)
+      self.track.avg_stable_height = np.append(self.track.avg_stable_height, total_counter.stable_height.last_value / N)
 
     output_str += end_str
 
@@ -824,9 +883,13 @@ class TrainDQN():
     """
 
     # for debugging, show memory usage
-    if i_episode % 100 == 0 and not test:
+    if i_episode % 100 == 1 and not test:
       theheap = guph.heap()
       print("Heap total size is", theheap.size, "(", theheap.size / 10e6, "GB)")
+      print("The replay memory size is", asizeof.asizeof(self.memory), "B",
+        "with length", len(self.memory))
+      print("The environment size is", asizeof.asizeof(self.env), "B")
+      guph.heap()
 
     # initialise environment and state
     obs = self.env.reset()
@@ -921,6 +984,7 @@ class TrainDQN():
       # save record of the training time hyperparameters and important files
       self.save_hyperparameters()
       self.save_important_files()
+      self.save() # save starting network parameters
     else:
       # save a record of the training restart
       continue_label = f"Training is continuing from episode {i_start} with these hyperparameters\n"
@@ -932,7 +996,6 @@ class TrainDQN():
 
       if self.log_level > 0: 
         print("Begin training episode", i_episode)
-        # self.env.mj.print(f"Begin training episode {i_episode}")
 
       self.run_episode(i_episode)
 
@@ -959,7 +1022,7 @@ class TrainDQN():
 
     # end of training
     if self.log_level > 0:
-      print("Training complete, finished", i_episode + 1, "episodes")
+      print("Training complete, finished", i_episode, "episodes")
     self.env.render()
     self.env.close()
 
@@ -976,6 +1039,7 @@ class TrainDQN():
 
       # check whether the test has completed
       if self.env.test_completed:
+        i_episode -= 1 # we didn't finish this episode
         break
 
       if self.log_level > 0: 
@@ -1051,28 +1115,15 @@ class TrainDQN():
     Save the model policy network, return save path
     """
 
-    if True:
-
-      save_data = TrainDQN.Save_Tuple(
-        policy_net = self.policy_net,
-        params = self.params,
-        memory = self.memory,
-        env = self.env,
-        track = self.track,
-        modelsaver = self.modelsaver,
-        extra = tupledata
-      )
-
-    else:
-      # save all needed internal data to continue training with
-      save_data = (
-        self.policy_net,  # neural network parameters
-        self.params,      # hyperparameters
-        self.memory,      # memory replay buffer
-        self.env,         # environment and simulation settings
-        self.track,       # logged data
-        (tupledata)       # extra data stored      
-      )
+    save_data = TrainDQN.Save_Tuple(
+      policy_net = self.policy_net,
+      params = self.params,
+      memory = self.memory,
+      env = self.env,
+      track = self.track,
+      modelsaver = self.modelsaver,
+      extra = tupledata
+    )
 
     savepath = self.modelsaver.save(self.policy_net.name, pyobj=save_data, 
                                     txtstr=txtstring, txtlabel=txtlabel)
@@ -1088,35 +1139,14 @@ class TrainDQN():
     load_data = self.modelsaver.load(id=id, folderpath=folderpath, 
                                      foldername=foldername)
 
-    if True:
-
-      self.policy_net = load_data.policy_net
-      self.params = load_data.params
-      self.memory = load_data.memory
-      self.env = load_data.env
-      self.track = load_data.track
+    self.policy_net = load_data.policy_net
+    self.params = load_data.params
+    self.memory = load_data.memory
+    self.env = load_data.env
+    self.track = load_data.track
       
-      if load_data.extra != None:
-        self.loaded_test_data = load_data.extra[0]
-
-    # keep this code for backwards compatibility, switch True->False above
-    else:
-
-      (load_data, extra) = load_data
-
-      # extract load_data data
-      self.policy_net = load_data[0]
-      self.params = load_data[1]
-      self.memory = load_data[2]
-      self.env = load_data[3]
-      # self.track = load_data[4]
-
-      # extract additional data
-      # self.track = tupledata[0]
-      # try:
-      #   self.loaded_test_data = extra[0]
-      # except TypeError:
-      #   self.loaded_test_data = None
+    if load_data.extra != None:
+      self.loaded_test_data = load_data.extra[0]
 
     # reload environment
     self.env._load_xml() # segfault without this
@@ -1170,23 +1200,20 @@ if __name__ == "__main__":
 
   use_wandb = False
   force_device = "cpu"
-  no_plot = True
+  no_plot = False
 
   model = TrainDQN(device=force_device, use_wandb=use_wandb, no_plot=no_plot)
 
   # if we want to adjust parameters
   # model.log_level = 2
   # model.params.num_episodes = 11
-  # model.params.test_freq = 10
-  # model.env.test_trials_per_obj = 1
-  # model.env.max_episode_steps = 20
   # model.params.wandb_freq_s = 5
   # model.env.mj.set.action_motor_steps = 350
   # model.env.disable_rendering = False
-  # model.env.test_trials_per_obj = 1
-  # model.env.test_obj_limit = 10
-  # model.env.max_episode_steps = 20
-  # model.env.mj.set.step_num.set   
+  model.params.test_freq = 10
+  model.env.test_trials_per_obj = 1
+  model.env.test_obj_limit = 10
+  model.env.max_episode_steps = 20
 
   # # if we want to configure HER
   # model.params.use_HER = True
@@ -1198,21 +1225,21 @@ if __name__ == "__main__":
 
   # ----- load ----- #
 
-  # load
-  net = networks.DQN_3L60
-  model.init(net)
-  folderpath = "/home/luke/mymujoco/rl/models/dqn/08-06-22/"# + model.policy_net.name + "/"
-  foldername = "luke-laptop_13:14_A1"
-  model.device = "cuda"
-  model.load(id=None, folderpath=folderpath, foldername=foldername)
+  # # load
+  # net = networks.DQN_3L60
+  # model.init(net)
+  # folderpath = "/home/luke/mymujoco/rl/models/dqn/14-06-22/"
+  # foldername = "luke-PC_11:41_A4"
+  # # model.device = "cuda"
+  # model.load(id=2, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
-  # # train
-  # net = networks.DQN_3L60
+  # train
+  net = networks.DQN_3L60
   # model.env.disable_rendering = True
-  # model.env.mj.set.debug = False
-  # model.train(network=net)
+  model.env.mj.set.debug = False
+  model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
@@ -1238,16 +1265,17 @@ if __name__ == "__main__":
   # model = array_training_DQN.new_rewards(model)
 
   # test
-  model.env.mj.set.debug = True
-  model.env.disable_rendering = False
-  model.env.test_trials_per_obj = 1
+  # model.env.mj.set.debug = False
+  # model.env.disable_rendering = False
+  # model.env.test_trials_per_obj = 1
   # model.env.test_obj_limit = 10
-  model.env.max_episode_steps = 200
+  # model.env.max_episode_steps = 80
   # model.env.mj.set.step_num.set          (0,      70,   1)
   # model.env.mj.set.exceed_limits.set     (-0.005, True,   10)
   # model.env.mj.set.exceed_axial.set      (-0.005, True,   10,    3.0,  6.0,  -1)
   # model.env.mj.set.exceed_lateral.set    (-0.005, True,   10,    4.0,  6.0,  -1)
-  test_data = model.test(pause_each_episode=False)
+  # input("Press enter to begin")
+  # test_data = model.test(pause_each_episode=False)
 
   # # save results
   # test_report = model.create_test_report(test_data)
