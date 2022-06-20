@@ -12,10 +12,41 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N ArrayTrainDQN_20
+#$ -N ArrayTrainDQN_20_continued
 #$ -t 1-18
 
 # The code you want to run now goes here.
+
+# ----- inputs ----- #
+
+# defaults
+continue=false
+machine=cluster
+timestamp=$LUKE_JOB_SUBMIT_TIME
+
+# a colon after a flag character indicates it expects an argument
+while getopts "cm:t:" opt
+do
+   case "$opt" in
+      c ) continue=true ; echo Continue has been set to true ;;
+      m ) machine="$OPTARG" ; echo Machine has been specified as $machine ;;
+      t ) timestamp="$OPTARG" ; echo Timestamp has been specified as $timestamp ;;
+   esac
+done
+
+# if we are continuing training
+if [ $continue = true ]
+then
+    # on what machine are we continuing
+    if [ -z "$machine" ]
+    then
+        CONTINUE="continue"
+    else
+        CONTINUE="continue_${machine}"
+    fi
+fi
+
+# ----- start of script ----- #
 
 hostname
 date
@@ -30,6 +61,6 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/clusterlibs/mujoco/mujoco210/bin
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/clusterlibs/mujoco/mujoco-2.1.5/lib
 
 cd ~/mymujoco/rl
-python3 array_training_DQN.py ${SGE_TASK_ID} $LUKE_JOB_SUBMIT_TIME
+python3 array_training_DQN.py ${SGE_TASK_ID} $timestamp $CONTINUE
 
 date

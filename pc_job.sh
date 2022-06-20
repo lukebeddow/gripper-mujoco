@@ -4,7 +4,7 @@
 #   $ ./pc_job.sh -j "1 2 3"
 
 # to continue a training from array_training.py and train args 1,2,3 use:
-#   $ ./pc_job.sh -j "1 2 3" -c y -t 07-06-22-16:34 -m luke-PC
+#   $ ./pc_job.sh -j "1 2 3" -c -t 07-06-22-16:34 -m luke-PC
 #   
 
 helpFunction()
