@@ -316,6 +316,20 @@ void ObjectHandler::spawn_object(mjModel* model, mjData* data, int idx, QPos pos
   set_live(model, idx);
 }
 
+QPos ObjectHandler::get_live_qpos(mjModel* model, mjData* data)
+{
+  /* get the qpos of the live object */
+
+  if (live_object == -1)
+    throw std::runtime_error("ObjectHandler::get_live_qpos() failed as there is no live object\n");
+
+  QPos out;
+
+  out.update(model, data, qposadr[live_object]);
+
+  return out;
+}
+
 // print functions
 void ObjectHandler::print()
 {
@@ -607,6 +621,256 @@ Forces ObjectHandler::extract_forces(const mjModel* model, mjData* data)
   // x force observed to be -ve under object contact (compression)
   out.obj.palm_local = out.obj.palm.rotate3_by(r4.transpose());
   out.all.palm_local = out.all.palm.rotate3_by(r4.transpose());
+
+  return out;
+}
+
+Forces ObjectHandler::extract_forces_faster(const mjModel* model, mjData* data)
+{
+  /* a new version of extract_forces() which intends to be faster in the following:
+        - use raw c arrays instead of copying them into myNum
+          -> they are only copied at the end of the function for output purposes
+        - compute only the bare minimum calculations on contacts
+          -> ordinarily, every contact is gathered and then parsed
+          -> in this function, only relevant contacts are gathered
+  this function will be more error prone but aims to increase speed */
+
+  if (live_object == -1) {
+    Forces empty;
+    return empty;
+  }
+
+  // create arrays (matrices) to store mujoco contact data
+  mjtNum frame[9];            // contact frame rotation matrix wrt base (3x3)
+  mjtNum global_force_vec[6]; // contact forces/torques in global frame (6x1)
+  mjtNum local_force_vec[6];  // contact forces/torques in local frame (6x1)
+  mjtNum force_vec[3];        // local forces only (3x1)
+  mjtNum torque_vec[3];       // local torques only (3x1)
+  mjtNum force_global[3];     // global forces only (3x1)
+  mjtNum torque_global[3];    // global torques only (3x1)
+
+  /* create raw arrays which will then be converted to myNum and outputed,
+  these correspond to the fields of the Forces struct */
+
+  // contact vectors with the object
+  mjtNum obj_glob_sum[6] = {};
+  mjtNum obj_glob_f1[6] = {};
+  mjtNum obj_glob_f2[6] = {};
+  mjtNum obj_glob_f3[6] = {};
+  mjtNum obj_glob_palm[6] = {};
+  mjtNum obj_glob_gnd[6] = {};
+  mjtNum obj_loc_f1[3] = {};
+  mjtNum obj_loc_f2[3] = {};
+  mjtNum obj_loc_f3[3] = {};
+  mjtNum obj_loc_palm[3] = {};
+
+  // contact vectors taking into account everything
+  mjtNum all_glob_f1[6] = {};
+  mjtNum all_glob_f2[6] = {};
+  mjtNum all_glob_f3[6] = {};
+  mjtNum all_glob_palm[6] = {};
+  mjtNum all_loc_f1[3] = {};
+  mjtNum all_loc_f2[3] = {};
+  mjtNum all_loc_f3[3] = {};
+  mjtNum all_loc_palm[3] = {};
+
+  // contact vectors with the ground
+  mjtNum gnd_glob_f1[6] = {};
+  mjtNum gnd_glob_f2[6] = {};
+  mjtNum gnd_glob_f3[6] = {};
+  mjtNum gnd_loc_f1[3] = {};
+  mjtNum gnd_loc_f2[3] = {};
+  mjtNum gnd_loc_f3[3] = {};
+
+  // all the above need to be zeroed
+
+  // contact container, used for the 'check_involves' member function
+  Contact contact;
+
+  // loop through all of the contacts at this time step
+  for (int i = 0; i < data->ncon; i++) {
+
+    // check that the contact is not excluded
+    if (data->contact[i].exclude != 0) {
+      // 0: include, 1: in gap, 2: fused, 3: equality, 4: no dofs
+      continue;
+    }
+
+    // check that the contact involves the live object
+    auto name1 = mj_id2name(model, mjOBJ_GEOM, data->contact[i].geom1);
+    auto name2 = mj_id2name(model, mjOBJ_GEOM, data->contact[i].geom2);
+
+    // for testing: check the geom names
+    // std::printf("name1 is %s, name2 is %s, live_geom is %s\n", 
+    //   name1, name2, live_geom.c_str());
+
+    // if we have a null pointer (non-named geom)
+    if (not name1 or not name2) {
+      continue;
+    }
+
+    // convert to std::string
+    std::string strname1(name1);
+    std::string strname2(name2);
+
+    // save object names
+    contact.name1 = strname1;
+    contact.name2 = strname2;
+
+    // check which objects/geoms this contact involves
+    contact.check_involves(live_geom);
+
+    // is this contact with entities we care about?
+    if (not contact.with_any()) continue;
+
+    // get the contact frame wrt to world frame (needs to be transposed)
+    mju_transpose(frame, data->contact[i].frame, 3, 3);
+
+    // get the local forces in this contact (requires mj_rnePostConstraint(...))
+    mj_contactForce(model, data, i, local_force_vec);
+
+    // get the force/torque vectors - note they are reverse order [t; f]
+    force_vec[0] = local_force_vec[0];  // x force
+    force_vec[1] = local_force_vec[1];  // y force
+    force_vec[2] = local_force_vec[2];  // z force
+    torque_vec[0] = local_force_vec[3]; // x torque
+    torque_vec[1] = local_force_vec[4]; // y torque
+    torque_vec[2] = local_force_vec[5]; // z torque
+
+    // rotate force/torque vectors into the global frame
+    mju_mulMatVec(force_global, frame, force_vec, 3, 3);
+    mju_mulMatVec(torque_global, frame, torque_vec, 3, 3);
+
+    // save the global force vector with forces, then torques
+    global_force_vec[0] = force_global[0];
+    global_force_vec[1] = force_global[1];
+    global_force_vec[2] = force_global[2];
+    global_force_vec[3] = torque_global[0];
+    global_force_vec[4] = torque_global[1];
+    global_force_vec[5] = torque_global[2];
+
+    // if the contact involves the object
+    if (contact.with.object) {
+      // out.obj.sum += contact.global_force_vec;
+      mju_addTo(obj_glob_sum, global_force_vec, 6);
+      if (contact.with.finger1) 
+        // out.obj.finger1 += contact.global_force_vec;
+        mju_addTo(obj_glob_f1, global_force_vec, 6);
+      if (contact.with.finger2) 
+        // out.obj.finger2 += contact.global_force_vec;
+        mju_addTo(obj_glob_f2, global_force_vec, 6);
+      if (contact.with.finger3) 
+        // out.obj.finger3 += contact.global_force_vec;
+        mju_addTo(obj_glob_f3, global_force_vec, 6);
+      if (contact.with.palm) 
+        // out.obj.palm += contact.global_force_vec;
+        mju_addTo(obj_glob_palm, global_force_vec, 6);
+      if (contact.with.ground) 
+        // out.obj.ground += contact.global_force_vec;
+        mju_addTo(obj_glob_gnd, global_force_vec, 6);
+    }
+
+    // if the contact involves the gripper
+    if (contact.with.finger1) {
+      // out.all.finger1 += contact.global_force_vec;
+      mju_addTo(all_glob_f1, global_force_vec, 6);
+      if (contact.with.ground) {
+        // out.gnd.finger1 += contact.global_force_vec;
+        mju_addTo(gnd_glob_f1, global_force_vec, 6);
+      }
+    }
+    if (contact.with.finger2) {
+      // out.all.finger2 += contact.global_force_vec;
+      mju_addTo(all_glob_f2, global_force_vec, 6);
+      if (contact.with.ground) {
+        // out.gnd.finger2 += contact.global_force_vec;
+        mju_addTo(gnd_glob_f2, global_force_vec, 6);
+      }
+    }
+    if (contact.with.finger3) {
+      // out.all.finger3 += contact.global_force_vec;
+      mju_addTo(all_glob_f3, global_force_vec, 6);
+      if (contact.with.ground) {
+        // out.gnd.finger3 += contact.global_force_vec;
+        mju_addTo(gnd_glob_f3, global_force_vec, 6);
+      }
+    }
+    if (contact.with.palm) {
+      // out.all.palm += contact.global_force_vec;
+      mju_addTo(all_glob_palm, global_force_vec, 6);
+    }
+
+    // // for testing
+    // contact.print();
+    // contact.print_involves();
+  }
+
+  // get the rotation matrices for each finger body
+  mjtNum r1[9];
+  mjtNum r2[9];
+  mjtNum r3[9];
+  mjtNum r4[9];
+  mju_transpose(r1, &data->xmat[f1_idx * 9], 3, 3);
+  mju_transpose(r2, &data->xmat[f2_idx * 9], 3, 3);
+  mju_transpose(r3, &data->xmat[f3_idx * 9], 3, 3);
+  mju_transpose(r4, &data->xmat[pm_idx * 9], 3, 3);
+
+  // rotate the finger vectors from the world frame to the finger body frame
+  // x = axial force, y = tangential force (ie strain gauge force)
+  // these forces are observed to all be +ve under object contact (outwards bend)
+  // mju_mulMatMat(result, lhs, rhs, lhs.nr, lhs.nc, rhs.nc);
+  mju_mulMatMat(obj_loc_f1, r1, obj_glob_f1, 3, 3, 1);
+  mju_mulMatMat(obj_loc_f2, r2, obj_glob_f2, 3, 3, 1);
+  mju_mulMatMat(obj_loc_f3, r3, obj_glob_f3, 3, 3, 1);
+
+  mju_mulMatMat(all_loc_f1, r1, all_glob_f1, 3, 3, 1);
+  mju_mulMatMat(all_loc_f2, r2, all_glob_f2, 3, 3, 1);
+  mju_mulMatMat(all_loc_f3, r3, all_glob_f3, 3, 3, 1);
+
+  mju_mulMatMat(gnd_loc_f1, r1, gnd_glob_f1, 3, 3, 1);
+  mju_mulMatMat(gnd_loc_f2, r2, gnd_glob_f2, 3, 3, 1);
+  mju_mulMatMat(gnd_loc_f3, r3, gnd_glob_f3, 3, 3, 1);
+
+  // rotate the palm global force vector into the local frame
+  // x = axial force, y/z unimportant
+  // x force observed to be -ve under object contact (compression)
+  mju_mulMatMat(obj_loc_palm, r4, obj_glob_palm, 3, 3, 1);
+  mju_mulMatMat(all_loc_palm, r4, all_glob_palm, 3, 3, 1);
+
+  Forces out;     // we will output this struct of force information
+
+  // get net force on object
+  out.obj.net = get_object_net_force(model, data);
+
+  // copy across data for output
+  out.obj.sum.init(obj_glob_sum, 6, 1);
+  out.obj.finger1.init(obj_glob_f1, 6, 1);
+  out.obj.finger2.init(obj_glob_f2, 6, 1);
+  out.obj.finger3.init(obj_glob_f3, 6, 1);
+  out.obj.palm.init(obj_glob_palm, 6, 1);
+  out.obj.ground.init(obj_glob_gnd, 6, 1);
+  out.obj.finger1_local.init(obj_loc_f1, 3, 1);
+  out.obj.finger2_local.init(obj_loc_f2, 3, 1);
+  out.obj.finger3_local.init(obj_loc_f3, 3, 1);
+  out.obj.palm_local.init(obj_loc_palm, 3, 1);
+
+  out.all.finger1.init(all_glob_f1, 6, 1);
+  out.all.finger2.init(all_glob_f2, 6, 1);
+  out.all.finger3.init(all_glob_f3, 6, 1);
+  out.all.palm.init(all_glob_palm, 6, 1);
+  out.all.finger1_local.init(all_loc_f1, 3, 1);
+  out.all.finger2_local.init(all_loc_f2, 3, 1);
+  out.all.finger3_local.init(all_loc_f3, 3, 1);
+  out.all.palm_local.init(all_loc_palm, 3, 1);
+
+  out.gnd.finger1.init(gnd_glob_f1, 6, 1);
+  out.gnd.finger2.init(gnd_glob_f2, 6, 1);
+  out.gnd.finger3.init(gnd_glob_f3, 6, 1);
+  out.gnd.finger1_local.init(gnd_loc_f1, 3, 1);
+  out.gnd.finger2_local.init(gnd_loc_f2, 3, 1);
+  out.gnd.finger3_local.init(gnd_loc_f3, 3, 1);
+  
+  out.empty = false;
 
   return out;
 }

@@ -209,13 +209,65 @@ bool Gripper::step_to(Gripper target, int num)
 {
   /* steps towards a given gripper state */
 
+  /* old code
   for (int i = 0; i < num; i++) {
     if (step_to(target.step.x, target.step.y, target.step.z)) {
       return true;
     }
   }
+  */
 
-  return false;
+  bool finished = true;
+
+  // calculate distance to target position
+  int x_to_go = target.step.x - step.x;
+  int y_to_go = target.step.y - step.y;
+  int z_to_go = target.step.z - step.z;
+
+  // how many steps will we go
+  if (x_to_go < 0) {
+    if (x_to_go * -1 > num) {
+      x_to_go = -1 * num;
+      finished = false;
+    }
+  }
+  else {
+    if (x_to_go > num) {
+      x_to_go = num;
+      finished = false;
+    }
+  }
+
+  if (y_to_go < 0) {
+    if (y_to_go * -1 > num) {
+      y_to_go = -1 * num;
+      finished = false;
+    }
+  }
+  else {
+    if (y_to_go > num) {
+      y_to_go = num;
+      finished = false;
+    }
+  }
+
+  if (z_to_go < 0) {
+    if (z_to_go * -1 > num) {
+      z_to_go = -1 * num;
+      finished = false;
+    }
+  }
+  else {
+    if (z_to_go > num) {
+      z_to_go = num;
+      finished = false;
+    }
+  }
+  
+  // set the new position
+  set_xyz_step(step.x + x_to_go, step.y + y_to_go, step.z + z_to_go);
+
+  return finished;
 }
 
 bool Gripper::is_at_xyz_m(double x, double y, double z)

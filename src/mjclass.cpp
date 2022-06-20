@@ -505,7 +505,7 @@ void MjClass::sense_gripper_state()
   state_vec[2] = normalise_between(
     state_vec[2], luke::Gripper::z_min, luke::Gripper::z_max);
   state_vec[3] = normalise_between(
-    state_vec[3], luke::Target::base_lims_min[0], luke::Target::base_lims_max[0]);
+    state_vec[3], luke::Target::base_z_min, luke::Target::base_z_max);
 
   // save reading
   x_motor_position.add(state_vec[0]);
@@ -521,7 +521,7 @@ void MjClass::update_env()
   /* ----- get information from simulation ----- */
 
   // get information about the object from the simluation
-  env_.obj.qpos = luke::get_object_qpos();
+  env_.obj.qpos = luke::get_object_qpos(model, data);
   env_.grp.target = luke::get_gripper_target();
   luke::Forces forces = luke::get_object_forces(model, data);
   
@@ -1044,7 +1044,7 @@ void MjClass::spawn_object(int index, double xpos, double ypos)
 
   // spawn the object and save its start position
   luke::spawn_object(model, data, index, spawn_pos);
-  env_.start_qpos = luke::get_object_qpos();
+  env_.start_qpos = luke::get_object_qpos(model, data);
 
   // update everything for rendering
   forward();
@@ -1191,7 +1191,7 @@ void MjClass::input_real_data(std::vector<float> state_data,
   if (s_.base_state_sensor.in_use) {
 
     state_data[i] = normalise_between(
-      state_data[i], luke::Target::base_lims_min[0], luke::Target::base_lims_max[0]);
+      state_data[i], luke::Target::base_z_min, luke::Target::base_z_max);
     z_base_position.add(state_data[i]); ++i;
 
   }

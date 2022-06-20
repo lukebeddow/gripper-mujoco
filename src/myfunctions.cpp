@@ -214,6 +214,22 @@ struct JointSettings {
     std::vector<mjtNum> base;
   } qvel;
 
+  // qpos pointer for each joint
+  struct {
+    std::vector<mjtNum*> panda;
+    std::vector<mjtNum*> gripper;
+    std::vector<mjtNum*> finger;
+    std::vector<mjtNum*> base;
+  } to_qpos;
+
+  // qvel pointer for each joint
+  struct {
+    std::vector<mjtNum*> panda;
+    std::vector<mjtNum*> gripper;
+    std::vector<mjtNum*> finger;
+    std::vector<mjtNum*> base;
+  } to_qvel;
+
   // have the joints settled into equilibrium
   struct {
     std::array<std::array<int, 2>, sim.n_arr> finger1_arr {};
@@ -270,12 +286,16 @@ struct JointSettings {
     print_vec(qveladr.base, "base joint qvel addresses");
   }
   void print_qpos() {
+    std::cout << "Please note, qpos and qvel are no longer used. To see them for "
+      "debugging, please run the function update_state() before printing\n";
     print_vec(qpos.panda, "panda joint qpos");
     print_vec(qpos.gripper, "gripper joint qpos");
     print_vec(qpos.finger, "finger joint qpos");
     print_vec(qpos.base, "base joint qpos");
   }
   void print_qvel() {
+    std::cout << "Please note, qpos and qvel are no longer used. To see them for "
+      "debugging, please run the function update_state() before printing\n";
     print_vec(qvel.panda, "panda joint qvel");
     print_vec(qvel.gripper, "gripper joint qvel");
     print_vec(qvel.finger, "finger joint qvel");
@@ -353,16 +373,8 @@ void init_J(mjModel* model, mjData* data)
 
   if (debug) print_joint_names(model);
 
-  // resize state vectors
-  j_.qpos.panda.resize(j_.num.panda);
-  j_.qpos.gripper.resize(j_.num.gripper);
-  j_.qpos.finger.resize(j_.num.finger);
-  j_.qpos.base.resize(j_.num.base);
-
-  j_.qvel.panda.resize(j_.num.panda);
-  j_.qvel.gripper.resize(j_.num.gripper);
-  j_.qvel.finger.resize(j_.num.finger);
-  j_.qvel.base.resize(j_.num.base);
+  // resize state vectors and find qpos/qvel pointers
+  configure_qpos(model, data);
 
   // calculate constants
   j_.dim.segment_length = j_.dim.finger_length / float(j_.num.per_finger);
@@ -538,6 +550,62 @@ void get_joint_addresses(mjModel* model)
   }
 }
 
+void configure_qpos(mjModel* model, mjData* data)
+{
+  /* sort out qpos and qvel information */
+
+  // resize state vectors
+  j_.qpos.panda.resize(j_.num.panda);
+  j_.qpos.gripper.resize(j_.num.gripper);
+  j_.qpos.finger.resize(j_.num.finger);
+  j_.qpos.base.resize(j_.num.base);
+
+  j_.qvel.panda.resize(j_.num.panda);
+  j_.qvel.gripper.resize(j_.num.gripper);
+  j_.qvel.finger.resize(j_.num.finger);
+  j_.qvel.base.resize(j_.num.base);
+
+  // resize pointer vectors
+  j_.to_qpos.panda.resize(j_.num.panda);
+  j_.to_qpos.gripper.resize(j_.num.gripper);
+  j_.to_qpos.finger.resize(j_.num.finger);
+  j_.to_qpos.base.resize(j_.num.base);
+
+  j_.to_qvel.panda.resize(j_.num.panda);
+  j_.to_qvel.gripper.resize(j_.num.gripper);
+  j_.to_qvel.finger.resize(j_.num.finger);
+  j_.to_qvel.base.resize(j_.num.base);
+
+  // insert the pointers
+  if (j_.in_use.panda) {
+    for (int i = 0; i < j_.num.panda; i++) {
+      j_.to_qpos.panda[i] = &data->qpos[j_.qposadr.panda[i]];
+      j_.to_qvel.panda[i] = &data->qvel[j_.qveladr.panda[i]];
+    }
+  }
+
+  if (j_.in_use.gripper) {
+    for (int i = 0; i < j_.num.gripper; i++) {
+      j_.to_qpos.gripper[i] = &data->qpos[j_.qposadr.gripper[i]];
+      j_.to_qvel.gripper[i] = &data->qvel[j_.qveladr.gripper[i]];
+    }
+  }
+  
+  if (j_.in_use.finger) {
+    for (int i = 0; i < j_.num.finger; i++) {
+      j_.to_qpos.finger[i] = &data->qpos[j_.qposadr.finger[i]];
+      j_.to_qvel.finger[i] = &data->qvel[j_.qveladr.finger[i]];
+    }
+  }
+
+  if (j_.in_use.base) {
+    for (int i = 0; i < j_.num.base; i++) {
+      j_.to_qpos.base[i] = &data->qpos[j_.qposadr.base[i]];
+      j_.to_qvel.base[i] = &data->qvel[j_.qveladr.base[i]];
+    }
+  }
+}
+
 void keyframe(mjModel* model, mjData* data, std::string keyframe_name)
 {
   /* overload with keyframe name */
@@ -589,12 +657,6 @@ void before_step(mjModel* model, mjData* data)
   mju_zero(data->qfrc_applied, model->nv);
   mju_zero(data->xfrc_applied, 6 * model->nbody);
 
-  // // if we are using the UI slider for gripper target control
-  // if (UI_GRIPPER_SLIDER.in_use) {
-  //   target_.set_xyz_m_rad(
-  //     UI_GRIPPER_SLIDER.x, UI_GRIPPER_SLIDER.th, UI_GRIPPER_SLIDER.z
-  //   );
-  // }
 }
 
 void step(mjModel* model, mjData* data)
@@ -754,8 +816,8 @@ void control_gripper(const mjModel* model, mjData* data, Gripper& target)
 
   // input the control signals
   for (int i : j_.gripper.prismatic) {
-    u = (j_.qpos.gripper[i] - target.x) * j_.ctrl.kp.x 
-      + j_.qvel.gripper[i] * j_.ctrl.kd.x;
+    u = ((*j_.to_qpos.gripper[i]) - target.x) * j_.ctrl.kp.x 
+      + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.x;
     if (abs(u) > force_lim) {
       std::cout << "x frc limited from " << u << " to ";
       u = force_lim * sign(u);
@@ -765,8 +827,8 @@ void control_gripper(const mjModel* model, mjData* data, Gripper& target)
   }
 
   for (int i : j_.gripper.revolute) {
-    u = (j_.qpos.gripper[i] - target.th) * j_.ctrl.kp.y 
-      + j_.qvel.gripper[i] * j_.ctrl.kd.y;
+    u = ((*j_.to_qpos.gripper[i]) - target.th) * j_.ctrl.kp.y 
+      + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.y;
     if (abs(u) > force_lim) {
       std::cout << "y frc limited from " << u << " to ";
       u = force_lim * sign(u);
@@ -776,8 +838,8 @@ void control_gripper(const mjModel* model, mjData* data, Gripper& target)
   }
   
   for (int i : j_.gripper.palm) {
-    u = (j_.qpos.gripper[i] - target.z) * j_.ctrl.kp.z 
-      + j_.qvel.gripper[i] * j_.ctrl.kd.z;
+    u = ((*j_.to_qpos.gripper[i]) - target.z) * j_.ctrl.kp.z 
+      + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.z;
     if (abs(u) > force_lim) {
       std::cout << "z frc limited from " << u << " to ";
       u = force_lim * sign(u);
@@ -799,8 +861,8 @@ void control_base(const mjModel* model, mjData* data)
   }
 
   for (int i = 0; i < j_.num.base; i++) {
-    u = (j_.qpos.base[i] - target_.base[i]) * j_.ctrl.base_kp
-      + j_.qvel.base[i] * j_.ctrl.base_kd;
+    u = ((*j_.to_qpos.base[i]) - target_.base[i]) * j_.ctrl.base_kp
+      + (*j_.to_qvel.base[i]) * j_.ctrl.base_kd;
     data->ctrl[n + i] = -u;
   }
 }
@@ -808,6 +870,10 @@ void control_base(const mjModel* model, mjData* data)
 void update_state(const mjModel* model, mjData* data)
 {
   /* update our record of the model state */
+
+  /* this function has been replaced by accessing qpos and qvel directly via
+  their pointers. It can still be used for helpful printing and debugging
+  but should never be called in the main loop */
 
   if (j_.in_use.panda) {
     for (int i = 0; i < j_.num.panda; i++) {
@@ -847,8 +913,8 @@ void update_all(const mjModel* model, mjData* data)
 {
   /* update the state of everything in the simulation */
 
-  update_state(model, data);
-  update_objects(model, data);
+  // update_state(model, data); // NO LONGER NEEDED
+  // update_objects(model, data); // NO LONGER NEEDED
 
   if (j_.ctrl.stepper) {
     update_stepper(model, data);
@@ -878,14 +944,14 @@ void update_stepper(const mjModel* model, mjData* data)
   }
 
   // extract the state of each finger
-  finger1_.set_xyz_m_rad(j_.qpos.gripper[0], j_.qpos.gripper[1], j_.qpos.gripper[6]);
-  finger2_.set_xyz_m_rad(j_.qpos.gripper[2], j_.qpos.gripper[3], j_.qpos.gripper[6]);
-  finger3_.set_xyz_m_rad(j_.qpos.gripper[4], j_.qpos.gripper[5], j_.qpos.gripper[6]);
+  finger1_.set_xyz_m_rad(*j_.to_qpos.gripper[0], *j_.to_qpos.gripper[1], *j_.to_qpos.gripper[6]);
+  finger2_.set_xy_m_rad(*j_.to_qpos.gripper[2], *j_.to_qpos.gripper[3]);
+  finger3_.set_xy_m_rad(*j_.to_qpos.gripper[4], *j_.to_qpos.gripper[5]);
 
-  // next we will check for settling, only worth checking after steps made
-  if (stepped) {
-    check_settling();
-  }
+  // // next we will check for settling, only worth checking after steps made
+  // if (stepped) {
+  //   check_settling();
+  // }
 }
 
 void update_objects(const mjModel* model, mjData* data)
@@ -910,6 +976,8 @@ void update_objects(const mjModel* model, mjData* data)
 void check_settling()
 {
   /* check if the simulation has settled to steady state */
+
+  // THIS FUNCTION IS CURRENTLY NOT CALLED
 
   static constexpr int n = j_.sim.n_arr;
 
@@ -1088,9 +1156,9 @@ bool move_base_target_m(double x, double y, double z)
   /* only z motion currently implemented */
   target_.base[0] += z;
 
-  // check limits: currently ONLY uses [0] for base z
-  double z_min = luke::Target::base_lims_min[0];
-  double z_max = luke::Target::base_lims_max[0];
+  // check limits, currently only z movements supported
+  double z_min = luke::Target::base_z_min;
+  double z_max = luke::Target::base_z_max;
 
   // check if we have gone outside the limits
   if (target_.base[0] > z_max) {
@@ -1469,7 +1537,7 @@ void spawn_object(mjModel* model, mjData* data, int idx, QPos pose)
   oh_.spawn_object(model, data, idx, pose);
 }
 
-QPos get_object_qpos()
+QPos get_object_qpos(mjModel* model, mjData* data)
 {
   /* returns the position of the live object in the simulation */
 
@@ -1486,14 +1554,18 @@ QPos get_object_qpos()
   // QPos test = get_object_qpos();
   // printf("qpos is xyz (%.3f, %.3f, %.3f)\n", test.x, test.y, test.z);
 
-  return oh_.qpos[oh_.live_object];
+  // old, when qpos was updated
+  // return oh_.qpos[oh_.live_object];
+
+  return oh_.get_live_qpos(model, data);
 }
 
 Forces get_object_forces(const mjModel* model, mjData* data)
 {
   /* get the contact forces on the live object */
 
-  return oh_.extract_forces(model, data);
+  // use the faster version of the extract_forces() function
+  return oh_.extract_forces_faster(model, data);
 }
 
 } // namespace luke

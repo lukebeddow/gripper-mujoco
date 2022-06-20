@@ -47,7 +47,7 @@ public:
 
   // hard gripper limits - user set
   constexpr static double xy_min =  50e-3;
-  constexpr static double xy_max = 140e-3;
+  constexpr static double xy_max = 135e-3;
   constexpr static double z_min = 0e-3;
   constexpr static double z_max = 160e-3;
 

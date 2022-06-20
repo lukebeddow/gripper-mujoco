@@ -64,6 +64,17 @@ struct ObjectHandler {
       bool ground;
     } with;
 
+    bool with_any() {
+      if (with.object or 
+          with.finger1 or 
+          with.finger2 or 
+          with.finger3 or
+          with.palm or 
+          with.ground) {
+        return true;
+      }
+      return false;
+    }
     bool involves(std::string idstr) {
       if (name1.substr(0, idstr.length()) == idstr or
           name2.substr(0, idstr.length()) == idstr) {
@@ -110,6 +121,7 @@ struct ObjectHandler {
   void reset_object(mjModel* model, mjData* data, int idx) ;
   void reset_live(mjModel* model, mjData* data);
   void spawn_object(mjModel* model, mjData* data, int idx, QPos pose);
+  QPos get_live_qpos(mjModel* model, mjData* data);
 
   // get object information
   myNum get_object_net_force(const mjModel* model, mjData* data);
@@ -117,6 +129,7 @@ struct ObjectHandler {
   myNum rotate_vector(myNum force_vec, double x_rot, double y_rot, double z_rot);
   double get_palm_force(const mjModel* model, mjData* data);
   Forces extract_forces(const mjModel* model, mjData* data);
+  Forces extract_forces_faster(const mjModel* model, mjData* data);
   bool check_contact_forces(const mjModel* model, mjData* data);
 
   // misc

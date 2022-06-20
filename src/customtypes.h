@@ -241,9 +241,11 @@ struct Target {
   std::array<double, 6> base {};      // target of base joints (only [0] used for z)
   std::array<double, 7> panda {};     // target for panda joints (never used)
 
-  // these two fields are NOT currently used anywhere, see: move_base_target_m()
-  static constexpr std::array<double, 6> base_lims_max {0.1, 1, 1, 1, 1, 1};
-  static constexpr std::array<double, 6> base_lims_min {-0.1, -1, -1, -1, -1, -1};
+  static constexpr double base_z_min = -0.1;
+  static constexpr double base_z_max = 0.1;
+
+  // static constexpr std::array<double, 6> base_lims_max {0.1, 1, 1, 1, 1, 1};
+  // static constexpr std::array<double, 6> base_lims_min {-0.1, -1, -1, -1, -1, -1};
   
   void reset() {
     end.reset();

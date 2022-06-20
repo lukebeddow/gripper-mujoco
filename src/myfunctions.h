@@ -43,6 +43,7 @@ void init_J(mjModel* model, mjData* data);
 void print_joint_names(mjModel* model);
 void get_joint_indexes(mjModel* model);
 void get_joint_addresses(mjModel* model);
+void configure_qpos(mjModel* model, mjData* data);
 void keyframe(mjModel* model, mjData* data, std::string keyframe_name);
 void keyframe(mjModel* model, mjData* data, int keyframe_index);
 void reset(mjModel* model, mjData* data);
@@ -96,7 +97,7 @@ void set_object_pose(mjData* data, int idx, QPos pose);
 void reset_object(mjModel* model, mjData* data);
 void spawn_object(mjModel* model, mjData* data, std::string name, QPos pose);
 void spawn_object(mjModel* model, mjData* data, int idx, QPos pose);
-QPos get_object_qpos();
+QPos get_object_qpos(mjModel* model, mjData* data);
 Forces get_object_forces(const mjModel* model, mjData* data);
 
 // other
