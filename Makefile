@@ -55,7 +55,7 @@ include buildsettings.mk
 # ----- compilation settings ----- #
 
 # define compiler flags and libraries
-COMMON = $(OPTIM) $(PROF) -std=c++11 -mavx -pthread -Wl,-rpath,'$$ORIGIN' $(DEFINE_VAR) \
+COMMON = $(OPTIM) -std=c++11 -mavx -pthread -Wl,-rpath,'$$ORIGIN' $(DEFINE_VAR) \
 		 -DLUKE_DEFAULTOBJECTS='"$(DEFAULT_OBJECTSET)"' \
 		 -I$(MUJOCO_PATH)/include \
 		 -I$(PYBIND_PATH)/include \
