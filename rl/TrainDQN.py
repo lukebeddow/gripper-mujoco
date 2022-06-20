@@ -10,6 +10,7 @@ from collections import namedtuple, deque
 from itertools import count
 from dataclasses import dataclass, asdict
 from copy import deepcopy
+import cProfile
 
 import wandb
 import torch
@@ -1200,7 +1201,7 @@ if __name__ == "__main__":
 
   use_wandb = False
   force_device = "cpu"
-  no_plot = False
+  no_plot = True
 
   model = TrainDQN(device=force_device, use_wandb=use_wandb, no_plot=no_plot)
 
@@ -1210,10 +1211,10 @@ if __name__ == "__main__":
   # model.params.wandb_freq_s = 5
   # model.env.mj.set.action_motor_steps = 350
   # model.env.disable_rendering = False
-  model.params.test_freq = 10
-  model.env.test_trials_per_obj = 1
-  model.env.test_obj_limit = 10
-  model.env.max_episode_steps = 20
+  # model.params.test_freq = 10
+  # model.env.test_trials_per_obj = 1
+  # model.env.test_obj_limit = 10
+  # model.env.max_episode_steps = 20
 
   # # if we want to configure HER
   # model.params.use_HER = True
@@ -1236,15 +1237,23 @@ if __name__ == "__main__":
   # ----- train ----- #
 
   # train
-  net = networks.DQN_3L60
-  # model.env.disable_rendering = True
-  model.env.mj.set.debug = False
-  model.train(network=net)
+  # net = networks.DQN_3L60
+  # # model.env.disable_rendering = True
+  # model.env.mj.set.debug = False
+  # model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
   # foldername = "luke-PC_A3_24-05-22-18:19"
   # model.continue_training(foldername, folderpath)
+
+  # ----- profile ----- #
+  net = networks.DQN_3L60
+  model.env.disable_rendering = True
+  model.env.mj.set.debug = False
+  model.params.num_episodes = 10
+  cProfile.run("model.train(network=net)", "/home/luke/mymujoco/rl/profile_results.txt")
+  exit()
 
   # ----- visualise ----- #
 
