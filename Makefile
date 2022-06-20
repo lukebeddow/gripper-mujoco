@@ -44,7 +44,7 @@ MODELDIR := /home/luke/gripper_repo_ws/src/gripper_v2/gripper_description/urdf/m
 
 # are we compiling in debug mode if so add symbols and turn off optimisations
 ifeq ($(filter debug, $(MAKECMDGOALS)), debug)
-OPTIM = -O0 -g
+OPTIM = -Og -g -pg
 else
 OPTIM = -O2
 endif
@@ -55,7 +55,7 @@ include buildsettings.mk
 # ----- compilation settings ----- #
 
 # define compiler flags and libraries
-COMMON = $(OPTIM) -std=c++11 -mavx -pthread -Wl,-rpath,'$$ORIGIN' $(DEFINE_VAR) \
+COMMON = $(OPTIM) $(PROF) -std=c++11 -mavx -pthread -Wl,-rpath,'$$ORIGIN' $(DEFINE_VAR) \
 		 -DLUKE_DEFAULTOBJECTS='"$(DEFAULT_OBJECTSET)"' \
 		 -I$(MUJOCO_PATH)/include \
 		 -I$(PYBIND_PATH)/include \
