@@ -55,6 +55,7 @@ class TrainDQN():
     # data logging settings
     save_freq: int = 1000
     test_freq: int = 1000
+    plot_freq_s: int = 60
     wandb_freq_s: int = 30
 
   Transition = namedtuple('Transition',
@@ -216,6 +217,7 @@ class TrainDQN():
       self.actions_done = 0
       self.episodes_done = 0
       self.last_log = 0
+      self.last_plot = 0
       # training data
       numpy_float = np.float32
       self.train_episodes = np.array([], dtype=np.int32)
@@ -295,8 +297,15 @@ class TrainDQN():
       axs.set_title(title, fontstyle="italic")
       axs.set(ylabel=ylabel)
 
-    def plot(self, plttitle=None):
-      """Plot a matplotlib figure"""
+    def plot(self, plttitle=None, plt_frequency=0):
+      """
+      Plot training results figures, pass a frequency to plot only if enough
+      time has elapsed
+      """
+
+      # if not enough time has elapsed since the last plot
+      if (self.last_plot + plt_frequency > time.time()):
+        return
 
       try:
         import matplotlib.pyplot as plt
@@ -423,88 +432,96 @@ class TrainDQN():
 
       plt.pause(0.001)
 
+      # save that we plotted
+      self.last_plot = time.time()
+
       return
 
-    def log_wandb(self, log_frequency):
+    def log_wandb(self, log_frequency=0):
+      """
+      Log data to weights and biases. Pass a frequency to only log if enough
+      time has elapsed since the last log
+      """
 
-      # if enough time has elapsed for another data upload
-      if (self.last_log + log_frequency < time.time()):
+      # if not enough time has elapsed since the last data upload
+      if (self.last_log + log_frequency > time.time()):
+        return
 
-        E = "Episode"
-        R = "Reward"
-        D = "Duration"
+      E = "Episode"
+      R = "Reward"
+      D = "Duration"
 
-        # create plots of raw reward and duration data
-        if self.plot_raw:
-          self.plot_wandb(self.train_episodes, self.train_rewards, E, R, "Raw rewards")
-          self.plot_wandb(self.train_episodes, self.train_durations, E, D, "Raw durations")
+      # create plots of raw reward and duration data
+      if self.plot_raw:
+        self.plot_wandb(self.train_episodes, self.train_rewards, E, R, "Raw rewards")
+        self.plot_wandb(self.train_episodes, self.train_durations, E, D, "Raw durations")
 
-        # create plots for a moving average of rewards and durations
-        if self.plot_moving_avg:
-          self.plot_wandb(self.avgR_episodes, self.avgR_rewards, E, R, 
-                          f"Rewards moving average ({self.moving_avg_num} samples)")
-          self.plot_wandb(self.avgR_episodes, self.avgR_durations, E, D, 
-                          f"Durations moving average ({self.moving_avg_num} samples)")
+      # create plots for a moving average of rewards and durations
+      if self.plot_moving_avg:
+        self.plot_wandb(self.avgR_episodes, self.avgR_rewards, E, R, 
+                        f"Rewards moving average ({self.moving_avg_num} samples)")
+        self.plot_wandb(self.avgR_episodes, self.avgR_durations, E, D, 
+                        f"Durations moving average ({self.moving_avg_num} samples)")
 
-        # create plots for a static average of rewards and durations
-        if self.plot_static_avg:
-          self.plot_wandb(self.avgS_episodes, self.avgS_rewards, E, R,
-                          f"Rewards static average ({self.static_avg_num} samples)")
-          self.plot_wandb(self.avgS_episodes, self.avgS_durations, E, D,
-                          f"Durations static average ({self.static_avg_num} samples)")
+      # create plots for a static average of rewards and durations
+      if self.plot_static_avg:
+        self.plot_wandb(self.avgS_episodes, self.avgS_rewards, E, R,
+                        f"Rewards static average ({self.static_avg_num} samples)")
+        self.plot_wandb(self.avgS_episodes, self.avgS_durations, E, D,
+                        f"Durations static average ({self.static_avg_num} samples)")
 
-        # plot the test time reward
-        if self.plot_test_raw:
-          self.plot_wandb(self.test_episodes, self.test_rewards, E, R, "Test rewards")
-          self.plot_wandb(self.test_episodes, self.test_durations, E, D, "Test durations")
-          
-        if self.plot_test_metrics:
-          # define performance metrics to examine
-          good_metrics = [
-            [self.avg_p_lifted, "% Lifted"],
-            [self.avg_p_contact, "% Contact"],
-            [self.avg_p_palm_force, "% Palm contact"]
-          ]
-          bad_metrics = [
-            [self.avg_p_exceed_axial, "% Exceed axial force"],
-            [self.avg_p_exceed_lateral, "% Exceed bending"],
-            [self.avg_p_exceed_palm, "% Exceed palm force"]
-          ]
+      # plot the test time reward
+      if self.plot_test_raw:
+        self.plot_wandb(self.test_episodes, self.test_rewards, E, R, "Test rewards")
+        self.plot_wandb(self.test_episodes, self.test_durations, E, D, "Test durations")
+        
+      if self.plot_test_metrics:
+        # define performance metrics to examine
+        good_metrics = [
+          [self.avg_p_lifted, "% Lifted"],
+          [self.avg_p_contact, "% Contact"],
+          [self.avg_p_palm_force, "% Palm contact"]
+        ]
+        bad_metrics = [
+          [self.avg_p_exceed_axial, "% Exceed axial force"],
+          [self.avg_p_exceed_lateral, "% Exceed bending"],
+          [self.avg_p_exceed_palm, "% Exceed palm force"]
+        ]
 
-          # create test results plots
-          wandb.log({"Test good performance metrics" : wandb.plot.line_series(
-            xs=[self.test_episodes for i in range(len(good_metrics))],
-            ys=[x[0] for x in good_metrics],
-            keys=[x[1] for x in good_metrics],
-            title="Test good performance metrics", xname="Training episodes"
-          )})
-          wandb.log({"Test bad performance metrics" : wandb.plot.line_series(
-            xs=[self.test_episodes for i in range(len(bad_metrics))],
-            ys=[x[0] for x in bad_metrics],
-            keys=[x[1] for x in bad_metrics],
-            title="Test bad performance metrics", xname="Training episodes"
-          )})
+        # create test results plots
+        wandb.log({"Test good performance metrics" : wandb.plot.line_series(
+          xs=[self.test_episodes for i in range(len(good_metrics))],
+          ys=[x[0] for x in good_metrics],
+          keys=[x[1] for x in good_metrics],
+          title="Test good performance metrics", xname="Training episodes"
+        )})
+        wandb.log({"Test bad performance metrics" : wandb.plot.line_series(
+          xs=[self.test_episodes for i in range(len(bad_metrics))],
+          ys=[x[0] for x in bad_metrics],
+          keys=[x[1] for x in bad_metrics],
+          title="Test bad performance metrics", xname="Training episodes"
+        )})
 
-        # create plots of success rate
-        if self.plot_success_rate:
-          # what metric are we using to determine success rate
-          if self.success_rate_metric == "stable height":
-            success_rate_vector = self.avg_stable_height
-          elif self.success_rate_metric == "target height":
-            success_rate_vector = self.avg_target_height
-          elif self.success_rate_metric == "lifted":
-            success_rate_vector = self.avg_lifted
-          elif self.success_rate_metric == "stable":
-            success_rate_vector = self.avg_stable
-          else:
-            print(f"{self.success_rate_metric} is not valid, Track used 'stable height' instead")
-            success_rate_vector = self.avg_stable_height
-          # plot
-          self.plot_wandb(self.test_episodes, success_rate_vector, E, "Success rate", 
-                          f"Success rate (metric: {self.success_rate_metric})")
+      # create plots of success rate
+      if self.plot_success_rate:
+        # what metric are we using to determine success rate
+        if self.success_rate_metric == "stable height":
+          success_rate_vector = self.avg_stable_height
+        elif self.success_rate_metric == "target height":
+          success_rate_vector = self.avg_target_height
+        elif self.success_rate_metric == "lifted":
+          success_rate_vector = self.avg_lifted
+        elif self.success_rate_metric == "stable":
+          success_rate_vector = self.avg_stable
+        else:
+          print(f"{self.success_rate_metric} is not valid, Track used 'stable height' instead")
+          success_rate_vector = self.avg_stable_height
+        # plot
+        self.plot_wandb(self.test_episodes, success_rate_vector, E, "Success rate", 
+                        f"Success rate (metric: {self.success_rate_metric})")
 
-        # finish by recording the last log time
-        self.last_log = time.time()
+      # finish by recording the last log time
+      self.last_log = time.time()
 
       return
 
@@ -658,7 +675,7 @@ class TrainDQN():
     if self.no_plot:
       return
 
-    self.track.plot(plttitle=pltname)
+    self.track.plot(plttitle=pltname, plt_frequency=self.params.plot_freq_s)
 
   def create_test_report(self, test_data, i_episode=None):
     """
@@ -683,20 +700,32 @@ class TrainDQN():
     # save all outputs in one place
     output_str = ""
 
-    # define the printing format
-    #              name    reward  steps   palm f  fing.f   Lft     Stb     oob     t.h     s.h     pLft   pCon   pPlmFrc  pXLim  pXAxial  pXlaT.  pXPalm
-    header_str = "{:<36} | {:<6} | {:<6} | {:<6} | {:<6} | {:<4} | {:<4} | {:<4} | {:<4} | {:<4} | {:<3} | {:<3} | {:<3} | {:<3} | {:<3} | {:<3} | {:<3}\n"
-    #              name     reward     steps      palm f     fing.f     Lft     Stb     oob     t.h     s.h     pLft       pCon       pPlmFrc    pXLim      pXAxial    pXlaT.     pXPalm
-    row_str =    "{:<36} | {:<6.3f} | {:<6.1f} | {:<6.3f} | {:<6.3f} | {:<4} | {:<4} | {:<4} | {:<4} | {:<4} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f}\n"
-    #              name     reward     steps      palm f     fing.f     Lft        Stb        oob        t.h        s.h        pLft       pCon       pPlmFrc    pXLim      pXAxial    pXlaT.     pXPalm
-    res_str =    "{:<37} | {:<6.3f} | {:<6.1f} | {:<6.3f} | {:<6.3f} | {:<4.2f} | {:<4.2f} | {:<4.2f} | {:<4.2f} | {:<4.2f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f} | {:<3.0f}\n"
+    # define the number of columns for the print out table and group them into styles
+    col_str = (
+        "{0} | " * 1 # name
+      + "{1} | " * 4 # float fields - reward, steps, palm f, fing.f
+      + "{2} | " * 5 # end conditions - Lft, Stb, oob, t.h, s.h
+      + "{3} | " * 7 # percentages - pLft, pCon, pPlmFrc, pXLim, pXAxial, pXlaT, pXPalm
+      + "\n"
+    )
+
+    # insert string formatting information for each column style
+    header_str = col_str.format("{:<36}", "{:<6}", "{:<4}", "{:<3}")
+    row_str = col_str.format("{:<36}", "{:<6.3f}", "{:<4}", "{:<3.0f}")
+    res_str = col_str.format("{:<36}", "{:<6.3f}", "{:<4.2f}", "{:<3.0f}")
+
+    # insert the names into the top of each column - notice the grouping of styles
     first_row = header_str.format(
-      "Object name", "Reward", "Steps", "Palm f", "Fing.f", "lft", "stb", "oob", "t.h", "s.h", "%Lt", "%Cn", "%PF", "%XL", "%XA", "%XT", "%XP"
+      "Object name", 
+      "Reward", "Steps", "Palm f", "Fing.f", 
+      "lft", "stb", "oob", "t.h", "s.h", 
+      "%Lt", "%Cn", "%PF", "%XL", "%XA", "%XT", "%XP"
     )
 
     # create intro text and column header text
     start_str = f"Starting test on {num_obj} objects, with {num_trials} trials each"
     if i_episode != None: start_str += f", after {i_episode} training steps"
+    else: start_str += ", before any training steps"
     start_str += "\n\n" + first_row
 
     output_str += start_str
@@ -718,7 +747,7 @@ class TrainDQN():
       # loop through the number of trials for each object
       for k in range(num_trials):
 
-        # add event counts for this object
+        # add together the event counts for this object
         obj_counter = self.env._add_events(obj_counter, test_data[j+k].cnt)
 
         # sum end of episode rewards for this set of trials
@@ -727,21 +756,25 @@ class TrainDQN():
       # calculate averages rewards for the set of trials
       avg_rewards.append(total_rewards / float(num_trials))
       
-      # calculate percentage of steps events were active
+      # calculate the percentage of steps that events were active
       obj_counter.calculate_percentage()
 
       # save all data in a string to output to a test summary text file
       obj_row = row_str.format(
+        # name x1
         names[-1], 
+        # float style x4
         avg_rewards[-1], 
         obj_counter.step_num.abs / float(num_trials),
         obj_counter.palm_force.last_value / float(num_trials),
         obj_counter.finger_force.last_value / float(num_trials),
+        # end state style x5
         obj_counter.lifted.last_value, 
         obj_counter.object_stable.last_value, 
         obj_counter.oob.last_value, 
         obj_counter.target_height.last_value, 
         obj_counter.stable_height.last_value,
+        # perentage style x7
         obj_counter.lifted.percent,
         obj_counter.object_contact.percent,
         obj_counter.palm_force.percent,
@@ -755,7 +788,7 @@ class TrainDQN():
 
       if print_out: print(obj_row)
 
-      # add to the total counter
+      # add these events to the total counter
       total_counter = self.env._add_events(total_counter, obj_counter)
 
       # reset the object counter
@@ -771,17 +804,21 @@ class TrainDQN():
     N = float(num_trials * num_obj)
 
     # add the overall averages to the test report string
-    end_str = res_str.format(
-      "\nOverall averages per object: ", 
+    end_str = "\n" + res_str.format(
+      # name x1
+      "Overall averages per object: ", 
+      # float style x4
       mean_reward, 
       total_counter.step_num.abs / N,
       total_counter.palm_force.last_value / N,
       total_counter.finger_force.last_value / N,
+      # end state style (averaged) x5
       total_counter.lifted.last_value / N, 
       total_counter.object_stable.last_value / N, 
       total_counter.oob.last_value / N, 
       total_counter.target_height.last_value / N, 
       total_counter.stable_height.last_value / N,
+      # percentage style x7
       total_counter.lifted.percent,
       total_counter.object_contact.percent,
       total_counter.palm_force.percent,
@@ -956,11 +993,11 @@ class TrainDQN():
 
         # plot to the screen
         if self.no_plot == False:
-          self.track.plot()
+          self.track.plot(plt_frequency=self.params.plot_freq_s)
 
         # save to wandb
         if self.use_wandb:
-          self.track.log_wandb(self.params.wandb_freq_s)
+          self.track.log_wandb(log_frequency=self.params.wandb_freq_s)
 
         # if using HER, wrap up the episode
         if self.params.use_HER:
@@ -1053,6 +1090,14 @@ class TrainDQN():
 
     # get the test data out
     test_data = self.env.test_trials
+
+    # plot to the screen
+    if self.no_plot == False:
+      self.track.plot() # guarantees data will be plotted, no frequency passed
+
+    # save to wandb
+    if self.use_wandb:
+      self.track.log_wandb() # guarantees data will be logged, no frequency passed
 
     if self.log_level > 0: print("Testing complete, finished", i_episode, "episodes")
 
