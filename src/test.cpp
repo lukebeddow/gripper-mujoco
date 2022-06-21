@@ -166,6 +166,7 @@ int main(int argc, char** argv)
   return 0;
 
   // precompiled settings
+  /* 20, 200, 20 -> initial time taken 52.6s */
   int num_episodes = 10;
   int step_cap = 30;
   int reload_rate = 2;
