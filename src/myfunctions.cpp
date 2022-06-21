@@ -978,6 +978,7 @@ void check_settling()
   /* check if the simulation has settled to steady state */
 
   // THIS FUNCTION IS CURRENTLY NOT CALLED
+  throw std::runtime_error("check_settling() function is not expecting to be called");
 
   static constexpr int n = j_.sim.n_arr;
 
