@@ -979,6 +979,7 @@ void check_settling()
 
   /* THIS FUNCTION IS CURRENTLY NOT CALLED AND WILL NOT WORK IF IT IS
   AS finger1_, finger2_, and finger3_ ARE NOT UPDATED EVER */
+  throw std::runtime_error("check_settling() function is not expecting to be called");
 
   static constexpr int n = j_.sim.n_arr;
 
