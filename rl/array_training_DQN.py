@@ -442,7 +442,7 @@ if __name__ == "__main__":
   """
 
   # key settings
-  use_wandb = True
+  use_wandb = False
   no_plot = True
   log_level = 1
 

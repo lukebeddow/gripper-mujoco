@@ -378,7 +378,7 @@ void MjClass::monitor_sensors()
   /* check all the sensors and take readings if possible */
 
   bool retrieved_forces = false;
-  luke::Forces forces;
+  luke::Forces_faster forces;
 
   // check the bending strain gauges
   if (s_.bending_gauge.ready_to_read(data->time)) {
@@ -407,7 +407,7 @@ void MjClass::monitor_sensors()
   if (s_.axial_gauge.ready_to_read(data->time)) {
 
     if (not retrieved_forces) {
-      forces = luke::get_object_forces(model, data);
+      forces = luke::get_object_forces_faster(model, data);
       retrieved_forces = true;
     }
 
@@ -436,7 +436,7 @@ void MjClass::monitor_sensors()
   if (s_.palm_sensor.ready_to_read(data->time)) {
 
     if (not retrieved_forces) {
-      forces = luke::get_object_forces(model, data);
+      forces = luke::get_object_forces_faster(model, data);
       retrieved_forces = true;
     }
 
@@ -523,7 +523,7 @@ void MjClass::update_env()
   // get information about the object from the simluation
   env_.obj.qpos = luke::get_object_qpos(model, data);
   env_.grp.target = luke::get_gripper_target();
-  luke::Forces forces = luke::get_object_forces(model, data);
+  luke::Forces_faster forces = luke::get_object_forces_faster(model, data);
   
   // // for testing
   // forces.print();

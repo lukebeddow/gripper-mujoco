@@ -181,7 +181,7 @@ public:
   bool update_x_th_z();
 
   // step towards a target
-  bool step_to(double xstep, double ystep, double zstep);
+  bool step_to(double xstep, double ystep, double zstep, int num = 1);
   bool step_to(Gripper target, int num);
   bool step_to_m_rad(double x, double th, double z, int num);
   bool step_to_m_rad(double x, double th, double z);

@@ -141,7 +141,7 @@ void ObjectHandler::remove_collisions(mjModel* model, mjData* data)
     }
 
     // turn the name to a string
-    std::string namestr(name1);
+    std::string namestr(name1); 
 
     // if it is the ground geom, set to 11 (already at 01)
     if (namestr == "ground_geom") {
@@ -367,6 +367,30 @@ myNum ObjectHandler::get_object_net_force(const mjModel* model, mjData* data)
 
   // create my mjtNum wrapper, nr=6, nc=1
   myNum out(F_swap, 6, 1);
+
+  // for testing
+  // out.print();
+
+  return out;
+}
+
+rawNum ObjectHandler::get_object_net_force_faster(const mjModel* model, mjData* data)
+{
+  /* get the net force in world frame on the live object */
+
+  if (live_object == -1) {
+    rawNum empty;
+    return empty;
+  }
+
+  // get the net forces (pointer encompasses whole array)
+  mjtNum* F = data->cfrc_ext + idx[live_object] * 6;
+
+  // cfrc_ext stores forces as [torque, force], so swap order
+  mjtNum F_swap[6] = { F[3], F[4], F[5], F[0], F[1], F[2] };
+
+  // create my mjtNum wrapper, nr=6, nc=1
+  rawNum out(F_swap, 6, 1);
 
   // for testing
   // out.print();
@@ -625,7 +649,7 @@ Forces ObjectHandler::extract_forces(const mjModel* model, mjData* data)
   return out;
 }
 
-Forces ObjectHandler::extract_forces_faster(const mjModel* model, mjData* data)
+Forces_faster ObjectHandler::extract_forces_faster(const mjModel* model, mjData* data)
 {
   /* a new version of extract_forces() which intends to be faster in the following:
         - use raw c arrays instead of copying them into myNum
@@ -636,7 +660,7 @@ Forces ObjectHandler::extract_forces_faster(const mjModel* model, mjData* data)
   this function will be more error prone but aims to increase speed */
 
   if (live_object == -1) {
-    Forces empty;
+    Forces_faster empty;
     return empty;
   }
 
@@ -709,13 +733,9 @@ Forces ObjectHandler::extract_forces_faster(const mjModel* model, mjData* data)
       continue;
     }
 
-    // convert to std::string
-    std::string strname1(name1);
-    std::string strname2(name2);
-
-    // save object names
-    contact.name1 = strname1;
-    contact.name2 = strname2;
+    // save object names (as std::string)
+    contact.name1 = name1;
+    contact.name2 = name2;
 
     // check which objects/geoms this contact involves
     contact.check_involves(live_geom);
@@ -837,10 +857,10 @@ Forces ObjectHandler::extract_forces_faster(const mjModel* model, mjData* data)
   mju_mulMatMat(obj_loc_palm, r4, obj_glob_palm, 3, 3, 1);
   mju_mulMatMat(all_loc_palm, r4, all_glob_palm, 3, 3, 1);
 
-  Forces out;     // we will output this struct of force information
+  Forces_faster out;     // we will output this struct of force information
 
   // get net force on object
-  out.obj.net = get_object_net_force(model, data);
+  out.obj.net = get_object_net_force_faster(model, data);
 
   // copy across data for output
   out.obj.sum.init(obj_glob_sum, 6, 1);

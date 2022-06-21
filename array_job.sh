@@ -1,8 +1,8 @@
 # These are flags you must include - Two memory and one runtime.
 # Runtime is either seconds or hours:min:sec (1day=24, 2days=48, 3days=72, 4days=96)
 
-#$ -l tmem=16G
-#$ -l h_vmem=16G
+#$ -l tmem=2G
+#$ -l h_vmem=2G
 #$ -l h_rt=71:59:0 
 
 # Some important notes
@@ -12,8 +12,8 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N ArrayTrainDQN_20_continued
-#$ -t 1-18
+#$ -N test_without_wandb
+#$ -t 1-6
 
 # The code you want to run now goes here.
 

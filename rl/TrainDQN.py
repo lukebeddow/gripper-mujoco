@@ -920,14 +920,13 @@ class TrainDQN():
     Perform one episode of training or testing
     """
 
-    # for debugging, show memory usage
-    if i_episode % 100 == 1 and not test:
+    # for debugging, show memory usage (heapy does not seem to be accurate)
+    if i_episode % 1000 == 1 and not test:
       theheap = guph.heap()
-      print("Heap total size is", theheap.size, "(", theheap.size / 10e6, "GB)")
-      print("The replay memory size is", asizeof.asizeof(self.memory), "B",
+      print("Heap total size is", theheap.size, "(", theheap.size / 1e6, "MB)")
+      print("The replay memory size is", asizeof.asizeof(self.memory) / 1e3, "kB",
         "with length", len(self.memory))
-      print("The environment size is", asizeof.asizeof(self.env), "B")
-      guph.heap()
+      print("The environment size is", asizeof.asizeof(self.env) / 1e3, "kB")
 
     # initialise environment and state
     obs = self.env.reset()
@@ -1253,13 +1252,13 @@ if __name__ == "__main__":
   # if we want to adjust parameters
   # model.log_level = 2
   # model.params.num_episodes = 11
+  # model.env.max_episode_steps = 20
   # model.params.wandb_freq_s = 5
   # model.env.mj.set.action_motor_steps = 350
   # model.env.disable_rendering = False
   # model.params.test_freq = 10
   # model.env.test_trials_per_obj = 1
   # model.env.test_obj_limit = 10
-  # model.env.max_episode_steps = 20
 
   # # if we want to configure HER
   # model.params.use_HER = True
@@ -1297,7 +1296,9 @@ if __name__ == "__main__":
   model.env.disable_rendering = True
   model.env.mj.set.debug = False
   model.params.num_episodes = 10
-  cProfile.run("model.train(network=net)", "/home/luke/mymujoco/rl/profile_results.txt")
+  cProfile.run("model.train(network=net)", "/home/luke/mymujoco/python_profile_results.xyz")
+  # in order to read profile results, run: $ python3 -m pstats /path/to/results.xyz
+  # do: $ sort cumtime OR $ sort tottime AND THEN $ stats
   exit()
 
   # ----- visualise ----- #

@@ -99,6 +99,7 @@ void spawn_object(mjModel* model, mjData* data, std::string name, QPos pose);
 void spawn_object(mjModel* model, mjData* data, int idx, QPos pose);
 QPos get_object_qpos(mjModel* model, mjData* data);
 Forces get_object_forces(const mjModel* model, mjData* data);
+Forces_faster get_object_forces_faster(const mjModel* model, mjData* data);
 
 // other
 gfloat verify_armadillo_gauge(const mjData* data, int finger,

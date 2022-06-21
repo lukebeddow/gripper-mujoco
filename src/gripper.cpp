@@ -155,74 +155,16 @@ void Gripper::print()
 
 }
 
-bool Gripper::step_to(double xstep, double ystep, double zstep)
+bool Gripper::step_to(double xstep, double ystep, double zstep, int num)
 {
-  /* steps each motor one step towards the desired step state. This function
-  should be called via an overload with more convenient units */
-
-  // std::cout << "(request, state) -> x: (" << xstep << ", " << step.x
-  //   << ") y: (" << ystep << ", " << step.y << ") z: (" << zstep
-  //   << ", " << step.z << ")\n";
-
-  bool finished = true;
-
-  if (xstep != step.x) {
-    (xstep > step.x) ? (step_x(1)) : (step_x(-1));
-    finished = false;
-  }
-
-  if (ystep != step.y) {
-    (ystep > step.y) ? (step_y(1)) : (step_y(-1));
-    finished = false;
-  }
-
-  if (zstep != step.z) {
-    (zstep > step.z) ? (step_z(1)) : (step_z(-1));
-    finished = false;
-  }
-
-  return finished;
-}
-
-bool Gripper::step_to_m_rad(double x, double th, double z)
-{
-  /* overload for making only a single step at a time */
-
-  return step_to_m_rad(x, th, z, 1);
-}
-
-bool Gripper::step_to_m_rad(double x, double th, double z, int num)
-{
-  /* steps each motor one step towards the desired state */
-
-  // std::printf("step_to_m_rad has been asked for (x, th, z) of (%.3f, %.3f, %.3f)\n",
-  //   x, th, z);
-
-  // get the steps of the desired state
-  Gripper temp;
-  temp.set_xyz_m_rad(x, th, z);
-
-  return step_to(temp, num);
-}
-
-bool Gripper::step_to(Gripper target, int num)
-{
-  /* steps towards a given gripper state */
-
-  /* old code
-  for (int i = 0; i < num; i++) {
-    if (step_to(target.step.x, target.step.y, target.step.z)) {
-      return true;
-    }
-  }
-  */
+  /* steps each motor num steps towards the desired step state */
 
   bool finished = true;
 
   // calculate distance to target position
-  int x_to_go = target.step.x - step.x;
-  int y_to_go = target.step.y - step.y;
-  int z_to_go = target.step.z - step.z;
+  int x_to_go = xstep - step.x;
+  int y_to_go = ystep - step.y;
+  int z_to_go = zstep - step.z;
 
   // how many steps will we go
   if (x_to_go < 0) {
@@ -268,6 +210,42 @@ bool Gripper::step_to(Gripper target, int num)
   set_xyz_step(step.x + x_to_go, step.y + y_to_go, step.z + z_to_go);
 
   return finished;
+}
+
+bool Gripper::step_to(Gripper target, int num)
+{
+  /* steps towards a given gripper state */
+
+  /* old code
+  for (int i = 0; i < num; i++) {
+    if (step_to(target.step.x, target.step.y, target.step.z)) {
+      return true;
+    }
+  }
+  */
+
+  return step_to(target.step.x, target.step.y, target.step.z, num);
+}
+
+bool Gripper::step_to_m_rad(double x, double th, double z)
+{
+  /* overload for making only a single step at a time */
+
+  return step_to_m_rad(x, th, z, 1);
+}
+
+bool Gripper::step_to_m_rad(double x, double th, double z, int num)
+{
+  /* steps each motor one step towards the desired state */
+
+  // std::printf("step_to_m_rad has been asked for (x, th, z) of (%.3f, %.3f, %.3f)\n",
+  //   x, th, z);
+
+  // get the steps of the desired state
+  Gripper temp;
+  temp.set_xyz_m_rad(x, th, z);
+
+  return step_to(temp, num);
 }
 
 bool Gripper::is_at_xyz_m(double x, double y, double z)

@@ -168,6 +168,152 @@ struct Forces {
 
 };
 
+struct Forces_faster {
+
+  /* Here we will save forces extracted from the simulation.
+
+  For the local finger frame: 
+    x = axial, y = tangential, z = lateral, all +ve with object contact
+
+  For the local palm frame:
+    x = axial, -ve with object contact
+  */
+
+  bool empty = false;
+
+  // forces applied on the object
+  struct Obj {
+
+    // global frame
+    rawNum net;           // net force on object, almost always [0,0,weight,0,0,0]
+    rawNum sum;           // sum of all contact forces, does not always = net or 0
+    rawNum finger1;
+    rawNum finger2;
+    rawNum finger3;
+    rawNum palm;
+    rawNum ground;
+
+    // forces felt from the object in their local frame
+    rawNum finger1_local;  
+    rawNum finger2_local;
+    rawNum finger3_local;
+    rawNum palm_local;
+
+    // need to initialise to zero to enable += running totals
+    Obj() : net(6,1), sum(6,1), finger1(6,1), finger2(6,1), finger3(6,1),
+            palm(6,1), ground(6,1), finger1_local(3,1), finger2_local(3,1),
+            finger3_local(3,1), palm_local(3,1) {}
+
+  } obj;
+
+  // all forces involved (excluding unnamed geoms!)
+  struct All {
+
+    // global frame
+    rawNum finger1;
+    rawNum finger2;
+    rawNum finger3;
+    rawNum palm;
+
+    // local frame
+    rawNum finger1_local;
+    rawNum finger2_local;
+    rawNum finger3_local;
+    rawNum palm_local;
+
+    // need to initialise to zero to enable += running totals
+    All() : finger1(6,1), finger2(6,1), finger3(6,1), palm(6,1), finger1_local(3,1),
+            finger2_local(3,1), finger3_local(3,1), palm_local(6,1) {}
+
+  } all;
+
+  // ground forces on gripper fingers
+  struct Gnd {
+
+    // global frame
+    rawNum finger1;
+    rawNum finger2;
+    rawNum finger3;
+
+    // local frame
+    rawNum finger1_local;
+    rawNum finger2_local;
+    rawNum finger3_local;
+
+    // need to initialise to zero to enable += running totals
+    Gnd() : finger1(6,1), finger2(6,1), finger3(6,1), finger1_local(3,1),
+            finger2_local(3,1), finger3_local(3,1) {}
+
+  } gnd;
+
+  void print() {
+    if (empty) { std::cout << "Cannot print forces - it is empty\n"; return; }
+    print_gnd_global();
+    print_gnd_local();    
+    print_obj_global();
+    print_obj_local();
+    print_all_global();
+    print_all_local();
+  }
+
+  void print_obj_global() {
+    if (empty) { std::cout << "Cannot print forces - it is empty\n"; return; }
+    std::cout << "Printing forces on object in global frame:\n";
+    std::cout << "net force (mag = " << obj.net.magnitude3() << "):\n"; obj.net.print();
+    std::cout << "sum force (mag = " << obj.sum.magnitude3() << "):\n"; obj.sum.print();
+    std::cout << "ground force (mag = " << obj.ground.magnitude3() << "):\n"; obj.ground.print();
+    std::cout << "finger1 force (mag = " << obj.finger1.magnitude3() << "):\n"; obj.finger1.print();
+    std::cout << "finger2 force (mag = " << obj.finger2.magnitude3() << "):\n"; obj.finger2.print();
+    std::cout << "finger3 force (mag = " << obj.finger3.magnitude3() << "):\n"; obj.finger3.print();
+    std::cout << "palm force (mag = " << obj.palm.magnitude3() << "):\n"; obj.palm.print();
+  }
+
+  void print_obj_local() {
+    if (empty) { std::cout << "Cannot print forces - it is empty\n"; return; }
+    std::cout << "Printing forces from object in local frames:\n";
+    std::cout << "finger1 local force (mag = " << obj.finger1_local.magnitude3() << "):\n"; obj.finger1_local.print();
+    std::cout << "finger2 local force (mag = " << obj.finger2_local.magnitude3() << "):\n"; obj.finger2_local.print();
+    std::cout << "finger3 local force (mag = " << obj.finger3_local.magnitude3() << "):\n"; obj.finger3_local.print();
+    std::cout << "palm local force (mag = " << obj.palm.magnitude3() << "):\n"; obj.palm_local.print();
+  }
+
+  void print_all_global() {
+    if (empty) { std::cout << "Cannot print forces - it is empty\n"; return; }
+    std::cout << "Printing forces from all named geoms in global frame:\n";
+    std::cout << "finger1 force (mag = " << all.finger1.magnitude3() << "):\n"; all.finger1.print();
+    std::cout << "finger2 force (mag = " << all.finger2.magnitude3() << "):\n"; all.finger2.print();
+    std::cout << "finger3 force (mag = " << all.finger3.magnitude3() << "):\n"; all.finger3.print();
+    std::cout << "palm force (mag = " << all.palm.magnitude3() << "):\n"; all.palm.print();
+  }
+
+  void print_all_local() {
+    if (empty) { std::cout << "Cannot print forces - it is empty\n"; return; }
+    std::cout << "Printing forces from all named geoms on the gripper fingers:\n";
+    std::cout << "finger1 local force (mag = " << all.finger1_local.magnitude3() << "):\n"; all.finger1_local.print();
+    std::cout << "finger2 local force (mag = " << all.finger2_local.magnitude3() << "):\n"; all.finger2_local.print();
+    std::cout << "finger3 local force (mag = " << all.finger3_local.magnitude3() << "):\n"; all.finger3_local.print();
+    std::cout << "palm local force (mag = " << all.palm.magnitude3() << "):\n"; all.palm_local.print();
+  }
+
+  void print_gnd_global() {
+    if (empty) { std::cout << "Cannot print forces - it is empty\n"; return; }
+    std::cout << "Printing forces from gnd named geoms in global frame:\n";
+    std::cout << "finger1 force (mag = " << gnd.finger1.magnitude3() << "):\n"; gnd.finger1.print();
+    std::cout << "finger2 force (mag = " << gnd.finger2.magnitude3() << "):\n"; gnd.finger2.print();
+    std::cout << "finger3 force (mag = " << gnd.finger3.magnitude3() << "):\n"; gnd.finger3.print();
+  }
+
+  void print_gnd_local() {
+    if (empty) { std::cout << "Cannot print forces - it is empty\n"; return; }
+    std::cout << "Printing forces from gnd named geoms in local frames:\n";
+    std::cout << "finger1 local force (mag = " << gnd.finger1_local.magnitude3() << "):\n"; gnd.finger1_local.print();
+    std::cout << "finger2 local force (mag = " << gnd.finger2_local.magnitude3() << "):\n"; gnd.finger2_local.print();
+    std::cout << "finger3 local force (mag = " << gnd.finger3_local.magnitude3() << "):\n"; gnd.finger3_local.print();
+ }
+
+};
+
+
 struct Gain {
 
   // gains for x,y,z motors

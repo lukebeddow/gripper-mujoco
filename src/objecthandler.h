@@ -125,11 +125,12 @@ struct ObjectHandler {
 
   // get object information
   myNum get_object_net_force(const mjModel* model, mjData* data);
+  rawNum get_object_net_force_faster(const mjModel* model, mjData* data);
   std::vector<Contact> get_all_contacts(const mjModel* model, mjData* data);
   myNum rotate_vector(myNum force_vec, double x_rot, double y_rot, double z_rot);
   double get_palm_force(const mjModel* model, mjData* data);
   Forces extract_forces(const mjModel* model, mjData* data);
-  Forces extract_forces_faster(const mjModel* model, mjData* data);
+  Forces_faster extract_forces_faster(const mjModel* model, mjData* data);
   bool check_contact_forces(const mjModel* model, mjData* data);
 
   // misc

@@ -195,7 +195,7 @@ int main(int argc, char** argv)
   // return 0;
 
   // precompiled settings
-  /* settings of 20, 200, 20 -> initial time taken 52.6s, newest 42.6s */
+  /* settings of 20, 200, 20 -> initial time taken 52.6s, newest 42.6s (both laptop times, newest PC is 45.0s*/
   int num_episodes = 20;
   int step_cap = 200;
   int reload_rate = 20;

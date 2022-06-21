@@ -943,10 +943,10 @@ void update_stepper(const mjModel* model, mjData* data)
     // std::cout << "wait-";
   }
 
-  // extract the state of each finger
-  finger1_.set_xyz_m_rad(*j_.to_qpos.gripper[0], *j_.to_qpos.gripper[1], *j_.to_qpos.gripper[6]);
-  finger2_.set_xy_m_rad(*j_.to_qpos.gripper[2], *j_.to_qpos.gripper[3]);
-  finger3_.set_xy_m_rad(*j_.to_qpos.gripper[4], *j_.to_qpos.gripper[5]);
+  // // extract the state of each finger - this is only used for check_settling(), NOT NEEDED
+  // finger1_.set_xyz_m_rad(*j_.to_qpos.gripper[0], *j_.to_qpos.gripper[1], *j_.to_qpos.gripper[6]);
+  // finger2_.set_xy_m_rad(*j_.to_qpos.gripper[2], *j_.to_qpos.gripper[3]);
+  // finger3_.set_xy_m_rad(*j_.to_qpos.gripper[4], *j_.to_qpos.gripper[5]);
 
   // // next we will check for settling, only worth checking after steps made
   // if (stepped) {
@@ -977,7 +977,8 @@ void check_settling()
 {
   /* check if the simulation has settled to steady state */
 
-  // THIS FUNCTION IS CURRENTLY NOT CALLED
+  /* THIS FUNCTION IS CURRENTLY NOT CALLED AND WILL NOT WORK IF IT IS
+  AS finger1_, finger2_, and finger3_ ARE NOT UPDATED EVER */
 
   static constexpr int n = j_.sim.n_arr;
 
@@ -1561,6 +1562,14 @@ QPos get_object_qpos(mjModel* model, mjData* data)
 }
 
 Forces get_object_forces(const mjModel* model, mjData* data)
+{
+  /* get the contact forces on the live object */
+
+  // use the faster version of the extract_forces() function
+  return oh_.extract_forces(model, data);
+}
+
+Forces_faster get_object_forces_faster(const mjModel* model, mjData* data)
 {
   /* get the contact forces on the live object */
 

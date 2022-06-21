@@ -408,11 +408,11 @@ namespace MjType
     struct Obj {
       std::string name;
       luke::QPos qpos;
-      luke::myNum finger1_force;
-      luke::myNum finger2_force;
-      luke::myNum finger3_force;
-      luke::myNum palm_force;
-      luke::myNum ground_force;
+      luke::rawNum finger1_force;
+      luke::rawNum finger2_force;
+      luke::rawNum finger3_force;
+      luke::rawNum palm_force;
+      luke::rawNum ground_force;
       float palm_axial_force;
       float avg_finger_force;
     } obj;
@@ -420,9 +420,9 @@ namespace MjType
     // track the state of the gripper
     struct Grp {
       luke::Gripper target;
-      luke::myNum finger1_force;
-      luke::myNum finger2_force;
-      luke::myNum finger3_force;
+      luke::rawNum finger1_force;
+      luke::rawNum finger2_force;
+      luke::rawNum finger3_force;
       float peak_finger_axial_force;
       float peak_finger_lateral_force;
     } grp;
