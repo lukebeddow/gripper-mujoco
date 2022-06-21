@@ -60,6 +60,11 @@ PYBIND11_MODULE(bind, m) {
     .def("get_n_actions", &MjClass::get_n_actions)
     .def("get_n_obs", &MjClass::get_n_obs)
 
+    // real life gripper functions
+    .def("get_finger_gauge_data", &MjClass::get_finger_gauge_data)
+    .def("input_real_data", &MjClass::input_real_data)
+    .def("get_real_observation", &MjClass::get_real_observation)
+
     // misc
     .def("forward", &MjClass::forward)
     .def("get_number_of_objects", &MjClass::get_number_of_objects)
@@ -121,6 +126,7 @@ PYBIND11_MODULE(bind, m) {
     .def("wipe_rewards", &MjType::Settings::wipe_rewards)
     .def("disable_sensors", &MjType::Settings::disable_sensors)
     .def("scale_rewards", &MjType::Settings::scale_rewards)
+    .def("set_use_normalisation", &MjType::Settings::set_use_normalisation)
 
     // use a macro to create code snippets for all of the settings
     #define XX(name, type, value) .def_readwrite(#name, &MjType::Settings::name)
@@ -589,6 +595,23 @@ PYBIND11_MODULE(bind, m) {
 
     .def(py::init<>())
     .def_readwrite("entries", &MjType::CurveFitData::entries)
+    ;
+  }
+
+  // classes to set gauge calibration
+  {py::class_<MjType::RealGaugeCalibrations::RealSensors>(m, "RealSensors")
+    .def(py::init<>())
+    .def_readwrite("g1", &MjType::RealGaugeCalibrations::RealSensors::g1)
+    .def_readwrite("g2", &MjType::RealGaugeCalibrations::RealSensors::g2)
+    .def_readwrite("g3", &MjType::RealGaugeCalibrations::RealSensors::g3)
+    .def_readwrite("palm", &MjType::RealGaugeCalibrations::RealSensors::palm)
+    ;
+  }
+
+  {py::class_<MjType::RealGaugeCalibrations>(m, "RealGaugeCalibrations")
+    .def_readwrite("offset", &MjType::RealGaugeCalibrations::offset)
+    .def_readwrite("scale", &MjType::RealGaugeCalibrations::scale)
+    .def_readwrite("norm", &MjType::RealGaugeCalibrations::norm)
     ;
   }
 

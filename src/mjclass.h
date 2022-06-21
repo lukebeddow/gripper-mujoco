@@ -60,6 +60,8 @@ namespace MjType
     float read_rate;        // rate in Hz which this sensor is read
     double last_read_time;  // time in seconds sensor was last read
 
+    bool use_normalisation = true; // are we using normalisation
+
     Sensor(bool in_use, float normalise, float read_rate)
       : in_use(in_use), normalise(normalise), read_rate(read_rate)
     {
@@ -77,6 +79,8 @@ namespace MjType
     float apply_normalisation(float value) 
     {
       /* normalise the given value from [-1 to +1] */
+
+      if (not use_normalisation) return value;
 
       if (in_use) {
         // bumper sensor only
@@ -382,10 +386,11 @@ namespace MjType
     void wipe_rewards();
     void disable_sensors();
     void scale_rewards(float scale); 
+    void set_use_normalisation(bool set_as);
 
   };
 
-  // data on the objects and environment
+  // data on the simulated objects and environment
   struct Env {
     
     // data that is not reset
@@ -435,6 +440,13 @@ namespace MjType
       cnt.reset();
     }
 
+  };
+
+  // data structure for real gripper data
+  struct Real {
+    std::vector<float> gauge1_since_last_read;
+    std::vector<float> gauge2_since_last_read;
+    std::vector<float> gauge3_since_last_read;
   };
 
   // info to give to python about simlulation
@@ -518,6 +530,17 @@ namespace MjType
 
   };
 
+  // calibration constants for gauge data
+  struct RealGaugeCalibrations {
+    /* applied as follows: g_out = (g_raw + offset) * scale */
+    struct RealSensors { float g1 {}, g2 {}, g3 {}, palm {}; };
+
+    RealSensors offset;
+    RealSensors scale;
+    RealSensors norm;
+
+  };
+
 }
 
 class MjClass
@@ -576,6 +599,9 @@ public:
   // reward goal (if using)
   MjType::Goal goal_;
 
+  // real gripper parameters
+  MjType::RealGaugeCalibrations calibrate_; 
+
   /* ----- variables that are reset ----- */
 
   // standard class variables
@@ -612,6 +638,9 @@ public:
   MjType::TestReport testReport_;
   MjType::CurveFitData curve_validation_data_;
 
+  // for using the real gripper
+  int samples_since_last_obs = 0;
+
   /* ----- member functions ----- */
 
   // constructors
@@ -632,6 +661,7 @@ public:
   bool render();
 
   // sensing
+  std::vector<float> get_finger_gauge_data();
   void monitor_sensors();
   void sense_gripper_state();
   void update_env();
@@ -660,6 +690,11 @@ public:
   float reward(std::vector<float> goal_vec, std::vector<float> event_vec);
   int get_n_actions();
   int get_n_obs();
+
+  // real world gripper functions
+  void input_real_data(std::vector<float> state_data, std::vector<float> sensor_data, 
+    float timestamp);
+  std::vector<float> get_real_observation();
 
   // misc
   void forward() { mj_forward(model, data); }
