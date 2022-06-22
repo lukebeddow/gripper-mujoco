@@ -470,7 +470,7 @@ if __name__ == "__main__":
 
   # define arguments and parse them
   parser = argparse.ArgumentParser()
-  parser.add_argument("-j")                      # job input number
+  parser.add_argument("-j", type=int)            # job input number
   parser.add_argument("-t", default=None)        # timestamp
   parser.add_argument("-m", default=None)        # machine
   parser.add_argument("-c", action="store_true") # continue training
