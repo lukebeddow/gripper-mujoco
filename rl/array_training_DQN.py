@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 import sys
-from time import sleep
 from datetime import datetime
 from TrainDQN import TrainDQN
 import networks
+import argparse
 
 def set_penalties(model, value, done=False, trigger=1):
   """
@@ -329,8 +329,9 @@ def apply_to_all_models(model):
   model.params.HER_k = 4
 
   # data logging
-  model.params.save_freq = 2_000
-  model.params.test_freq = 2_000
+  model.params.save_freq = 500
+  model.params.test_freq = 1_000
+  model.params.plot_freq_s = 300
   model.params.wandb_freq_s = 300
 
   # ensure debug mode is off
@@ -395,6 +396,7 @@ def apply_to_all_models(model):
   model.track.plot_test_metrics = True
   model.track.plot_success_rate = True
   model.track.success_rate_metric = "stable height"
+  model.track.plot_time_taken = True
 
   return model
 
@@ -413,63 +415,91 @@ def continue_training(model, run_name, group_name):
   model.continue_training(run_name, model.savedir + group_name + "/",
                           new_endpoint=new_endpoint)
 
-  # we are finished when training has finished
-  exit()
+def logging_job(model, run_name, group_name):
+  """
+  Log training data, either to wandb or plot it to screen, or both
+  """
+
+  print("Logging training in group:", group_name)
+  print("Logging training of run:", run_name)
+
+  model.load(folderpath=model.savedir + group_name + "/", foldername=run_name)
+  
+  # logging/plotting options
+  model.track.plot_raw = True
+  model.track.plot_moving_avg = False
+  model.track.plot_static_avg = True
+  model.track.plot_test_raw = False
+  model.track.plot_test_metrics = False
+  model.track.plot_success_rate = False
+  model.track.success_rate_metric = "stable height"
+  model.track.plot_time_taken = True
+  
+  model.log_wandb(force=True)
+  model.plot(force=True, hang=True)
 
 if __name__ == "__main__":
 
   """
-  This script should be called as follows:
+  This script should be called using the flags defined below:
 
-  Option A: start a series of trainings right now:
-    $ ./array_training_DQN.py <number> $(date +%d-%m-%y-%H:%M)
+  Required:
+    -j [ARG] job input number, one integer only
 
-  Option B: continue a series of trainings from a previous time:
-    $ ./array_training_DQN.py <number> <timestamp> <continue> 
+  Optional:
+    -t [ARG] timestamp in 'DD-MM-YY-HR:MN' format
+    -m [ARG] machine name for run eg 'cluster', 'luke-PC'
+    -c continue a previous training
+    -l logging job, log to weights and biases
+    -p logging job, plot graphs of training to screen
+    -n no weights and biases, disable live logging
 
-  where: <number> is used to specify what training regime the user wants. This
-         script saves this number as 'inputarg' and it is used with if...elif...
-         to determine what settings are used in the training.
-         <timestamp> is the training time in the format '%d-%m-%y-%H:%M' as
-         can be achieved with the linux 'date' command as seen above.
-         <continue> specifies if we are continouing a previous training. Leave
-         blank if not, otherwise use 'continue' or 'continue_${MACHINE}' to specify
-         the name of the machine in the original training
-
-  eg: ./array_training_DQN.py 2 $(date +%d-%m-%y-%H:%M)
-      ./array_training_DQN.py 5 22-06-2022-11:51 continue
-      ./array_training_DQN.py 4 14-02-2021-4:59 continue_luke-PC
+  Examples:
+    ./array_training_DQN.py -j 1
+    ./array_training_DQN.py -j 3 -t 12-05-22-09:42 -c -n
   """
 
-  # key settings
-  use_wandb = False
+  # key default settings
+  use_wandb = True
   no_plot = True
   log_level = 1
+  datestr = "%d-%m-%Y-%H:%M" # all date inputs must follow this format
 
   # print all the inputs we have received
   print("Script inputs are:", sys.argv[1:])
 
-  # extract input arguments
-  inputarg = int(sys.argv[1])
-  timestamp = sys.argv[2]
+  # define arguments and parse them
+  parser = argparse.ArgumentParser()
+  parser.add_argument("-j")                      # job input number
+  parser.add_argument("-t", default=None)        # timestamp
+  parser.add_argument("-m", default=None)        # machine
+  parser.add_argument("-c", action="store_true") # continue training
+  parser.add_argument("-l", action="store_true") # log to wandb job
+  parser.add_argument("-p", action="store_true") # plot to wandb job
+  parser.add_argument("-n", action="store_true") # no wandb logging
+  args = parser.parse_args()
 
-  # check if we are continuing a training
-  if len(sys.argv) > 3 and sys.argv[3][:8] == "continue":
-    resume_training = True
-    if len(sys.argv[3]) > 8: 
-      chosen_machine = sys.argv[3][9:]
-      if chosen_machine not in ["luke-PC", "cluster", "luke-laptop"]:
-        raise RuntimeError(f"chosen machine name not valid, you put: {chosen_machine}")
-    else: chosen_machine = None
-  else:
-    resume_training = False
+  # extract inputs
+  inputarg = args.j
+  timestamp = args.t if args.t else datetime.now().strftime(datestr)
+  machine_override = args.m
+  resume_training = args.c
+  log_wandb = args.l
+  log_plot = args.p
+  if args.n: use_wandb = False
+
+  # echo inputs
+  print("Input arg:", inputarg)
+  print("Timestamp is:", timestamp)
+  print("Machine override is:", machine_override)
+  print("Resume training is:", resume_training)
+  print("Use wandb is", use_wandb)
+  print("log_wandb is", log_wandb)
+  print("log_plot is", log_plot)
+  print()
 
   # save_suffix = f"A{inputarg}_{timestamp[-5:]}" # only include hr:min
   save_suffix = f"{timestamp[-5:]}_A{inputarg}" # only include hr:min
-
-  print("Input argument:", inputarg)
-  print("Timestamp is:", timestamp)
-  print("Resume training is:", resume_training)
 
   # create and configure the model to default
   model = TrainDQN(use_wandb=use_wandb, no_plot=no_plot, log_level=log_level)
@@ -483,14 +513,27 @@ if __name__ == "__main__":
   model.run_name = f"{model.machine}_{save_suffix}"
   model.group_name = timestamp[:8] # include only day-month-year
 
-  if resume_training and chosen_machine is not None:
-    model.run_name = f"{chosen_machine}_{save_suffix}"
+  if machine_override is not None:
+    model.run_name = f"{machine_override}_{save_suffix}"
+
+  print("Run group is:", model.group_name)
+  print("Run name is:", model.run_name)
+
+  # ----- SPECIAL JOB OPTIONS ----- #
 
   # if we are resuming training (currently can only resume on the SAME machine)
-  if resume_training: continue_training(model, model.run_name, model.group_name)
+  if resume_training: 
+    continue_training(model, model.run_name, model.group_name)
+    exit()
 
-  print("Run group name is:", model.group_name)
-  print("This run will be saved as:", model.run_name)
+  # if we are doing a logging job
+  if log_wandb or log_plot: 
+    model.no_plot = not log_plot
+    model.use_wandb = log_wandb
+    logging_job(model, model.run_name, model.group_name)
+    if log_plot:
+      input("Press enter to quit")
+    exit()
 
   # ----- BEGIN TRAININGS ----- #
 

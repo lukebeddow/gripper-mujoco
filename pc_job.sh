@@ -17,28 +17,32 @@ helpFunction()
    echo -e "\t -c continue previous training"
    echo -e "\t -m [ARG] machine, if continuing, on what machine eg -m luke-PC"
    echo -e "\t -t [ARG] timestamp in form dd-mm-yy-hr:mn eg -t 07-12-22-15:34"
+   echo -e "\t -n do not use weights and biases for logging live"
+   echo -e "\t -l logging job, log to weights and biases"
+   echo -e "\t -p logging job, plot graphs on screen"
    echo -e "\t -h print help information"
    exit 1 # exit script after printing help
 }
 
 # defaults
-continue=false
 machine=luke-PC
-timestamp=$(date +%d-%m-%y-%H:%M)
-
-# where to save terminal output to
-LOG_FOLDER=/home/luke/training_logs
+timestamp="$(date +%d-%m-%y-%H:%M)"
+FAKETTY=faketty
 
 # a colon after a flag character indicates it expects an argument
-while getopts "j:cm:t:h" opt
+while getopts "j:t:m:clpnfh" opt
 do
    case "$opt" in
-      j ) jobs="$OPTARG" ; echo Jobs input are $jobs ;;
-      c ) continue=true ; echo Continue has been set to true ;;
-      m ) machine="$OPTARG" ; echo Machine has been specified as $machine ;;
-      t ) timestamp="$OPTARG" ; echo Timestamp has been specified as $timestamp ;;
+      j ) jobs="$OPTARG" ; echo Jobs input are "$jobs" ;;
+      t ) timestamp="$OPTARG" ; echo Timestamp has been specified as "$timestamp" ;;
+      m ) machine="$OPTARG" ; MACHINE="-m $machine" ; echo Machine has been specified as "$machine" ;;
+      c ) CONTINUE="-c" ; echo Continue has been set to true ;;
+      l ) LOG_WANDB="-l" ; echo log_wandb has been set to true ;;
+      p ) LOG_PLOT="-p" ; echo log_plot has been set to true ;;
+      n ) NO_WANDB="-n" ; echo no_wandb has been set to true ;;
+      f ) FAKETTY=; echo faketty has been disabled ;;
       h ) helpFunction ;; # help flag
-    #   ? ) helpFunction ;; # print helpFunction in case parameter is non-existent
+      * ) echo Invalid flag received ; helpFunction ;;
    esac
 done
 
@@ -57,43 +61,41 @@ faketty() {
 # add mujoco to the shared library path
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/mujoco-2.1.5/lib
 
-# navigate to correct directory
-cd ~/mymujoco/rl
+# where to save terminal output to
+LOG_FOLDER=~/training_logs
 
-# if we are continuing training
-if [ $continue = true ]
-then
-    # on what machine are we continuing
-    if [ -z "$machine" ]
-    then
-        CONTINUE="continue"
-    else
-        CONTINUE="continue_${machine}"
-    fi
-fi
+# navigate to correct directory
+cd ~/mymujoco/rl || exit
 
 # extract the job indicies
 ARRAY_INDEXES=("$jobs")
 
 # echo information to the terminal
-echo -e "\nThe following jobs will be done:"
+echo -e "\nThe following jobs have been selected:"
 for I in ${ARRAY_INDEXES[@]}
 do
-    echo ${machine}_${timestamp}_A${I}
+    echo -e "${machine}_${timestamp}_A${I}"
 done
 
 # wrapper to catch ctrl+c and kill all background processes
 trap 'trap - SIGINT && kill 0' SIGINT
 
-echo Submitting jobs now
+echo -e "\nSubmitting jobs now"
 echo Saving logs to $LOG_FOLDER/
 
 for I in ${ARRAY_INDEXES[@]}
 do
-    JOB_NAME=${machine}_${timestamp}_A${I}
-    faketty python3 array_training_DQN.py $I $timestamp $CONTINUE \
-    > $LOG_FOLDER/$JOB_NAME.txt &
-    echo Submitted job: $JOB_NAME
+    JOB_NAME="${machine}_${timestamp}_A${I}"
+    $FAKETTY python3 array_training_DQN.py \
+        -j $I \
+        -t $timestamp \
+        $MACHINE \
+        $CONTINUE \
+        $NO_WANDB \
+        $LOG_WANDB \
+        $LOG_PLOT \
+        > "$LOG_FOLDER/$JOB_NAME.txt" &
+    echo Submitted job: "$JOB_NAME"
 done
 
 echo All jobs submitted

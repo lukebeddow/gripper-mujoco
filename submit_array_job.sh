@@ -12,6 +12,6 @@
 # echo commands
 echo Command line given arguments are: "$@"
 
-export LUKE_JOB_SUBMIT_TIME=$(date +%d-%m-%y-%H:%M)
+LUKE_JOB_SUBMIT_TIME=$(date +%d-%m-%y-%H:%M)
 
-qsub -V ~/mymujoco/array_job.sh "$@"
+qsub ~/mymujoco/array_job.sh -t $LUKE_JOB_SUBMIT_TIME "$@" 

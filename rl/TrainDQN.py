@@ -22,7 +22,14 @@ from env.MjEnv import MjEnv
 from ModelSaver import ModelSaver
 
 from guppy import hpy; guph = hpy()
-from pympler import muppy, asizeof
+from pympler import asizeof
+
+try:
+  import matplotlib.pyplot as plt
+  plt.ion() # needed for plotting multiple graphs
+except ModuleNotFoundError as e:
+  print("matplotlib module not found, any attempt to plot will fail")
+  print(e)
 
 class TrainDQN():
   """
@@ -55,7 +62,7 @@ class TrainDQN():
     # data logging settings
     save_freq: int = 1000
     test_freq: int = 1000
-    plot_freq_s: int = 60
+    plot_freq_s: int = 30
     wandb_freq_s: int = 30
 
   Transition = namedtuple('Transition',
@@ -204,6 +211,7 @@ class TrainDQN():
       Class which tracks key data during training and logs to wandb
       """
       # parameters to set
+      numpy_float = np.float32
       self.moving_avg_num = 100
       self.static_avg_num = self.moving_avg_num
       self.plot_raw = False
@@ -213,13 +221,16 @@ class TrainDQN():
       self.plot_test_metrics = True
       self.plot_success_rate = True
       self.success_rate_metric = "stable height"
+      self.plot_time_taken = True
       # general
       self.actions_done = 0
       self.episodes_done = 0
       self.last_log = 0
       self.last_plot = 0
+      # utility data
+      self.raw_time_taken = np.array([], dtype=numpy_float)
+      self.avg_time_taken = np.array([], dtype=numpy_float)
       # training data
-      numpy_float = np.float32
       self.train_episodes = np.array([], dtype=np.int32)
       self.train_rewards = np.array([], dtype=numpy_float)
       self.train_durations = np.array([], dtype=np.int32)
@@ -271,19 +282,32 @@ class TrainDQN():
 
     def calc_static_average(self):
       """Average rewards and durations to reduce data points"""
+
+      # find number of points we can average
       num_avg_points = len(self.avgS_rewards) * self.static_avg_num
+
+      # if we points which have not been averaged yet
       if num_avg_points + self.static_avg_num < len(self.train_episodes):
+
+        # prepare to average rewards, durations, time taken
         unaveraged_r = self.train_rewards[num_avg_points:]
         unaveraged_d = self.train_durations[num_avg_points:]
+        unaveraged_t = self.raw_time_taken[num_avg_points:]
+
         num_points_to_avg = len(unaveraged_r) // self.static_avg_num
+
         for i in range(num_points_to_avg):
+          # find average values
           avg_e = self.train_episodes[
             num_avg_points + (i * self.static_avg_num) + (self.static_avg_num // 2)]
           avg_r = np.mean(unaveraged_r[i * self.static_avg_num : (i + 1) * self.static_avg_num])
           avg_d = np.mean(unaveraged_d[i * self.static_avg_num : (i + 1) * self.static_avg_num])
+          avg_t = np.mean(unaveraged_t[i * self.static_avg_num : (i + 1) * self.static_avg_num])
+          # append to average lists
           self.avgS_episodes = np.append(self.avgS_episodes, avg_e)
           self.avgS_rewards = np.append(self.avgS_rewards, avg_r)
           self.avgS_durations = np.append(self.avgS_durations, avg_d)
+          self.avg_time_taken = np.append(self.avg_time_taken, avg_t)
 
     def plot_wandb(self, xdata, ydata, xlabel, ylabel, title):
       # plot data to weights and biases
@@ -305,13 +329,6 @@ class TrainDQN():
 
       # if not enough time has elapsed since the last plot
       if (self.last_plot + plt_frequency > time.time()):
-        return
-
-      try:
-        import matplotlib.pyplot as plt
-      except ModuleNotFoundError as e:
-        print("matplotlib module not found in Track.plot(), returning")
-        print(e)
         return
 
       if self.fig is None:
@@ -342,6 +359,10 @@ class TrainDQN():
           fig6, axs6 = plt.subplots(1, 1)
           self.fig.append(fig6)
           self.axs.append([axs6, axs6]) # add paired to hold the pattern
+        if self.plot_time_taken:
+          fig7, axs7 = plt.subplots(1, 1)
+          self.fig.append(fig7)
+          self.axs.append([axs7, axs7]) # add paired to hold the pattern
 
       ind = 0
 
@@ -413,22 +434,28 @@ class TrainDQN():
         ind += 1
 
       if self.plot_success_rate:
-          # what metric are we using to determine success rate
-          if self.success_rate_metric == "stable height":
-            success_rate_vector = self.avg_stable_height
-          elif self.success_rate_metric == "target height":
-            success_rate_vector = self.avg_target_height
-          elif self.success_rate_metric == "lifted":
-            success_rate_vector = self.avg_lifted
-          elif self.success_rate_metric == "stable":
-            success_rate_vector = self.avg_stable
-          else:
-            print(f"{self.success_rate_metric} is not valid, Track used 'stable height' instead")
-            success_rate_vector = self.avg_stable_height
-          # plot
-          self.plot_matplotlib(self.test_episodes, success_rate_vector, "Success rate",
-                        f"Success rate (metric: {self.success_rate_metric})", self.axs[ind][0])
-          ind += 1        
+        # what metric are we using to determine success rate
+        if self.success_rate_metric == "stable height":
+          success_rate_vector = self.avg_stable_height
+        elif self.success_rate_metric == "target height":
+          success_rate_vector = self.avg_target_height
+        elif self.success_rate_metric == "lifted":
+          success_rate_vector = self.avg_lifted
+        elif self.success_rate_metric == "stable":
+          success_rate_vector = self.avg_stable
+        else:
+          print(f"{self.success_rate_metric} is not valid, Track used 'stable height' instead")
+          success_rate_vector = self.avg_stable_height
+        # plot
+        self.plot_matplotlib(self.test_episodes, success_rate_vector, "Success rate",
+                      f"Success rate (metric: {self.success_rate_metric})", self.axs[ind][0])
+        ind += 1   
+
+      # create plots for static average of time taken per step
+      if self.plot_time_taken:
+        self.plot_matplotlib(self.avgS_episodes, self.avg_time_taken, "Time per action / s",
+          f"Time per action static average ({self.static_avg_num} samples)", self.axs[ind][0])
+        ind += 1     
 
       plt.pause(0.001)
 
@@ -520,6 +547,11 @@ class TrainDQN():
         self.plot_wandb(self.test_episodes, success_rate_vector, E, "Success rate", 
                         f"Success rate (metric: {self.success_rate_metric})")
 
+      # create plots for static average of time taken per step
+      if self.plot_time_taken:
+        self.plot_wandb(self.avgS_episodes, self.avg_time_taken, E, "Time per action / s",
+                        f"Time per action static average ({self.static_avg_num} samples)")
+
       # finish by recording the last log time
       self.last_log = time.time()
 
@@ -553,6 +585,7 @@ class TrainDQN():
     self.log_level = 1 if log_level is None else log_level
 
     # wandb options
+    self.wandb_init_flag = False
     self.use_wandb = use_wandb if use_wandb is not None else True
     self.wandb_note = ""
     self.wandb_project = "luke-gripper-mujoco"
@@ -629,6 +662,7 @@ class TrainDQN():
       wandb.init(project=self.wandb_project, entity=self.wandb_entity, 
                  name=self.run_name, config=asdict(self.params),
                  notes=self.wandb_note, group=self.group_name)
+      self.wandb_init_flag = True
 
     # print important info
     print("Using model:", self.policy_net.name)
@@ -666,16 +700,41 @@ class TrainDQN():
       return torch.tensor([[rand_action]], device=self.device,
                           dtype=torch.long)
 
-  def plot(self, pltname=None):
+  def plot(self, force=None, hang=None):
     """
     Create a plot to track the training data
     """
 
-    # plt.pause() currently results in segfault
     if self.no_plot:
       return
 
-    self.track.plot(plttitle=pltname, plt_frequency=self.params.plot_freq_s)
+    freq = self.params.plot_freq_s if force is not True else 0
+
+    self.track.plot(plttitle=self.group_name + " / " + self.run_name, plt_frequency=freq)
+
+    if hang == True:
+      plt.ioff()
+      plt.show() # halts all program execution
+      plt.ion()
+
+  def log_wandb(self, force=None):
+    """
+    Log to weights and biases
+    """
+
+    if not self.use_wandb:
+      return
+
+    if not self.wandb_init_flag:
+      if self.use_wandb:
+        wandb.init(project=self.wandb_project, entity=self.wandb_entity, 
+                  name=self.run_name, config=asdict(self.params),
+                  notes=self.wandb_note, group=self.group_name)
+        self.wandb_init_flag = True
+
+    freq = self.params.wandb_freq_s if force is not True else 0
+
+    self.track.log_wandb(plt_frequency=freq)
 
   def create_test_report(self, test_data, i_episode=None):
     """
@@ -711,8 +770,8 @@ class TrainDQN():
 
     # insert string formatting information for each column style
     header_str = col_str.format("{:<36}", "{:<6}", "{:<4}", "{:<3}")
-    row_str = col_str.format("{:<36}", "{:<6.3f}", "{:<4}", "{:<3.0f}")
-    res_str = col_str.format("{:<36}", "{:<6.3f}", "{:<4.2f}", "{:<3.0f}")
+    row_str = col_str.format("{:<36}", "{:<6.2f}", "{:<4}", "{:<3.0f}")
+    res_str = col_str.format("{:<36}", "{:<6.2f}", "{:<4.2f}", "{:<3.0f}")
 
     # insert the names into the top of each column - notice the grouping of styles
     first_row = header_str.format(
@@ -936,10 +995,10 @@ class TrainDQN():
       goal = self.env._get_desired_goal()
       goal = self.to_torch(goal)
 
+    ep_start = time.time()
+
     # count up through actions
     for t in count():
-
-      t_step_start = time.time()
 
       if self.log_level > 1: print("Episode", i_episode, "action", t)
 
@@ -976,13 +1035,17 @@ class TrainDQN():
 
       obs = new_obs
 
-      t_step_end = time.time()
-
-      if self.log_level > 1: print("Time for action in TrainDQN", t_step_end - t_step_start, 
-                                    "seconds")
-
       # check if this episode is over and log if we aren't testing
       if done:
+
+        # finish timing and save data
+        ep_end = time.time()
+        time_per_step = (ep_end - ep_start) / float(t + 1)
+        self.track.raw_time_taken = np.append(self.track.raw_time_taken, time_per_step)
+
+        if self.log_level > 1:
+          print(f"Time for episode was {ep_end - ep_start:.3f}s"
+            f", time per step was {time_per_step * 1e3:.3f} ms")
 
         # if we are testing, no data is logged
         if test: break
@@ -992,11 +1055,11 @@ class TrainDQN():
 
         # plot to the screen
         if self.no_plot == False:
-          self.track.plot(plt_frequency=self.params.plot_freq_s)
+          self.plot()
 
         # save to wandb
         if self.use_wandb:
-          self.track.log_wandb(log_frequency=self.params.wandb_freq_s)
+          self.log_wandb()
 
         # if using HER, wrap up the episode
         if self.params.use_HER:
@@ -1092,11 +1155,11 @@ class TrainDQN():
 
     # plot to the screen
     if self.no_plot == False:
-      self.track.plot() # guarantees data will be plotted, no frequency passed
+      self.plot(force=True) # guarantees data will be plotted
 
     # save to wandb
     if self.use_wandb:
-      self.track.log_wandb() # guarantees data will be logged, no frequency passed
+      self.log_wandb(force=True) # guarantees data will be logged
 
     if self.log_level > 0: print("Testing complete, finished", i_episode, "episodes")
 
@@ -1180,6 +1243,14 @@ class TrainDQN():
     Load the most recent model, overwrite current networks
     """
 
+    # check if modelsaver is defined
+    if not hasattr(self, "modelsaver"):
+      if folderpath is not None:
+        print(f"load not given a modelsaver, making one from folderpath: {folderpath}")
+        self.modelsaver = ModelSaver(folderpath)
+      else:
+        raise RuntimeError("load not given a folderpath or a modelsaver")
+
     # load the model
     load_data = self.modelsaver.load(id=id, folderpath=folderpath, 
                                      foldername=foldername)
@@ -1189,6 +1260,12 @@ class TrainDQN():
     self.memory = load_data.memory
     self.env = load_data.env
     self.track = load_data.track
+
+    # delete later! for now enables backwards compatibility
+    try:
+      if self.track.plot_time_taken: pass
+    except:
+      self.track.plot_time_taken = False
       
     if load_data.extra != None:
       self.loaded_test_data = load_data.extra[0]
@@ -1252,13 +1329,27 @@ if __name__ == "__main__":
   # if we want to adjust parameters
   # model.log_level = 2
   # model.params.num_episodes = 11
-  # model.env.max_episode_steps = 20
+  model.env.max_episode_steps = 20
   # model.params.wandb_freq_s = 5
   # model.env.mj.set.action_motor_steps = 350
   # model.env.disable_rendering = False
   # model.params.test_freq = 10
   # model.env.test_trials_per_obj = 1
   # model.env.test_obj_limit = 10
+
+  # # plotting options
+  # model.no_plot = False
+  # model.params.plot_freq_s = 10
+  # model.track.moving_avg_num = 10
+  # model.track.static_avg_num = model.track.moving_avg_num
+  # model.track.plot_raw = True
+  # model.track.plot_moving_avg = False
+  # model.track.plot_static_avg = True
+  # model.track.plot_test_raw = False
+  # model.track.plot_test_metrics = False
+  # model.track.plot_success_rate = False
+  # model.track.success_rate_metric = "stable height"
+  # model.track.plot_time_taken = True
 
   # # if we want to configure HER
   # model.params.use_HER = True
@@ -1281,10 +1372,10 @@ if __name__ == "__main__":
   # ----- train ----- #
 
   # train
-  # net = networks.DQN_3L60
-  # # model.env.disable_rendering = True
-  # model.env.mj.set.debug = False
-  # model.train(network=net)
+  net = networks.DQN_3L60
+  model.env.disable_rendering = True
+  model.env.mj.set.debug = False
+  model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
@@ -1292,14 +1383,14 @@ if __name__ == "__main__":
   # model.continue_training(foldername, folderpath)
 
   # ----- profile ----- #
-  net = networks.DQN_3L60
-  model.env.disable_rendering = True
-  model.env.mj.set.debug = False
-  model.params.num_episodes = 10
-  cProfile.run("model.train(network=net)", "/home/luke/mymujoco/python_profile_results.xyz")
-  # in order to read profile results, run: $ python3 -m pstats /path/to/results.xyz
-  # do: $ sort cumtime OR $ sort tottime AND THEN $ stats
-  exit()
+  # net = networks.DQN_3L60
+  # model.env.disable_rendering = True
+  # model.env.mj.set.debug = False
+  # model.params.num_episodes = 10
+  # cProfile.run("model.train(network=net)", "/home/luke/mymujoco/python_profile_results.xyz")
+  # # in order to read profile results, run: $ python3 -m pstats /path/to/results.xyz
+  # # do: $ sort cumtime OR $ sort tottime AND THEN $ stats
+  # exit()
 
   # ----- visualise ----- #
 
