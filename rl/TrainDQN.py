@@ -734,7 +734,7 @@ class TrainDQN():
 
     freq = self.params.wandb_freq_s if force is not True else 0
 
-    self.track.log_wandb(plt_frequency=freq)
+    self.track.log_wandb(log_frequency=freq)
 
   def create_test_report(self, test_data, i_episode=None):
     """
