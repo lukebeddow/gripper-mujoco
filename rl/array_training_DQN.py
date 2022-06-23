@@ -3,6 +3,8 @@
 import sys
 from datetime import datetime
 from TrainDQN import TrainDQN
+from time import sleep
+from random import random
 import networks
 import argparse
 
@@ -487,6 +489,10 @@ if __name__ == "__main__":
   log_wandb = args.l
   log_plot = args.p
   if args.n: use_wandb = False
+
+  # seperate process for safety
+  sleep(inputarg)
+  sleep(random())
 
   # echo inputs
   print("Input arg:", inputarg)
