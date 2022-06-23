@@ -685,7 +685,7 @@ class TrainDQN():
 
     eps_threshold = (self.params.eps_end 
       + (self.params.eps_start - self.params.eps_end)
-      * (math.exp(-1. * decay_num / self.params.eps_decay)))
+      * (math.exp(-1. * decay_num / float(self.params.eps_decay))))
 
     # if we will not choose randomly
     if sample > eps_threshold or test:
@@ -1038,7 +1038,7 @@ class TrainDQN():
       # check if this episode is over and log if we aren't testing
       if done:
 
-        # finish timing and save data
+        # finish timing
         ep_end = time.time()
         time_per_step = (ep_end - ep_start) / float(t + 1)
 

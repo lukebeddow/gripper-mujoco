@@ -12,8 +12,8 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N test_without_wandb
-#$ -t 1-6
+#$ -N ArrayTrain_23
+#$ -t 1-18
 
 # The code you want to run now goes here.
 

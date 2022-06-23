@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from email.mime import base
 import sys
 from datetime import datetime
 from TrainDQN import TrainDQN
@@ -388,7 +389,7 @@ def apply_to_all_models(model):
   # model.env.mj.set.base_state_sensor.read_rate = -1
   model.env.mj.set.bending_gauge.in_use = True
 
-  # plotting options
+  # logging/plotting options
   model.track.moving_avg_num = 100
   model.track.static_avg_num = model.track.moving_avg_num
   model.track.plot_raw = False
@@ -439,6 +440,32 @@ def logging_job(model, run_name, group_name):
   
   model.log_wandb(force=True)
   model.plot(force=True, hang=True)
+
+def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=5, network=networks.DQN_3L60, 
+                      memory=10_000):
+  """
+  Runs a baseline training on the model
+  """
+
+  # set parameters
+  model.env.max_episode_steps = 250
+  model.params.learning_rate = lr
+  model.params.eps_decay = eps_decay
+  model.params.memory_replay = memory
+
+  # wandb notes
+  model.wandb_note += f"Network: {network.name}\n"
+  model.wandb_note += f"Learning rate {lr}\n"
+  model.wandb_note += f"eps_decay = {eps_decay}\n"
+  
+  # configure rewards and sensors
+  model = create_reward_function(model, style="mixed_v2", options=[])
+  model = add_sensors(model, num=sensors, sensor_mode=1, state_mode=0)
+  model = setup_HER(model, use=False)
+
+  # train and finish
+  model.train(network)
+  exit()
 
 if __name__ == "__main__":
 
@@ -543,170 +570,46 @@ if __name__ == "__main__":
 
   # ----- BEGIN TRAININGS ----- #
 
-  # baseline - SR=0.80 with nocuboid object set
-  if inputarg == 0:
-    # form the network
-    network = networks.DQN_3L60
-    model.wandb_note += f"Network: {network.name}\n"
-    # set parameters
-    model.params.optimiser = "adam" # already default
-    model.env.max_episode_steps = 250
-    model.params.learning_rate = 0.00001
-    model.wandb_note += "Learning rate 0.00001\n"
-    # configure rewards and sensors
-    model = create_reward_function(model, style="mixed_v2", options=[])
-    model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-    model = setup_HER(model, use=False)
-    model.train(network)
-    exit()
+  """ 
+  # How to perform a baseline training:
 
-  # form the network
-  network = networks.DQN_3L60
-  model.wandb_note += f"Network: {network.name}\n"
-  # set parameters
-  model.env.max_episode_steps = 250
-  # configure rewards and sensors
-  model = create_reward_function(model, style="mixed_v2", options=[])
-  model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-  model = setup_HER(model, use=False)
+  # varying 6x3 = 18 possible trainings, 1-18
+  lr_list = [1e-6, 5e-6, 1e-5, 5e-5, 1e-4, 1e-3]
+  ed_list = [1000, 2000, 4000]
 
-  # ----- LR=1e-6, EPS_DECAY=1000,2000,4000 ----- #
+  # lists are zero indexed so adjust input arg to 0-17
+  inputarg -= 1
 
-  if inputarg == 1:
-    model.params.learning_rate = 1e-6
-    model.wandb_note += "Learning rate 1e-6\n"
-    model.params.eps_decay = 1000
-    model.wandb_note += "eps_decay = 1000\n"
-    model.train(network)
+  # get the learning rate and epsilon decay for this training
+  this_lr = lr_list[inputarg // 3]
+  this_ed = ed_list[inputarg % 3]
 
-  elif inputarg == 2:
-    model.params.learning_rate = 1e-6
-    model.wandb_note += "Learning rate 1e-6\n"
-    model.params.eps_decay = 2000
-    model.wandb_note += "eps_decay = 2000\n"
-    model.train(network)
+  # perform the training with other parameters standard
+  baseline_training(lr=this_lr, ed=this_ed)
+  """
+  
+  # varying 5x5 = 25 possible trainings 1-25
+  sensors_list = [1, 2, 3, 4, 5]
+  memory_list = [20, 40, 80, 200, 500] # 40 episodes of memory = 10_000 memory (250 steps)
 
-  elif inputarg == 3:
-    model.params.learning_rate = 1e-6
-    model.wandb_note += "Learning rate 1e-6\n"
-    model.params.eps_decay = 4000
-    model.wandb_note += "eps_decay = 4000\n"
-    model.train(network)
+  # lists are zero indexed so adjust inputarg to 0-17
+  inputarg -= 1
 
-  # ----- LR=5e-6, EPS_DECAY=1000,2000,4000 ----- #
+  # get the sensors and memory size for this training
+  this_sensor = sensors_list[inputarg // 3]
+  this_memory = memory_list[inputarg % 3] * 250
 
-  elif inputarg == 4:
-    model.params.learning_rate = 5e-6
-    model.wandb_note += "Learning rate 5e-6\n"
-    model.params.eps_decay = 1000
-    model.wandb_note += "eps_decay = 1000\n"
-    model.train(network)
+  # make note
+  model.wandb_note += f"Sensors used: {sensors_list}\n"
+  model.wandb_note += f"Memory size used: {this_memory} ({this_memory / 250} episdoes)\n"
 
-  elif inputarg == 5:
-    model.params.learning_rate = 5e-6
-    model.wandb_note += "Learning rate 5e-6\n"
-    model.params.eps_decay = 2000
-    model.wandb_note += "eps_decay = 2000\n"
-    model.train(network)
+  # temporary options
+  model.params.save_freq = 1000
+  model.params.test_freq = 1000
+  model.params.num_episodes = 20_000
 
-  elif inputarg == 6:
-    model.params.learning_rate = 5e-6
-    model.wandb_note += "Learning rate 5e-6\n"
-    model.params.eps_decay = 4000
-    model.wandb_note += "eps_decay = 4000\n"
-    model.train(network)
-
-  # ----- LR=1e-5, EPS_DECAY=1000,2000,4000 ----- #
-
-  elif inputarg == 7:
-    model.params.learning_rate = 1e-5
-    model.wandb_note += "Learning rate 1e-5\n"
-    model.params.eps_decay = 1000
-    model.wandb_note += "eps_decay = 1000\n"
-    model.train(network)
-
-  elif inputarg == 8:
-    model.params.learning_rate = 1e-5
-    model.wandb_note += "Learning rate 1e-5\n"
-    model.params.eps_decay = 2000
-    model.wandb_note += "eps_decay = 2000\n"
-    model.train(network)
-
-  elif inputarg == 9:
-    model.params.learning_rate = 1e-5
-    model.wandb_note += "Learning rate 1e-5\n"
-    model.params.eps_decay = 4000
-    model.wandb_note += "eps_decay = 4000\n"
-    model.train(network)
-
-  # ----- LR=5e-5, EPS_DECAY=1000,2000,4000 ----- #
-
-  elif inputarg == 10:
-    model.params.learning_rate = 5e-5
-    model.wandb_note += "Learning rate 5e-5\n"
-    model.params.eps_decay = 1000
-    model.wandb_note += "eps_decay = 1000\n"
-    model.train(network)
-
-  elif inputarg == 11:
-    model.params.learning_rate = 5e-5
-    model.wandb_note += "Learning rate 5e-5\n"
-    model.params.eps_decay = 2000
-    model.wandb_note += "eps_decay = 2000\n"
-    model.train(network)
-
-  elif inputarg == 12:
-    model.params.learning_rate = 5e-5
-    model.wandb_note += "Learning rate 5e-5\n"
-    model.params.eps_decay = 4000
-    model.wandb_note += "eps_decay = 4000\n"
-    model.train(network)
-
-  # ----- LR=1e-4, EPS_DECAY=1000,2000,4000 ----- #
-
-  elif inputarg == 13:
-    model.params.learning_rate = 1e-4
-    model.wandb_note += "Learning rate 1e-4\n"
-    model.params.eps_decay = 1000
-    model.wandb_note += "eps_decay = 1000\n"
-    model.train(network)
-
-  elif inputarg == 14:
-    model.params.learning_rate = 1e-4
-    model.wandb_note += "Learning rate 1e-4\n"
-    model.params.eps_decay = 2000
-    model.wandb_note += "eps_decay = 2000\n"
-    model.train(network)
-
-  elif inputarg == 15:
-    model.params.learning_rate = 1e-4
-    model.wandb_note += "Learning rate 1e-4\n"
-    model.params.eps_decay = 4000
-    model.wandb_note += "eps_decay = 4000\n"
-    model.train(network)
-
-  # ----- LR=1e-3, EPS_DECAY=1000,2000,4000 ----- #
-
-  elif inputarg == 16:
-    model.params.learning_rate = 1e-3
-    model.wandb_note += "Learning rate 1e-3\n"
-    model.params.eps_decay = 1000
-    model.wandb_note += "eps_decay = 1000\n"
-    model.train(network)
-
-  elif inputarg == 17:
-    model.params.learning_rate = 1e-3
-    model.wandb_note += "Learning rate 1e-3\n"
-    model.params.eps_decay = 2000
-    model.wandb_note += "eps_decay = 2000\n"
-    model.train(network)
-
-  elif inputarg == 18:
-    model.params.learning_rate = 1e-3
-    model.wandb_note += "Learning rate 1e-3\n"
-    model.params.eps_decay = 4000
-    model.wandb_note += "eps_decay = 4000\n"
-    model.train(network)
+  # perform the training with other parameters standard
+  baseline_training(sensors=this_sensor, memory=this_memory)
 
   # ----- END ----- #
 
@@ -743,13 +646,13 @@ if __name__ == "__main__":
   #   model.wandb_note += "Learning rate 0.00001\n"
   #   model.train(network)
 
-  elif inputarg == 5:
-    model = create_reward_function(model, style="mixed_v2", options=["cap_neg", "terminate_early", "cap_pos"])
-    model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
-    model = setup_HER(model, use=False)
-    model.params.learning_rate = 0.00001
-    model.wandb_note += "Learning rate 0.00001\n"
-    model.train(network)
+  # elif inputarg == 5:
+  #   model = create_reward_function(model, style="mixed_v2", options=["cap_neg", "terminate_early", "cap_pos"])
+  #   model = add_sensors(model, num=5, sensor_mode=1, state_mode=0)
+  #   model = setup_HER(model, use=False)
+  #   model.params.learning_rate = 0.00001
+  #   model.wandb_note += "Learning rate 0.00001\n"
+  #   model.train(network)
 
   # exit()
 
