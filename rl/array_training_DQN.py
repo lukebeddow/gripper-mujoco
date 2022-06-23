@@ -426,12 +426,12 @@ def logging_job(model, run_name, group_name):
   model.load(folderpath=model.savedir + group_name + "/", foldername=run_name)
   
   # logging/plotting options
-  model.track.plot_raw = True
+  model.track.plot_raw = False
   model.track.plot_moving_avg = False
   model.track.plot_static_avg = True
-  model.track.plot_test_raw = False
-  model.track.plot_test_metrics = False
-  model.track.plot_success_rate = False
+  model.track.plot_test_raw = True
+  model.track.plot_test_metrics = True
+  model.track.plot_success_rate = True
   model.track.success_rate_metric = "stable height"
   model.track.plot_time_taken = True
   

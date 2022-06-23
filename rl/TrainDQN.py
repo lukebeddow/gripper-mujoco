@@ -1041,7 +1041,6 @@ class TrainDQN():
         # finish timing and save data
         ep_end = time.time()
         time_per_step = (ep_end - ep_start) / float(t + 1)
-        self.track.raw_time_taken = np.append(self.track.raw_time_taken, time_per_step)
 
         if self.log_level > 1:
           print(f"Time for episode was {ep_end - ep_start:.3f}s"
@@ -1051,6 +1050,7 @@ class TrainDQN():
         if test: break
 
         # save training data
+        self.track.raw_time_taken = np.append(self.track.raw_time_taken, time_per_step)
         self.track.log_episode(self.env.track.cumulative_reward, t + 1)
 
         # plot to the screen
@@ -1329,7 +1329,7 @@ if __name__ == "__main__":
   # if we want to adjust parameters
   # model.log_level = 2
   # model.params.num_episodes = 11
-  model.env.max_episode_steps = 20
+  # model.env.max_episode_steps = 20
   # model.params.wandb_freq_s = 5
   # model.env.mj.set.action_motor_steps = 350
   # model.env.disable_rendering = False
@@ -1361,21 +1361,21 @@ if __name__ == "__main__":
 
   # ----- load ----- #
 
-  # # load
-  # net = networks.DQN_3L60
-  # model.init(net)
-  # folderpath = "/home/luke/mymujoco/rl/models/dqn/14-06-22/"
-  # foldername = "luke-PC_11:41_A4"
-  # # model.device = "cuda"
-  # model.load(id=2, folderpath=folderpath, foldername=foldername)
+  # load
+  net = networks.DQN_3L60
+  model.init(net)
+  folderpath = "/home/luke/mymujoco/rl/models/dqn/15-06-22/"
+  foldername = "luke-PC_15:10_A11"
+  # model.device = "cuda"
+  model.load(id=5, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
-  # train
-  net = networks.DQN_3L60
-  model.env.disable_rendering = True
-  model.env.mj.set.debug = False
-  model.train(network=net)
+  # # train
+  # net = networks.DQN_3L60
+  # model.env.disable_rendering = True
+  # model.env.mj.set.debug = False
+  # model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
@@ -1411,23 +1411,23 @@ if __name__ == "__main__":
   # model = array_training_DQN.new_rewards(model)
 
   # test
-  # model.env.mj.set.debug = False
-  # model.env.disable_rendering = False
-  # model.env.test_trials_per_obj = 1
+  model.env.mj.set.debug = False
+  model.env.disable_rendering = False
+  model.env.test_trials_per_obj = 1
   # model.env.test_obj_limit = 10
   # model.env.max_episode_steps = 80
   # model.env.mj.set.step_num.set          (0,      70,   1)
   # model.env.mj.set.exceed_limits.set     (-0.005, True,   10)
   # model.env.mj.set.exceed_axial.set      (-0.005, True,   10,    3.0,  6.0,  -1)
   # model.env.mj.set.exceed_lateral.set    (-0.005, True,   10,    4.0,  6.0,  -1)
-  # input("Press enter to begin")
-  # test_data = model.test(pause_each_episode=False)
+  input("Press enter to begin")
+  test_data = model.test(pause_each_episode=False)
 
-  # # save results
-  # test_report = model.create_test_report(test_data)
-  # model.modelsaver.new_folder(label="DQN_testing")
-  # model.save_hyperparameters(labelstr=f"Loaded model path: {model.modelsaver.last_loadpath}\n")
-  # model.save(txtstring=test_report, txtlabel="test_results_demo")
+  # save results
+  test_report = model.create_test_report(test_data)
+  model.modelsaver.new_folder(label="DQN_testing")
+  model.save_hyperparameters(labelstr=f"Loaded model path: {model.modelsaver.last_loadpath}\n")
+  model.save(txtstring=test_report, txtlabel="test_results_demo")
   
 
 
