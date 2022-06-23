@@ -585,7 +585,7 @@ if __name__ == "__main__":
   this_ed = ed_list[inputarg % 3]
 
   # perform the training with other parameters standard
-  baseline_training(lr=this_lr, ed=this_ed)
+  baseline_training(model, lr=this_lr, ed=this_ed)
   """
   
   # varying 5x5 = 25 possible trainings 1-25
@@ -595,12 +595,15 @@ if __name__ == "__main__":
   # lists are zero indexed so adjust inputarg to 0-17
   inputarg -= 1
 
+  # we vary wrt sensors_list
+  x = len(sensors_list)
+
   # get the sensors and memory size for this training
-  this_sensor = sensors_list[inputarg // 3]
-  this_memory = memory_list[inputarg % 3] * 250
+  this_sensor = sensors_list[inputarg // x]
+  this_memory = memory_list[inputarg % x] * 250
 
   # make note
-  model.wandb_note += f"Sensors used: {sensors_list}\n"
+  model.wandb_note += f"Sensors used: {this_sensor}\n"
   model.wandb_note += f"Memory size used: {this_memory} ({this_memory / 250} episdoes)\n"
 
   # temporary options
@@ -609,7 +612,7 @@ if __name__ == "__main__":
   model.params.num_episodes = 20_000
 
   # perform the training with other parameters standard
-  baseline_training(sensors=this_sensor, memory=this_memory)
+  baseline_training(model, sensors=this_sensor, memory=this_memory)
 
   # ----- END ----- #
 
