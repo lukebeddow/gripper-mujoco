@@ -16,6 +16,8 @@
 hostname
 date
 
+cd
+
 # source python and export the library location
 source mypython/python3/bin/activate
 export LD_LIBRARY_PATH=/share/apps/python-3.6.9/lib:$LD_LIBRARY_PATH

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
-from email.mime import base
+# fix for cluster, numpy causes segfault
+import os
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+
 import sys
 from datetime import datetime
 from TrainDQN import TrainDQN
@@ -580,9 +583,12 @@ if __name__ == "__main__":
   # lists are zero indexed so adjust input arg to 0-17
   inputarg -= 1
 
+  # we vary wrt ed_list every every inputarg increment
+  x = len(ed_list)
+
   # get the learning rate and epsilon decay for this training
-  this_lr = lr_list[inputarg // 3]
-  this_ed = ed_list[inputarg % 3]
+  this_lr = lr_list[inputarg // x]           # vary every x
+  this_ed = ed_list[inputarg % x]            # vary every +1 & loop
 
   # perform the training with other parameters standard
   baseline_training(model, lr=this_lr, ed=this_ed)
@@ -595,12 +601,12 @@ if __name__ == "__main__":
   # lists are zero indexed so adjust inputarg to 0-17
   inputarg -= 1
 
-  # we vary wrt sensors_list
-  x = len(sensors_list)
+  # we vary wrt memory_list every inputarg increment
+  x = len(memory_list)
 
   # get the sensors and memory size for this training
-  this_sensor = sensors_list[inputarg // x]
-  this_memory = memory_list[inputarg % x] * 250
+  this_sensor = sensors_list[inputarg // x]       # vary every x
+  this_memory = memory_list[inputarg % x] * 250   # vary every +1 & loop
 
   # make note
   model.wandb_note += f"Sensors used: {this_sensor}\n"

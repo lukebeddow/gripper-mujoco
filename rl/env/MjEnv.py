@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-# add the env folder to path
 import os
 import pickle
 import sys
@@ -13,11 +12,10 @@ sys.path.insert(0, pathhere)
 from mjpy.bind import MjClass, EventTrack
 
 import time
-import gym
 import numpy as np
 from dataclasses import dataclass
 
-class MjEnv(gym.Env):
+class MjEnv():
 
   @dataclass
   class Track:
@@ -59,10 +57,8 @@ class MjEnv(gym.Env):
 
   def __init__(self):
     """
-    A mujoco environment wrapper for OpenAI gym
+    A mujoco environment
     """
-
-    super(MjEnv, self).__init__()
 
     # user defined parameters
     self.max_episode_steps = 100

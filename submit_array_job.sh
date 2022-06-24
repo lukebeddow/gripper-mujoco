@@ -12,6 +12,9 @@
 # echo commands
 echo Command line given arguments are: "$@"
 
-LUKE_JOB_SUBMIT_TIME=$(date +%d-%m-%y-%H:%M)
+echo -e "Command line given arguments are currently DISABLED\n"
 
-qsub ~/mymujoco/array_job.sh -t $LUKE_JOB_SUBMIT_TIME "$@" 
+export LUKE_JOB_SUBMIT_TIME=$(date +%d-%m-%y-%H:%M)
+# export OPENBLAS_NUM_THREADS=1
+
+qsub -V ~/mymujoco/array_job.sh -t $LUKE_JOB_SUBMIT_TIME

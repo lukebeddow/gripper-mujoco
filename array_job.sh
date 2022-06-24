@@ -1,8 +1,8 @@
 # These are flags you must include - Two memory and one runtime.
 # Runtime is either seconds or hours:min:sec (1day=24, 2days=48, 3days=72, 4days=96)
 
-#$ -l tmem=2G
-#$ -l h_vmem=2G
+#$ -l tmem=4G
+#$ -l h_vmem=4G
 #$ -l h_rt=71:59:0 
 
 # Some important notes
@@ -13,7 +13,7 @@
 #$ -S /bin/bash
 #$ -j y
 #$ -N ArrayTrain_23
-#$ -t 1-18
+#$ -t 1-25
 
 # The code you want to run now goes here.
 
@@ -34,7 +34,7 @@ cd ~/mymujoco/rl
 # run the script and pass in flags
 python3 array_training_DQN.py \
   -j ${SGE_TASK_ID} \
-  -m cluster \
-  "$@"
+  -t $LUKE_JOB_SUBMIT_TIME \
+  -n
 
 date
