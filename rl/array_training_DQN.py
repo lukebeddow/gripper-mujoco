@@ -414,6 +414,7 @@ def continue_training(model, run_name, group_name):
   print("Continuing training in group:", group_name)
   print("Continuing training of run:", run_name)
 
+  # set up the object set
   model.env.mj.model_folder_path = "/home/luke/mymujoco/mjcf"
 
   new_endpoint = 20000
@@ -505,6 +506,7 @@ if __name__ == "__main__":
   parser.add_argument("-j", type=int)            # job input number
   parser.add_argument("-t", default=None)        # timestamp
   parser.add_argument("-m", default=None)        # machine
+  parser.add_argument("-o", default=None)        # object set name
   parser.add_argument("-c", action="store_true") # continue training
   parser.add_argument("-l", action="store_true") # log to wandb job
   parser.add_argument("-p", action="store_true") # plot to wandb job
@@ -519,20 +521,22 @@ if __name__ == "__main__":
   log_wandb = args.l
   log_plot = args.p
   if args.n: use_wandb = False
-
-  # seperate process for safety
-  sleep(inputarg)
-  sleep(random())
+  object_set_override = args.o
 
   # echo inputs
   print("Input arg:", inputarg)
   print("Timestamp is:", timestamp)
   print("Machine override is:", machine_override)
   print("Resume training is:", resume_training)
+  print("Object set override is", object_set_override)
   print("Use wandb is", use_wandb)
   print("log_wandb is", log_wandb)
   print("log_plot is", log_plot)
   print()
+
+  # seperate process for safety
+  sleep(inputarg)
+  sleep(random())
 
   # save_suffix = f"A{inputarg}_{timestamp[-5:]}" # only include hr:min
   save_suffix = f"{timestamp[-5:]}_A{inputarg}" # only include hr:min
@@ -552,13 +556,17 @@ if __name__ == "__main__":
   if machine_override is not None:
     model.run_name = f"{machine_override}_{save_suffix}"
 
+  # override default object set
+  if object_set_override is not None:
+    model.env._load_object_set(name=object_set_override)
+
   print("Run group is:", model.group_name)
   print("Run name is:", model.run_name)
 
   # ----- SPECIAL JOB OPTIONS ----- #
 
   # if we are resuming training (currently can only resume on the SAME machine)
-  if resume_training: 
+  if resume_training:
     continue_training(model, model.run_name, model.group_name)
     exit()
 
@@ -587,8 +595,8 @@ if __name__ == "__main__":
   x = len(ed_list)
 
   # get the learning rate and epsilon decay for this training
-  this_lr = lr_list[inputarg // x]           # vary every x
-  this_ed = ed_list[inputarg % x]            # vary every +1 & loop
+  this_lr = lr_list[inputarg // x]           # vary every x steps
+  this_ed = ed_list[inputarg % x]            # vary every step & loop
 
   # perform the training with other parameters standard
   baseline_training(model, lr=this_lr, ed=this_ed)
@@ -605,7 +613,7 @@ if __name__ == "__main__":
   x = len(memory_list)
 
   # get the sensors and memory size for this training
-  this_sensor = sensors_list[inputarg // x]       # vary every x
+  this_sensor = sensors_list[inputarg // x]       # vary every x steps
   this_memory = memory_list[inputarg % x] * 250   # vary every +1 & loop
 
   # make note

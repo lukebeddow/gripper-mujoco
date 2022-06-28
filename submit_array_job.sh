@@ -12,8 +12,6 @@
 # echo commands
 echo Command line given arguments are: "$@"
 
-echo -e "Command line given arguments are currently DISABLED\n"
-
 export LUKE_JOB_SUBMIT_TIME=$(date +%d-%m-%y-%H:%M)
 # export OPENBLAS_NUM_THREADS=1
 

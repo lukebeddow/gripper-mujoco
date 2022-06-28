@@ -1120,6 +1120,10 @@ class TrainDQN():
     # update the target network at the end
     self.target_net.load_state_dict(self.policy_net.state_dict())
 
+    # log and plot now we are finished
+    self.log_wandb()
+    self.plot()
+
     # end of training
     if self.log_level > 0:
       print("Training complete, finished", i_episode, "episodes")

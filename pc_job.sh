@@ -20,6 +20,8 @@ helpFunction()
    echo -e "\t -n do not use weights and biases for logging live"
    echo -e "\t -l logging job, log to weights and biases"
    echo -e "\t -p logging job, plot graphs on screen"
+   echo -e "\t -s [ARG] staggered job, submit jobs in groups of ARG eg 3 at a time"
+   echo -e "\t -o [ARG] object set name to use for the jobs eg 'set1_nocuboid_525'"
    echo -e "\t -h print help information"
    exit 1 # exit script after printing help
 }
@@ -30,7 +32,7 @@ timestamp="$(date +%d-%m-%y-%H:%M)"
 FAKETTY=faketty
 
 # a colon after a flag character indicates it expects an argument
-while getopts "j:t:m:clpnfh" opt
+while getopts "j:t:m:clpnfs:o:h" opt
 do
    case "$opt" in
       j ) jobs="$OPTARG" ; echo Jobs input are "$jobs" ;;
@@ -41,12 +43,14 @@ do
       p ) LOG_PLOT="-p" ; echo log_plot has been set to true ;;
       n ) NO_WANDB="-n" ; echo no_wandb has been set to true ;;
       f ) FAKETTY=; echo faketty has been disabled ;;
+      s ) STAGGER="$OPTARG" ; echo Stagger has been set to true with rate $STAGGER ;;
+      o ) OBJECTS="-o $OPTARG" ; echo Object set override has been set as: $OPTARG ;;
       h ) helpFunction ;; # help flag
       * ) echo Invalid flag received ; helpFunction ;;
    esac
 done
 
-# if jobs are not specified
+# if jobs are not specified, throw an error
 if [ -z "$jobs" ]
 then
     echo Incorrect inputs, jobs to do must be specified with -j flag
@@ -83,6 +87,8 @@ trap 'trap - SIGINT && kill 0' SIGINT
 echo -e "\nSubmitting jobs now"
 echo Saving logs to $LOG_FOLDER/
 
+IND=0
+
 for I in ${ARRAY_INDEXES[@]}
 do
     JOB_NAME="${machine}_${timestamp}_A${I}"
@@ -94,8 +100,22 @@ do
         $NO_WANDB \
         $LOG_WANDB \
         $LOG_PLOT \
+        $OBJECTS \
         > "$LOG_FOLDER/$JOB_NAME.txt" &
     echo Submitted job: "$JOB_NAME"
+
+    # for submitting staggered jobs
+    IND=$((IND + 1))
+    if [ ! -z "$STAGGER" ]
+    then
+        if [ $(expr $IND % $STAGGER) == "0" ];
+        then
+            echo -e "Staggering now, waiting for all jobs to finish..."
+            wait
+            echo -e " ...finished\n"
+        fi
+    fi
+
 done
 
 echo All jobs submitted
