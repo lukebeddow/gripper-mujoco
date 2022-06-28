@@ -417,10 +417,14 @@ def continue_training(model, run_name, group_name):
   # set up the object set
   model.env.mj.model_folder_path = "/home/luke/mymujoco/mjcf"
 
-  new_endpoint = 20000
-  model.wandb_note += f"Continuing training until new endpoint of {new_endpoint} episodes\n"
+  # new_endpoint = 20_000
+  # model.wandb_note += f"Continuing training until new endpoint of {new_endpoint} episodes\n"
+
+  extra_episodes = 10_000
+  model.wandb_note += f"Continuing training with an extra {extra_episodes} episodes\n"
+  
   model.continue_training(run_name, model.savedir + group_name + "/",
-                          new_endpoint=new_endpoint)
+                          extra_episodes=extra_episodes)
 
 def logging_job(model, run_name, group_name):
   """

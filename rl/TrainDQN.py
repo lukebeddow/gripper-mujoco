@@ -1120,13 +1120,16 @@ class TrainDQN():
     # update the target network at the end
     self.target_net.load_state_dict(self.policy_net.state_dict())
 
-    # log and plot now we are finished
+    # save, log and plot now we are finished
+    self.save(txtstring=f"Training finished after {i_episode} episodes",
+              txtlabel="training_finished")
     self.log_wandb()
     self.plot()
 
     # end of training
     if self.log_level > 0:
       print("Training complete, finished", i_episode, "episodes")
+
     self.env.render()
     self.env.close()
 
@@ -1193,6 +1196,7 @@ class TrainDQN():
     param_str += "Network name: " + self.policy_net.name + "\n"
     param_str += "Save time and date: " + time_stamp + "\n"
     param_str += "Running on machine: " + self.machine + "\n"
+    param_str += "Object set in use: " + self.env.mj.object_set_name + "\n"
 
     # convert parameters to a string
     param_str += "\nParameters dataclass:\n"
@@ -1293,7 +1297,7 @@ class TrainDQN():
     return self.modelsaver.last_loadpath
   
   def continue_training(self, foldername, folderpath, new_endpoint=None,
-                        network=None):
+                        network=None, extra_episodes=None):
     """
     Load a model and then continue training it
     """
@@ -1308,6 +1312,12 @@ class TrainDQN():
     # update the new training episode target
     if new_endpoint != None:
       self.params.num_episodes = new_endpoint
+
+    # or add extra episodes on to what has already been done
+    elif extra_episodes != None:
+      self.params.num_episodes = self.track.episodes_done + extra_episodes
+
+    # or if we have done exactly our target episodes, double the target
     elif self.params.num_episodes == self.track.episodes_done:
       # if no target is set but we have finished, double the initial target
       self.params.num_episodes = 2 * self.track.episodes_done
