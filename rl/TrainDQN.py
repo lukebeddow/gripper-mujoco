@@ -1297,7 +1297,7 @@ class TrainDQN():
     return self.modelsaver.last_loadpath
   
   def continue_training(self, foldername, folderpath, new_endpoint=None,
-                        network=None, extra_episodes=None):
+                        network=None, extra_episodes=None, object_set=None):
     """
     Load a model and then continue training it
     """
@@ -1326,6 +1326,10 @@ class TrainDQN():
     # check if our training endpoint is already satisfied
     if self.params.num_episodes < self.track.episodes_done:
       raise RuntimeError("episodes done exceeds the params.num_episodes target")
+
+    # load a new object set if we are told to
+    if object_set is not None:
+      self.env._load_object_set(name=object_set)
 
     # begin the training at the given starting point (always uses most recent pickle)
     self.train(i_start=self.track.episodes_done)
@@ -1378,10 +1382,10 @@ if __name__ == "__main__":
   # load
   net = networks.DQN_3L60
   model.init(net)
-  folderpath = "/home/luke/mymujoco/rl/models/dqn/15-06-22/"
-  foldername = "luke-PC_15:10_A11"
+  folderpath = "/home/luke/mymujoco/rl/models/dqn/23-06-22/"
+  foldername = "luke-PC_17:31_A23"
   # model.device = "cuda"
-  model.load(id=5, folderpath=folderpath, foldername=foldername)
+  model.load(id=34, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 

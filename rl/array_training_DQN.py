@@ -406,7 +406,7 @@ def apply_to_all_models(model):
 
   return model
 
-def continue_training(model, run_name, group_name):
+def continue_training(model, run_name, group_name, object_set=None):
   """
   Continue the training of a model
   """
@@ -424,7 +424,7 @@ def continue_training(model, run_name, group_name):
   model.wandb_note += f"Continuing training with an extra {extra_episodes} episodes\n"
   
   model.continue_training(run_name, model.savedir + group_name + "/",
-                          extra_episodes=extra_episodes)
+                          extra_episodes=extra_episodes, object_set=object_set)
 
 def logging_job(model, run_name, group_name):
   """
@@ -562,6 +562,7 @@ if __name__ == "__main__":
 
   # override default object set
   if object_set_override is not None:
+    # this does not work for continue training, as that loads the old set
     model.env._load_object_set(name=object_set_override)
 
   print("Run group is:", model.group_name)
@@ -571,7 +572,8 @@ if __name__ == "__main__":
 
   # if we are resuming training (currently can only resume on the SAME machine)
   if resume_training:
-    continue_training(model, model.run_name, model.group_name)
+    continue_training(model, model.run_name, model.group_name,
+                      object_set=object_set_override)
     exit()
 
   # if we are doing a logging job
