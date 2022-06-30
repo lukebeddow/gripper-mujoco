@@ -314,7 +314,7 @@ def apply_to_all_models(model):
   """
 
   # set up the object set
-  model.env._load_object_set(name="set1_nocuboid_525")
+  model.env._load_object_set(name="set2_nocuboid_525")
 
   # number of steps in an episode
   model.env.max_episode_steps = 200

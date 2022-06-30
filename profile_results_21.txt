@@ -1,0 +1,946 @@
+Flat profile:
+
+Each sample counts as 0.01 seconds.
+  %   cumulative   self              self     total           
+ time   seconds   seconds    calls  ms/call  ms/call  name    
+ 40.00      0.10     0.10   490200     0.00     0.00  MjClass::monitor_sensors()
+ 12.00      0.13     0.03   490223     0.00     0.00  luke::update_stepper(mjModel_ const*, mjData_*)
+ 12.00      0.16     0.03   490200     0.00     0.00  luke::control_gripper(mjModel_ const*, mjData_*, luke::Gripper&)
+ 12.00      0.19     0.03    12255     0.00     0.00  luke::ObjectHandler::extract_forces_faster(mjModel_ const*, mjData_*)
+  8.00      0.21     0.02   490200     0.00     0.00  luke::control_base(mjModel_ const*, mjData_*)
+  4.00      0.22     0.01  1635975     0.00     0.00  luke::Gripper::update_xy()
+  4.00      0.23     0.01   490200     0.00     0.00  MjClass::step()
+  4.00      0.24     0.01   163392     0.00     0.00  luke::Gripper::step_to(luke::Gripper, int)
+  4.00      0.25     0.01    29412     0.00     0.00  bool arma::glue_polyfit::apply_noalias<double>(arma::Mat<double>&, arma::Col<double> const&, arma::Col<double> const&, unsigned long long)
+  0.00      0.25     0.00  2278008     0.00     0.00  void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char const*>(char const*, char const*, std::forward_iterator_tag)
+  0.00      0.25     0.00  1139645     0.00     0.00  void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char*>(char*, char*, std::forward_iterator_tag)
+  0.00      0.25     0.00   655529     0.00     0.00  luke::Gripper::update_z()
+  0.00      0.25     0.00   490223     0.00     0.00  luke::update_all(mjModel_ const*, mjData_*)
+  0.00      0.25     0.00   490200     0.00     0.00  luke::after_step(mjModel_*, mjData_*)
+  0.00      0.25     0.00   490200     0.00     0.00  luke::before_step(mjModel_*, mjData_*)
+  0.00      0.25     0.00   490200     0.00     0.00  luke::is_target_step()
+  0.00      0.25     0.00   490200     0.00     0.00  luke::is_target_reached()
+  0.00      0.25     0.00   490200     0.00     0.00  luke::step(mjModel_*, mjData_*)
+  0.00      0.25     0.00   490200     0.00     0.00  luke::control(mjModel_ const*, mjData_*)
+  0.00      0.25     0.00   245100     0.00     0.00  luke::rawNum::rawNum(luke::rawNum const&)
+  0.00      0.25     0.00   173078     0.00     0.00  decltype (__miter_base(({parm#1}.base)())) std::__miter_base<float*>(std::move_iterator<float*>)
+  0.00      0.25     0.00   135960     0.00     0.00  float* std::__niter_base<float*, std::vector<float, std::allocator<float> > >(__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >)
+  0.00      0.25     0.00    69216     0.00     0.00  float const* std::__niter_base<float const*, std::vector<float, std::allocator<float> > >(__gnu_cxx::__normal_iterator<float const*, std::vector<float, std::allocator<float> > >)
+  0.00      0.25     0.00    58824     0.00     0.00  arma::Mat<double>::init_warm(unsigned long long, unsigned long long)
+  0.00      0.25     0.00    34608     0.00     0.00  void std::vector<float, std::allocator<float> >::_M_range_insert<__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > > >(__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, std::forward_iterator_tag)
+  0.00      0.25     0.00    34608     0.00     0.00  __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > > std::vector<float, std::allocator<float> >::insert<__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, void>(__gnu_cxx::__normal_iterator<float const*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >)
+  0.00      0.25     0.00    34608     0.00     0.00  std::vector<float, std::allocator<float> >::vector(std::vector<float, std::allocator<float> > const&)
+  0.00      0.25     0.00    29412     0.00     0.00  bool arma::glue_polyfit::apply_direct<arma::subview<double>, arma::subview<double> >(arma::Mat<arma::subview<double>::elem_type>&, arma::Base<arma::subview<double>::elem_type, arma::subview<double> > const&, arma::Base<arma::subview<double>::elem_type, arma::subview<double> > const&, unsigned long long)
+  0.00      0.25     0.00    29412     0.00     0.00  luke::read_armadillo_gauge(mjData_ const*, int)
+  0.00      0.25     0.00    24720     0.00     0.00  MjType::Sensor::change_sample(luke::SlidingWindow<float>, float)
+  0.00      0.25     0.00    19776     0.00     0.00  void std::vector<float, std::allocator<float> >::_M_realloc_insert<float const&>(__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, float const&)
+  0.00      0.25     0.00    12255     0.00     0.00  luke::ObjectHandler::get_object_net_force_faster(mjModel_ const*, mjData_*)
+  0.00      0.25     0.00    12255     0.00     0.00  luke::get_object_forces_faster(mjModel_ const*, mjData_*)
+  0.00      0.25     0.00     9888     0.00     0.00  MjType::Sensor::raw_sample(luke::SlidingWindow<float>, float)
+  0.00      0.25     0.00     9804     0.00     0.00  normalise_between(float, float, float)
+  0.00      0.25     0.00     9804     0.00     0.00  luke::get_gauge_data(mjModel_ const*, mjData_*)
+  0.00      0.25     0.00     4902     0.00     0.00  luke::get_target_state()
+  0.00      0.25     0.00     4902     0.00     0.00  double const* std::__min_element<double const*, __gnu_cxx::__ops::_Iter_less_iter>(double const*, double const*, __gnu_cxx::__ops::_Iter_less_iter)
+  0.00      0.25     0.00     2472     0.00     0.00  luke::ObjectHandler::get_live_qpos(mjModel_*, mjData_*)
+  0.00      0.25     0.00     2472     0.00     0.00  luke::get_object_qpos(mjModel_*, mjData_*)
+  0.00      0.25     0.00     2472     0.00     0.00  MjClass::get_observation()
+  0.00      0.25     0.00     2451     0.00     0.00  calc_rewards(MjType::EventTrack&, MjType::Settings&)
+  0.00      0.25     0.00     2451     0.00     0.10  learning_step(MjClass&)
+  0.00      0.25     0.00     2451     0.00     0.00  update_events(MjType::EventTrack&, MjType::Settings&)
+  0.00      0.25     0.00     2451     0.00     0.00  luke::get_gripper_target()
+  0.00      0.25     0.00     2451     0.00     0.00  MjClass::set_action(int)
+  0.00      0.25     0.00     2451     0.00     0.00  MjClass::update_env()
+  0.00      0.25     0.00     2451     0.00     0.10  MjClass::action_step()
+  0.00      0.25     0.00     2451     0.00     0.00  MjClass::sense_gripper_state()
+  0.00      0.25     0.00     2451     0.00     0.00  MjClass::reward()
+  0.00      0.25     0.00     2451     0.00     0.00  MjClass::is_done()
+  0.00      0.25     0.00     1839     0.00     0.00  luke::move_gripper_target_step(int, int, int)
+  0.00      0.25     0.00      612     0.00     0.00  luke::move_base_target_m(double, double, double)
+  0.00      0.25     0.00      414     0.00     0.00  std::vector<float, std::allocator<float> >::_M_fill_assign(unsigned long, float const&)
+  0.00      0.25     0.00      204     0.00     0.00  decltype (__miter_base(({parm#1}.base)())) std::__miter_base<int*>(std::move_iterator<int*>)
+  0.00      0.25     0.00      150     0.00     0.00  void std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >::_M_realloc_insert<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+  0.00      0.25     0.00      110     0.00     0.00  std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > __gnu_cxx::__to_xstring<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, char>(int (*)(char*, unsigned long, char const*, __va_list_tag*), unsigned long, char const*, ...)
+  0.00      0.25     0.00       75     0.00     0.00  luke::Gripper::update()
+  0.00      0.25     0.00       60     0.00     0.00  int const* std::__niter_base<int const*, std::vector<int, std::allocator<int> > >(__gnu_cxx::__normal_iterator<int const*, std::vector<int, std::allocator<int> > >)
+  0.00      0.25     0.00       44     0.00     0.00  luke::ObjectHandler::reset_live(mjModel_*, mjData_*)
+  0.00      0.25     0.00       40     0.00     0.00  luke::ObjectHandler::move_object(mjData_*, int, luke::QPos)
+  0.00      0.25     0.00       40     0.00     0.00  luke::ObjectHandler::check_idx(int)
+  0.00      0.25     0.00       37     0.00     0.00  void std::vector<int, std::allocator<int> >::_M_realloc_insert<int const&>(__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >, int const&)
+  0.00      0.25     0.00       32     0.00     0.00  double* const* std::__niter_base<double* const*, std::vector<double*, std::allocator<double*> > >(__gnu_cxx::__normal_iterator<double* const*, std::vector<double*, std::allocator<double*> > >)
+  0.00      0.25     0.00       32     0.00     0.00  double const* std::__niter_base<double const*, std::vector<double, std::allocator<double> > >(__gnu_cxx::__normal_iterator<double const*, std::vector<double, std::allocator<double> > >)
+  0.00      0.25     0.00       30     0.00     0.00  std::vector<int, std::allocator<int> >::operator=(std::vector<int, std::allocator<int> > const&)
+  0.00      0.25     0.00       30     0.00     0.00  int* std::__niter_base<int*, std::vector<int, std::allocator<int> > >(__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >)
+  0.00      0.25     0.00       25     0.00     0.00  luke::keyframe(mjModel_*, mjData_*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)
+  0.00      0.25     0.00       25     0.00     0.00  luke::keyframe(mjModel_*, mjData_*, int)
+  0.00      0.25     0.00       23     0.00     0.00  luke::get_objects[abi:cxx11]()
+  0.00      0.25     0.00       23     0.00     0.00  luke::reset_object(mjModel_*, mjData_*)
+  0.00      0.25     0.00       23     0.00     0.00  luke::reset(mjModel_*, mjData_*)
+  0.00      0.25     0.00       23     0.00     0.00  MjClass::configure_settings()
+  0.00      0.25     0.00       23     0.00     0.00  MjClass::default_goal_event_triggering()
+  0.00      0.25     0.00       23     0.00     0.00  MjClass::reset()
+  0.00      0.25     0.00       23     0.00     0.00  std::vector<int, std::allocator<int> >::_M_fill_insert(__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >, unsigned long, int const&)
+  0.00      0.25     0.00       21     0.00     0.00  reset_sim(MjClass&)
+  0.00      0.25     0.00       21     0.00     0.00  luke::spawn_object(mjModel_*, mjData_*, int, luke::QPos)
+  0.00      0.25     0.00       21     0.00     0.00  luke::ObjectHandler::spawn_object(mjModel_*, mjData_*, int, luke::QPos)
+  0.00      0.25     0.00       21     0.00     0.00  luke::ObjectHandler::set_live(mjModel_*, int)
+  0.00      0.25     0.00       21     0.00     0.00  MjClass::spawn_object(int)
+  0.00      0.25     0.00       21     0.00     0.00  MjClass::spawn_object(int, double, double)
+  0.00      0.25     0.00       19     0.00     0.00  luke::ObjectHandler::reset_object(mjModel_*, mjData_*, int)
+  0.00      0.25     0.00       19     0.00     0.00  std::vector<float, std::allocator<float> >::_M_default_append(unsigned long)
+  0.00      0.25     0.00       16     0.00     0.00  std::vector<double*, std::allocator<double*> >::operator=(std::vector<double*, std::allocator<double*> > const&)
+  0.00      0.25     0.00       16     0.00     0.00  std::vector<double, std::allocator<double> >::operator=(std::vector<double, std::allocator<double> > const&)
+  0.00      0.25     0.00       16     0.00     0.00  std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const* std::__niter_base<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >(__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >)
+  0.00      0.25     0.00       16     0.00     0.00  double** std::__niter_base<double**, std::vector<double*, std::allocator<double*> > >(__gnu_cxx::__normal_iterator<double**, std::vector<double*, std::allocator<double*> > >)
+  0.00      0.25     0.00       16     0.00     0.00  double* std::__niter_base<double*, std::vector<double, std::allocator<double> > >(__gnu_cxx::__normal_iterator<double*, std::vector<double, std::allocator<double> > >)
+  0.00      0.25     0.00       12     0.00     0.00  std::vector<double*, std::allocator<double*> >::_M_default_append(unsigned long)
+  0.00      0.25     0.00       12     0.00     0.00  std::vector<double, std::allocator<double> >::_M_default_append(unsigned long)
+  0.00      0.25     0.00       12     0.00     0.00  decltype (__miter_base(({parm#1}.base)())) std::__miter_base<double**>(std::move_iterator<double**>)
+  0.00      0.25     0.00       12     0.00     0.00  decltype (__miter_base(({parm#1}.base)())) std::__miter_base<double*>(std::move_iterator<double*>)
+  0.00      0.25     0.00        8     0.00     0.00  std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >::operator=(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&)
+  0.00      0.25     0.00        8     0.00     0.00  std::vector<int, std::allocator<int> >::_M_default_append(unsigned long)
+  0.00      0.25     0.00        8     0.00     0.00  std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >* std::__niter_base<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >(__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >)
+  0.00      0.25     0.00        4     0.00     0.00  std::vector<luke::QPos, std::allocator<luke::QPos> >::_M_default_append(unsigned long)
+  0.00      0.25     0.00        2     0.00     0.00  luke::ObjectHandler::settle_objects(mjModel_*, mjData_*)
+  0.00      0.25     0.00        2     0.00     0.00  luke::ObjectHandler::remove_collisions(mjModel_*, mjData_*)
+  0.00      0.25     0.00        2     0.00     0.00  luke::ObjectHandler::overwrite_keyframe(mjModel_*, mjData_*, int)
+  0.00      0.25     0.00        2     0.00     0.00  luke::ObjectHandler::init(mjModel_*, mjData_*)
+  0.00      0.25     0.00        2     0.00     0.00  luke::ObjectHandler::resize()
+  0.00      0.25     0.00        2     0.00     0.00  luke::configure_qpos(mjModel_*, mjData_*)
+  0.00      0.25     0.00        2     0.00     0.00  luke::get_joint_indexes(mjModel_*)
+  0.00      0.25     0.00        2     0.00     0.00  luke::get_joint_addresses(mjModel_*)
+  0.00      0.25     0.00        2     0.00     0.00  luke::init(mjModel_*, mjData_*)
+  0.00      0.25     0.00        2     0.00     0.00  luke::init_J(mjModel_*, mjData_*)
+  0.00      0.25     0.00        2     0.00     0.00  MjClass::load_relative(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)
+  0.00      0.25     0.00        2     0.00     0.00  MjClass::init()
+  0.00      0.25     0.00        2     0.00     0.00  MjClass::load(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)
+  0.00      0.25     0.00        2     0.00     0.00  std::vector<bool, std::allocator<bool> >::_M_fill_insert(std::_Bit_iterator, unsigned long, bool)
+  0.00      0.25     0.00        2     0.00     0.00  std::vector<bool, std::allocator<bool> >::resize(unsigned long, bool)
+  0.00      0.25     0.00        2     0.00     0.00  std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+  0.00      0.25     0.00        1     0.00     0.00  _GLOBAL__sub_I__ZN4luke13ObjectHandlerC2Ev
+  0.00      0.25     0.00        1     0.00     0.00  _GLOBAL__sub_I__ZN4luke7Gripper9update_xyEv
+  0.00      0.25     0.00        1     0.00     0.00  _GLOBAL__sub_I__ZN4luke9print_vecESt6vectorIbSaIbEENSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE
+  0.00      0.25     0.00        1     0.00     0.00  _GLOBAL__sub_I__ZN6render1mE
+  0.00      0.25     0.00        1     0.00     0.00  _GLOBAL__sub_I__ZN7MjClassC2Ev
+  0.00      0.25     0.00        1     0.00     0.00  _GLOBAL__sub_I_num_xml_tasks
+  0.00      0.25     0.00        1     0.00     0.00  __static_initialization_and_destruction_0(int, int)
+  0.00      0.25     0.00        1     0.00     0.00  __static_initialization_and_destruction_0(int, int)
+  0.00      0.25     0.00        1     0.00     0.00  __static_initialization_and_destruction_0(int, int)
+  0.00      0.25     0.00        1     0.00     0.00  __static_initialization_and_destruction_0(int, int)
+  0.00      0.25     0.00        1     0.00     0.00  __static_initialization_and_destruction_0(int, int)
+  0.00      0.25     0.00        1     0.00     0.00  __static_initialization_and_destruction_0(int, int)
+  0.00      0.25     0.00        1     0.00   250.00  run_test(int, int, int)
+  0.00      0.25     0.00        1     0.00     0.00  luke::JointSettings::JointSettings()
+  0.00      0.25     0.00        1     0.00     0.00  luke::JointSettings::{unnamed type#1}::JointSettings()
+  0.00      0.25     0.00        1     0.00     0.00  luke::ObjectHandler::ObjectHandler()
+  0.00      0.25     0.00        1     0.00     0.00  MjClass::tick()
+  0.00      0.25     0.00        1     0.00     0.00  MjClass::tock()
+  0.00      0.25     0.00        1     0.00     0.00  MjClass::MjClass()
+  0.00      0.25     0.00        1     0.00     0.00  MjClass::~MjClass()
+
+ %         the percentage of the total running time of the
+time       program used by this function.
+
+cumulative a running sum of the number of seconds accounted
+ seconds   for by this function and those listed above it.
+
+ self      the number of seconds accounted for by this
+seconds    function alone.  This is the major sort for this
+           listing.
+
+calls      the number of times this function was invoked, if
+           this function is profiled, else blank.
+
+ self      the average number of milliseconds spent in this
+ms/call    function per call, if this function is profiled,
+	   else blank.
+
+ total     the average number of milliseconds spent in this
+ms/call    function and its descendents per call, if this
+	   function is profiled, else blank.
+
+name       the name of the function.  This is the minor sort
+           for this listing. The index shows the location of
+	   the function in the gprof listing. If the index is
+	   in parenthesis it shows where it would appear in
+	   the gprof listing if it were to be printed.
+
+Copyright (C) 2012-2018 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.
+
+		     Call graph (explanation follows)
+
+
+granularity: each sample hit covers 2 byte(s) for 4.00% of 0.25 seconds
+
+index % time    self  children    called     name
+                                                 <spontaneous>
+[1]    100.0    0.00    0.25                 main [1]
+                0.00    0.25       1/1           run_test(int, int, int) [2]
+-----------------------------------------------
+                0.00    0.25       1/1           main [1]
+[2]    100.0    0.00    0.25       1         run_test(int, int, int) [2]
+                0.00    0.25    2451/2451        learning_step(MjClass&) [3]
+                0.00    0.00      21/21          reset_sim(MjClass&) [27]
+                0.00    0.00       2/2           MjClass::load_relative(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [29]
+                0.00    0.00       1/1           MjClass::MjClass() [35]
+                0.00    0.00       2/110         std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > __gnu_cxx::__to_xstring<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, char>(int (*)(char*, unsigned long, char const*, __va_list_tag*), unsigned long, char const*, ...) [86]
+                0.00    0.00       2/1139645     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char*>(char*, char*, std::forward_iterator_tag) [53]
+                0.00    0.00       1/1           MjClass::tick() [149]
+                0.00    0.00       1/1           MjClass::tock() [150]
+                0.00    0.00       1/1           MjClass::~MjClass() [151]
+-----------------------------------------------
+                0.00    0.25    2451/2451        run_test(int, int, int) [2]
+[3]    100.0    0.00    0.25    2451         learning_step(MjClass&) [3]
+                0.00    0.25    2451/2451        MjClass::action_step() [4]
+                0.00    0.00    2451/2451        MjClass::set_action(int) [23]
+                0.00    0.00    2451/2451        MjClass::reward() [80]
+                0.00    0.00    2451/2472        MjClass::get_observation() [75]
+                0.00    0.00    2451/2451        MjClass::is_done() [81]
+-----------------------------------------------
+                0.00    0.25    2451/2451        learning_step(MjClass&) [3]
+[4]    100.0    0.00    0.25    2451         MjClass::action_step() [4]
+                0.01    0.23  490200/490200      MjClass::step() [5]
+                0.00    0.01    2451/2451        MjClass::update_env() [22]
+                0.00    0.00  490200/490200      luke::is_target_step() [56]
+                0.00    0.00  490200/490200      luke::is_target_reached() [57]
+                0.00    0.00    2451/2451        MjClass::sense_gripper_state() [79]
+-----------------------------------------------
+                0.01    0.23  490200/490200      MjClass::action_step() [4]
+[5]     97.6    0.01    0.23  490200         MjClass::step() [5]
+                0.10    0.03  490200/490200      MjClass::monitor_sensors() [6]
+                0.00    0.05  490200/490200      luke::step(mjModel_*, mjData_*) [7]
+                0.00    0.05  490200/490200      luke::after_step(mjModel_*, mjData_*) [11]
+                0.00    0.00  490200/490200      luke::before_step(mjModel_*, mjData_*) [55]
+-----------------------------------------------
+                0.10    0.03  490200/490200      MjClass::step() [5]
+[6]     53.6    0.10    0.03  490200         MjClass::monitor_sensors() [6]
+                0.00    0.02    9804/12255       luke::get_object_forces_faster(mjModel_ const*, mjData_*) [14]
+                0.00    0.01    9804/9804        luke::get_gauge_data(mjModel_ const*, mjData_*) [21]
+                0.00    0.00  245100/245100      luke::rawNum::rawNum(luke::rawNum const&) [58]
+-----------------------------------------------
+                0.00    0.05  490200/490200      MjClass::step() [5]
+[7]     20.0    0.00    0.05  490200         luke::step(mjModel_*, mjData_*) [7]
+                0.00    0.05  490200/490200      luke::control(mjModel_ const*, mjData_*) [8]
+-----------------------------------------------
+                0.00    0.05  490200/490200      luke::step(mjModel_*, mjData_*) [7]
+[8]     20.0    0.00    0.05  490200         luke::control(mjModel_ const*, mjData_*) [8]
+                0.03    0.00  490200/490200      luke::control_gripper(mjModel_ const*, mjData_*, luke::Gripper&) [12]
+                0.02    0.00  490200/490200      luke::control_base(mjModel_ const*, mjData_*) [15]
+-----------------------------------------------
+                0.00    0.00      23/490223      luke::reset(mjModel_*, mjData_*) [26]
+                0.00    0.05  490200/490223      luke::after_step(mjModel_*, mjData_*) [11]
+[9]     20.0    0.00    0.05  490223         luke::update_all(mjModel_ const*, mjData_*) [9]
+                0.03    0.02  490223/490223      luke::update_stepper(mjModel_ const*, mjData_*) [10]
+-----------------------------------------------
+                0.03    0.02  490223/490223      luke::update_all(mjModel_ const*, mjData_*) [9]
+[10]    20.0    0.03    0.02  490223         luke::update_stepper(mjModel_ const*, mjData_*) [10]
+                0.01    0.00  163392/163392      luke::Gripper::step_to(luke::Gripper, int) [16]
+                0.01    0.00 1470669/1635975     luke::Gripper::update_xy() [17]
+                0.00    0.00  490223/655529      luke::Gripper::update_z() [54]
+-----------------------------------------------
+                0.00    0.05  490200/490200      MjClass::step() [5]
+[11]    20.0    0.00    0.05  490200         luke::after_step(mjModel_*, mjData_*) [11]
+                0.00    0.05  490200/490223      luke::update_all(mjModel_ const*, mjData_*) [9]
+-----------------------------------------------
+                0.03    0.00  490200/490200      luke::control(mjModel_ const*, mjData_*) [8]
+[12]    12.0    0.03    0.00  490200         luke::control_gripper(mjModel_ const*, mjData_*, luke::Gripper&) [12]
+-----------------------------------------------
+                0.03    0.00   12255/12255       luke::get_object_forces_faster(mjModel_ const*, mjData_*) [14]
+[13]    12.0    0.03    0.00   12255         luke::ObjectHandler::extract_forces_faster(mjModel_ const*, mjData_*) [13]
+                0.00    0.00 2277524/2278008     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char const*>(char const*, char const*, std::forward_iterator_tag) [52]
+                0.00    0.00 1138762/1139645     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char*>(char*, char*, std::forward_iterator_tag) [53]
+                0.00    0.00   12255/12255       luke::ObjectHandler::get_object_net_force_faster(mjModel_ const*, mjData_*) [68]
+-----------------------------------------------
+                0.00    0.01    2451/12255       MjClass::update_env() [22]
+                0.00    0.02    9804/12255       MjClass::monitor_sensors() [6]
+[14]    12.0    0.00    0.03   12255         luke::get_object_forces_faster(mjModel_ const*, mjData_*) [14]
+                0.03    0.00   12255/12255       luke::ObjectHandler::extract_forces_faster(mjModel_ const*, mjData_*) [13]
+-----------------------------------------------
+                0.02    0.00  490200/490200      luke::control(mjModel_ const*, mjData_*) [8]
+[15]     8.0    0.02    0.00  490200         luke::control_base(mjModel_ const*, mjData_*) [15]
+-----------------------------------------------
+                0.01    0.00  163392/163392      luke::update_stepper(mjModel_ const*, mjData_*) [10]
+[16]     4.4    0.01    0.00  163392         luke::Gripper::step_to(luke::Gripper, int) [16]
+                0.00    0.00  163392/1635975     luke::Gripper::update_xy() [17]
+                0.00    0.00  163392/655529      luke::Gripper::update_z() [54]
+-----------------------------------------------
+                0.00    0.00      75/1635975     luke::Gripper::update() [28]
+                0.00    0.00    1839/1635975     luke::move_gripper_target_step(int, int, int) [24]
+                0.00    0.00  163392/1635975     luke::Gripper::step_to(luke::Gripper, int) [16]
+                0.01    0.00 1470669/1635975     luke::update_stepper(mjModel_ const*, mjData_*) [10]
+[17]     4.0    0.01    0.00 1635975         luke::Gripper::update_xy() [17]
+-----------------------------------------------
+                0.00    0.01   29412/29412       luke::read_armadillo_gauge(mjData_ const*, int) [20]
+[18]     4.0    0.00    0.01   29412         bool arma::glue_polyfit::apply_direct<arma::subview<double>, arma::subview<double> >(arma::Mat<arma::subview<double>::elem_type>&, arma::Base<arma::subview<double>::elem_type, arma::subview<double> > const&, arma::Base<arma::subview<double>::elem_type, arma::subview<double> > const&, unsigned long long) [18]
+                0.01    0.00   29412/29412       bool arma::glue_polyfit::apply_noalias<double>(arma::Mat<double>&, arma::Col<double> const&, arma::Col<double> const&, unsigned long long) [19]
+-----------------------------------------------
+                0.01    0.00   29412/29412       bool arma::glue_polyfit::apply_direct<arma::subview<double>, arma::subview<double> >(arma::Mat<arma::subview<double>::elem_type>&, arma::Base<arma::subview<double>::elem_type, arma::subview<double> > const&, arma::Base<arma::subview<double>::elem_type, arma::subview<double> > const&, unsigned long long) [18]
+[19]     4.0    0.01    0.00   29412         bool arma::glue_polyfit::apply_noalias<double>(arma::Mat<double>&, arma::Col<double> const&, arma::Col<double> const&, unsigned long long) [19]
+                0.00    0.00   58824/58824       arma::Mat<double>::init_warm(unsigned long long, unsigned long long) [62]
+-----------------------------------------------
+                0.00    0.01   29412/29412       luke::get_gauge_data(mjModel_ const*, mjData_*) [21]
+[20]     4.0    0.00    0.01   29412         luke::read_armadillo_gauge(mjData_ const*, int) [20]
+                0.00    0.01   29412/29412       bool arma::glue_polyfit::apply_direct<arma::subview<double>, arma::subview<double> >(arma::Mat<arma::subview<double>::elem_type>&, arma::Base<arma::subview<double>::elem_type, arma::subview<double> > const&, arma::Base<arma::subview<double>::elem_type, arma::subview<double> > const&, unsigned long long) [18]
+-----------------------------------------------
+                0.00    0.01    9804/9804        MjClass::monitor_sensors() [6]
+[21]     4.0    0.00    0.01    9804         luke::get_gauge_data(mjModel_ const*, mjData_*) [21]
+                0.00    0.01   29412/29412       luke::read_armadillo_gauge(mjData_ const*, int) [20]
+-----------------------------------------------
+                0.00    0.01    2451/2451        MjClass::action_step() [4]
+[22]     2.4    0.00    0.01    2451         MjClass::update_env() [22]
+                0.00    0.01    2451/12255       luke::get_object_forces_faster(mjModel_ const*, mjData_*) [14]
+                0.00    0.00    4902/4902        double const* std::__min_element<double const*, __gnu_cxx::__ops::_Iter_less_iter>(double const*, double const*, __gnu_cxx::__ops::_Iter_less_iter) [72]
+                0.00    0.00    2451/2472        luke::get_object_qpos(mjModel_*, mjData_*) [74]
+                0.00    0.00    2451/2451        luke::get_gripper_target() [78]
+                0.00    0.00    2451/2451        update_events(MjType::EventTrack&, MjType::Settings&) [77]
+-----------------------------------------------
+                0.00    0.00    2451/2451        learning_step(MjClass&) [3]
+[23]     0.0    0.00    0.00    2451         MjClass::set_action(int) [23]
+                0.00    0.00    1839/1839        luke::move_gripper_target_step(int, int, int) [24]
+                0.00    0.00    2451/4902        luke::get_target_state() [71]
+                0.00    0.00     612/612         luke::move_base_target_m(double, double, double) [82]
+-----------------------------------------------
+                0.00    0.00    1839/1839        MjClass::set_action(int) [23]
+[24]     0.0    0.00    0.00    1839         luke::move_gripper_target_step(int, int, int) [24]
+                0.00    0.00    1839/1635975     luke::Gripper::update_xy() [17]
+                0.00    0.00    1839/655529      luke::Gripper::update_z() [54]
+-----------------------------------------------
+                0.00    0.00       2/23          MjClass::init() [30]
+                0.00    0.00      21/23          reset_sim(MjClass&) [27]
+[25]     0.0    0.00    0.00      23         MjClass::reset() [25]
+                0.00    0.00      23/23          luke::reset(mjModel_*, mjData_*) [26]
+                0.00    0.00      23/75          luke::Gripper::update() [28]
+                0.00    0.00     414/414         std::vector<float, std::allocator<float> >::_M_fill_assign(unsigned long, float const&) [83]
+                0.00    0.00      23/23          MjClass::configure_settings() [100]
+-----------------------------------------------
+                0.00    0.00      23/23          MjClass::reset() [25]
+[26]     0.0    0.00    0.00      23         luke::reset(mjModel_*, mjData_*) [26]
+                0.00    0.00      23/490223      luke::update_all(mjModel_ const*, mjData_*) [9]
+                0.00    0.00      46/75          luke::Gripper::update() [28]
+                0.00    0.00      23/1139645     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char*>(char*, char*, std::forward_iterator_tag) [53]
+                0.00    0.00      23/25          luke::keyframe(mjModel_*, mjData_*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [96]
+                0.00    0.00      23/23          luke::reset_object(mjModel_*, mjData_*) [99]
+-----------------------------------------------
+                0.00    0.00      21/21          run_test(int, int, int) [2]
+[27]     0.0    0.00    0.00      21         reset_sim(MjClass&) [27]
+                0.00    0.00      21/23          MjClass::reset() [25]
+                0.00    0.00      21/23          luke::get_objects[abi:cxx11]() [98]
+                0.00    0.00      21/21          MjClass::spawn_object(int) [106]
+                0.00    0.00      21/2472        MjClass::get_observation() [75]
+-----------------------------------------------
+                0.00    0.00       1/75          MjClass::MjClass() [35]
+                0.00    0.00       5/75          __static_initialization_and_destruction_0(int, int) [33]
+                0.00    0.00      23/75          MjClass::reset() [25]
+                0.00    0.00      46/75          luke::reset(mjModel_*, mjData_*) [26]
+[28]     0.0    0.00    0.00      75         luke::Gripper::update() [28]
+                0.00    0.00      75/1635975     luke::Gripper::update_xy() [17]
+                0.00    0.00      75/655529      luke::Gripper::update_z() [54]
+-----------------------------------------------
+                0.00    0.00       2/2           run_test(int, int, int) [2]
+[29]     0.0    0.00    0.00       2         MjClass::load_relative(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [29]
+                0.00    0.00       2/2           MjClass::load(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [31]
+                0.00    0.00       2/2           std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) [135]
+-----------------------------------------------
+                0.00    0.00       2/2           MjClass::load(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [31]
+[30]     0.0    0.00    0.00       2         MjClass::init() [30]
+                0.00    0.00       2/23          MjClass::reset() [25]
+                0.00    0.00       2/2           luke::init(mjModel_*, mjData_*) [131]
+                0.00    0.00       2/23          luke::get_objects[abi:cxx11]() [98]
+-----------------------------------------------
+                0.00    0.00       2/2           MjClass::load_relative(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [29]
+[31]     0.0    0.00    0.00       2         MjClass::load(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [31]
+                0.00    0.00       2/2           MjClass::init() [30]
+-----------------------------------------------
+                0.00    0.00       1/1           __libc_csu_init [34]
+[32]     0.0    0.00    0.00       1         _GLOBAL__sub_I__ZN4luke9print_vecESt6vectorIbSaIbEENSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE [32]
+                0.00    0.00       1/1           __static_initialization_and_destruction_0(int, int) [33]
+-----------------------------------------------
+                0.00    0.00       1/1           _GLOBAL__sub_I__ZN4luke9print_vecESt6vectorIbSaIbEENSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE [32]
+[33]     0.0    0.00    0.00       1         __static_initialization_and_destruction_0(int, int) [33]
+                0.00    0.00       5/75          luke::Gripper::update() [28]
+                0.00    0.00       1/1           luke::JointSettings::JointSettings() [146]
+                0.00    0.00       1/1           luke::ObjectHandler::ObjectHandler() [148]
+-----------------------------------------------
+                                                 <spontaneous>
+[34]     0.0    0.00    0.00                 __libc_csu_init [34]
+                0.00    0.00       1/1           _GLOBAL__sub_I__ZN4luke9print_vecESt6vectorIbSaIbEENSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE [32]
+                0.00    0.00       1/1           _GLOBAL__sub_I__ZN4luke7Gripper9update_xyEv [137]
+                0.00    0.00       1/1           _GLOBAL__sub_I__ZN4luke13ObjectHandlerC2Ev [136]
+                0.00    0.00       1/1           _GLOBAL__sub_I__ZN6render1mE [138]
+                0.00    0.00       1/1           _GLOBAL__sub_I__ZN7MjClassC2Ev [139]
+                0.00    0.00       1/1           _GLOBAL__sub_I_num_xml_tasks [140]
+-----------------------------------------------
+                0.00    0.00       1/1           run_test(int, int, int) [2]
+[35]     0.0    0.00    0.00       1         MjClass::MjClass() [35]
+                0.00    0.00       1/75          luke::Gripper::update() [28]
+                0.00    0.00      19/19          std::vector<float, std::allocator<float> >::_M_default_append(unsigned long) [109]
+                0.00    0.00       3/2278008     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char const*>(char const*, char const*, std::forward_iterator_tag) [52]
+-----------------------------------------------
+                0.00    0.00       2/2278008     luke::JointSettings::JointSettings() [146]
+                0.00    0.00       3/2278008     MjClass::MjClass() [35]
+                0.00    0.00      15/2278008     luke::JointSettings::{unnamed type#1}::JointSettings() [147]
+                0.00    0.00      34/2278008     luke::init_J(mjModel_*, mjData_*) [132]
+                0.00    0.00      40/2278008     luke::ObjectHandler::init(mjModel_*, mjData_*) [126]
+                0.00    0.00     104/2278008     luke::ObjectHandler::remove_collisions(mjModel_*, mjData_*) [124]
+                0.00    0.00     286/2278008     luke::get_joint_indexes(mjModel_*) [129]
+                0.00    0.00 2277524/2278008     luke::ObjectHandler::extract_forces_faster(mjModel_ const*, mjData_*) [13]
+[52]     0.0    0.00    0.00 2278008         void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char const*>(char const*, char const*, std::forward_iterator_tag) [52]
+-----------------------------------------------
+                0.00    0.00       2/1139645     run_test(int, int, int) [2]
+                0.00    0.00       2/1139645     std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) [135]
+                0.00    0.00       2/1139645     luke::init(mjModel_*, mjData_*) [131]
+                0.00    0.00      15/1139645     luke::JointSettings::{unnamed type#1}::JointSettings() [147]
+                0.00    0.00      21/1139645     luke::ObjectHandler::set_live(mjModel_*, int) [105]
+                0.00    0.00      23/1139645     luke::reset(mjModel_*, mjData_*) [26]
+                0.00    0.00      30/1139645     luke::init_J(mjModel_*, mjData_*) [132]
+                0.00    0.00      74/1139645     luke::ObjectHandler::init(mjModel_*, mjData_*) [126]
+                0.00    0.00     110/1139645     std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > __gnu_cxx::__to_xstring<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, char>(int (*)(char*, unsigned long, char const*, __va_list_tag*), unsigned long, char const*, ...) [86]
+                0.00    0.00     132/1139645     luke::get_joint_indexes(mjModel_*) [129]
+                0.00    0.00     150/1139645     void std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >::_M_realloc_insert<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) [85]
+                0.00    0.00     322/1139645     luke::get_objects[abi:cxx11]() [98]
+                0.00    0.00 1138762/1139645     luke::ObjectHandler::extract_forces_faster(mjModel_ const*, mjData_*) [13]
+[53]     0.0    0.00    0.00 1139645         void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char*>(char*, char*, std::forward_iterator_tag) [53]
+-----------------------------------------------
+                0.00    0.00      75/655529      luke::Gripper::update() [28]
+                0.00    0.00    1839/655529      luke::move_gripper_target_step(int, int, int) [24]
+                0.00    0.00  163392/655529      luke::Gripper::step_to(luke::Gripper, int) [16]
+                0.00    0.00  490223/655529      luke::update_stepper(mjModel_ const*, mjData_*) [10]
+[54]     0.0    0.00    0.00  655529         luke::Gripper::update_z() [54]
+-----------------------------------------------
+                0.00    0.00  490200/490200      MjClass::step() [5]
+[55]     0.0    0.00    0.00  490200         luke::before_step(mjModel_*, mjData_*) [55]
+-----------------------------------------------
+                0.00    0.00  490200/490200      MjClass::action_step() [4]
+[56]     0.0    0.00    0.00  490200         luke::is_target_step() [56]
+-----------------------------------------------
+                0.00    0.00  490200/490200      MjClass::action_step() [4]
+[57]     0.0    0.00    0.00  490200         luke::is_target_reached() [57]
+-----------------------------------------------
+                0.00    0.00  245100/245100      MjClass::monitor_sensors() [6]
+[58]     0.0    0.00    0.00  245100         luke::rawNum::rawNum(luke::rawNum const&) [58]
+-----------------------------------------------
+                0.00    0.00      38/173078      std::vector<float, std::allocator<float> >::_M_default_append(unsigned long) [109]
+                0.00    0.00   79104/173078      void std::vector<float, std::allocator<float> >::_M_realloc_insert<float const&>(__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, float const&) [67]
+                0.00    0.00   93936/173078      void std::vector<float, std::allocator<float> >::_M_range_insert<__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > > >(__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, std::forward_iterator_tag) [63]
+[59]     0.0    0.00    0.00  173078         decltype (__miter_base(({parm#1}.base)())) std::__miter_base<float*>(std::move_iterator<float*>) [59]
+-----------------------------------------------
+                0.00    0.00  135960/135960      void std::vector<float, std::allocator<float> >::_M_range_insert<__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > > >(__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, std::forward_iterator_tag) [63]
+[60]     0.0    0.00    0.00  135960         float* std::__niter_base<float*, std::vector<float, std::allocator<float> > >(__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >) [60]
+-----------------------------------------------
+                0.00    0.00   69216/69216       std::vector<float, std::allocator<float> >::vector(std::vector<float, std::allocator<float> > const&) [65]
+[61]     0.0    0.00    0.00   69216         float const* std::__niter_base<float const*, std::vector<float, std::allocator<float> > >(__gnu_cxx::__normal_iterator<float const*, std::vector<float, std::allocator<float> > >) [61]
+-----------------------------------------------
+                0.00    0.00   58824/58824       bool arma::glue_polyfit::apply_noalias<double>(arma::Mat<double>&, arma::Col<double> const&, arma::Col<double> const&, unsigned long long) [19]
+[62]     0.0    0.00    0.00   58824         arma::Mat<double>::init_warm(unsigned long long, unsigned long long) [62]
+-----------------------------------------------
+                0.00    0.00   34608/34608       __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > > std::vector<float, std::allocator<float> >::insert<__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, void>(__gnu_cxx::__normal_iterator<float const*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >) [64]
+[63]     0.0    0.00    0.00   34608         void std::vector<float, std::allocator<float> >::_M_range_insert<__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > > >(__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, std::forward_iterator_tag) [63]
+                0.00    0.00  135960/135960      float* std::__niter_base<float*, std::vector<float, std::allocator<float> > >(__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >) [60]
+                0.00    0.00   93936/173078      decltype (__miter_base(({parm#1}.base)())) std::__miter_base<float*>(std::move_iterator<float*>) [59]
+-----------------------------------------------
+                0.00    0.00   34608/34608       MjClass::get_observation() [75]
+[64]     0.0    0.00    0.00   34608         __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > > std::vector<float, std::allocator<float> >::insert<__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, void>(__gnu_cxx::__normal_iterator<float const*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >) [64]
+                0.00    0.00   34608/34608       void std::vector<float, std::allocator<float> >::_M_range_insert<__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > > >(__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, std::forward_iterator_tag) [63]
+-----------------------------------------------
+                0.00    0.00   34608/34608       MjClass::get_observation() [75]
+[65]     0.0    0.00    0.00   34608         std::vector<float, std::allocator<float> >::vector(std::vector<float, std::allocator<float> > const&) [65]
+                0.00    0.00   69216/69216       float const* std::__niter_base<float const*, std::vector<float, std::allocator<float> > >(__gnu_cxx::__normal_iterator<float const*, std::vector<float, std::allocator<float> > >) [61]
+-----------------------------------------------
+                0.00    0.00   24720/24720       MjClass::get_observation() [75]
+[66]     0.0    0.00    0.00   24720         MjType::Sensor::change_sample(luke::SlidingWindow<float>, float) [66]
+-----------------------------------------------
+                0.00    0.00   19776/19776       MjType::Sensor::raw_sample(luke::SlidingWindow<float>, float) [69]
+[67]     0.0    0.00    0.00   19776         void std::vector<float, std::allocator<float> >::_M_realloc_insert<float const&>(__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, float const&) [67]
+                0.00    0.00   79104/173078      decltype (__miter_base(({parm#1}.base)())) std::__miter_base<float*>(std::move_iterator<float*>) [59]
+-----------------------------------------------
+                0.00    0.00   12255/12255       luke::ObjectHandler::extract_forces_faster(mjModel_ const*, mjData_*) [13]
+[68]     0.0    0.00    0.00   12255         luke::ObjectHandler::get_object_net_force_faster(mjModel_ const*, mjData_*) [68]
+-----------------------------------------------
+                0.00    0.00    9888/9888        MjClass::get_observation() [75]
+[69]     0.0    0.00    0.00    9888         MjType::Sensor::raw_sample(luke::SlidingWindow<float>, float) [69]
+                0.00    0.00   19776/19776       void std::vector<float, std::allocator<float> >::_M_realloc_insert<float const&>(__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, float const&) [67]
+-----------------------------------------------
+                0.00    0.00    9804/9804        MjClass::sense_gripper_state() [79]
+[70]     0.0    0.00    0.00    9804         normalise_between(float, float, float) [70]
+-----------------------------------------------
+                0.00    0.00    2451/4902        MjClass::set_action(int) [23]
+                0.00    0.00    2451/4902        MjClass::sense_gripper_state() [79]
+[71]     0.0    0.00    0.00    4902         luke::get_target_state() [71]
+-----------------------------------------------
+                0.00    0.00    4902/4902        MjClass::update_env() [22]
+[72]     0.0    0.00    0.00    4902         double const* std::__min_element<double const*, __gnu_cxx::__ops::_Iter_less_iter>(double const*, double const*, __gnu_cxx::__ops::_Iter_less_iter) [72]
+-----------------------------------------------
+                0.00    0.00    2472/2472        luke::get_object_qpos(mjModel_*, mjData_*) [74]
+[73]     0.0    0.00    0.00    2472         luke::ObjectHandler::get_live_qpos(mjModel_*, mjData_*) [73]
+-----------------------------------------------
+                0.00    0.00      21/2472        MjClass::spawn_object(int, double, double) [107]
+                0.00    0.00    2451/2472        MjClass::update_env() [22]
+[74]     0.0    0.00    0.00    2472         luke::get_object_qpos(mjModel_*, mjData_*) [74]
+                0.00    0.00    2472/2472        luke::ObjectHandler::get_live_qpos(mjModel_*, mjData_*) [73]
+-----------------------------------------------
+                0.00    0.00      21/2472        reset_sim(MjClass&) [27]
+                0.00    0.00    2451/2472        learning_step(MjClass&) [3]
+[75]     0.0    0.00    0.00    2472         MjClass::get_observation() [75]
+                0.00    0.00   34608/34608       std::vector<float, std::allocator<float> >::vector(std::vector<float, std::allocator<float> > const&) [65]
+                0.00    0.00   34608/34608       __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > > std::vector<float, std::allocator<float> >::insert<__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, void>(__gnu_cxx::__normal_iterator<float const*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >) [64]
+                0.00    0.00   24720/24720       MjType::Sensor::change_sample(luke::SlidingWindow<float>, float) [66]
+                0.00    0.00    9888/9888        MjType::Sensor::raw_sample(luke::SlidingWindow<float>, float) [69]
+-----------------------------------------------
+                0.00    0.00    2451/2451        MjClass::reward() [80]
+[76]     0.0    0.00    0.00    2451         calc_rewards(MjType::EventTrack&, MjType::Settings&) [76]
+-----------------------------------------------
+                0.00    0.00    2451/2451        MjClass::update_env() [22]
+[77]     0.0    0.00    0.00    2451         update_events(MjType::EventTrack&, MjType::Settings&) [77]
+-----------------------------------------------
+                0.00    0.00    2451/2451        MjClass::update_env() [22]
+[78]     0.0    0.00    0.00    2451         luke::get_gripper_target() [78]
+-----------------------------------------------
+                0.00    0.00    2451/2451        MjClass::action_step() [4]
+[79]     0.0    0.00    0.00    2451         MjClass::sense_gripper_state() [79]
+                0.00    0.00    9804/9804        normalise_between(float, float, float) [70]
+                0.00    0.00    2451/4902        luke::get_target_state() [71]
+-----------------------------------------------
+                0.00    0.00    2451/2451        learning_step(MjClass&) [3]
+[80]     0.0    0.00    0.00    2451         MjClass::reward() [80]
+                0.00    0.00    2451/2451        calc_rewards(MjType::EventTrack&, MjType::Settings&) [76]
+-----------------------------------------------
+                0.00    0.00    2451/2451        learning_step(MjClass&) [3]
+[81]     0.0    0.00    0.00    2451         MjClass::is_done() [81]
+-----------------------------------------------
+                0.00    0.00     612/612         MjClass::set_action(int) [23]
+[82]     0.0    0.00    0.00     612         luke::move_base_target_m(double, double, double) [82]
+-----------------------------------------------
+                0.00    0.00     414/414         MjClass::reset() [25]
+[83]     0.0    0.00    0.00     414         std::vector<float, std::allocator<float> >::_M_fill_assign(unsigned long, float const&) [83]
+-----------------------------------------------
+                0.00    0.00       8/204         std::vector<int, std::allocator<int> >::_M_default_append(unsigned long) [120]
+                0.00    0.00      48/204         std::vector<int, std::allocator<int> >::_M_fill_insert(__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >, unsigned long, int const&) [102]
+                0.00    0.00     148/204         void std::vector<int, std::allocator<int> >::_M_realloc_insert<int const&>(__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >, int const&) [91]
+[84]     0.0    0.00    0.00     204         decltype (__miter_base(({parm#1}.base)())) std::__miter_base<int*>(std::move_iterator<int*>) [84]
+-----------------------------------------------
+                0.00    0.00       6/150         luke::ObjectHandler::init(mjModel_*, mjData_*) [126]
+                0.00    0.00       6/150         luke::get_joint_indexes(mjModel_*) [129]
+                0.00    0.00     138/150         luke::get_objects[abi:cxx11]() [98]
+[85]     0.0    0.00    0.00     150         void std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >::_M_realloc_insert<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) [85]
+                0.00    0.00     150/1139645     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char*>(char*, char*, std::forward_iterator_tag) [53]
+-----------------------------------------------
+                0.00    0.00       2/110         run_test(int, int, int) [2]
+                0.00    0.00     108/110         luke::get_joint_indexes(mjModel_*) [129]
+[86]     0.0    0.00    0.00     110         std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > __gnu_cxx::__to_xstring<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, char>(int (*)(char*, unsigned long, char const*, __va_list_tag*), unsigned long, char const*, ...) [86]
+                0.00    0.00     110/1139645     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char*>(char*, char*, std::forward_iterator_tag) [53]
+-----------------------------------------------
+                0.00    0.00      60/60          std::vector<int, std::allocator<int> >::operator=(std::vector<int, std::allocator<int> > const&) [94]
+[87]     0.0    0.00    0.00      60         int const* std::__niter_base<int const*, std::vector<int, std::allocator<int> > >(__gnu_cxx::__normal_iterator<int const*, std::vector<int, std::allocator<int> > >) [87]
+-----------------------------------------------
+                0.00    0.00      21/44          luke::ObjectHandler::spawn_object(mjModel_*, mjData_*, int, luke::QPos) [104]
+                0.00    0.00      23/44          luke::reset_object(mjModel_*, mjData_*) [99]
+[88]     0.0    0.00    0.00      44         luke::ObjectHandler::reset_live(mjModel_*, mjData_*) [88]
+                0.00    0.00      19/19          luke::ObjectHandler::reset_object(mjModel_*, mjData_*, int) [108]
+-----------------------------------------------
+                0.00    0.00      19/40          luke::ObjectHandler::reset_object(mjModel_*, mjData_*, int) [108]
+                0.00    0.00      21/40          luke::ObjectHandler::spawn_object(mjModel_*, mjData_*, int, luke::QPos) [104]
+[89]     0.0    0.00    0.00      40         luke::ObjectHandler::move_object(mjData_*, int, luke::QPos) [89]
+-----------------------------------------------
+                0.00    0.00      19/40          luke::ObjectHandler::reset_object(mjModel_*, mjData_*, int) [108]
+                0.00    0.00      21/40          luke::ObjectHandler::spawn_object(mjModel_*, mjData_*, int, luke::QPos) [104]
+[90]     0.0    0.00    0.00      40         luke::ObjectHandler::check_idx(int) [90]
+-----------------------------------------------
+                0.00    0.00      15/37          luke::get_joint_indexes(mjModel_*) [129]
+                0.00    0.00      22/37          luke::get_joint_addresses(mjModel_*) [130]
+[91]     0.0    0.00    0.00      37         void std::vector<int, std::allocator<int> >::_M_realloc_insert<int const&>(__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >, int const&) [91]
+                0.00    0.00     148/204         decltype (__miter_base(({parm#1}.base)())) std::__miter_base<int*>(std::move_iterator<int*>) [84]
+-----------------------------------------------
+                0.00    0.00      32/32          std::vector<double*, std::allocator<double*> >::operator=(std::vector<double*, std::allocator<double*> > const&) [110]
+[92]     0.0    0.00    0.00      32         double* const* std::__niter_base<double* const*, std::vector<double*, std::allocator<double*> > >(__gnu_cxx::__normal_iterator<double* const*, std::vector<double*, std::allocator<double*> > >) [92]
+-----------------------------------------------
+                0.00    0.00      32/32          std::vector<double, std::allocator<double> >::operator=(std::vector<double, std::allocator<double> > const&) [111]
+[93]     0.0    0.00    0.00      32         double const* std::__niter_base<double const*, std::vector<double, std::allocator<double> > >(__gnu_cxx::__normal_iterator<double const*, std::vector<double, std::allocator<double> > >) [93]
+-----------------------------------------------
+                0.00    0.00      30/30          luke::init_J(mjModel_*, mjData_*) [132]
+[94]     0.0    0.00    0.00      30         std::vector<int, std::allocator<int> >::operator=(std::vector<int, std::allocator<int> > const&) [94]
+                0.00    0.00      60/60          int const* std::__niter_base<int const*, std::vector<int, std::allocator<int> > >(__gnu_cxx::__normal_iterator<int const*, std::vector<int, std::allocator<int> > >) [87]
+                0.00    0.00      30/30          int* std::__niter_base<int*, std::vector<int, std::allocator<int> > >(__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >) [95]
+-----------------------------------------------
+                0.00    0.00      30/30          std::vector<int, std::allocator<int> >::operator=(std::vector<int, std::allocator<int> > const&) [94]
+[95]     0.0    0.00    0.00      30         int* std::__niter_base<int*, std::vector<int, std::allocator<int> > >(__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >) [95]
+-----------------------------------------------
+                0.00    0.00       2/25          luke::init(mjModel_*, mjData_*) [131]
+                0.00    0.00      23/25          luke::reset(mjModel_*, mjData_*) [26]
+[96]     0.0    0.00    0.00      25         luke::keyframe(mjModel_*, mjData_*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [96]
+                0.00    0.00      25/25          luke::keyframe(mjModel_*, mjData_*, int) [97]
+-----------------------------------------------
+                0.00    0.00      25/25          luke::keyframe(mjModel_*, mjData_*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [96]
+[97]     0.0    0.00    0.00      25         luke::keyframe(mjModel_*, mjData_*, int) [97]
+-----------------------------------------------
+                0.00    0.00       2/23          MjClass::init() [30]
+                0.00    0.00      21/23          reset_sim(MjClass&) [27]
+[98]     0.0    0.00    0.00      23         luke::get_objects[abi:cxx11]() [98]
+                0.00    0.00     322/1139645     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char*>(char*, char*, std::forward_iterator_tag) [53]
+                0.00    0.00     138/150         void std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >::_M_realloc_insert<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) [85]
+-----------------------------------------------
+                0.00    0.00      23/23          luke::reset(mjModel_*, mjData_*) [26]
+[99]     0.0    0.00    0.00      23         luke::reset_object(mjModel_*, mjData_*) [99]
+                0.00    0.00      23/44          luke::ObjectHandler::reset_live(mjModel_*, mjData_*) [88]
+-----------------------------------------------
+                0.00    0.00      23/23          MjClass::reset() [25]
+[100]    0.0    0.00    0.00      23         MjClass::configure_settings() [100]
+                0.00    0.00      23/23          std::vector<int, std::allocator<int> >::_M_fill_insert(__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >, unsigned long, int const&) [102]
+                0.00    0.00      23/23          MjClass::default_goal_event_triggering() [101]
+-----------------------------------------------
+                0.00    0.00      23/23          MjClass::configure_settings() [100]
+[101]    0.0    0.00    0.00      23         MjClass::default_goal_event_triggering() [101]
+-----------------------------------------------
+                0.00    0.00      23/23          MjClass::configure_settings() [100]
+[102]    0.0    0.00    0.00      23         std::vector<int, std::allocator<int> >::_M_fill_insert(__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >, unsigned long, int const&) [102]
+                0.00    0.00      48/204         decltype (__miter_base(({parm#1}.base)())) std::__miter_base<int*>(std::move_iterator<int*>) [84]
+-----------------------------------------------
+                0.00    0.00      21/21          MjClass::spawn_object(int, double, double) [107]
+[103]    0.0    0.00    0.00      21         luke::spawn_object(mjModel_*, mjData_*, int, luke::QPos) [103]
+                0.00    0.00      21/21          luke::ObjectHandler::spawn_object(mjModel_*, mjData_*, int, luke::QPos) [104]
+-----------------------------------------------
+                0.00    0.00      21/21          luke::spawn_object(mjModel_*, mjData_*, int, luke::QPos) [103]
+[104]    0.0    0.00    0.00      21         luke::ObjectHandler::spawn_object(mjModel_*, mjData_*, int, luke::QPos) [104]
+                0.00    0.00      21/40          luke::ObjectHandler::check_idx(int) [90]
+                0.00    0.00      21/44          luke::ObjectHandler::reset_live(mjModel_*, mjData_*) [88]
+                0.00    0.00      21/40          luke::ObjectHandler::move_object(mjData_*, int, luke::QPos) [89]
+                0.00    0.00      21/21          luke::ObjectHandler::set_live(mjModel_*, int) [105]
+-----------------------------------------------
+                0.00    0.00      21/21          luke::ObjectHandler::spawn_object(mjModel_*, mjData_*, int, luke::QPos) [104]
+[105]    0.0    0.00    0.00      21         luke::ObjectHandler::set_live(mjModel_*, int) [105]
+                0.00    0.00      21/1139645     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char*>(char*, char*, std::forward_iterator_tag) [53]
+-----------------------------------------------
+                0.00    0.00      21/21          reset_sim(MjClass&) [27]
+[106]    0.0    0.00    0.00      21         MjClass::spawn_object(int) [106]
+                0.00    0.00      21/21          MjClass::spawn_object(int, double, double) [107]
+-----------------------------------------------
+                0.00    0.00      21/21          MjClass::spawn_object(int) [106]
+[107]    0.0    0.00    0.00      21         MjClass::spawn_object(int, double, double) [107]
+                0.00    0.00      21/21          luke::spawn_object(mjModel_*, mjData_*, int, luke::QPos) [103]
+                0.00    0.00      21/2472        luke::get_object_qpos(mjModel_*, mjData_*) [74]
+-----------------------------------------------
+                0.00    0.00      19/19          luke::ObjectHandler::reset_live(mjModel_*, mjData_*) [88]
+[108]    0.0    0.00    0.00      19         luke::ObjectHandler::reset_object(mjModel_*, mjData_*, int) [108]
+                0.00    0.00      19/40          luke::ObjectHandler::check_idx(int) [90]
+                0.00    0.00      19/40          luke::ObjectHandler::move_object(mjData_*, int, luke::QPos) [89]
+-----------------------------------------------
+                0.00    0.00      19/19          MjClass::MjClass() [35]
+[109]    0.0    0.00    0.00      19         std::vector<float, std::allocator<float> >::_M_default_append(unsigned long) [109]
+                0.00    0.00      38/173078      decltype (__miter_base(({parm#1}.base)())) std::__miter_base<float*>(std::move_iterator<float*>) [59]
+-----------------------------------------------
+                0.00    0.00      16/16          luke::init_J(mjModel_*, mjData_*) [132]
+[110]    0.0    0.00    0.00      16         std::vector<double*, std::allocator<double*> >::operator=(std::vector<double*, std::allocator<double*> > const&) [110]
+                0.00    0.00      32/32          double* const* std::__niter_base<double* const*, std::vector<double*, std::allocator<double*> > >(__gnu_cxx::__normal_iterator<double* const*, std::vector<double*, std::allocator<double*> > >) [92]
+                0.00    0.00      16/16          double** std::__niter_base<double**, std::vector<double*, std::allocator<double*> > >(__gnu_cxx::__normal_iterator<double**, std::vector<double*, std::allocator<double*> > >) [113]
+-----------------------------------------------
+                0.00    0.00      16/16          luke::init_J(mjModel_*, mjData_*) [132]
+[111]    0.0    0.00    0.00      16         std::vector<double, std::allocator<double> >::operator=(std::vector<double, std::allocator<double> > const&) [111]
+                0.00    0.00      32/32          double const* std::__niter_base<double const*, std::vector<double, std::allocator<double> > >(__gnu_cxx::__normal_iterator<double const*, std::vector<double, std::allocator<double> > >) [93]
+                0.00    0.00      16/16          double* std::__niter_base<double*, std::vector<double, std::allocator<double> > >(__gnu_cxx::__normal_iterator<double*, std::vector<double, std::allocator<double> > >) [114]
+-----------------------------------------------
+                0.00    0.00      16/16          std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >::operator=(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) [119]
+[112]    0.0    0.00    0.00      16         std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const* std::__niter_base<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >(__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >) [112]
+-----------------------------------------------
+                0.00    0.00      16/16          std::vector<double*, std::allocator<double*> >::operator=(std::vector<double*, std::allocator<double*> > const&) [110]
+[113]    0.0    0.00    0.00      16         double** std::__niter_base<double**, std::vector<double*, std::allocator<double*> > >(__gnu_cxx::__normal_iterator<double**, std::vector<double*, std::allocator<double*> > >) [113]
+-----------------------------------------------
+                0.00    0.00      16/16          std::vector<double, std::allocator<double> >::operator=(std::vector<double, std::allocator<double> > const&) [111]
+[114]    0.0    0.00    0.00      16         double* std::__niter_base<double*, std::vector<double, std::allocator<double> > >(__gnu_cxx::__normal_iterator<double*, std::vector<double, std::allocator<double> > >) [114]
+-----------------------------------------------
+                0.00    0.00      12/12          luke::configure_qpos(mjModel_*, mjData_*) [128]
+[115]    0.0    0.00    0.00      12         std::vector<double*, std::allocator<double*> >::_M_default_append(unsigned long) [115]
+                0.00    0.00      12/12          decltype (__miter_base(({parm#1}.base)())) std::__miter_base<double**>(std::move_iterator<double**>) [117]
+-----------------------------------------------
+                0.00    0.00      12/12          luke::configure_qpos(mjModel_*, mjData_*) [128]
+[116]    0.0    0.00    0.00      12         std::vector<double, std::allocator<double> >::_M_default_append(unsigned long) [116]
+                0.00    0.00      12/12          decltype (__miter_base(({parm#1}.base)())) std::__miter_base<double*>(std::move_iterator<double*>) [118]
+-----------------------------------------------
+                0.00    0.00      12/12          std::vector<double*, std::allocator<double*> >::_M_default_append(unsigned long) [115]
+[117]    0.0    0.00    0.00      12         decltype (__miter_base(({parm#1}.base)())) std::__miter_base<double**>(std::move_iterator<double**>) [117]
+-----------------------------------------------
+                0.00    0.00      12/12          std::vector<double, std::allocator<double> >::_M_default_append(unsigned long) [116]
+[118]    0.0    0.00    0.00      12         decltype (__miter_base(({parm#1}.base)())) std::__miter_base<double*>(std::move_iterator<double*>) [118]
+-----------------------------------------------
+                0.00    0.00       8/8           luke::init_J(mjModel_*, mjData_*) [132]
+[119]    0.0    0.00    0.00       8         std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >::operator=(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) [119]
+                0.00    0.00      16/16          std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const* std::__niter_base<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >(__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >) [112]
+                0.00    0.00       8/8           std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >* std::__niter_base<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >(__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >) [121]
+-----------------------------------------------
+                0.00    0.00       8/8           luke::ObjectHandler::resize() [127]
+[120]    0.0    0.00    0.00       8         std::vector<int, std::allocator<int> >::_M_default_append(unsigned long) [120]
+                0.00    0.00       8/204         decltype (__miter_base(({parm#1}.base)())) std::__miter_base<int*>(std::move_iterator<int*>) [84]
+-----------------------------------------------
+                0.00    0.00       8/8           std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >::operator=(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) [119]
+[121]    0.0    0.00    0.00       8         std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >* std::__niter_base<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >(__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >) [121]
+-----------------------------------------------
+                0.00    0.00       4/4           luke::ObjectHandler::resize() [127]
+[122]    0.0    0.00    0.00       4         std::vector<luke::QPos, std::allocator<luke::QPos> >::_M_default_append(unsigned long) [122]
+-----------------------------------------------
+                0.00    0.00       2/2           luke::ObjectHandler::init(mjModel_*, mjData_*) [126]
+[123]    0.0    0.00    0.00       2         luke::ObjectHandler::settle_objects(mjModel_*, mjData_*) [123]
+-----------------------------------------------
+                0.00    0.00       2/2           luke::ObjectHandler::init(mjModel_*, mjData_*) [126]
+[124]    0.0    0.00    0.00       2         luke::ObjectHandler::remove_collisions(mjModel_*, mjData_*) [124]
+                0.00    0.00     104/2278008     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char const*>(char const*, char const*, std::forward_iterator_tag) [52]
+-----------------------------------------------
+                0.00    0.00       2/2           luke::ObjectHandler::init(mjModel_*, mjData_*) [126]
+[125]    0.0    0.00    0.00       2         luke::ObjectHandler::overwrite_keyframe(mjModel_*, mjData_*, int) [125]
+-----------------------------------------------
+                0.00    0.00       2/2           luke::init(mjModel_*, mjData_*) [131]
+[126]    0.0    0.00    0.00       2         luke::ObjectHandler::init(mjModel_*, mjData_*) [126]
+                0.00    0.00      74/1139645     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char*>(char*, char*, std::forward_iterator_tag) [53]
+                0.00    0.00      40/2278008     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char const*>(char const*, char const*, std::forward_iterator_tag) [52]
+                0.00    0.00       6/150         void std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >::_M_realloc_insert<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) [85]
+                0.00    0.00       2/2           luke::ObjectHandler::settle_objects(mjModel_*, mjData_*) [123]
+                0.00    0.00       2/2           luke::ObjectHandler::resize() [127]
+                0.00    0.00       2/2           luke::ObjectHandler::overwrite_keyframe(mjModel_*, mjData_*, int) [125]
+                0.00    0.00       2/2           luke::ObjectHandler::remove_collisions(mjModel_*, mjData_*) [124]
+-----------------------------------------------
+                0.00    0.00       2/2           luke::ObjectHandler::init(mjModel_*, mjData_*) [126]
+[127]    0.0    0.00    0.00       2         luke::ObjectHandler::resize() [127]
+                0.00    0.00       8/8           std::vector<int, std::allocator<int> >::_M_default_append(unsigned long) [120]
+                0.00    0.00       4/4           std::vector<luke::QPos, std::allocator<luke::QPos> >::_M_default_append(unsigned long) [122]
+                0.00    0.00       2/2           std::vector<bool, std::allocator<bool> >::resize(unsigned long, bool) [134]
+-----------------------------------------------
+                0.00    0.00       2/2           luke::init_J(mjModel_*, mjData_*) [132]
+[128]    0.0    0.00    0.00       2         luke::configure_qpos(mjModel_*, mjData_*) [128]
+                0.00    0.00      12/12          std::vector<double, std::allocator<double> >::_M_default_append(unsigned long) [116]
+                0.00    0.00      12/12          std::vector<double*, std::allocator<double*> >::_M_default_append(unsigned long) [115]
+-----------------------------------------------
+                0.00    0.00       2/2           luke::init_J(mjModel_*, mjData_*) [132]
+[129]    0.0    0.00    0.00       2         luke::get_joint_indexes(mjModel_*) [129]
+                0.00    0.00     286/2278008     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char const*>(char const*, char const*, std::forward_iterator_tag) [52]
+                0.00    0.00     132/1139645     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char*>(char*, char*, std::forward_iterator_tag) [53]
+                0.00    0.00     108/110         std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > __gnu_cxx::__to_xstring<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, char>(int (*)(char*, unsigned long, char const*, __va_list_tag*), unsigned long, char const*, ...) [86]
+                0.00    0.00      15/37          void std::vector<int, std::allocator<int> >::_M_realloc_insert<int const&>(__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >, int const&) [91]
+                0.00    0.00       6/150         void std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >::_M_realloc_insert<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) [85]
+-----------------------------------------------
+                0.00    0.00       2/2           luke::init_J(mjModel_*, mjData_*) [132]
+[130]    0.0    0.00    0.00       2         luke::get_joint_addresses(mjModel_*) [130]
+                0.00    0.00      22/37          void std::vector<int, std::allocator<int> >::_M_realloc_insert<int const&>(__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >, int const&) [91]
+-----------------------------------------------
+                0.00    0.00       2/2           MjClass::init() [30]
+[131]    0.0    0.00    0.00       2         luke::init(mjModel_*, mjData_*) [131]
+                0.00    0.00       2/2           luke::init_J(mjModel_*, mjData_*) [132]
+                0.00    0.00       2/1139645     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char*>(char*, char*, std::forward_iterator_tag) [53]
+                0.00    0.00       2/25          luke::keyframe(mjModel_*, mjData_*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [96]
+                0.00    0.00       2/2           luke::ObjectHandler::init(mjModel_*, mjData_*) [126]
+-----------------------------------------------
+                0.00    0.00       2/2           luke::init(mjModel_*, mjData_*) [131]
+[132]    0.0    0.00    0.00       2         luke::init_J(mjModel_*, mjData_*) [132]
+                0.00    0.00      34/2278008     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char const*>(char const*, char const*, std::forward_iterator_tag) [52]
+                0.00    0.00      30/1139645     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char*>(char*, char*, std::forward_iterator_tag) [53]
+                0.00    0.00      30/30          std::vector<int, std::allocator<int> >::operator=(std::vector<int, std::allocator<int> > const&) [94]
+                0.00    0.00      16/16          std::vector<double, std::allocator<double> >::operator=(std::vector<double, std::allocator<double> > const&) [111]
+                0.00    0.00      16/16          std::vector<double*, std::allocator<double*> >::operator=(std::vector<double*, std::allocator<double*> > const&) [110]
+                0.00    0.00       8/8           std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >::operator=(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) [119]
+                0.00    0.00       2/2           luke::get_joint_indexes(mjModel_*) [129]
+                0.00    0.00       2/2           luke::get_joint_addresses(mjModel_*) [130]
+                0.00    0.00       2/2           luke::configure_qpos(mjModel_*, mjData_*) [128]
+-----------------------------------------------
+                0.00    0.00       2/2           std::vector<bool, std::allocator<bool> >::resize(unsigned long, bool) [134]
+[133]    0.0    0.00    0.00       2         std::vector<bool, std::allocator<bool> >::_M_fill_insert(std::_Bit_iterator, unsigned long, bool) [133]
+-----------------------------------------------
+                0.00    0.00       2/2           luke::ObjectHandler::resize() [127]
+[134]    0.0    0.00    0.00       2         std::vector<bool, std::allocator<bool> >::resize(unsigned long, bool) [134]
+                0.00    0.00       2/2           std::vector<bool, std::allocator<bool> >::_M_fill_insert(std::_Bit_iterator, unsigned long, bool) [133]
+-----------------------------------------------
+                0.00    0.00       2/2           MjClass::load_relative(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [29]
+[135]    0.0    0.00    0.00       2         std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) [135]
+                0.00    0.00       2/1139645     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char*>(char*, char*, std::forward_iterator_tag) [53]
+-----------------------------------------------
+                0.00    0.00       1/1           __libc_csu_init [34]
+[136]    0.0    0.00    0.00       1         _GLOBAL__sub_I__ZN4luke13ObjectHandlerC2Ev [136]
+                0.00    0.00       1/1           __static_initialization_and_destruction_0(int, int) [144]
+-----------------------------------------------
+                0.00    0.00       1/1           __libc_csu_init [34]
+[137]    0.0    0.00    0.00       1         _GLOBAL__sub_I__ZN4luke7Gripper9update_xyEv [137]
+                0.00    0.00       1/1           __static_initialization_and_destruction_0(int, int) [145]
+-----------------------------------------------
+                0.00    0.00       1/1           __libc_csu_init [34]
+[138]    0.0    0.00    0.00       1         _GLOBAL__sub_I__ZN6render1mE [138]
+                0.00    0.00       1/1           __static_initialization_and_destruction_0(int, int) [143]
+-----------------------------------------------
+                0.00    0.00       1/1           __libc_csu_init [34]
+[139]    0.0    0.00    0.00       1         _GLOBAL__sub_I__ZN7MjClassC2Ev [139]
+                0.00    0.00       1/1           __static_initialization_and_destruction_0(int, int) [142]
+-----------------------------------------------
+                0.00    0.00       1/1           __libc_csu_init [34]
+[140]    0.0    0.00    0.00       1         _GLOBAL__sub_I_num_xml_tasks [140]
+                0.00    0.00       1/1           __static_initialization_and_destruction_0(int, int) [141]
+-----------------------------------------------
+                0.00    0.00       1/1           _GLOBAL__sub_I_num_xml_tasks [140]
+[141]    0.0    0.00    0.00       1         __static_initialization_and_destruction_0(int, int) [141]
+-----------------------------------------------
+                0.00    0.00       1/1           _GLOBAL__sub_I__ZN7MjClassC2Ev [139]
+[142]    0.0    0.00    0.00       1         __static_initialization_and_destruction_0(int, int) [142]
+-----------------------------------------------
+                0.00    0.00       1/1           _GLOBAL__sub_I__ZN6render1mE [138]
+[143]    0.0    0.00    0.00       1         __static_initialization_and_destruction_0(int, int) [143]
+-----------------------------------------------
+                0.00    0.00       1/1           _GLOBAL__sub_I__ZN4luke13ObjectHandlerC2Ev [136]
+[144]    0.0    0.00    0.00       1         __static_initialization_and_destruction_0(int, int) [144]
+-----------------------------------------------
+                0.00    0.00       1/1           _GLOBAL__sub_I__ZN4luke7Gripper9update_xyEv [137]
+[145]    0.0    0.00    0.00       1         __static_initialization_and_destruction_0(int, int) [145]
+-----------------------------------------------
+                0.00    0.00       1/1           __static_initialization_and_destruction_0(int, int) [33]
+[146]    0.0    0.00    0.00       1         luke::JointSettings::JointSettings() [146]
+                0.00    0.00       2/2278008     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char const*>(char const*, char const*, std::forward_iterator_tag) [52]
+                0.00    0.00       1/1           luke::JointSettings::{unnamed type#1}::JointSettings() [147]
+-----------------------------------------------
+                0.00    0.00       1/1           luke::JointSettings::JointSettings() [146]
+[147]    0.0    0.00    0.00       1         luke::JointSettings::{unnamed type#1}::JointSettings() [147]
+                0.00    0.00      15/2278008     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char const*>(char const*, char const*, std::forward_iterator_tag) [52]
+                0.00    0.00      15/1139645     void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char*>(char*, char*, std::forward_iterator_tag) [53]
+-----------------------------------------------
+                0.00    0.00       1/1           __static_initialization_and_destruction_0(int, int) [33]
+[148]    0.0    0.00    0.00       1         luke::ObjectHandler::ObjectHandler() [148]
+-----------------------------------------------
+                0.00    0.00       1/1           run_test(int, int, int) [2]
+[149]    0.0    0.00    0.00       1         MjClass::tick() [149]
+-----------------------------------------------
+                0.00    0.00       1/1           run_test(int, int, int) [2]
+[150]    0.0    0.00    0.00       1         MjClass::tock() [150]
+-----------------------------------------------
+                0.00    0.00       1/1           run_test(int, int, int) [2]
+[151]    0.0    0.00    0.00       1         MjClass::~MjClass() [151]
+-----------------------------------------------
+
+ This table describes the call tree of the program, and was sorted by
+ the total amount of time spent in each function and its children.
+
+ Each entry in this table consists of several lines.  The line with the
+ index number at the left hand margin lists the current function.
+ The lines above it list the functions that called this function,
+ and the lines below it list the functions this one called.
+ This line lists:
+     index	A unique number given to each element of the table.
+		Index numbers are sorted numerically.
+		The index number is printed next to every function name so
+		it is easier to look up where the function is in the table.
+
+     % time	This is the percentage of the `total' time that was spent
+		in this function and its children.  Note that due to
+		different viewpoints, functions excluded by options, etc,
+		these numbers will NOT add up to 100%.
+
+     self	This is the total amount of time spent in this function.
+
+     children	This is the total amount of time propagated into this
+		function by its children.
+
+     called	This is the number of times the function was called.
+		If the function called itself recursively, the number
+		only includes non-recursive calls, and is followed by
+		a `+' and the number of recursive calls.
+
+     name	The name of the current function.  The index number is
+		printed after it.  If the function is a member of a
+		cycle, the cycle number is printed between the
+		function's name and the index number.
+
+
+ For the function's parents, the fields have the following meanings:
+
+     self	This is the amount of time that was propagated directly
+		from the function into this parent.
+
+     children	This is the amount of time that was propagated from
+		the function's children into this parent.
+
+     called	This is the number of times this parent called the
+		function `/' the total number of times the function
+		was called.  Recursive calls to the function are not
+		included in the number after the `/'.
+
+     name	This is the name of the parent.  The parent's index
+		number is printed after it.  If the parent is a
+		member of a cycle, the cycle number is printed between
+		the name and the index number.
+
+ If the parents of the function cannot be determined, the word
+ `<spontaneous>' is printed in the `name' field, and all the other
+ fields are blank.
+
+ For the function's children, the fields have the following meanings:
+
+     self	This is the amount of time that was propagated directly
+		from the child into the function.
+
+     children	This is the amount of time that was propagated from the
+		child's children to the function.
+
+     called	This is the number of times the function called
+		this child `/' the total number of times the child
+		was called.  Recursive calls by the child are not
+		listed in the number after the `/'.
+
+     name	This is the name of the child.  The child's index
+		number is printed after it.  If the child is a
+		member of a cycle, the cycle number is printed
+		between the name and the index number.
+
+ If there are any cycles (circles) in the call graph, there is an
+ entry for the cycle-as-a-whole.  This entry shows who called the
+ cycle (as parents) and the members of the cycle (as children.)
+ The `+' recursive calls entry shows the number of function calls that
+ were internal to the cycle, and the calls entry for each member shows,
+ for that member, how many times it was called from other members of
+ the cycle.
+
+Copyright (C) 2012-2018 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.
+
+Index by function name
+
+ [136] _GLOBAL__sub_I__ZN4luke13ObjectHandlerC2Ev (objecthandler.cpp) [128] luke::configure_qpos(mjModel_*, mjData_*) [25] MjClass::reset()
+ [137] _GLOBAL__sub_I__ZN4luke7Gripper9update_xyEv (gripper.cpp) [21] luke::get_gauge_data(mjModel_ const*, mjData_*) [80] MjClass::reward()
+  [32] _GLOBAL__sub_I__ZN4luke9print_vecESt6vectorIbSaIbEENSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE (myfunctions.cpp) [56] luke::is_target_step() [81] MjClass::is_done()
+ [138] _GLOBAL__sub_I__ZN6render1mE (rendering.cpp) [10] luke::update_stepper(mjModel_ const*, mjData_*) [35] MjClass::MjClass()
+ [139] _GLOBAL__sub_I__ZN7MjClassC2Ev (mjclass.cpp) [12] luke::control_gripper(mjModel_ const*, mjData_*, luke::Gripper&) [151] MjClass::~MjClass()
+ [140] _GLOBAL__sub_I_num_xml_tasks (test.cpp) [74] luke::get_object_qpos(mjModel_*, mjData_*) [86] std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > __gnu_cxx::__to_xstring<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, char>(int (*)(char*, unsigned long, char const*, __va_list_tag*), unsigned long, char const*, ...)
+  [76] calc_rewards(MjType::EventTrack&, MjType::Settings&) [71] luke::get_target_state() [122] std::vector<luke::QPos, std::allocator<luke::QPos> >::_M_default_append(unsigned long)
+   [3] learning_step(MjClass&) [129] luke::get_joint_indexes(mjModel_*) [85] void std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >::_M_realloc_insert<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+  [77] update_events(MjType::EventTrack&, MjType::Settings&) [57] luke::is_target_reached() [119] std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >::operator=(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&)
+  [70] normalise_between(float, float, float) [78] luke::get_gripper_target() [115] std::vector<double*, std::allocator<double*> >::_M_default_append(unsigned long)
+ [141] __static_initialization_and_destruction_0(int, int) (test.cpp) [82] luke::move_base_target_m(double, double, double) [110] std::vector<double*, std::allocator<double*> >::operator=(std::vector<double*, std::allocator<double*> > const&)
+ [142] __static_initialization_and_destruction_0(int, int) (mjclass.cpp) [130] luke::get_joint_addresses(mjModel_*) [133] std::vector<bool, std::allocator<bool> >::_M_fill_insert(std::_Bit_iterator, unsigned long, bool)
+ [143] __static_initialization_and_destruction_0(int, int) (rendering.cpp) [20] luke::read_armadillo_gauge(mjData_ const*, int) [134] std::vector<bool, std::allocator<bool> >::resize(unsigned long, bool)
+ [144] __static_initialization_and_destruction_0(int, int) (objecthandler.cpp) [14] luke::get_object_forces_faster(mjModel_ const*, mjData_*) [116] std::vector<double, std::allocator<double> >::_M_default_append(unsigned long)
+  [33] __static_initialization_and_destruction_0(int, int) (myfunctions.cpp) [24] luke::move_gripper_target_step(int, int, int) [111] std::vector<double, std::allocator<double> >::operator=(std::vector<double, std::allocator<double> > const&)
+ [145] __static_initialization_and_destruction_0(int, int) (gripper.cpp) [131] luke::init(mjModel_*, mjData_*) [83] std::vector<float, std::allocator<float> >::_M_fill_assign(unsigned long, float const&)
+   [2] run_test(int, int, int) [7] luke::step(mjModel_*, mjData_*) [63] void std::vector<float, std::allocator<float> >::_M_range_insert<__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > > >(__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, std::forward_iterator_tag)
+  [27] reset_sim(MjClass&)    [26] luke::reset(mjModel_*, mjData_*) [109] std::vector<float, std::allocator<float> >::_M_default_append(unsigned long)
+  [18] bool arma::glue_polyfit::apply_direct<arma::subview<double>, arma::subview<double> >(arma::Mat<arma::subview<double>::elem_type>&, arma::Base<arma::subview<double>::elem_type, arma::subview<double> > const&, arma::Base<arma::subview<double>::elem_type, arma::subview<double> > const&, unsigned long long) [132] luke::init_J(mjModel_*, mjData_*) [67] void std::vector<float, std::allocator<float> >::_M_realloc_insert<float const&>(__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, float const&)
+  [19] bool arma::glue_polyfit::apply_noalias<double>(arma::Mat<double>&, arma::Col<double> const&, arma::Col<double> const&, unsigned long long) [58] luke::rawNum::rawNum(luke::rawNum const&) [64] __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > > std::vector<float, std::allocator<float> >::insert<__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, void>(__gnu_cxx::__normal_iterator<float const*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >, __gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >)
+  [62] arma::Mat<double>::init_warm(unsigned long long, unsigned long long) [28] luke::Gripper::update() [65] std::vector<float, std::allocator<float> >::vector(std::vector<float, std::allocator<float> > const&)
+  [11] luke::after_step(mjModel_*, mjData_*) [16] luke::Gripper::step_to(luke::Gripper, int) [102] std::vector<int, std::allocator<int> >::_M_fill_insert(__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >, unsigned long, int const&)
+   [9] luke::update_all(mjModel_ const*, mjData_*) [54] luke::Gripper::update_z() [120] std::vector<int, std::allocator<int> >::_M_default_append(unsigned long)
+  [55] luke::before_step(mjModel_*, mjData_*) [17] luke::Gripper::update_xy() [91] void std::vector<int, std::allocator<int> >::_M_realloc_insert<int const&>(__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >, int const&)
+  [98] luke::get_objects[abi:cxx11]() [8] luke::control(mjModel_ const*, mjData_*) [94] std::vector<int, std::allocator<int> >::operator=(std::vector<int, std::allocator<int> > const&)
+  [15] luke::control_base(mjModel_ const*, mjData_*) [96] luke::keyframe(mjModel_*, mjData_*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [52] void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char const*>(char const*, char const*, std::forward_iterator_tag)
+  [99] luke::reset_object(mjModel_*, mjData_*) [97] luke::keyframe(mjModel_*, mjData_*, int) [53] void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char*>(char*, char*, std::forward_iterator_tag)
+ [103] luke::spawn_object(mjModel_*, mjData_*, int, luke::QPos) [69] MjType::Sensor::raw_sample(luke::SlidingWindow<float>, float) [117] decltype (__miter_base(({parm#1}.base)())) std::__miter_base<double**>(std::move_iterator<double**>)
+ [146] luke::JointSettings::JointSettings() [66] MjType::Sensor::change_sample(luke::SlidingWindow<float>, float) [118] decltype (__miter_base(({parm#1}.base)())) std::__miter_base<double*>(std::move_iterator<double*>)
+ [147] luke::JointSettings::{unnamed type#1}::JointSettings() [23] MjClass::set_action(int) [59] decltype (__miter_base(({parm#1}.base)())) std::__miter_base<float*>(std::move_iterator<float*>)
+  [88] luke::ObjectHandler::reset_live(mjModel_*, mjData_*) [22] MjClass::update_env() [84] decltype (__miter_base(({parm#1}.base)())) std::__miter_base<int*>(std::move_iterator<int*>)
+  [89] luke::ObjectHandler::move_object(mjData_*, int, luke::QPos) [4] MjClass::action_step() [112] std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const* std::__niter_base<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >(__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >)
+ [108] luke::ObjectHandler::reset_object(mjModel_*, mjData_*, int) [106] MjClass::spawn_object(int) [92] double* const* std::__niter_base<double* const*, std::vector<double*, std::allocator<double*> > >(__gnu_cxx::__normal_iterator<double* const*, std::vector<double*, std::allocator<double*> > >)
+ [104] luke::ObjectHandler::spawn_object(mjModel_*, mjData_*, int, luke::QPos) [107] MjClass::spawn_object(int, double, double) [93] double const* std::__niter_base<double const*, std::vector<double, std::allocator<double> > >(__gnu_cxx::__normal_iterator<double const*, std::vector<double, std::allocator<double> > >)
+  [73] luke::ObjectHandler::get_live_qpos(mjModel_*, mjData_*) [29] MjClass::load_relative(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [61] float const* std::__niter_base<float const*, std::vector<float, std::allocator<float> > >(__gnu_cxx::__normal_iterator<float const*, std::vector<float, std::allocator<float> > >)
+ [123] luke::ObjectHandler::settle_objects(mjModel_*, mjData_*) [75] MjClass::get_observation() [87] int const* std::__niter_base<int const*, std::vector<int, std::allocator<int> > >(__gnu_cxx::__normal_iterator<int const*, std::vector<int, std::allocator<int> > >)
+ [124] luke::ObjectHandler::remove_collisions(mjModel_*, mjData_*) [6] MjClass::monitor_sensors() [121] std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >* std::__niter_base<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >(__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >)
+ [125] luke::ObjectHandler::overwrite_keyframe(mjModel_*, mjData_*, int) [100] MjClass::configure_settings() [113] double** std::__niter_base<double**, std::vector<double*, std::allocator<double*> > >(__gnu_cxx::__normal_iterator<double**, std::vector<double*, std::allocator<double*> > >)
+  [13] luke::ObjectHandler::extract_forces_faster(mjModel_ const*, mjData_*) [79] MjClass::sense_gripper_state() [114] double* std::__niter_base<double*, std::vector<double, std::allocator<double> > >(__gnu_cxx::__normal_iterator<double*, std::vector<double, std::allocator<double> > >)
+  [68] luke::ObjectHandler::get_object_net_force_faster(mjModel_ const*, mjData_*) [101] MjClass::default_goal_event_triggering() [60] float* std::__niter_base<float*, std::vector<float, std::allocator<float> > >(__gnu_cxx::__normal_iterator<float*, std::vector<float, std::allocator<float> > >)
+ [126] luke::ObjectHandler::init(mjModel_*, mjData_*) [30] MjClass::init() [95] int* std::__niter_base<int*, std::vector<int, std::allocator<int> > >(__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >)
+ [127] luke::ObjectHandler::resize() [31] MjClass::load(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [72] double const* std::__min_element<double const*, __gnu_cxx::__ops::_Iter_less_iter>(double const*, double const*, __gnu_cxx::__ops::_Iter_less_iter)
+ [105] luke::ObjectHandler::set_live(mjModel_*, int) [5] MjClass::step() [135] std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+  [90] luke::ObjectHandler::check_idx(int) [149] MjClass::tick()
+ [148] luke::ObjectHandler::ObjectHandler() [150] MjClass::tock()

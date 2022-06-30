@@ -1,0 +1,21 @@
+<mujoco><mesh file="models/sphere/sphere.STL" name="sphere_normal_37" refquat="1 0 0 0" scale="1.188235294117647 1.188235294117647 1.188235294117647"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_64" refquat="1 0 0 0" scale="1.0294117647058822 1.0294117647058822 1.0294117647058822"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_83" refquat="1 0 0 0" scale="0.9176470588235293 0.9176470588235293 0.9176470588235293"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_80" refquat="1 0 0 0" scale="0.9352941176470587 0.9352941176470587 0.9352941176470587"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_2" refquat="1 0 0 0" scale="1.3941176470588235 1.3941176470588235 1.3941176470588235"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_47" refquat="1 0 0 0" scale="1.1294117647058823 1.1294117647058823 1.1294117647058823"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_20" refquat="1 0 0 0" scale="1.288235294117647 1.288235294117647 1.288235294117647"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_112" refquat="1 0 0 0" scale="0.7470588235294117 0.7470588235294117 0.7470588235294117"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_70" refquat="1 0 0 0" scale="0.9941176470588234 0.9941176470588234 0.9941176470588234"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_106" refquat="1 0 0 0" scale="0.7823529411764705 0.7823529411764705 0.7823529411764705"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_111" refquat="1 0 0 0" scale="0.7529411764705881 0.7529411764705881 0.7529411764705881"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_98" refquat="1 0 0 0" scale="0.8294117647058823 0.8294117647058823 0.8294117647058823"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_78" refquat="1 0 0 0" scale="0.9470588235294117 0.9470588235294117 0.9470588235294117"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_62" refquat="1 0 0 0" scale="1.0411764705882351 1.0411764705882351 1.0411764705882351"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_18" refquat="1 0 0 0" scale="1.2999999999999998 1.2999999999999998 1.2999999999999998"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_28" refquat="1 0 0 0" scale="1.2411764705882353 1.2411764705882353 1.2411764705882353"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_9" refquat="1 0 0 0" scale="1.352941176470588 1.352941176470588 1.352941176470588"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_51" refquat="1 0 0 0" scale="1.1058823529411763 1.1058823529411763 1.1058823529411763"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_103" refquat="1 0 0 0" scale="0.7999999999999999 0.7999999999999999 0.7999999999999999"/>
+  <mesh file="models/sphere/sphere.STL" name="sphere_normal_76" refquat="1 0 0 0" scale="0.9588235294117646 0.9588235294117646 0.9588235294117646"/>
+  </mujoco>
