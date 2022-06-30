@@ -25,7 +25,6 @@ const int maxgeom = 5000;           // preallocated geom array in mjvScene
 const double syncmisalign = 0.1;    // maximum time mis-alignment before re-sync
 const double refreshfactor = 0.7;   // fraction of refresh available for simulation
 
-
 // model and data
 mjModel* m = NULL;
 mjData* d = NULL;
@@ -84,13 +83,16 @@ struct
     int fullscreen = 0;
     int vsync = 1;
     int busywait = 0;
-    int bendgauge = 0;      // added by luke
-    int axialgauge = 0;     // added by luke
-    int palmsensor = 0;     // added by luke
-    int wristsensor = 0;    // added by luke
-    int allsensors = 0;     // added by luke
-    int object_int = 0;     // added by luke
-    int env_steps = 1;      // added by luke
+    int bendgauge = 0;          // added by luke
+    int axialgauge = 0;         // added by luke
+    int palmsensor = 0;         // added by luke
+    int wristsensor = 0;        // added by luke
+    int allsensors = 0;         // added by luke
+    int object_int = 0;         // added by luke
+    int env_steps = 1;          // added by luke
+    int object_x_noise_mm = 0;  // added by luke
+    int object_y_noise_mm = 0;  // added by luke
+    int object_z_rot_deg = 0;   // added by luke
 
     // simulation
     int run = 1;
@@ -1190,6 +1192,9 @@ void makeObjectUI(int oldstate)
         {mjITEM_BUTTON,    "Wipe curve fit", 2, NULL,                    " #305"},
         // {mjITEM_BUTTON,    "Copy pose",     2, NULL,                    " #304"},
         {mjITEM_SLIDERINT, "Live Object",   3, &settings.object_int,    "0 20"},
+        {mjITEM_SLIDERINT, "x noise",       3, &settings.object_x_noise_mm, "-10 10"},
+        {mjITEM_SLIDERINT, "y noise",       3, &settings.object_y_noise_mm, "-10 10"},
+        {mjITEM_SLIDERINT, "z rotation",    3, &settings.object_z_rot_deg,  "0 360"},
         // {mjITEM_BUTTON,    "Reset to key",  3},
         // {mjITEM_BUTTON,    "Set key",       3},
         {mjITEM_END}
@@ -1853,7 +1858,7 @@ void uiEvent(mjuiState* state)
             // std::cout << "case " << it->itemid << '\n';
             switch (it->itemid)
             {
-                // changin the gripper slider
+                // changing the gripper slider
                 default: {
                     luke::target_.end.update_x_th_z();
                     break;
@@ -1905,20 +1910,14 @@ void uiEvent(mjuiState* state)
             switch( it->itemid )
             {
             case 0: {            // Reset
-                // std::cout << "case 0\n";
-                // luke::reset_object(d);
                 myMjClass.reset_object();
                 break;
             }
             case 1: {            // Respawn
-                // std::cout << "case 1\n";
-                // luke::QPos default_pose;
-                // double z_rest = luke::get_object_rest(settings.object_int);
-                // default_pose.z = z_rest;
-                // luke::spawn_object(d, settings.object_int, default_pose);
-
-                std::cout << "object to spawn is " << settings.object_int << '\n';
-                myMjClass.spawn_object(settings.object_int);
+                myMjClass.spawn_object(settings.object_int, 
+                    settings.object_x_noise_mm * 1e-3,
+                    settings.object_y_noise_mm * 1e-3,
+                    settings.object_z_rot_deg * (3.1416 / 180.0));
 
                 break;
             }

@@ -31,7 +31,7 @@ public:
   // gripper physical constants - user set
   constexpr static double leadscrew_dist = 35e-3;
   constexpr static double finger_length = 235e-3;
-  constexpr static double hook_length = 35e-3;
+  constexpr static double hook_length = 39.5e-3;
 
   constexpr static double xy_lead = 4;
   constexpr static double xy_gear = 1.5;
@@ -41,15 +41,15 @@ public:
   constexpr static double z_gear = 1;
   constexpr static double z_steps_per_rev = 400;
 
-  // home position - user set
-  constexpr static double xy_home = 131e-3;
-  constexpr static double z_home = 4.88e-3;
-
   // hard gripper limits - user set
-  constexpr static double xy_min =  50e-3;
-  constexpr static double xy_max = 135e-3;
+  constexpr static double xy_min =  49e-3;
+  constexpr static double xy_max = 134e-3;
   constexpr static double z_min = 0e-3;
-  constexpr static double z_max = 160e-3;
+  constexpr static double z_max = 165e-3;
+
+  // home position - user set
+  constexpr static double xy_home = xy_max - 1.0 * (xy_lead * 1e-3 / xy_gear); // home is 1.0rev from max
+  constexpr static double z_home = z_min + 1.0 * (z_lead * 1e-3 / z_gear);     // see Gripper_v2.h (Arduino library)
 
   // safety limits - user set
   double th_min = -40 * to_rad;

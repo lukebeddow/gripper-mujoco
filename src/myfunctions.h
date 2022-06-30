@@ -48,6 +48,7 @@ void keyframe(mjModel* model, mjData* data, std::string keyframe_name);
 void keyframe(mjModel* model, mjData* data, int keyframe_index);
 void reset(mjModel* model, mjData* data);
 void wipe_settled();
+void calibrate_reset(mjModel* model, mjData* data);
 
 // simulation
 void before_step(mjModel* model, mjData* data);

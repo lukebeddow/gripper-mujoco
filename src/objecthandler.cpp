@@ -307,7 +307,7 @@ void ObjectHandler::spawn_object(mjModel* model, mjData* data, int idx, QPos pos
   reset_live(model, data);
 
   // override the z height of the given pose to use reset value
-  pose.z = reset_qpos[idx].z;
+  pose.z = reset_qpos[idx].z + z_spawn_tolerance;
 
   // move this object into the given pose
   move_object(data, idx, pose);

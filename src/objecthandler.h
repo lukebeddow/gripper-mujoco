@@ -36,6 +36,9 @@ struct ObjectHandler {
   int f3_idx;
   int pm_idx;
 
+  // extra tolerance when spawning objects in metres
+  constexpr static double z_spawn_tolerance =  1e-6;
+
   // collision groups
   constexpr static unsigned long COL_none = 0;  // 0...000
   constexpr static unsigned long COL_main = 1;  // 0...001

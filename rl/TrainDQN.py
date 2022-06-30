@@ -53,7 +53,7 @@ class TrainDQN():
     adam_beta2: float = 0.999
 
     # memory replay and HER settings
-    memory_replay: int = 10000
+    memory_replay: int = 50000
     min_memory_replay: int = 5000
     use_HER: bool = False
     HER_mode: str = "final" # or 'future' or 'episode'
@@ -1333,7 +1333,7 @@ if __name__ == "__main__":
   # if we want to adjust parameters
   # model.log_level = 2
   # model.params.num_episodes = 11
-  # model.env.max_episode_steps = 20
+  model.env.max_episode_steps = 20
   # model.params.wandb_freq_s = 5
   # model.env.mj.set.action_motor_steps = 350
   # model.env.disable_rendering = False
@@ -1365,21 +1365,21 @@ if __name__ == "__main__":
 
   # ----- load ----- #
 
-  # load
-  net = networks.DQN_3L60
-  model.init(net)
-  folderpath = "/home/luke/mymujoco/rl/models/dqn/15-06-22/"
-  foldername = "luke-PC_15:10_A11"
-  # model.device = "cuda"
-  model.load(id=5, folderpath=folderpath, foldername=foldername)
+  # # load
+  # net = networks.DQN_3L60
+  # model.init(net)
+  # folderpath = "/home/luke/mymujoco/rl/models/dqn/15-06-22/"
+  # foldername = "luke-PC_15:10_A11"
+  # # model.device = "cuda"
+  # model.load(id=5, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
-  # # train
-  # net = networks.DQN_3L60
-  # model.env.disable_rendering = True
-  # model.env.mj.set.debug = False
-  # model.train(network=net)
+  # train
+  net = networks.DQN_3L60
+  model.env.disable_rendering = False
+  model.env.mj.set.debug = False
+  model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"

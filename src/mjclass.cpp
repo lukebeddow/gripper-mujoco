@@ -259,6 +259,7 @@ void MjClass::reset()
   x_motor_position.reset();
   y_motor_position.reset();
   z_motor_position.reset();
+  z_base_position.reset();
 
   // reset timestamps for sensor readings
   gauge_timestamps.reset();
@@ -512,6 +513,8 @@ void MjClass::sense_gripper_state()
   y_motor_position.add(state_vec[1]);
   z_motor_position.add(state_vec[2]);
   z_base_position.add(state_vec[3]);
+
+  std::cout << "Base Z reading: "; z_base_position.print(5);
 }
 
 void MjClass::update_env()
@@ -1019,15 +1022,17 @@ void MjClass::spawn_object(int index)
 {
   /* overload, default x and y positions */
 
-  constexpr double default_x = 0.0;
-  constexpr double default_y = 0.0;
+  constexpr double default_x_pos = 0.0;
+  constexpr double default_y_pos = 0.0;
+  constexpr double default_z_rot = 0.0;
 
-  spawn_object(index, default_x, default_y);
+  spawn_object(index, default_x_pos, default_y_pos, default_z_rot);
 }
 
-void MjClass::spawn_object(int index, double xpos, double ypos)
+void MjClass::spawn_object(int index, double xpos, double ypos, double zrot)
 {
-  /* spawn an object beneath the gripper */
+  /* spawn an object beneath the gripper at (xpos, ypos) with a given rotation
+  zrot in radians about the vertical axis */
 
   if (index < 0 or index >= env_.object_names.size()) {
     throw std::runtime_error("bad index to spawn_object()");
@@ -1042,9 +1047,26 @@ void MjClass::spawn_object(int index, double xpos, double ypos)
   spawn_pos.y = ypos;
   spawn_pos.z = -1;     // will automatically be set to keyframe value
 
+  // set the rotation to be spawned
+  double x1 = spawn_pos.qx;
+  double y1 = spawn_pos.qy;
+  double z1 = spawn_pos.qz;
+  double w1 = spawn_pos.qw;
+  double x2 = 1 * 1 * sin(zrot / 2) - 0 * 0 * cos(zrot / 2);
+  double y2 = 0 * 1 * cos(zrot / 2) - 1 * 0 * sin(zrot / 2);
+  double z2 = 1 * 0 * cos(zrot / 2) + 0 * 1 * sin(zrot / 2);
+  double w2 = 1 * 1 * cos(zrot / 2) + 0 * 0 * sin(zrot / 2);
+  spawn_pos.qw = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2;
+  spawn_pos.qx = w1 * x2 + x1 * w2 - y1 * z2 + z1 * y2;
+  spawn_pos.qy = w1 * y2 + x1 * z2 + y1 * w2 - z1 * x2;
+  spawn_pos.qz = w1 * z2 - x1 * y2 + y1 * x2 + z1 * w2;
+
   // spawn the object and save its start position
   luke::spawn_object(model, data, index, spawn_pos);
   env_.start_qpos = luke::get_object_qpos(model, data);
+
+  std::cout << "start qpos is ";
+  env_.start_qpos.print();
 
   // update everything for rendering
   forward();

@@ -206,8 +206,13 @@ def add_sensors(model, num=10, sensor_mode=1, state_mode=0):
   # wrist z force sensor
   if num >= 3: model.env.mj.set.wrist_sensor_Z.in_use = True
 
-  # wrist xy force sensor
-  if num >= 4: model.env.mj.set.wrist_sensor_XY.in_use = True
+  # # wrist xy force sensor WE DONT WANT THIS SENSOR
+  # if num >= 4: model.env.mj.set.wrist_sensor_XY.in_use = True
+
+  # base z position sensor
+  if num >= 4:
+    model.env.mj.set.base_state_sensor.in_use = True
+    model.env.mj.set.base_state_sensor.read_rate = -2
 
   # finger axial gauges
   if num >= 5: model.env.mj.set.axial_gauge.in_use = True
@@ -328,14 +333,14 @@ def apply_to_all_models(model):
   model.params.adam_beta2 = 0.999
 
   # memory replay and HER
-  model.params.memory_replay = 20_000
+  model.params.memory_replay = 50_000
   model.params.min_memory_replay = 5_000
   model.params.use_HER = False # python setting OVERRIDES cpp
   model.params.HER_mode = "final"
   model.params.HER_k = 4
 
   # data logging
-  model.params.save_freq = 500
+  model.params.save_freq = 1_000
   model.params.test_freq = 1_000
   model.params.plot_freq_s = 300
   model.params.wandb_freq_s = 300
@@ -351,7 +356,7 @@ def apply_to_all_models(model):
 
   # define lengths and forces
   model.env.mj.set.oob_distance = 75e-3
-  model.env.mj.set.done_height = 25e-3
+  model.env.mj.set.done_height = 35e-3
   model.env.mj.set.stable_finger_force = 0.4
   model.env.mj.set.stable_palm_force = 1.0
 
@@ -373,24 +378,18 @@ def apply_to_all_models(model):
 
   # wipe all rewards so none trigger
   model.env.mj.set.wipe_rewards()
-  model.env.mj.set.quit_on_reward_below = -10e5
-  model.env.mj.set.quit_on_reward_above = 10e5
+  model.env.mj.set.quit_on_reward_below = -1e6
+  model.env.mj.set.quit_on_reward_above = 1e6
   model.env.mj.set.quit_reward_capped = False
 
   # disable use of all sensors, then add back defaults
-  # model.env.mj.set.disable_sensors()
-  model.env.mj.set.motor_state_sensor.in_use = False
-  model.env.mj.set.bending_gauge.in_use = False
-  # model.env.mj.set.base_state_sensor.in_use = False
-  model.env.mj.set.axial_gauge.in_use = False
-  model.env.mj.set.palm_sensor.in_use = False
-  model.env.mj.set.wrist_sensor_XY.in_use = False
-  model.env.mj.set.wrist_sensor_Z.in_use = False
-
+  model.env.mj.set.disable_sensors()
   model.env.mj.set.motor_state_sensor.in_use = True
-  model.env.mj.set.motor_state_sensor.read_rate = -1
-  # model.env.mj.set.base_state_sensor.read_rate = -1
   model.env.mj.set.bending_gauge.in_use = True
+
+  # set state sensors to default of one reading only
+  model.env.mj.set.motor_state_sensor.read_rate = -1
+  model.env.mj.set.base_state_sensor.read_rate = -1
 
   # logging/plotting options
   model.track.moving_avg_num = 100
@@ -446,7 +445,7 @@ def logging_job(model, run_name, group_name):
   model.plot(force=True, hang=True)
 
 def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=5, network=networks.DQN_3L60, 
-                      memory=10_000):
+                      memory=50_000):
   """
   Runs a baseline training on the model
   """
@@ -507,6 +506,7 @@ if __name__ == "__main__":
   parser.add_argument("-t", default=None)        # timestamp
   parser.add_argument("-m", default=None)        # machine
   parser.add_argument("-o", default=None)        # object set name
+  parser.add_argument("-d", default=None)        # save dir location
   parser.add_argument("-c", action="store_true") # continue training
   parser.add_argument("-l", action="store_true") # log to wandb job
   parser.add_argument("-p", action="store_true") # plot to wandb job
@@ -518,6 +518,7 @@ if __name__ == "__main__":
   timestamp = args.t if args.t else datetime.now().strftime(datestr)
   machine_override = args.m
   resume_training = args.c
+  save_location_override = args.d
   log_wandb = args.l
   log_plot = args.p
   if args.n: use_wandb = False
@@ -529,6 +530,7 @@ if __name__ == "__main__":
   print("Machine override is:", machine_override)
   print("Resume training is:", resume_training)
   print("Object set override is", object_set_override)
+  print("Save location override is", save_location_override)
   print("Use wandb is", use_wandb)
   print("log_wandb is", log_wandb)
   print("log_plot is", log_plot)
@@ -559,6 +561,10 @@ if __name__ == "__main__":
   # override default object set
   if object_set_override is not None:
     model.env._load_object_set(name=object_set_override)
+
+  # override save location
+  if save_location_override is not None:
+    model.savedir = save_location_override
 
   print("Run group is:", model.group_name)
   print("Run name is:", model.run_name)
@@ -601,6 +607,11 @@ if __name__ == "__main__":
   # perform the training with other parameters standard
   baseline_training(model, lr=this_lr, ed=this_ed)
   """
+
+  # new baseline test
+  baseline_training(model, sensors=inputarg)
+
+  # ----- nothing below here as exit() used ----- #
   
   # varying 5x5 = 25 possible trainings 1-25
   sensors_list = [1, 2, 3, 4, 5]

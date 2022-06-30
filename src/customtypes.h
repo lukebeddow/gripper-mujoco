@@ -313,7 +313,6 @@ struct Forces_faster {
 
 };
 
-
 struct Gain {
 
   // gains for x,y,z motors
@@ -341,9 +340,9 @@ struct QPos {
   double x, y, z, qx, qy, qz, qw;
 
   // constructor
+  QPos() : x(0), y(0), z(0), qx(0), qy(0), qz(0), qw(1) {}
   QPos(double x, double y, double z, double qx, double qy, double qz, double qw)
     : x(x), y(y), z(z), qx(qx), qy(qy), qz(qz), qw(qw) {}
-  QPos() { QPos(0, 0, 0, 0, 0, 0, 1); };
   void reset() { x = y = z = qx = qy = qz = 0; qw = 1; }
 
   // update using mjData and qpos address (idx)
@@ -366,7 +365,7 @@ struct QPos {
 
   void print() {
     std::printf("QPos: xyz = (%.3f, %.3f, %.3f) quat = (%.3f, %.3f, %.3f, %.3f)\n",
-      x, y, z, qx, qy, qw, qz);
+      x, y, z, qx, qy, qz, qw);
   }
 };
 

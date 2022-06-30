@@ -679,7 +679,7 @@ public:
   std::vector<float> set_action(int action);
   void reset_object();
   void spawn_object(int index);
-  void spawn_object(int index, double xpos, double ypos);
+  void spawn_object(int index, double xpos, double ypos, double zrot);
   bool is_done();
   std::vector<luke::gfloat> get_observation();
   std::vector<float> get_event_state();

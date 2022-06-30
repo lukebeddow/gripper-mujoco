@@ -281,17 +281,15 @@ class MjEnv():
     x_pos_mm = np.random.randint(-self.object_position_noise_mm, self.object_position_noise_mm + 1)
     y_pos_mm = np.random.randint(-self.object_position_noise_mm, self.object_position_noise_mm + 1)
 
+    # randomly choose a z rotation
+    z_rot_rad = np.random.choice([0, 60, 120]) * (np.pi / 180.0)
+
     # if we are doing a test, chose a specific object
     if self.test_in_progress:
       obj_idx = self.current_test_trial.obj_idx
 
-    # # for testing - fix these random quantities
-    # obj_idx = 0
-    # x_pos_mm = 0
-    # y_pos_mm = 0
-
     # spawn in the object
-    self.mj.spawn_object(obj_idx, x_pos_mm * 1e-3, y_pos_mm * 1e-3)
+    self.mj.spawn_object(obj_idx, x_pos_mm * 1e-3, y_pos_mm * 1e-3, z_rot_rad)
 
     return
 

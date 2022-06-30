@@ -48,7 +48,7 @@ PYBIND11_MODULE(bind, m) {
     .def("set_action", &MjClass::set_action)
     .def("reset_object", &MjClass::reset_object)
     .def("spawn_object", static_cast<void (MjClass::*)(int)>(&MjClass::spawn_object)) /* see bottom */
-    .def("spawn_object", static_cast<void (MjClass::*)(int, double, double)>(&MjClass::spawn_object))
+    .def("spawn_object", static_cast<void (MjClass::*)(int, double, double, double)>(&MjClass::spawn_object))
     .def("is_done", &MjClass::is_done)
     .def("get_observation", &MjClass::get_observation)
     .def("get_event_state", &MjClass::get_event_state)

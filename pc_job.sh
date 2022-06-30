@@ -32,7 +32,7 @@ timestamp="$(date +%d-%m-%y-%H:%M)"
 FAKETTY=faketty
 
 # a colon after a flag character indicates it expects an argument
-while getopts "j:t:m:clpnfs:o:h" opt
+while getopts "j:t:m:clpnfs:o:d:h" opt
 do
    case "$opt" in
       j ) jobs="$OPTARG" ; echo Jobs input are "$jobs" ;;
@@ -45,6 +45,7 @@ do
       f ) FAKETTY=; echo faketty has been disabled ;;
       s ) STAGGER="$OPTARG" ; echo Stagger has been set to true with rate $STAGGER ;;
       o ) OBJECTS="-o $OPTARG" ; echo Object set override has been set as: $OPTARG ;;
+      d ) SAVEDIR="-d $OPTARG" ; echo Save directory override has been set as $OPTARG ;;
       h ) helpFunction ;; # help flag
       * ) echo Invalid flag received ; helpFunction ;;
    esac
@@ -101,6 +102,7 @@ do
         $LOG_WANDB \
         $LOG_PLOT \
         $OBJECTS \
+        $SAVEDIR \
         > "$LOG_FOLDER/$JOB_NAME.txt" &
     echo Submitted job: "$JOB_NAME"
 

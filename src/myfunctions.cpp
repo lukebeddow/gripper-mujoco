@@ -320,7 +320,8 @@ ObjectHandler oh_;
 
 Target target_;     // global state target
 
-// gripper finger state trackers
+// gripper finger state 
+// these are not currently used at all!
 Gripper finger1_;
 Gripper finger2_;
 Gripper finger3_;
@@ -329,6 +330,7 @@ Gripper finger3_;
 static double last_step_time_ = 0.0;
 
 // make vectors of pointers for properties we will want to loop over
+// these are not currently used at all!
 std::vector<Gripper*> fingers_ {&finger1_, &finger2_, &finger3_};
 std::vector<std::array<std::array<int, 2>, j_.sim.n_arr>*> finger_arrays_ {
   &j_.settle.finger1_arr, &j_.settle.finger2_arr, &j_.settle.finger3_arr
@@ -409,7 +411,7 @@ void reset(mjModel* model, mjData* data)
   mj_resetData(model, data);
   keyframe(model, data, j_.reset_keyframe);
   reset_object(model, data);
-  
+
   // recalculate all object positions/forces
   mj_forward(model, data);
   update_all(model, data);
@@ -417,6 +419,9 @@ void reset(mjModel* model, mjData* data)
   // briefly override
   j_.settle.settled = true;
   j_.settle.target_reached = true;
+
+  // set the joints to the eqilibrium position
+  calibrate_reset(model, data);
 }
 
 void print_joint_names(mjModel* model)
@@ -636,6 +641,61 @@ void keyframe(mjModel* model, mjData* data, int key)
   last_step_time_ = model->key_time[key];
 }
 
+void calibrate_reset(mjModel* model, mjData* data)
+{
+  /* find the equilibrium start position and set the simulation to that */
+
+  static bool first_call = true;
+  static std::vector<mjtNum> control_signals;
+  static std::vector<mjtNum> qpos_positions;
+
+  if (first_call) {
+
+    constexpr int settle_number = 400; // found using mysimulate and visual inspection
+
+    // loop to settle the simulation ~86ms
+    for (int i = 0; i < settle_number; i++) {
+      before_step(model, data);
+      step(model, data);
+      after_step(model, data);
+    }
+
+    // see where the joints have settled to equilibrium
+    for (int i = 0; i < j_.num.panda; i++) {
+      qpos_positions.push_back(*j_.to_qpos.panda[i]);
+    }
+
+    for (int i = 0; i < j_.num.base; i++) {
+      qpos_positions.push_back(*j_.to_qpos.base[i]);
+    }
+
+    for (int i = 0; i < j_.num.gripper; i++) {
+      qpos_positions.push_back(*j_.to_qpos.gripper[i]);
+    }
+
+    first_call = false;
+  }
+
+  int k = 0;
+
+  // apply the equilibrium positions to the joints
+  for (int i = 0; i < j_.num.panda; i++) { 
+    (*j_.to_qpos.panda[i]) = qpos_positions[k]; 
+    k += 1;
+  }
+
+  for (int i = 0; i < j_.num.base; i++) {
+    (*j_.to_qpos.base[i]) = qpos_positions[k]; 
+    k += 1;
+  }
+
+  for (int i = 0; i < j_.num.gripper; i++) {
+    (*j_.to_qpos.gripper[i]) = qpos_positions[k]; 
+    k += 1;
+  }
+
+}
+
 void wipe_settled()
 {
   /* wipes the settled and target reached states, to give an action time to
@@ -806,10 +866,6 @@ void control_gripper(const mjModel* model, mjData* data, Gripper& target)
 
   double u = 0;
 
-  // std::cout << "targeting steps: " << target.step.x << " " << target.step.y
-  //   << " " << target.step.z << ", global target is " << target_.step.x
-  //   << " " << target_.step.y << " " << target_.step.z << '\n';
-
   double force_lim = 10000;
 
   int n = j_.num.panda + j_.num.base;
@@ -922,6 +978,9 @@ void update_all(const mjModel* model, mjData* data)
   else {
     throw std::runtime_error("non-stepper not implemented");
   }
+
+  // FOR TESTING
+
 }
 
 void update_stepper(const mjModel* model, mjData* data)
