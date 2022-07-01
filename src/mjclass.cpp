@@ -513,8 +513,6 @@ void MjClass::sense_gripper_state()
   y_motor_position.add(state_vec[1]);
   z_motor_position.add(state_vec[2]);
   z_base_position.add(state_vec[3]);
-
-  std::cout << "Base Z reading: "; z_base_position.print(5);
 }
 
 void MjClass::update_env()
