@@ -107,6 +107,41 @@ class DQN_4L60(nn.Module):
 
     return x
 
+
+class DQN_5L60(nn.Module):
+
+  name = "DQN_5L60"
+
+  def __init__(self, inputs, outputs, device):
+    super(DQN_4L60, self).__init__()
+    self.device = device
+    self.linear1 = torch.nn.Linear(inputs, 60)
+    self.linear2 = torch.nn.Linear(60, 60)
+    self.linear3 = torch.nn.Linear(60, 60)
+    self.linear4 = torch.nn.Linear(60, 60)
+    self.linear5 = torch.nn.Linear(60, 60)
+    self.linear6 = torch.nn.Linear(60, outputs)
+    self.activation = torch.nn.ReLU()
+    self.softmax = torch.nn.Softmax(dim=1)
+
+  def forward(self, x):
+    x = x.to(self.device)
+    x = self.linear1(x)
+    x = self.activation(x)
+    x = self.linear2(x)
+    x = self.activation(x)
+    x = self.linear3(x)
+    x = self.activation(x)
+    x = self.linear4(x)
+    x = self.activation(x)
+    x = self.linear5(x)
+    x = self.activation(x)
+    x = self.linear6(x)
+    x = self.softmax(x)
+
+    return x
+
+
 # ----- for saving and loading models ----- #
 
 # import os

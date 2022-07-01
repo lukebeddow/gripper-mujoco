@@ -314,7 +314,7 @@ def apply_to_all_models(model):
   """
 
   # set up the object set
-  model.env._load_object_set(name="set2_nocuboid_525")
+  model.env._load_object_set(name="set1_nocuboid_525")
 
   # number of steps in an episode
   model.env.max_episode_steps = 250
@@ -617,12 +617,13 @@ if __name__ == "__main__":
   baseline_training(model, lr=this_lr, ed=this_ed)
   """
 
-  # varying 5x5 = 25 possible trainings 1-25
+  # varying 5x4 = 20 possible trainings 1-20
   sensor_steps_list = [1, 2, 3, 4, 5]
   network_list = [
     networks.DQN_2L60,
     networks.DQN_3L60,
-    networks.DQN_4L60
+    networks.DQN_4L60,
+    networks.DQN_5L60
   ]
 
   # lists are zero indexed so adjust inputarg to 0-17
@@ -648,7 +649,7 @@ if __name__ == "__main__":
   model.env.mj.set.set_sensor_prev_steps_to(this_sensor_step)
 
   # lets train on the harder object set
-  model.env._load_object_set(name="set2_fullset_795")
+  model.env._load_object_set(name="set1_fullset_795")
 
   # perform the training with other parameters standard
   baseline_training(model, network=this_network)

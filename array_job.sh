@@ -13,7 +13,7 @@
 #$ -S /bin/bash
 #$ -j y
 #$ -N ArrayTrain_25
-#$ -t 1-25
+#$ -t 1-20
 
 # The code you want to run now goes here.
 
