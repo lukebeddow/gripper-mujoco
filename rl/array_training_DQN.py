@@ -317,7 +317,7 @@ def apply_to_all_models(model):
   model.env._load_object_set(name="set2_nocuboid_525")
 
   # number of steps in an episode
-  model.env.max_episode_steps = 200
+  model.env.max_episode_steps = 250
 
   # key learning hyperparameters
   model.params.batch_size = 128
@@ -483,12 +483,15 @@ if __name__ == "__main__":
     -j [ARG] job input number, one integer only
 
   Optional:
-    -t [ARG] timestamp in 'DD-MM-YY-HR:MN' format
-    -m [ARG] machine name for run eg 'cluster', 'luke-PC'
-    -c continue a previous training
-    -l logging job, log to weights and biases
-    -p logging job, plot graphs of training to screen
-    -n no weights and biases, disable live logging
+    -t, --timestamp [ARG]   timestamp in 'DD-MM-YY-HR:MN' format
+    -m, --machine [ARG]     machine name for run eg 'cluster', 'luke-PC'
+    -o, --object-set [ARG]  object set name to use, eg 'set1_fullset_795'
+    -c, --continue          continue a previous training
+    -l, --log-wandb         logging job, log to weights and biases
+    -p, --plot              logging job, plot graphs of training to screen
+    -n, --no-wandb          no weights and biases, disable live logging
+    --device                what device to use, 'cpu' or 'cuda'
+    --savedir               directory to save/load into eg '/home/luke/models/'
 
   Examples:
     ./array_training_DQN.py -j 1
@@ -506,38 +509,28 @@ if __name__ == "__main__":
 
   # define arguments and parse them
   parser = argparse.ArgumentParser()
-  parser.add_argument("-j", type=int)            # job input number
-  parser.add_argument("-t", default=None)        # timestamp
-  parser.add_argument("-m", default=None)        # machine
-  parser.add_argument("-o", default=None)        # object set name
-  parser.add_argument("-d", default=None)        # save dir location
-  parser.add_argument("-c", action="store_true") # continue training
-  parser.add_argument("-l", action="store_true") # log to wandb job
-  parser.add_argument("-p", action="store_true") # plot to wandb job
-  parser.add_argument("-n", action="store_true") # no wandb logging
+  parser.add_argument("-j", "--job",          type=int)            # job input number
+  parser.add_argument("-t", "--timestamp",    default=None)        # timestamp
+  parser.add_argument("-m", "--machine",      default=None)        # machine
+  parser.add_argument("-o", "--object-set",   default=None)        # object set name
+  parser.add_argument("-c", "--continue",     action="store_true", dest="resume") # continue training
+  parser.add_argument("-l", "--log-wandb",    action="store_true") # log to wandb job
+  parser.add_argument("-p", "--plot",         action="store_true") # plot to wandb job
+  parser.add_argument("-n", "--no-wandb",     action="store_true") # no wandb logging
+  parser.add_argument("--device",             default=None)        # override device
+  parser.add_argument("--savedir",            default=None)        # override save/load directory
+
   args = parser.parse_args()
 
-  # extract inputs
-  inputarg = args.j
-  timestamp = args.t if args.t else datetime.now().strftime(datestr)
-  machine_override = args.m
-  resume_training = args.c
-  save_location_override = args.d
-  log_wandb = args.l
-  log_plot = args.p
-  if args.n: use_wandb = False
-  object_set_override = args.o
+  # extract primary inputs
+  inputarg = args.job
+  timestamp = args.timestamp if args.timestamp else datetime.now().strftime(datestr)
+  if args.no_wandb: use_wandb = False
 
-  # echo inputs
+  # echo these inputs
   print("Input arg:", inputarg)
   print("Timestamp is:", timestamp)
-  print("Machine override is:", machine_override)
-  print("Resume training is:", resume_training)
-  print("Object set override is", object_set_override)
-  print("Save location override is", save_location_override)
   print("Use wandb is", use_wandb)
-  print("log_wandb is", log_wandb)
-  print("log_plot is", log_plot)
   print()
 
   # seperate process for safety
@@ -552,24 +545,31 @@ if __name__ == "__main__":
   model = apply_to_all_models(model)
 
   # cpu training only on cluster or PC
-  if model.machine in ["cluster", "luke-PC"]: 
+  if model.machine in ["cluster", "luke-PC"] and args.device is None: 
     model.device = "cpu"
+    print("Setting to default 'cpu' device")
+  elif args.device is not None:
+    print(f"Device override of '{args.device}'")
+    model.device = args.device
 
   # override default run/group names
   model.run_name = f"{model.machine}_{save_suffix}"
   model.group_name = timestamp[:8] # include only day-month-year
 
-  if machine_override is not None:
-    model.run_name = f"{machine_override}_{save_suffix}"
+  if args.machine is not None:
+    print(f"Machine override of '{args.machine}'")
+    model.run_name = f"{args.machine}_{save_suffix}"
 
   # override default object set
-  if object_set_override is not None:
+  if args.object_set is not None:
     # this does not work for continue training, as that loads the old set
-    model.env._load_object_set(name=object_set_override)
+    print(f"Object set override of '{args.object_set}'")
+    model.env._load_object_set(name=args.object_set)
 
   # override save location
-  if save_location_override is not None:
-    model.savedir = save_location_override
+  if args.savedir is not None:
+    print(f"Savedir override of '{args.savedir}'")
+    model.savedir = args.savedir
 
   print("Run group is:", model.group_name)
   print("Run name is:", model.run_name)
@@ -577,18 +577,20 @@ if __name__ == "__main__":
   # ----- SPECIAL JOB OPTIONS ----- #
 
   # if we are resuming training (currently can only resume on the SAME machine)
-  if resume_training:
+  if args.resume:
+    print("Resuming training")
     continue_training(model, model.run_name, model.group_name,
-                      object_set=object_set_override)
+                      object_set=args.object_set)
     exit()
 
   # if we are doing a logging job
-  if log_wandb or log_plot: 
-    model.no_plot = not log_plot
-    model.use_wandb = log_wandb
+  if args.log_wandb or args.plot: 
+    print(f"Logging job, plot is {args.plot} and wandb is {args.log_wandb}")
+    model.no_plot = not args.plot
+    model.use_wandb = args.log_wandb
     logging_job(model, model.run_name, model.group_name)
-    if log_plot:
-      input("Press enter to quit")
+    if args.plot:
+      input("Press enter to quit plotting windows and terminate program")
     exit()
 
   # ----- BEGIN TRAININGS ----- #

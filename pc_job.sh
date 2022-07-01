@@ -10,18 +10,13 @@
 helpFunction()
 {
    echo -e "\nUsage:"
-   echo -e "Run jobs 1-4:\t $0 -j '1 2 3 4'"
-   echo -e "Continue 1-4:\t $0 -j '1 2 3 4' -c -t old_timestamp"
+   echo -e "Run jobs 1-4:      $0 -j '1 2 3 4'"
+   echo -e "Run 2 at a time:   $0 -j '1 2 3 4' --stagger 2"
+   echo -e "Pass python args:  $0 -j '1 2 3 4' -c --stagger 2 --device cpu"
    echo -e "\nOptions:"
-   echo -e "\t -j ['ARGS'] jobs to run (need to be in quotes), eg -j '1 2 3 4'"
-   echo -e "\t -c continue previous training"
-   echo -e "\t -m [ARG] machine, if continuing, on what machine eg -m luke-PC"
-   echo -e "\t -t [ARG] timestamp in form dd-mm-yy-hr:mn eg -t 07-12-22-15:34"
-   echo -e "\t -n do not use weights and biases for logging live"
-   echo -e "\t -l logging job, log to weights and biases"
-   echo -e "\t -p logging job, plot graphs on screen"
-   echo -e "\t -s [ARG] staggered job, submit jobs in groups of ARG eg 3 at a time"
-   echo -e "\t -o [ARG] object set name to use for the jobs eg 'set1_nocuboid_525'"
+   echo -e "\t -j, --jobs ['ARGS'] jobs to run (need to be in quotes), eg -j '1 2 3 4'"
+   echo -e "\t -s, --stagger [ARG] staggered job, submit jobs in groups of ARG eg 3 at a time"
+   echo -e "\t -f, --no-faketty disable faketty output file logging "
    echo -e "\t -h print help information"
    exit 1 # exit script after printing help
 }
@@ -31,25 +26,22 @@ machine=luke-PC
 timestamp="$(date +%d-%m-%y-%H:%M)"
 FAKETTY=faketty
 
-# a colon after a flag character indicates it expects an argument
-while getopts "j:t:m:clpnfs:o:d:h" opt
+PY_ARGS=() # arguments passed directly into python without parsing
+
+# loop through input args, look for script specific arguments
+for (( i = 1; i <= "$#"; i++ ));
 do
-   case "$opt" in
-      j ) jobs="$OPTARG" ; echo Jobs input are "$jobs" ;;
-      t ) timestamp="$OPTARG" ; echo Timestamp has been specified as "$timestamp" ;;
-      m ) machine="$OPTARG" ; MACHINE="-m $machine" ; echo Machine has been specified as "$machine" ;;
-      c ) CONTINUE="-c" ; echo Continue has been set to true ;;
-      l ) LOG_WANDB="-l" ; echo log_wandb has been set to true ;;
-      p ) LOG_PLOT="-p" ; echo log_plot has been set to true ;;
-      n ) NO_WANDB="-n" ; echo no_wandb has been set to true ;;
-      f ) FAKETTY=; echo faketty has been disabled ;;
-      s ) STAGGER="$OPTARG" ; echo Stagger has been set to true with rate $STAGGER ;;
-      o ) OBJECTS="-o $OPTARG" ; echo Object set override has been set as: $OPTARG ;;
-      d ) SAVEDIR="-d $OPTARG" ; echo Save directory override has been set as $OPTARG ;;
-      h ) helpFunction ;; # help flag
-      * ) echo Invalid flag received ; helpFunction ;;
-   esac
+  case ${!i} in
+    -j | --jobs ) (( i++ )); jobs=${!i}; echo jobs are $jobs ;;
+    -t | --timestamp ) (( i++ )); timestamp=${!i}; echo Timestamp set to $timestamp ;;
+    -m | --machine ) (( i++ )); machine=${!i}; MACHINE="-m $machine"; echo Machine set to $machine ;;
+    -f | --no-faketty ) FAKETTY=; echo faketty disabled ;;
+    -s | --stagger ) (( i++ )); STAGGER=${!i}; echo stagger is $STAGGER ;;
+    * ) PY_ARGS+=( ${!i} ) ;;
+  esac
 done
+
+echo Python only arguments are: ${PY_ARGS[@]}
 
 # if jobs are not specified, throw an error
 if [ -z "$jobs" ]
@@ -97,12 +89,7 @@ do
         -j $I \
         -t $timestamp \
         $MACHINE \
-        $CONTINUE \
-        $NO_WANDB \
-        $LOG_WANDB \
-        $LOG_PLOT \
-        $OBJECTS \
-        $SAVEDIR \
+        ${PY_ARGS[@]} \
         > "$LOG_FOLDER/$JOB_NAME.txt" &
     echo Submitted job: "$JOB_NAME"
 
