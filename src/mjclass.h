@@ -58,12 +58,13 @@ namespace MjType
     bool in_use;            // is this sensor currently in use
     float normalise;        // value with which to normalise readings to [-1,1]
     float read_rate;        // rate in Hz which this sensor is read
+    int prev_steps;         // back how many previous steps do we read
     double last_read_time;  // time in seconds sensor was last read
 
     bool use_normalisation = true; // are we using normalisation
 
-    Sensor(bool in_use, float normalise, float read_rate)
-      : in_use(in_use), normalise(normalise), read_rate(read_rate)
+    Sensor(bool in_use, float normalise, float read_rate, int prev_steps)
+      : in_use(in_use), normalise(normalise), read_rate(read_rate), prev_steps(prev_steps)
     {
       last_read_time = 0.0;
     }
@@ -133,7 +134,7 @@ namespace MjType
         n_readings = std::ceil(readings_since_step);
       }
       else {
-        n_readings = -1 * read_rate;
+        n_readings = 1;
       }
 
       return n_readings;
@@ -146,7 +147,16 @@ namespace MjType
 
       int n_readings = get_n_readings(time_since_last_sample);
 
-      return data.read(n_readings);
+      int total_readings;
+      
+      if (n_readings == 1) {
+        total_readings = prev_steps;
+      }
+      else {
+        total_readings = 1 + (n_readings - 1) * prev_steps;
+      }
+       
+      return data.read(total_readings);
     }
 
     std::vector<luke::gfloat> change_sample(luke::SlidingWindow<luke::gfloat> data,
@@ -154,12 +164,31 @@ namespace MjType
     {
       /* sample the first and last reading as well as the change [x0, dx, x1] */
 
+      // get the number of readings since the last sample, inclusive
       int n_readings = get_n_readings(time_since_last_sample);
 
-      std::vector<luke::gfloat> result(3);
-      result[0] = data.read_element(n_readings - 1); // read_element 0 indexed
-      result[2] = data.read_element();
-      result[1] = result[2] - result[0];
+      // how many readings to go back prev_steps number of steps
+      int total_readings;
+      if (n_readings <= 1) {
+        throw std::runtime_error("change_sample() cannot be used with n_readings <= 1");
+      }
+      else {
+        total_readings = 1 + (n_readings - 1) * prev_steps;
+      }
+       
+      // read_element is 0 indexed
+      total_readings -= 1;
+
+      // make the return vector, first element is furthest back reading
+      std::vector<luke::gfloat> result(2 * prev_steps + 1);
+      result[0] = data.read_element(total_readings);
+
+      // loop through steps to add in elements
+      for (int i = 0; i < prev_steps; i++) {
+        int first_sample = total_readings - i * (n_readings - 1);
+        result[i * 2 + 2] = data.read_element(first_sample - (n_readings - 1));
+        result[i * 2 + 1] = result[i * 2 + 2] - result[i * 2];
+      }
 
       return result;
     }
@@ -169,24 +198,64 @@ namespace MjType
     {
       /* sample the first and last reading as well as the average [x0, xbar, x1] */
 
+      // get the number of readings since the last sample, inclusive
       int n_readings = get_n_readings(time_since_last_sample);
 
-      std::vector<luke::gfloat> all = data.read(n_readings);
-
-      luke::gfloat mean = 0.0;
-
-      for (uint i = 0; i < all.size(); i++) {
-        mean += all[i];
+      // how many readings to go back prev_steps number of steps
+      int total_readings;
+      if (n_readings <= 1) {
+        throw std::runtime_error("change_sample() cannot be used with n_readings <= 1");
+      }
+      else {
+        total_readings = 1 + (n_readings - 1) * prev_steps;
       }
 
-      mean /= (luke::gfloat)all.size();
+      // read_element is 0 indexed
+      total_readings -= 1;
 
-      std::vector<luke::gfloat> result {
-        all[0], mean, all[all.size() - 1]
-      };
+      // make the return vector, first element is furthest back reading
+      std::vector<luke::gfloat> result(2 * prev_steps + 1);
+      result[0] = data.read_element(total_readings);
+
+      // loop through steps to add in elements
+      for (int i = 0; i < prev_steps; i++) {
+        int first_sample = total_readings - i * (n_readings - 1);
+        result[i * 2 + 2] = data.read_element(first_sample - (n_readings - 1));
+
+        // sum intermediate values and get the mean
+        result[i * 2 + 1] = 0;
+        for (int j = 1; j < n_readings - 1; j++) {
+          result[i * 2 + 1] += data.read_element(first_sample - j);
+        }
+        result[i * 2 + 1] /= n_readings - 2;
+      }
 
       return result;
     }
+
+    // std::vector<luke::gfloat> adjacent_average_sample(luke::SlidingWindow<luke::gfloat> data,
+    //   float time_since_last_sample)
+    // {
+    //   /* sample the first and last reading, as well as intermediate samples which
+    //   are the inclusive average of their adjacent samples */
+
+    //   int n_readings = get_n_readings(time_since_last_sample);
+
+    //   std::vector<luke::gfloat> all = data.read(n_readings);
+
+    //   // make result vector and fill in first and last readings
+    //   std::vector<luke::gfloat> result(n_readings);
+    //   result[0] = all[0];
+    //   result[n_readings - 1] = all[n_readings - 1];
+
+    //   // loop through central readings and take their averages
+    //   for (uint i = 1; i < all.size() - 1; i++) {
+    //     result[i] = 0.333 * (all[i - 1] + all[i] + all[i + 1]);
+    //   }
+
+    //   return result;
+    // }
+
   };
 
   // what key events will we keep track of in the simulation
@@ -214,7 +283,7 @@ namespace MjType
 
     // create an event for each reward, binary->binary, linear->linear
     #define XX(NAME, TYPE, VALUE)
-    #define SS(NAME, USED, NORMALISE, READ_RATE)
+    #define SS(NAME, USED, NORMALISE, READ_RATE, PREV_STEPS)
     #define BR(NAME, REWARD, DONE, TRIGGER) BinaryEvent NAME;
     #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) LinearEvent NAME;
       // run the macro to create the code
@@ -233,7 +302,7 @@ namespace MjType
       /* run the reset function for all members of the class */
 
       #define XX(NAME, TYPE, VALUE)
-      #define SS(NAME, USED, NORMALISE, READ_RATE)
+      #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
       #define BR(NAME, REWARD, DONE, TRIGGER) NAME.reset();
       #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) NAME.reset();
 
@@ -251,7 +320,7 @@ namespace MjType
       /* calculate the percentage of steps where this event occured */
 
       #define XX(NAME, TYPE, VALUE)
-      #define SS(NAME, USED, NORMALISE, READ_RATE)
+      #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
 
       #define BR(NAME, REWARD, DONE, TRIGGER)                             \
                 NAME.percent = (100.0 * NAME.abs) / (float) step_num.abs;
@@ -318,7 +387,7 @@ namespace MjType
 
     // create an event for each reward, default none involved
     #define XX(NAME, TYPE, VALUE)
-    #define SS(NAME, USED, NORMALISE, READ_RATE)
+    #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
     #define BR(NAME, REWARD, DONE, TRIGGER) Event NAME;
     #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) Event NAME;
       // run the macro to create the code
@@ -341,7 +410,7 @@ namespace MjType
       /* reset the goal */
 
       #define XX(NAME, TYPE, VALUE)
-      #define SS(NAME, USED, NORMALISE, READ_RATE)
+      #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
       #define BR(NAME, REWARD, DONE, TRIGGER)                                  \
                 NAME.state = -1.0;                                             \
                 if (reset_involved) { NAME.involved = false; }                    
@@ -367,7 +436,7 @@ namespace MjType
 
     // define the assignment code we want for X, BR, LR
     #define XX(name, type, value) type name { value };
-    #define SS(name, use, norm, readrate) Sensor name { use, norm, readrate };
+    #define SS(name, use, norm, readrate, prevsteps) Sensor name { use, norm, readrate, prevsteps };
     #define BR(name, reward, done, trigger) BinaryReward name { reward, done, trigger };
     #define LR(name, reward, done, trigger, min, max, overshoot) \
               LinearReward name { reward, done, trigger, min, max, overshoot };
@@ -387,6 +456,7 @@ namespace MjType
     void disable_sensors();
     void scale_rewards(float scale); 
     void set_use_normalisation(bool set_as);
+    void set_sensor_prev_steps_to(int prev_steps);
 
   };
 

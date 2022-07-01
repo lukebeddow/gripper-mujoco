@@ -810,7 +810,7 @@ bool MjClass::is_done()
 
   // general and sensor settings not used
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USE, NORM, READRATE)
+  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
 
   /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
@@ -1323,7 +1323,7 @@ MjType::EventTrack MjClass::add_events(MjType::EventTrack& e1, MjType::EventTrac
   MjType::EventTrack out;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             out.NAME.abs = e1.NAME.abs + e2.NAME.abs;                          \
@@ -1359,7 +1359,7 @@ void MjClass::default_goal_event_triggering()
   constexpr int default_trigger = 1;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (goal_.NAME.involved) { s_.NAME.trigger = default_trigger; }    
@@ -1471,7 +1471,7 @@ std::string MjType::Settings::get_settings()
             /* add to output */\
             output_str += str;
 
-  #define SS(NAME, IN_USE, NORM, READRATE) \
+  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS) \
             str.clear();\
             /* type first */\
             type_str.clear(); type_str += "Sensor";\
@@ -1568,7 +1568,7 @@ void MjType::Settings::wipe_rewards()
   /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)
+  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3) \
             NAME.reward = 0.0;\
             NAME.done = false;\
@@ -1596,7 +1596,26 @@ void MjType::Settings::disable_sensors()
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, DONTUSE1, DONTUSE2, DONTUSE3) NAME.in_use = false;
+  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS) NAME.in_use = false;
+  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
+  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
+  
+    // run the macro and disable all the sensors
+    LUKE_MJSETTINGS
+  
+  #undef XX
+  #undef SS
+  #undef BR
+  #undef LR
+}
+
+void MjType::Settings::set_sensor_prev_steps_to(int prev_steps)
+{
+  /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
+     eg instead of using TRIGGER we need to use s_.NAME.trigger */
+
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS) NAME.prev_steps = prev_steps;
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
   
@@ -1615,7 +1634,7 @@ void MjType::Settings::set_use_normalisation(bool set_as)
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, DONTUSE1, DONTUSE2, DONTUSE3) NAME.use_normalisation = set_as;
+  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS) NAME.use_normalisation = set_as;
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
   
@@ -1635,7 +1654,7 @@ void MjType::Settings::scale_rewards(float scale)
   /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)
+  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3) NAME.reward *= scale;
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6) \
             NAME.reward *= scale;
@@ -1658,7 +1677,7 @@ void MjType::EventTrack::print()
   std::cout << "EventTrack = row (abs); "
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                               \
             << #NAME << " = " << NAME.row << " (" << NAME.abs << "); "
@@ -1682,7 +1701,7 @@ void update_events(MjType::EventTrack& events, MjType::Settings& settings)
   bool active = false; // is a linear reward active
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
   #define BR(NAME, REWARD, DONE, TRIGGER)                                    \
             events.NAME.row = events.NAME.row *                              \
                                   events.NAME.value + events.NAME.value;     \
@@ -1718,7 +1737,7 @@ float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings)
 
   // general and sensor settings not used
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USE, NORM, READRATE)
+  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
 
   /* do NOT use other fields than name as it will pull values from simsettings.h,
      eg instead of using TRIGGER we need to use settings.NAME.trigger */
@@ -1794,7 +1813,7 @@ float goal_rewards(MjType::EventTrack& events, MjType::Settings& settings,
 
   // general and sensor settings not used
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USE, NORM, READRATE)
+  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
 
   /* do NOT use other fields than name as it will pull values from simsettings.h,
      eg instead of using TRIGGER we need to use settings.NAME.trigger */
@@ -1850,7 +1869,7 @@ std::vector<float> MjType::EventTrack::vectorise()
   std::vector<float> out;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             out.push_back(NAME.row);
@@ -1886,7 +1905,7 @@ void MjType::EventTrack::unvectorise(std::vector<float> in)
   int i = 0;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             NAME.row = in[i] + 0.5; /* casts float -> int */                   \
@@ -1915,7 +1934,7 @@ std::vector<float> MjType::Goal::vectorise() const
   std::vector<float> out;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (NAME.involved) {                                               \
@@ -1954,7 +1973,7 @@ void MjType::Goal::unvectorise(std::vector<float> vec)
   int i = 0;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (NAME.involved) {                                               \
@@ -2026,7 +2045,7 @@ MjType::Goal score_goal(MjType::Goal const goal, MjType::EventTrack event,
   MjType::Goal new_goal;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (goal.NAME.involved) {                                          \
@@ -2085,7 +2104,7 @@ std::vector<std::string> MjType::Goal::goal_names()
   std::vector<std::string> goal_names;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (NAME.involved) { goal_names.push_back(#NAME); }
@@ -2114,7 +2133,7 @@ std::string MjType::Goal::get_goal_info()
   int i = 0;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (NAME.involved) {                                               \

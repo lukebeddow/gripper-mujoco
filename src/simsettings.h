@@ -67,14 +67,14 @@
   /* 
 
   2. Sensors
-      name                      used      normalise read-rate   (NB: -ve read-rate gives -n_readings) */\
-  SS(  motor_state_sensor,      true,     0,        -2)     /* xyz motor states, normalise is ignored */\
-  SS(  base_state_sensor,       true,     0,        -2)     /* base position state, normalise is ignored)*/\
-  SS(  bending_gauge,           true,     100.0,    10)     /* strain gauge to measure finger bending */\
-  SS(  axial_gauge,             true,     3.0,      10)     /* strain gauge to measure axial finger strain */\
-  SS(  palm_sensor,             true,     8.0,      10)     /* palm force sensor */\
-  SS(  wrist_sensor_XY,         true,     5.00,     10)     /* force wrist sensor X and Y forces */\
-  SS(  wrist_sensor_Z,          true,     28.0,     10)     /* force wrist sensor Z force */\
+      name                      used      normalise read-rate prev-steps (NB read-rate < 0 means 1 per step */\
+  SS(  motor_state_sensor,      true,     0,        -1,       1)  /* xyz motor states, normalise is ignored */\
+  SS(  base_state_sensor,       true,     0,        -1,       1)  /* base position state, normalise is ignored)*/\
+  SS(  bending_gauge,           true,     100.0,    10,       1)  /* strain gauge to measure finger bending */\
+  SS(  axial_gauge,             true,     3.0,      10,       1)  /* strain gauge to measure axial finger strain */\
+  SS(  palm_sensor,             true,     8.0,      10,       1)  /* palm force sensor */\
+  SS(  wrist_sensor_XY,         true,     5.00,     10,       1)  /* force wrist sensor X and Y forces */\
+  SS(  wrist_sensor_Z,          true,     28.0,     10,       1)  /* force wrist sensor Z force */\
   /* 
 
   3. Binary rewards

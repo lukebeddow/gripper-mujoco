@@ -384,10 +384,11 @@ def apply_to_all_models(model):
 
   # disable use of all sensors, then add back defaults
   model.env.mj.set.disable_sensors()
+  model.env.mj.set.set_sensor_prev_steps_to(1) # set lookback depth to 1
   model.env.mj.set.motor_state_sensor.in_use = True
   model.env.mj.set.bending_gauge.in_use = True
 
-  # set state sensors to default of one reading only
+  # ensure state sensors only give one reading per step (read_rate < 0)
   model.env.mj.set.motor_state_sensor.read_rate = -1
   model.env.mj.set.base_state_sensor.read_rate = -1
 
@@ -616,36 +617,41 @@ if __name__ == "__main__":
   baseline_training(model, lr=this_lr, ed=this_ed)
   """
 
-  # new baseline test
-  baseline_training(model, sensors=inputarg)
-
-  # ----- nothing below here as exit() used ----- #
-  
   # varying 5x5 = 25 possible trainings 1-25
-  sensors_list = [1, 2, 3, 4, 5]
-  memory_list = [20, 40, 80, 200, 500] # 40 episodes of memory = 10_000 memory (250 steps)
+  sensor_steps_list = [1, 2, 3, 4, 5]
+  network_list = [
+    networks.DQN_2L60,
+    networks.DQN_3L60,
+    networks.DQN_4L60
+  ]
 
   # lists are zero indexed so adjust inputarg to 0-17
   inputarg -= 1
 
   # we vary wrt memory_list every inputarg increment
-  x = len(memory_list)
+  x = len(network_list)
 
   # get the sensors and memory size for this training
-  this_sensor = sensors_list[inputarg // x]       # vary every x steps
-  this_memory = memory_list[inputarg % x] * 250   # vary every +1 & loop
+  this_sensor_step = sensor_steps_list[inputarg // x]       # vary every x steps
+  this_network = network_list[inputarg % x]                 # vary every +1 & loop
 
   # make note
-  model.wandb_note += f"Sensors used: {this_sensor}\n"
-  model.wandb_note += f"Memory size used: {this_memory} ({this_memory / 250} episdoes)\n"
+  model.wandb_note += f"Sensor steps used: {this_sensor_step}\n"
+  model.wandb_note += f"Memory size used: {this_network}\n"
 
   # temporary options
   model.params.save_freq = 1000
   model.params.test_freq = 1000
   model.params.num_episodes = 20_000
 
+  # apply the sensor step change
+  model.env.mj.set.set_sensor_prev_steps_to(this_sensor_step)
+
+  # lets train on the harder object set
+  model.env._load_object_set(name="set2_fullset_795")
+
   # perform the training with other parameters standard
-  baseline_training(model, sensors=this_sensor, memory=this_memory)
+  baseline_training(model, network=this_network)
 
   # ----- END ----- #
 
