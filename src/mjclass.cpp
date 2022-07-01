@@ -1063,9 +1063,6 @@ void MjClass::spawn_object(int index, double xpos, double ypos, double zrot)
   luke::spawn_object(model, data, index, spawn_pos);
   env_.start_qpos = luke::get_object_qpos(model, data);
 
-  std::cout << "start qpos is ";
-  env_.start_qpos.print();
-
   // update everything for rendering
   forward();
 }
