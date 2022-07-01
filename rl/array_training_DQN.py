@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 # fix for cluster, numpy causes segfault
-import os
-os.environ['OPENBLAS_NUM_THREADS'] = '1'
+# import os
+# os.environ['OPENBLAS_NUM_THREADS'] = '1'
 
 import sys
 from datetime import datetime
