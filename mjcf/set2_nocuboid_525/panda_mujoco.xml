@@ -84,40 +84,4 @@
 
   <motor name="panda_joint7_actuator" joint="panda_joint7"/>
 
-  </actuator><keyframe>
-    <key name="initial pose" time="0" qpos="0.0 0.0 0.0 0.0 0.0 1.0 0.0"/>
-  </keyframe><actuator>
-    
-  <motor name="panda_joint1_actuator" joint="panda_joint1"/>
-
-  <motor name="panda_joint2_actuator" joint="panda_joint2"/>
-
-  <motor name="panda_joint3_actuator" joint="panda_joint3"/>
-
-  <motor name="panda_joint4_actuator" joint="panda_joint4"/>
-
-  <motor name="panda_joint5_actuator" joint="panda_joint5"/>
-
-  <motor name="panda_joint6_actuator" joint="panda_joint6"/>
-
-  <motor name="panda_joint7_actuator" joint="panda_joint7"/>
-
-  </actuator><keyframe>
-    <key name="initial pose" time="0" qpos="0.0 0.0 0.0 0.0 0.0 1.0 0.0"/>
-  </keyframe><actuator>
-    
-  <motor name="panda_joint1_actuator" joint="panda_joint1"/>
-
-  <motor name="panda_joint2_actuator" joint="panda_joint2"/>
-
-  <motor name="panda_joint3_actuator" joint="panda_joint3"/>
-
-  <motor name="panda_joint4_actuator" joint="panda_joint4"/>
-
-  <motor name="panda_joint5_actuator" joint="panda_joint5"/>
-
-  <motor name="panda_joint6_actuator" joint="panda_joint6"/>
-
-  <motor name="panda_joint7_actuator" joint="panda_joint7"/>
-
   </actuator></mujoco>
