@@ -162,10 +162,6 @@ class MjEnv():
     self.n_actions = self.mj.get_n_actions()
     self.n_obs = self.mj.get_n_obs()
 
-    # for testing
-    print("n_actions is", self.n_actions)
-    print("n_obs is", self.n_obs)
-
   def _make_event_track(self):
     """
     Create an EventTrack object
@@ -455,25 +451,45 @@ if __name__ == "__main__":
 
   mj = MjEnv()
 
-  mj.mj.set.wipe_rewards()
-  mj.mj.set.lifted.set(100, 10, 1)
-  print(mj._get_cpp_settings())
+  
+  # mj.mj.set.set_sensor_prev_steps_to(3)
+  mj.mj.set.sensor_n_prev_steps = 1
+  mj.mj.set.state_n_prev_steps = 1
+  mj.mj.set.sensor_sample_mode = 3
+  mj.mj.set.debug = False
+  mj.reset()
 
-  with open("test_file.pickle", 'wb') as f:
-    pickle.dump(mj, f)
-    print("Pickle saved")
+  for i in range(20):
+    mj.step(np.random.randint(0,8))
 
-  with open("test_file.pickle", 'rb') as f:
-    mj = pickle.load(f)
-    print("Pickle loaded")
+  print("\n\n\nSTART")
 
-  mj._load_xml(index=0)
-  mj._load_xml(index=1)
-  mj._load_xml(index=2)
+  for i in range (3):
+    print("\nObservation", i)
+    # mj.step(np.random.randint(0,8))
+    mj.step(2)
+    # print(mj.mj.get_observation())
+    
 
-  mj.step(0)
+  # mj.mj.set.wipe_rewards()
+  # mj.mj.set.lifted.set(100, 10, 1)
+  # print(mj._get_cpp_settings())
 
-  print(mj._get_cpp_settings())
+  # with open("test_file.pickle", 'wb') as f:
+  #   pickle.dump(mj, f)
+  #   print("Pickle saved")
+
+  # with open("test_file.pickle", 'rb') as f:
+  #   mj = pickle.load(f)
+  #   print("Pickle loaded")
+
+  # mj._load_xml(index=0)
+  # mj._load_xml(index=1)
+  # mj._load_xml(index=2)
+
+  # mj.step(0)
+
+  # print(mj._get_cpp_settings())
 
   # obs = mj.mj.get_observation()
   # print(obs)

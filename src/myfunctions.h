@@ -49,6 +49,9 @@ void keyframe(mjModel* model, mjData* data, int keyframe_index);
 void reset(mjModel* model, mjData* data);
 void wipe_settled();
 void calibrate_reset(mjModel* model, mjData* data);
+void add_base_joint_noise(std::vector<luke::gfloat> noise);
+void add_gripper_joint_noise(std::vector<luke::gfloat> noise);
+void snap_to_target();
 
 // simulation
 void before_step(mjModel* model, mjData* data);

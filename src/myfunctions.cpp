@@ -696,6 +696,76 @@ void calibrate_reset(mjModel* model, mjData* data)
 
 }
 
+void add_base_joint_noise(std::vector<luke::gfloat> noise)
+{
+  /* add noise in metres to resultant joint position */
+
+  if (noise.size() == 1) {
+    target_.base_noise[0] = noise[0];
+  }
+
+  else {
+    throw std::runtime_error("base noise must be specified as a 1 element vector"
+     " in add_gripper_joint_noise()");
+  }
+}
+
+void add_gripper_joint_noise(std::vector<luke::gfloat> noise)
+{
+  /* add noise in metres to resultant joint position */
+
+  if (noise.size() == 3) {
+    target_.gripper_noise[j_.gripper.prismatic[0]] = noise[0];
+    target_.gripper_noise[j_.gripper.prismatic[1]] = noise[0];
+    target_.gripper_noise[j_.gripper.prismatic[2]] = noise[0];
+    target_.gripper_noise[j_.gripper.revolute[0]] = noise[1];
+    target_.gripper_noise[j_.gripper.revolute[1]] = noise[1];
+    target_.gripper_noise[j_.gripper.revolute[2]] = noise[1];
+    target_.gripper_noise[j_.gripper.palm[0]] = noise[2];
+  }
+
+  else if (noise.size() == 7) {
+    target_.gripper_noise[j_.gripper.prismatic[0]] = noise[0];
+    target_.gripper_noise[j_.gripper.prismatic[1]] = noise[2];
+    target_.gripper_noise[j_.gripper.prismatic[2]] = noise[4];
+    target_.gripper_noise[j_.gripper.revolute[0]] = target_.end.calc_th(0, noise[1]);
+    target_.gripper_noise[j_.gripper.revolute[1]] = target_.end.calc_th(0, noise[3]);
+    target_.gripper_noise[j_.gripper.revolute[2]] = target_.end.calc_th(0, noise[5]);
+    target_.gripper_noise[j_.gripper.palm[0]] = noise[6];
+  }
+
+  else {
+    throw std::runtime_error("gripper noise must either be specified as a 3 element"
+     " or 7 element vector in add_gripper_joint_noise()");
+  }
+}
+
+void snap_to_target()
+{
+  /* force all of the joints to their target position (including noise) */
+
+  // snap the base, only z supported, note we have an offset
+  (*j_.to_qpos.base[0]) = target_.base[0] - target_.base_noise[0] - target_.z_offset; 
+
+  for (int i = 0; i < j_.num.gripper; i++) {
+    (*j_.to_qpos.gripper[i]) = target_.end.x + target_.gripper_noise[0];
+  }
+
+  // snap gripper joints
+  for (int i : j_.gripper.prismatic) {
+    (*j_.to_qpos.gripper[i]) = target_.end.x + target_.gripper_noise[i];
+  }
+
+  for (int i : j_.gripper.revolute) {
+    (*j_.to_qpos.gripper[i]) = target_.end.th + target_.gripper_noise[i];
+  }
+
+  for (int i : j_.gripper.palm) {
+    (*j_.to_qpos.gripper[i]) = target_.end.z + target_.gripper_noise[i];
+  }
+
+}
+
 void wipe_settled()
 {
   /* wipes the settled and target reached states, to give an action time to
@@ -872,7 +942,7 @@ void control_gripper(const mjModel* model, mjData* data, Gripper& target)
 
   // input the control signals
   for (int i : j_.gripper.prismatic) {
-    u = ((*j_.to_qpos.gripper[i]) - target.x) * j_.ctrl.kp.x 
+    u = ((*j_.to_qpos.gripper[i]) + target_.gripper_noise[i] - target.x) * j_.ctrl.kp.x 
       + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.x;
     if (abs(u) > force_lim) {
       std::cout << "x frc limited from " << u << " to ";
@@ -883,7 +953,7 @@ void control_gripper(const mjModel* model, mjData* data, Gripper& target)
   }
 
   for (int i : j_.gripper.revolute) {
-    u = ((*j_.to_qpos.gripper[i]) - target.th) * j_.ctrl.kp.y 
+    u = ((*j_.to_qpos.gripper[i]) + target_.gripper_noise[i] - target.th) * j_.ctrl.kp.y 
       + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.y;
     if (abs(u) > force_lim) {
       std::cout << "y frc limited from " << u << " to ";
@@ -894,7 +964,7 @@ void control_gripper(const mjModel* model, mjData* data, Gripper& target)
   }
   
   for (int i : j_.gripper.palm) {
-    u = ((*j_.to_qpos.gripper[i]) - target.z) * j_.ctrl.kp.z 
+    u = ((*j_.to_qpos.gripper[i]) + target_.gripper_noise[i] - target.z) * j_.ctrl.kp.z 
       + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.z;
     if (abs(u) > force_lim) {
       std::cout << "z frc limited from " << u << " to ";
@@ -917,7 +987,7 @@ void control_base(const mjModel* model, mjData* data)
   }
 
   for (int i = 0; i < j_.num.base; i++) {
-    u = ((*j_.to_qpos.base[i]) - target_.base[i]) * j_.ctrl.base_kp
+    u = ((*j_.to_qpos.base[i]) - target_.base_noise[i] - target_.base[i]) * j_.ctrl.base_kp
       + (*j_.to_qvel.base[i]) * j_.ctrl.base_kd;
     data->ctrl[n + i] = -u;
   }
@@ -979,8 +1049,10 @@ void update_all(const mjModel* model, mjData* data)
     throw std::runtime_error("non-stepper not implemented");
   }
 
-  // FOR TESTING
-
+  // // for testing
+  // update_state(model, data);
+  // j_.print_qpos();
+  // target_.end.print();
 }
 
 void update_stepper(const mjModel* model, mjData* data)

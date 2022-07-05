@@ -113,7 +113,7 @@ class DQN_5L60(nn.Module):
   name = "DQN_5L60"
 
   def __init__(self, inputs, outputs, device):
-    super(DQN_4L60, self).__init__()
+    super(DQN_5L60, self).__init__()
     self.device = device
     self.linear1 = torch.nn.Linear(inputs, 60)
     self.linear2 = torch.nn.Linear(60, 60)

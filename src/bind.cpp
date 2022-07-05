@@ -49,6 +49,8 @@ PYBIND11_MODULE(bind, m) {
     .def("reset_object", &MjClass::reset_object)
     .def("spawn_object", static_cast<void (MjClass::*)(int)>(&MjClass::spawn_object)) /* see bottom */
     .def("spawn_object", static_cast<void (MjClass::*)(int, double, double, double)>(&MjClass::spawn_object))
+    .def("add_noise_to_base", &MjClass::add_noise_to_base)
+    .def("add_noise_to_motors", &MjClass::add_noise_to_motors)
     .def("is_done", &MjClass::is_done)
     .def("get_observation", &MjClass::get_observation)
     .def("get_event_state", &MjClass::get_event_state)
@@ -131,7 +133,7 @@ PYBIND11_MODULE(bind, m) {
 
     // use a macro to create code snippets for all of the settings
     #define XX(name, type, value) .def_readwrite(#name, &MjType::Settings::name)
-    #define SS(name, in_use, norm, readrate, prevsteps) .def_readwrite(#name, &MjType::Settings::name)
+    #define SS(name, in_use, norm, readrate) .def_readwrite(#name, &MjType::Settings::name)
     #define BR(name, reward, done, trigger) .def_readwrite(#name, &MjType::Settings::name)
     #define LR(name, reward, done, trigger, min, max, overshoot) \
               .def_readwrite(#name, &MjType::Settings::name)
@@ -155,7 +157,7 @@ PYBIND11_MODULE(bind, m) {
 
           // expand settings into list of variable names for tuple
           #define XX(name, type, value) s.name,
-          #define SS(name, in_use, norm, readrate, prevsteps) s.name,
+          #define SS(name, in_use, norm, readrate) s.name,
           #define BR(name, reward, done, trigger) s.name,
           #define LR(name, reward, done, trigger, min, max, overshoot) s.name,
             // run the macro to create the code
@@ -187,7 +189,7 @@ PYBIND11_MODULE(bind, m) {
 
         // expand the tuple elements and type cast them with a macro
         #define XX(name, type, value) out.name = t[i].cast<type>(); ++i;
-        #define SS(name, in_use, norm, readrate, prevsteps) \
+        #define SS(name, in_use, norm, readrate) \
                   out.name = t[i].cast<MjType::Sensor>(); ++i;
         #define BR(name, reward, done, trigger) \
                   out.name = t[i].cast<MjType::BinaryReward>(); ++i;
@@ -306,7 +308,7 @@ PYBIND11_MODULE(bind, m) {
     .def("calculate_percentage", &MjType::EventTrack::calculate_percentage)
 
     #define XX(name, type, value)
-    #define SS(name, in_use, norm, readrate, prevsteps)
+    #define SS(name, in_use, norm, readrate)
     #define BR(name, reward, done, trigger) \
               .def_readonly(#name, &MjType::EventTrack::name)
 
@@ -328,7 +330,7 @@ PYBIND11_MODULE(bind, m) {
         return py::make_tuple(
           
           #define XX(name, type, value)
-          #define SS(name, in_use, norm, readrate, prevsteps)
+          #define SS(name, in_use, norm, readrate)
           #define BR(name, reward, done, trigger) et.name,
           #define LR(name, reward, done, trigger, min, max, overshoot) et.name,
             // run the macro to create the binding code
@@ -351,7 +353,7 @@ PYBIND11_MODULE(bind, m) {
 
         // expand the tuple elements and type cast them with a macro
         #define XX(name, type, value)
-        #define SS(name, in_use, norm, readrate, prevsteps)
+        #define SS(name, in_use, norm, readrate)
         #define BR(name, reward, done, trigger) \
                   et.name = t[i].cast<MjType::EventTrack::BinaryEvent>(); ++i;
         #define LR(name, reward, done, trigger, min, max, overshoot) \
@@ -382,7 +384,7 @@ PYBIND11_MODULE(bind, m) {
   // set up sensor type so python can interact and change them
   {py::class_<MjType::Sensor>(m, "Sensor")
 
-    .def(py::init<bool, float, float, int>())
+    .def(py::init<bool, float, float>())
     .def("set", &MjType::Sensor::set)
 
     .def_readwrite("in_use", &MjType::Sensor::in_use)
@@ -394,7 +396,11 @@ PYBIND11_MODULE(bind, m) {
     .def(py::pickle(
       [](const MjType::Sensor r) { // __getstate___
         /* return a tuple that fully encodes the state of the object */
-        return py::make_tuple(r.in_use, r.normalise, r.read_rate, r.prev_steps);
+        return py::make_tuple(
+          r.in_use, 
+          r.normalise, 
+          r.read_rate
+        );
       },
       [](py::tuple t) { // __setstate__
 
@@ -403,7 +409,7 @@ PYBIND11_MODULE(bind, m) {
 
         // create new c++ instance with old data
         MjType::Sensor out(t[0].cast<bool>(), t[1].cast<float>(), 
-          t[2].cast<float>(), t[3].cast<int>());
+          t[2].cast<float>());
 
         return out;
       }
@@ -512,7 +518,7 @@ PYBIND11_MODULE(bind, m) {
     .def("get_goal_info", &MjType::Goal::get_goal_info)
 
     #define XX(name, type, value)
-    #define SS(name, in_use, norm, readrate, prevsteps)
+    #define SS(name, in_use, norm, readrate)
     #define BR(name, reward, done, trigger) \
               .def_readwrite(#name, &MjType::Goal::name)
 
@@ -534,7 +540,7 @@ PYBIND11_MODULE(bind, m) {
         return py::make_tuple(
           
           #define XX(name, type, value)
-          #define SS(name, in_use, norm, readrate, prevsteps)
+          #define SS(name, in_use, norm, readrate)
           #define BR(name, reward, done, trigger) g.name,
           #define LR(name, reward, done, trigger, min, max, overshoot) g.name,
             // run the macro to create the binding code
@@ -557,7 +563,7 @@ PYBIND11_MODULE(bind, m) {
 
         // expand the tuple elements and type cast them with a macro
         #define XX(name, type, value)
-        #define SS(name, in_use, norm, readrate, prevsteps)
+        #define SS(name, in_use, norm, readrate)
         #define BR(name, reward, done, trigger) \
                   g.name = t[i].cast<MjType::Goal::Event>(); ++i;
         #define LR(name, reward, done, trigger, min, max, overshoot) \

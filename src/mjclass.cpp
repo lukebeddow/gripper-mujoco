@@ -146,6 +146,10 @@ void MjClass::configure_settings()
       sampleFcnPtr = &MjType::Sensor::average_sample;
       break;
     }
+    case MjType::Sample::median: {
+      sampleFcnPtr = &MjType::Sensor::median_sample;
+      break;
+    }
     default: {
       throw std::runtime_error("s_.sensor_sample_mode not set to legal value");
     }
@@ -165,6 +169,10 @@ void MjClass::configure_settings()
       stateFcnPtr = &MjType::Sensor::average_sample;
       break;
     }
+    case MjType::Sample::median: {
+      sampleFcnPtr = &MjType::Sensor::median_sample;
+      break;
+    }
     default: {
       throw std::runtime_error("s_.state_sample_mode not set to legal value");
     }
@@ -172,6 +180,10 @@ void MjClass::configure_settings()
 
   // enforce HER goals to trigger at 1 always
   default_goal_event_triggering();
+
+  // update the sensor number of readings based on time per step
+  double time_per_step = model->opt.timestep * s_.sim_steps_per_action;
+  s_.update_sensor_settings(time_per_step);
 
   // safety check
   if (s_.motor_state_sensor.read_rate >= 0)
@@ -244,6 +256,11 @@ void MjClass::reset()
 
   // reset the simulation
   luke::reset(model, data);
+
+  // // FOR TESTING - NOISE IS NOT WORKING
+  // std::vector<luke::gfloat> grip_noise = { 1e-3, 5e-3, 10e-3 };
+  // add_noise_to_base(6e-3);
+  // add_noise_to_motors(grip_noise);
 
   // reset sensor saved data
   finger1_gauge.reset();
@@ -810,7 +827,7 @@ bool MjClass::is_done()
 
   // general and sensor settings not used
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
@@ -864,26 +881,40 @@ std::vector<luke::gfloat> MjClass::get_observation()
 {
   /* get an observation with n samples from the gauges */
 
+  // use for printing detailed observation debug information
+  constexpr bool debug_obs = false;
+
   std::vector<luke::gfloat> observation;
 
-  // how much time has elapsed since the last state
-  double time_per_step = model->opt.timestep * s_.sim_steps_per_action;
+  // // FOR TESTING
+  // std::cout << "Last 10 gauge 1 readings: ";
+  // finger1_gauge.print(10);
+
+  if (debug_obs) {
+    std::cout << "Observation information:\n";
+  }
 
   // get bending strain gauge sensor output
   if (s_.bending_gauge.in_use) {
 
     // sample data
     std::vector<luke::gfloat> f1 = 
-      (s_.bending_gauge.*sampleFcnPtr)(finger1_gauge, time_per_step);
+      (s_.bending_gauge.*sampleFcnPtr)(finger1_gauge);
     std::vector<luke::gfloat> f2 = 
-      (s_.bending_gauge.*sampleFcnPtr)(finger2_gauge, time_per_step);
+      (s_.bending_gauge.*sampleFcnPtr)(finger2_gauge);
     std::vector<luke::gfloat> f3 = 
-      (s_.bending_gauge.*sampleFcnPtr)(finger3_gauge, time_per_step);
+      (s_.bending_gauge.*sampleFcnPtr)(finger3_gauge);
 
     // insert data into observation output
     observation.insert(observation.end(), f1.begin(), f1.end());
     observation.insert(observation.end(), f2.begin(), f2.end());
     observation.insert(observation.end(), f3.begin(), f3.end());
+
+    if (debug_obs) {
+      luke::print_vec(f1, "Bending gauge 1");
+      luke::print_vec(f2, "Bending gauge 2");
+      luke::print_vec(f3, "Bending gauge 3");
+    }
   }
 
   // get axial strain gauge sensor output
@@ -891,16 +922,22 @@ std::vector<luke::gfloat> MjClass::get_observation()
 
     // sample data
     std::vector<luke::gfloat> a1 = 
-      (s_.axial_gauge.*sampleFcnPtr)(finger1_axial_gauge, time_per_step);
+      (s_.axial_gauge.*sampleFcnPtr)(finger1_axial_gauge);
     std::vector<luke::gfloat> a2 = 
-      (s_.axial_gauge.*sampleFcnPtr)(finger2_axial_gauge, time_per_step);
+      (s_.axial_gauge.*sampleFcnPtr)(finger2_axial_gauge);
     std::vector<luke::gfloat> a3 = 
-      (s_.axial_gauge.*sampleFcnPtr)(finger3_axial_gauge, time_per_step);
+      (s_.axial_gauge.*sampleFcnPtr)(finger3_axial_gauge);
 
     // insert data into observation output
     observation.insert(observation.end(), a1.begin(), a1.end());
     observation.insert(observation.end(), a2.begin(), a2.end());
     observation.insert(observation.end(), a3.begin(), a3.end());
+
+    if (debug_obs) {
+      luke::print_vec(a1, "Axial gauge 1");
+      luke::print_vec(a2, "Axial gauge 2");
+      luke::print_vec(a3, "Axial gauge 3");
+    }
   }
 
   // get palm sensor output
@@ -908,10 +945,14 @@ std::vector<luke::gfloat> MjClass::get_observation()
 
     // sample data
     std::vector<luke::gfloat> p1 = 
-      (s_.palm_sensor.*sampleFcnPtr)(palm_sensor, time_per_step);
+      (s_.palm_sensor.*sampleFcnPtr)(palm_sensor);
 
     // insert data into observation output
     observation.insert(observation.end(), p1.begin(), p1.end());
+
+    if (debug_obs) {
+      luke::print_vec(p1, "Palm gauge");
+    }
   }
 
   // get wrist sensor XY output
@@ -919,13 +960,18 @@ std::vector<luke::gfloat> MjClass::get_observation()
 
     // sample data
     std::vector<luke::gfloat> wX =
-      (s_.wrist_sensor_XY.*sampleFcnPtr)(wrist_X_sensor, time_per_step);
+      (s_.wrist_sensor_XY.*sampleFcnPtr)(wrist_X_sensor);
     std::vector<luke::gfloat> wY =
-      (s_.wrist_sensor_XY.*sampleFcnPtr)(wrist_Y_sensor, time_per_step);
+      (s_.wrist_sensor_XY.*sampleFcnPtr)(wrist_Y_sensor);
 
     // insert data into observation output
     observation.insert(observation.end(), wX.begin(), wX.end());
     observation.insert(observation.end(), wY.begin(), wY.end());
+
+    if (debug_obs) {
+      luke::print_vec(wX, "Wrist X");
+      luke::print_vec(wY, "Wrist Y");
+    }
   }
 
   // get wrist sensor Z output
@@ -933,10 +979,14 @@ std::vector<luke::gfloat> MjClass::get_observation()
     
     // sample data
     std::vector<luke::gfloat> wZ =
-      (s_.wrist_sensor_XY.*sampleFcnPtr)(wrist_Z_sensor, time_per_step);
+      (s_.wrist_sensor_XY.*sampleFcnPtr)(wrist_Z_sensor);
 
     // insert data into observation output
     observation.insert(observation.end(), wZ.begin(), wZ.end());
+
+    if (debug_obs) {
+      luke::print_vec(wZ, "Wrist Z");
+    }
   }
 
   // get motor state output
@@ -944,27 +994,41 @@ std::vector<luke::gfloat> MjClass::get_observation()
 
     // sample data
     std::vector<luke::gfloat> s1 = 
-      (s_.motor_state_sensor.*stateFcnPtr)(x_motor_position, time_per_step);
+      (s_.motor_state_sensor.*stateFcnPtr)(x_motor_position);
     std::vector<luke::gfloat> s2 = 
-      (s_.motor_state_sensor.*stateFcnPtr)(y_motor_position, time_per_step);
+      (s_.motor_state_sensor.*stateFcnPtr)(y_motor_position);
     std::vector<luke::gfloat> s3 = 
-      (s_.motor_state_sensor.*stateFcnPtr)(z_motor_position, time_per_step);
+      (s_.motor_state_sensor.*stateFcnPtr)(z_motor_position);
 
     // insert data into observation output
     observation.insert(observation.end(), s1.begin(), s1.end());
     observation.insert(observation.end(), s2.begin(), s2.end());
     observation.insert(observation.end(), s3.begin(), s3.end());
+    
+    if (debug_obs) {
+      luke::print_vec(s1, "Motor state X");
+      luke::print_vec(s2, "Motor state Y");
+      luke::print_vec(s3, "Motor state Z");
+    }
   }
 
   // get base state
   if (s_.base_state_sensor.in_use) {
 
     // sample data
-    std::vector<luke::gfloat> base = 
-      (s_.base_state_sensor.*stateFcnPtr)(z_base_position, time_per_step);
+    std::vector<luke::gfloat> bZ = 
+      (s_.base_state_sensor.*stateFcnPtr)(z_base_position);
 
     // insert data into observation output
-    observation.insert(observation.end(), base.begin(), base.end());
+    observation.insert(observation.end(), bZ.begin(), bZ.end());
+
+    if (debug_obs) {
+      luke::print_vec(bZ, "Base state Z");
+    }
+  }
+
+  if (debug_obs) {
+    std::cout << "End of observation (n_obs = " << observation.size() << ")\n";
   }
   
   return observation;
@@ -1067,6 +1131,23 @@ void MjClass::spawn_object(int index, double xpos, double ypos, double zrot)
   forward();
 }
 
+void MjClass::add_noise_to_base(double base_noise)
+{
+  /* move the base joints to slightly different home positions, noise in metres */
+
+  std::vector<luke::gfloat> noise = { (luke::gfloat) base_noise };
+  luke::add_base_joint_noise(noise);
+  luke::snap_to_target();
+}
+
+void MjClass::add_noise_to_motors(std::vector<luke::gfloat> motor_noise)
+{
+  /* move motor joints to slightly different home positions, noise in metres */
+
+  luke::add_gripper_joint_noise(motor_noise);
+  luke::snap_to_target();
+}
+
 float MjClass::reward()
 {
   /* calculate the reward available at the current simulation state */
@@ -1159,7 +1240,7 @@ int MjClass::get_n_obs()
 
 std::vector<float> MjClass::get_finger_gauge_data()
 {
-  /* report the most recent gauge data */
+  /* report the most recent gauge data in a vector { f1, f2, f3 } */
 
   std::vector<float> out;
 
@@ -1254,15 +1335,14 @@ void MjClass::input_real_data(std::vector<float> state_data,
 
 std::vector<float> MjClass::get_real_observation()
 {
-  /* get an observation of real data - n_samples_since_last should be inclusive, 
-  so if before we had [0,1,2] and now we have [0,1,2,3,4,5] then n=4 */
+  /* get an observation of real data, samples_since_last_obs should NOT be inclusive, 
+  so if before we had [0,1,2] and now we have [0,1,2,3,4,5] then n=3 */
 
-  // add +1 so that n_samples is inclusive of the last data point
-  samples_since_last_obs += 1;
-
-  // short-circuit timings to get set number of readings instead
-  s_.bending_gauge.read_rate = -1 * samples_since_last_obs;
-  s_.palm_sensor.read_rate = -1 * samples_since_last_obs;
+  // manually set reading settings to ensure correctness
+  s_.bending_gauge.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
+  s_.base_state_sensor.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
+  s_.palm_sensor.update_n_readings(samples_since_last_obs, s_.sensor_n_prev_steps);
+  s_.wrist_sensor_Z.update_n_readings(samples_since_last_obs, s_.sensor_n_prev_steps);
 
   // reset as we are about to return an observation
   samples_since_last_obs = 0;
@@ -1323,7 +1403,7 @@ MjType::EventTrack MjClass::add_events(MjType::EventTrack& e1, MjType::EventTrac
   MjType::EventTrack out;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             out.NAME.abs = e1.NAME.abs + e2.NAME.abs;                          \
@@ -1359,7 +1439,7 @@ void MjClass::default_goal_event_triggering()
   constexpr int default_trigger = 1;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (goal_.NAME.involved) { s_.NAME.trigger = default_trigger; }    
@@ -1471,7 +1551,7 @@ std::string MjType::Settings::get_settings()
             /* add to output */\
             output_str += str;
 
-  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS) \
+  #define SS(NAME, IN_USE, NORM, READRATE) \
             str.clear();\
             /* type first */\
             type_str.clear(); type_str += "Sensor";\
@@ -1568,7 +1648,7 @@ void MjType::Settings::wipe_rewards()
   /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
+  #define SS(NAME, IN_USE, NORM, READRATE)
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3) \
             NAME.reward = 0.0;\
             NAME.done = false;\
@@ -1596,7 +1676,7 @@ void MjType::Settings::disable_sensors()
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS) NAME.in_use = false;
+  #define SS(NAME, IN_USE, NORM, READRATE) NAME.in_use = false;
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
   
@@ -1615,11 +1695,43 @@ void MjType::Settings::set_sensor_prev_steps_to(int prev_steps)
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS) NAME.prev_steps = prev_steps;
+  #define SS(NAME, IN_USE, NORM, READRATE) NAME.prev_steps = prev_steps;
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
   
     // run the macro and disable all the sensors
+    LUKE_MJSETTINGS
+  
+  #undef XX
+  #undef SS
+  #undef BR
+  #undef LR
+}
+
+void MjType::Settings::update_sensor_settings(double time_since_last_sample)
+{
+  /* updates the number of reading each sensor is taking based on time between
+  samples and read rate */
+
+  // turn on normalisation behaviour for all sensors
+  set_use_normalisation(true);
+
+  // set the number of previous steps to sample back for all sensors
+  set_sensor_prev_steps_to(sensor_n_prev_steps);
+
+  // manually override state sensors
+  motor_state_sensor.prev_steps = state_n_prev_steps;
+  base_state_sensor.prev_steps = state_n_prev_steps;
+
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, IN_USE, NORM, READRATE)         \
+            if (NAME.in_use) {                                \
+              NAME.update_n_readings(time_since_last_sample); \
+            }
+  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
+  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
+  
+    // run the macro and update all the sensors
     LUKE_MJSETTINGS
   
   #undef XX
@@ -1634,7 +1746,7 @@ void MjType::Settings::set_use_normalisation(bool set_as)
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS) NAME.use_normalisation = set_as;
+  #define SS(NAME, IN_USE, NORM, READRATE) NAME.use_normalisation = set_as;
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
   
@@ -1654,7 +1766,7 @@ void MjType::Settings::scale_rewards(float scale)
   /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
+  #define SS(NAME, IN_USE, NORM, READRATE)
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3) NAME.reward *= scale;
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6) \
             NAME.reward *= scale;
@@ -1677,7 +1789,7 @@ void MjType::EventTrack::print()
   std::cout << "EventTrack = row (abs); "
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                               \
             << #NAME << " = " << NAME.row << " (" << NAME.abs << "); "
@@ -1701,7 +1813,7 @@ void update_events(MjType::EventTrack& events, MjType::Settings& settings)
   bool active = false; // is a linear reward active
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
+  #define SS(NAME, IN_USE, NORM, READRATE)
   #define BR(NAME, REWARD, DONE, TRIGGER)                                    \
             events.NAME.row = events.NAME.row *                              \
                                   events.NAME.value + events.NAME.value;     \
@@ -1737,7 +1849,7 @@ float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings)
 
   // general and sensor settings not used
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   /* do NOT use other fields than name as it will pull values from simsettings.h,
      eg instead of using TRIGGER we need to use settings.NAME.trigger */
@@ -1813,7 +1925,7 @@ float goal_rewards(MjType::EventTrack& events, MjType::Settings& settings,
 
   // general and sensor settings not used
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   /* do NOT use other fields than name as it will pull values from simsettings.h,
      eg instead of using TRIGGER we need to use settings.NAME.trigger */
@@ -1869,7 +1981,7 @@ std::vector<float> MjType::EventTrack::vectorise()
   std::vector<float> out;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             out.push_back(NAME.row);
@@ -1905,7 +2017,7 @@ void MjType::EventTrack::unvectorise(std::vector<float> in)
   int i = 0;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             NAME.row = in[i] + 0.5; /* casts float -> int */                   \
@@ -1934,7 +2046,7 @@ std::vector<float> MjType::Goal::vectorise() const
   std::vector<float> out;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (NAME.involved) {                                               \
@@ -1973,7 +2085,7 @@ void MjType::Goal::unvectorise(std::vector<float> vec)
   int i = 0;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (NAME.involved) {                                               \
@@ -2045,7 +2157,7 @@ MjType::Goal score_goal(MjType::Goal const goal, MjType::EventTrack event,
   MjType::Goal new_goal;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (goal.NAME.involved) {                                          \
@@ -2104,7 +2216,7 @@ std::vector<std::string> MjType::Goal::goal_names()
   std::vector<std::string> goal_names;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (NAME.involved) { goal_names.push_back(#NAME); }
@@ -2133,7 +2245,7 @@ std::string MjType::Goal::get_goal_info()
   int i = 0;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE, PREVSTEPS)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (NAME.involved) {                                               \

@@ -471,6 +471,9 @@ def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=5, network=network
   model = add_sensors(model, num=sensors, sensor_mode=1, state_mode=0)
   model = setup_HER(model, use=False)
 
+  # print details
+  print("\nWandb note is:\n", model.wandb_note)
+
   # train and finish
   model.train(network)
   exit()
@@ -649,7 +652,7 @@ if __name__ == "__main__":
   model.env.mj.set.set_sensor_prev_steps_to(this_sensor_step)
 
   # lets train on the harder object set
-  model.env._load_object_set(name="set1_fullset_795")
+  model.env._load_object_set(name="set2_fullset_795")
 
   # perform the training with other parameters standard
   baseline_training(model, network=this_network)
