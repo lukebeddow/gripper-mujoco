@@ -1724,7 +1724,7 @@ void MjType::Settings::update_sensor_settings(double time_since_last_sample)
   base_state_sensor.prev_steps = state_n_prev_steps;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)         \
+  #define SS(NAME, IN_USE, NORM, READRATE)                    \
             if (NAME.in_use) {                                \
               NAME.update_n_readings(time_since_last_sample); \
             }

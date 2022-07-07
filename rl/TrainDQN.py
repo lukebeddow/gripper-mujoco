@@ -665,11 +665,14 @@ class TrainDQN():
       self.wandb_init_flag = True
 
     # print important info
-    print("Using model:", self.policy_net.name)
-    print("Using HER:", self.params.use_HER)
-    print("Using wandb:", self.use_wandb)
-    print("Run name:", self.run_name)
-    print("Group name:", self.group_name)
+    if self.log_level > 0:
+      print("Using model:", self.policy_net.name)
+      print("Network inputs (n_obs):", self.env.n_obs)
+      print("Network outputs (n_actions):", self.env.n_actions)
+      print("Using HER:", self.params.use_HER)
+      print("Using wandb:", self.use_wandb)
+      print("Run name:", self.run_name)
+      print("Group name:", self.group_name)
 
   def to_torch(self, data, dtype=None):
     """

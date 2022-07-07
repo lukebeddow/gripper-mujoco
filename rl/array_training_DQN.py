@@ -183,7 +183,8 @@ def create_reward_function(model, style="negative", options=[]):
 
   return model
 
-def add_sensors(model, num=10, sensor_mode=1, state_mode=0):
+def add_sensors(model, num=10, sensor_mode=1, state_mode=0, sensor_steps=1,
+  state_steps=2):
   """
   Add a number of sensors
   """
@@ -196,6 +197,10 @@ def add_sensors(model, num=10, sensor_mode=1, state_mode=0):
   model.env.mj.set.motor_state_sensor.in_use = True
   model.env.mj.set.motor_state_sensor.read_rate = -1
   model.env.mj.set.bending_gauge.in_use = True
+
+  # set the number of steps in the past we use for observations
+  model.env.mj.set.sensor_n_prev_steps = sensor_steps
+  model.env.mj.set.state_n_prev_steps = state_steps
 
   # state sensor with two readings (current, prev)
   if num >= 1: model.env.mj.set.motor_state_sensor.read_rate = -2
@@ -217,7 +222,10 @@ def add_sensors(model, num=10, sensor_mode=1, state_mode=0):
   # finger axial gauges
   if num >= 5: model.env.mj.set.axial_gauge.in_use = True
 
-  model.wandb_note += f"Num sensors: {num}, state mode: {state_mode}, sensor mode: {sensor_mode}\n"
+  model.wandb_note += (
+    f"Num sensors: {num}, state mode: {state_mode}, sensor mode: {sensor_mode}" +
+    f", state steps: {state_steps}, sensor steps: {sensor_steps}"
+  )
 
   return model
 
@@ -382,9 +390,12 @@ def apply_to_all_models(model):
   model.env.mj.set.quit_on_reward_above = 1e6
   model.env.mj.set.quit_reward_capped = False
 
-  # disable use of all sensors, then add back defaults
+  # disable use of all sensors
   model.env.mj.set.disable_sensors()
-  model.env.mj.set.set_sensor_prev_steps_to(1) # set lookback depth to 1
+  model.env.mj.set.sensor_n_prev_steps = 1 # lookback only 1 step
+  model.env.mj.set.state_n_prev_steps = 1 # lookback only 1 step
+
+  # add back default sensors
   model.env.mj.set.motor_state_sensor.in_use = True
   model.env.mj.set.bending_gauge.in_use = True
 
@@ -450,7 +461,7 @@ def logging_job(model, run_name, group_name):
   model.plot(force=True, hang=True)
 
 def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=5, network=networks.DQN_3L60, 
-                      memory=50_000):
+                      memory=50_000, state_steps=2, sensor_steps=1):
   """
   Runs a baseline training on the model
   """
@@ -468,11 +479,12 @@ def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=5, network=network
   
   # configure rewards and sensors
   model = create_reward_function(model, style="mixed_v2", options=[])
-  model = add_sensors(model, num=sensors, sensor_mode=1, state_mode=0)
+  model = add_sensors(model, num=sensors, sensor_mode=1, state_mode=0,
+                      state_steps=state_steps, sensor_steps=sensor_steps)
   model = setup_HER(model, use=False)
 
-  # print details
-  print("\nWandb note is:\n", model.wandb_note)
+  # print details THIS LINE ISN'T WORKING FOR SOME REASON
+  print("\nWandb note is:", model.wandb_note)
 
   # train and finish
   model.train(network)
@@ -616,6 +628,11 @@ if __name__ == "__main__":
   this_lr = lr_list[inputarg // x]           # vary every x steps
   this_ed = ed_list[inputarg % x]            # vary every step & loop
 
+  # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
+  #   A1, A2, A3, ...
+  #   B1, B2, B3, ...
+  #   C1, C2, C3, ...
+
   # perform the training with other parameters standard
   baseline_training(model, lr=this_lr, ed=this_ed)
   """
@@ -639,23 +656,21 @@ if __name__ == "__main__":
   this_sensor_step = sensor_steps_list[inputarg // x]       # vary every x steps
   this_network = network_list[inputarg % x]                 # vary every +1 & loop
 
+  # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
+  #   A1, A2, A3, ...
+  #   B1, B2, B3, ...
+  #   C1, C2, C3, ...
+
   # make note
   model.wandb_note += f"Sensor steps used: {this_sensor_step}\n"
-  model.wandb_note += f"Memory size used: {this_network}\n"
-
-  # temporary options
-  model.params.save_freq = 1000
-  model.params.test_freq = 1000
-  model.params.num_episodes = 20_000
-
-  # apply the sensor step change
-  model.env.mj.set.set_sensor_prev_steps_to(this_sensor_step)
+  model.wandb_note += f"Network name used {this_network}\n"
 
   # lets train on the harder object set
   model.env._load_object_set(name="set2_fullset_795")
 
   # perform the training with other parameters standard
-  baseline_training(model, network=this_network)
+  baseline_training(model, network=this_network, state_steps=this_sensor_step,
+                    sensor_steps=this_sensor_step)
 
   # ----- END ----- #
 
