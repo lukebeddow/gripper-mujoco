@@ -697,6 +697,7 @@ public:
   luke::SlidingWindow<luke::gfloat> wrist_Z_sensor { gauge_buffer_size };
 
   // track the timestamps of sensor updates, this is for plotting in mysimlulate.cpp
+  luke::SlidingWindow<float> step_timestamps { gauge_buffer_size };
   luke::SlidingWindow<float> gauge_timestamps { gauge_buffer_size };
   luke::SlidingWindow<float> axial_timestamps { gauge_buffer_size };
   luke::SlidingWindow<float> palm_timestamps { gauge_buffer_size };

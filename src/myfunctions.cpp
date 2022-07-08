@@ -119,6 +119,7 @@ struct JointSettings {
   struct {
     double finger_length = 235e-3;
     double segment_length = 0;                        // runtime depends
+    double finger_stiffness_N_per_m = 10;
   } dim;
 
   // strain gauge parameters
@@ -373,7 +374,11 @@ void init_J(mjModel* model, mjData* data)
   get_joint_indexes(model);
   get_joint_addresses(model);
 
-  if (debug) print_joint_names(model);
+  if (debug) {
+    print_joint_names(model);
+    set_finger_stiffness(model, 10);
+    print_joint_names(model);
+  }
 
   // resize state vectors and find qpos/qvel pointers
   configure_qpos(model, data);
@@ -474,8 +479,8 @@ void get_joint_indexes(mjModel* model)
     }
   }
 
-  // for testing
-  if (j_.num.finger != 27) throw std::runtime_error("j_.num.finger != 27");
+  // // for testing
+  // if (j_.num.finger != 27) throw std::runtime_error("j_.num.finger != 27");
 
   // hence per finger is this divided by 3
   j_.num.per_finger = j_.num.finger / 3;
@@ -552,6 +557,15 @@ void get_joint_addresses(mjModel* model)
   if (debug) {
     j_.print_qposadr();
     j_.print_qveladr();
+  }
+}
+
+void set_finger_stiffness(mjModel* model, mjtNum stiffness)
+{
+  /* set the stiffness of the flexible finger joints */
+
+  for (int i : j_.idx.finger) {
+    model->jnt_stiffness[i] = stiffness;
   }
 }
 

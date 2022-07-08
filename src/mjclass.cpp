@@ -185,6 +185,9 @@ void MjClass::configure_settings()
   double time_per_step = model->opt.timestep * s_.sim_steps_per_action;
   s_.update_sensor_settings(time_per_step);
 
+  // update the finger spring stiffness
+  luke::set_finger_stiffness(model, s_.finger_stiffness);
+
   // safety check
   if (s_.motor_state_sensor.read_rate >= 0)
     throw std::runtime_error("base_state_sensor read_rate must be a negative number"
@@ -279,6 +282,7 @@ void MjClass::reset()
   z_base_position.reset();
 
   // reset timestamps for sensor readings
+  step_timestamps.reset();
   gauge_timestamps.reset();
   axial_timestamps.reset();
   palm_timestamps.reset();
@@ -530,6 +534,9 @@ void MjClass::sense_gripper_state()
   y_motor_position.add(state_vec[1]);
   z_motor_position.add(state_vec[2]);
   z_base_position.add(state_vec[3]);
+
+  // save the time the reading was made
+  step_timestamps.add(data->time);
 }
 
 void MjClass::update_env()

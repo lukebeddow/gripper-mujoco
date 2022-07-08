@@ -363,6 +363,7 @@ def apply_to_all_models(model):
   model.env.mj.set.render_on_step = False
 
   # define lengths and forces
+  model.env.mj.set.finger_stiffness = 5
   model.env.mj.set.oob_distance = 75e-3
   model.env.mj.set.done_height = 35e-3
   model.env.mj.set.stable_finger_force = 0.4
@@ -646,7 +647,7 @@ if __name__ == "__main__":
     networks.DQN_5L60
   ]
 
-  # lists are zero indexed so adjust inputarg to 0-17
+  # lists are zero indexed so adjust inputarg
   inputarg -= 1
 
   # we vary wrt memory_list every inputarg increment

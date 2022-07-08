@@ -53,6 +53,7 @@ mjvFigure figbendgauge;
 mjvFigure figaxialgauge;
 mjvFigure figpalm;
 mjvFigure figwrist;
+mjvFigure figmotors;
 
 // OpenGL rendering and UI
 GLFWvidmode vmode;
@@ -87,6 +88,7 @@ struct
     int axialgauge = 0;         // added by luke
     int palmsensor = 0;         // added by luke
     int wristsensor = 0;        // added by luke
+    int statesensor = 0;        // added by luke
     int allsensors = 0;         // added by luke
     int object_int = 0;         // added by luke
     int env_steps = 1;          // added by luke
@@ -172,7 +174,8 @@ const mjuiDef defOption[] =
     {mjITEM_CHECKINT,  "Axial gauge",   2, &settings.axialgauge,    " #402"}, // added by luke
     {mjITEM_CHECKINT,  "Palm sensor",   2, &settings.palmsensor,    " #403"}, // added by luke
     {mjITEM_CHECKINT,  "Wrist sensor",  2, &settings.wristsensor,   " #404"}, // added by luke
-    {mjITEM_CHECKINT,  "All sensors",   2, &settings.allsensors,    " #405"}, // added by luke
+    {mjITEM_CHECKINT,  "Motor sensor",  2, &settings.statesensor,   " #405"}, // added by luke
+    {mjITEM_CHECKINT,  "All sensors",   2, &settings.allsensors,    " #406"}, // added by luke
     {mjITEM_END}
 };
 
@@ -592,10 +595,11 @@ void lukesensorfigsinit(void)
     mjv_defaultFigure(&figaxialgauge);
     mjv_defaultFigure(&figpalm);
     mjv_defaultFigure(&figwrist);
+    mjv_defaultFigure(&figmotors);
 
     // what figures are we initialising
     std::vector<mjvFigure*> myfigs {
-        &figbendgauge, &figaxialgauge, &figpalm, &figwrist
+        &figbendgauge, &figaxialgauge, &figpalm, &figwrist, &figmotors
     };
 
     // initialise all figures the same
@@ -628,6 +632,7 @@ void lukesensorfigsinit(void)
     strcpy(figaxialgauge.title, "Axial gauges");
     strcpy(figpalm.title, "Palm sensor");
     strcpy(figwrist.title, "Wrist sensor");
+    strcpy(figmotors.title, "Motor states");
 
     // add legends
     strcpy(figbendgauge.linename[0], "1");
@@ -640,6 +645,10 @@ void lukesensorfigsinit(void)
     strcpy(figwrist.linename[0], "X");
     strcpy(figwrist.linename[1], "Y");
     strcpy(figwrist.linename[2], "Z");
+    strcpy(figmotors.linename[0], "X");
+    strcpy(figmotors.linename[1], "Y");
+    strcpy(figmotors.linename[2], "Z");
+    strcpy(figmotors.linename[3], "H");
 }
 
 
@@ -665,12 +674,17 @@ void lukesensorfigsupdate(void)
     std::vector<luke::gfloat> wXdata = myMjClass.wrist_X_sensor.read(gnum);
     std::vector<luke::gfloat> wYdata = myMjClass.wrist_Y_sensor.read(gnum);
     std::vector<luke::gfloat> wZdata = myMjClass.wrist_Z_sensor.read(gnum);
+    std::vector<luke::gfloat> mXdata = myMjClass.x_motor_position.read(gnum);
+    std::vector<luke::gfloat> mYdata = myMjClass.y_motor_position.read(gnum);
+    std::vector<luke::gfloat> mZdata = myMjClass.z_motor_position.read(gnum);
+    std::vector<luke::gfloat> mHdata = myMjClass.z_base_position.read(gnum);
 
     // get the corresponding timestamps
     std::vector<float> btdata = myMjClass.gauge_timestamps.read(gnum);
     std::vector<float> atdata = myMjClass.axial_timestamps.read(gnum);
     std::vector<float> ptdata = myMjClass.palm_timestamps.read(gnum);
     std::vector<float> wtdata = myMjClass.wristZ_timestamps.read(gnum);
+    std::vector<float> mtdata = myMjClass.step_timestamps.read(gnum);
 
     // package sensor data pointers in iterable vectors
     std::vector<std::vector<luke::gfloat>*> bdata {
@@ -685,18 +699,21 @@ void lukesensorfigsupdate(void)
     std::vector<std::vector<luke::gfloat>*> wdata {
         &wXdata, &wYdata, &wZdata
     };
+    std::vector<std::vector<luke::gfloat>*> mdata {
+        &mXdata, &mYdata, &mZdata, &mHdata  
+    };
 
     // package figures into iterable vector
     std::vector<mjvFigure*> myfigs {
-        &figbendgauge, &figaxialgauge, &figpalm, &figwrist
+        &figbendgauge, &figaxialgauge, &figpalm, &figwrist, &figmotors
     };
 
     // package sensor data in same order as figures
     std::vector< std::vector<std::vector<luke::gfloat>*>* > sensordata {
-        &bdata, &adata, &pdata, &wdata
+        &bdata, &adata, &pdata, &wdata, &mdata
     };
     std::vector<std::vector<float>*> timedata {
-        &btdata, &atdata, &ptdata, &wtdata
+        &btdata, &atdata, &ptdata, &wtdata, &mtdata
     };
 
     // maximum number of lines on a figure
@@ -739,21 +756,37 @@ void lukesensorfigshow(mjrRect rect)
 {
     // what figures are showing
     std::vector<mjvFigure*> myfigs {
-        &figbendgauge, &figaxialgauge, &figpalm, &figwrist
+        &figbendgauge, &figaxialgauge, &figpalm, &figwrist, &figmotors
     };
     // what settings determine if these are showing
     std::vector<int> flags {
         settings.bendgauge, 
         settings.axialgauge, 
         settings.palmsensor,
-        settings.wristsensor
+        settings.wristsensor,
+        settings.statesensor
     };
 
     // how many graphs do we need to fit
     int num = myfigs.size();
+    int to_show = 0;
+
+    if (settings.allsensors) {
+        to_show = num;
+    }
+    else {
+        for (int i = 0; i < myfigs.size(); i++) {
+            if (flags[i] != 0) {
+                to_show += 1;
+            }
+        }
+    }
+
+    // maximum size
+    if (to_show < 3) to_show = 3;
 
     // constant width with and without profiler
-    int width = settings.profiler ? rect.width / 3 : rect.width / num;
+    int width = settings.profiler ? rect.width / 3 : rect.width / to_show;
     int show = 0;
 
     for (int i = 0; i < myfigs.size(); i++) {
@@ -2545,6 +2578,7 @@ int main(int argc, const char** argv)
     #if defined(LUKE_DEFAULTOBJECTS)
         default_path = LUKE_MJCF_PATH;
         default_path += '/';
+        // default_path += "set2_nocuboid_525"; // override object set
         default_path += LUKE_DEFAULTOBJECTS;
     #endif
     #endif

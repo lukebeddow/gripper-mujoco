@@ -43,6 +43,7 @@ void init_J(mjModel* model, mjData* data);
 void print_joint_names(mjModel* model);
 void get_joint_indexes(mjModel* model);
 void get_joint_addresses(mjModel* model);
+void set_finger_stiffness(mjModel* model, mjtNum stiffness);
 void configure_qpos(mjModel* model, mjData* data);
 void keyframe(mjModel* model, mjData* data, std::string keyframe_name);
 void keyframe(mjModel* model, mjData* data, int keyframe_index);

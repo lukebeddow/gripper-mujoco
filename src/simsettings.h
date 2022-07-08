@@ -29,6 +29,7 @@
   XX(  debug,                   bool,     true)     /* print debug info to terminal */\
   XX(  mujoco_timestep,         float,    0.002)    /* sim timestep in seconds - default 0.002 */\
   XX(  curve_validation,        bool,     false)    /* save finger curve data for testing */\
+  XX(  finger_stiffness,        double,       5)    /* mujoco finger joint spring stiffness, units unknown */\
   /*
   HER settings */\
   XX(  use_HER,                 bool,     false)    /* use hindsight experience replay (HER) */\
