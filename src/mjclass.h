@@ -12,6 +12,8 @@
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <random>
+#include <memory>
 
 #include "simsettings.h"
 #include "myfunctions.h"
@@ -25,6 +27,9 @@
 namespace MjType
 {
   /* types used inside the MjClass, including data structures */
+
+  // random generator pointer, seeded in MjClass::configure_settings()
+  extern std::unique_ptr<std::default_random_engine> generator;
 
   // what are the possible actions (order matters - see configure_settings())
   struct Action {
@@ -56,16 +61,23 @@ namespace MjType
   // sensor type for sensing in simulation
   struct Sensor {
 
-    bool in_use = false;        // is this sensor currently in use
-    float normalise = 1;        // value with which to normalise readings to [-1,1]
-    float read_rate = 1;        // rate in Hz which this sensor is read
-    int prev_steps = 1;         // back how many previous steps do we read
-    double last_read_time = 0;  // time in seconds sensor was last read
+    // initialised settings from simsettings.h
+    bool in_use = false;                // is this sensor currently in use
+    float normalise = 1;                // value with which to normalise readings to [-1,1]
+    float read_rate = 1;                // rate in Hz which this sensor is read
 
-    int readings_per_step = 1;  // how many readings during action execution
-    int total_readings = 1;     // how many samples back do we start reading
+    // user options that can be overriden
+    bool use_normalisation = true;      // are we using normalisation
+    bool use_noise = true;              // are we adding synthetic nois
+    float noise_mag = 0;                // magnitude of added noise
+    float noise_mu = 0;                 // mean of noise (ie zero error)
+    float noise_std = -1;               // std deviation of noise (< 0 means flat)
 
-    bool use_normalisation = true; // are we using normalisation
+    // internal variables set via functions, do not touch
+    double last_read_time = 0;          // time in seconds sensor was last read
+    int prev_steps = 1;                 // back how many previous steps do we read
+    int readings_per_step = 1;          // how many readings during action execution
+    int total_readings = 1;             // how many samples back do we start reading
 
     Sensor(bool in_use, float normalise, float read_rate)
       : in_use(in_use), normalise(normalise), read_rate(read_rate)
@@ -106,6 +118,46 @@ namespace MjType
       else {
         return 0.0;
       }
+    }
+
+    float apply_noise(float value, std::uniform_real_distribution<float>& uniform_dist)
+    {
+      /* add noise to a reading */
+
+      if (not use_noise) return value;
+
+      constexpr float two_pi = 2.0 * M_PI;
+      constexpr float epsilon = std::numeric_limits<float>::epsilon();
+
+      // calculate a uniform random noise
+      if (noise_std < epsilon) {
+        float noise = noise_mu + noise_mag * (2 * uniform_dist(*MjType::generator) - 1);
+        value += noise;
+      }
+      // use the box mueller transform to calculate normal noise
+      else {
+
+        // get random values, ensuring u1 isn't 0 (division by 0 error)
+        float u1, u2;
+        do {
+          u1 = uniform_dist(*MjType::generator);
+        }
+        while (u1 <= epsilon);
+        u2 = uniform_dist(*MjType::generator);
+
+        // compute z0 and z1
+        float mag = noise_std * std::sqrt(-2.0 * std::log(u1));
+        float z0 = mag * std::cos(two_pi * u2) + noise_mu;
+        // float z1 = mag * std::sin(two_pi * u2) + noise_mu; // not needed
+  
+        value += z0;
+      }
+
+      // ensure we remain in bounds
+      if (value > 1) value = 1;
+      else if (value < -1) value = -1;
+
+      return value;
     }
 
     bool ready_to_read(double current_time_seconds) 
@@ -455,9 +507,10 @@ namespace MjType
     void disable_sensors();
     void scale_rewards(float scale); 
     void set_use_normalisation(bool set_as);
+    void set_use_noise(bool set_as);
     void set_sensor_prev_steps_to(int prev_steps);
     void update_sensor_settings(double time_since_last_sample);
-
+    void apply_noise_params();
   };
 
   // data on the simulated objects and environment
@@ -624,6 +677,9 @@ public:
 
   // for measuring timings
   typedef std::chrono::high_resolution_clock time_;
+
+  // for uniform random numbers [0.0, 1.0]
+  std::uniform_real_distribution<float> uniform_dist {0.0, 1.0};
 
   // parameters set at compile time
   static constexpr double ftol = 1e-5;             // floating point tolerance

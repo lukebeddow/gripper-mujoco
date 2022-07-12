@@ -30,6 +30,7 @@
   XX(  mujoco_timestep,         float,    0.002)    /* sim timestep in seconds - default 0.002 */\
   XX(  curve_validation,        bool,     false)    /* save finger curve data for testing */\
   XX(  finger_stiffness,        double,       5)    /* mujoco finger joint spring stiffness, units unknown */\
+  XX(  random_seed,             uint,         0)    /* random seed */\
   /*
   HER settings */\
   XX(  use_HER,                 bool,     false)    /* use hindsight experience replay (HER) */\
@@ -43,6 +44,13 @@
   XX(  state_sample_mode,       int,      0)        /* how to sample motor state, see MjType::Sample*/\
   XX(  sensor_n_prev_steps,     int,      1)        /* how many steps back do we sample with sensors */\
   XX(  state_n_prev_steps,      int,      1)        /* how many steps back do we sample with state sensors */\
+  XX(  all_sensors_use_noise,   bool,     false)    /* do all of the sensors use noise */\
+  XX(  sensor_noise_mag,        double,    0.0)     /* noise magnitude if using uniform distribution (std <= 0) */\
+  XX(  sensor_noise_mu,         double,    0.0)     /* abs range of sensor mean shift */\
+  XX(  sensor_noise_std,        double,    0.015)   /* std deviation of noise, <= 0 means uniform */\
+  XX(  state_noise_mag,         double,    0.0)     /* noise magnitude if using uniform distribution (std <= 0)*/\
+  XX(  state_noise_mu,          double,    0.0)     /* abs range of state sensor mean shift*/\
+  XX(  state_noise_std,         double,    0.015)   /* std deviation of noise, <= 0 means uniform*/\
   /* 
   update_env() settings */\
   XX(  oob_distance,            double,   75e-3)    /* distance to consider object out of bounds */\

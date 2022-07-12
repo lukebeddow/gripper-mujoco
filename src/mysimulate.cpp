@@ -96,6 +96,10 @@ struct
     int object_y_noise_mm = 0;  // added by luke
     int object_z_rot_deg = 0;   // added by luke
 
+    float sensor_mag = 0;
+    float sensor_mu = 0;
+    float sensor_std = 0;
+
     // simulation
     int run = 1;
     int key = 0;
@@ -176,9 +180,12 @@ const mjuiDef defOption[] =
     {mjITEM_CHECKINT,  "Wrist sensor",  2, &settings.wristsensor,   " #404"}, // added by luke
     {mjITEM_CHECKINT,  "Motor sensor",  2, &settings.statesensor,   " #405"}, // added by luke
     {mjITEM_CHECKINT,  "All sensors",   2, &settings.allsensors,    " #406"}, // added by luke
+    {mjITEM_CHECKINT,  "Use noise",     2, &myMjClass.s_.all_sensors_use_noise, " #407"},  // added by luke
+    {mjITEM_SLIDERNUM, "Noise mag",     2, &myMjClass.s_.sensor_noise_mag,   "0.0 1.0"},   // added by luke
+    {mjITEM_SLIDERNUM, "Noise mean",    2, &myMjClass.s_.sensor_noise_mu,    "-1.0 1.0"},  // added by luke
+    {mjITEM_SLIDERNUM, "Noise std",     2, &myMjClass.s_.sensor_noise_std,   "-0.1 1.0"},  // added by luke
     {mjITEM_END}
 };
-
 
 // simulation section of UI
 const mjuiDef defSimulation[] =
@@ -1724,6 +1731,26 @@ void uiEvent(mjuiState* state)
             case 10:            // Vertical sync
                 glfwSwapInterval(settings.vsync);
                 break;
+            
+
+            case 18:            // apply noise
+            case 19:            // mag slider
+            case 20:            // mean slider
+            case 21:            // std slider
+                // myMjClass.tick();
+                // while (myMjClass.tock() < 1) {};
+                // throw std::runtime_error("");
+                // std::cout << it->itemid << '\n';
+
+                myMjClass.s_.state_noise_mag = myMjClass.s_.sensor_noise_mag;
+                myMjClass.s_.state_noise_mu = myMjClass.s_.sensor_noise_mu;
+                myMjClass.s_.state_noise_std = myMjClass.s_.sensor_noise_std;
+                myMjClass.s_.set_use_noise(myMjClass.s_.all_sensors_use_noise);
+                myMjClass.s_.apply_noise_params();
+                break;
+
+            //     // do nothing
+            //     break;
             }
 
             // modify UI

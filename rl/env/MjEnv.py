@@ -26,7 +26,6 @@ class MjEnv():
     last_reward: float = 0
     cumulative_reward: float = 0
 
-  # @dataclass
   class Test:
     # saved after each test trial ends
     obj_idx: int = 0
@@ -34,28 +33,9 @@ class MjEnv():
     reward: float = 0
     steps: int = 0
     object_name: str = ""
+    cnt = None
 
-    # conditions of the object at episode end
-    lifted: bool = False
-    stable: bool = False
-    oob: bool = False
-    target_height: bool = False
-    stable_height: bool = False
-    palm_force: float = 0
-    finger_force: float = 0
-
-    # counts during the episode of events
-    cnt_lifted: int = 0
-    cnt_object_contact: int = 0
-    cnt_palm_force: int = 0
-    cnt_exceed_limits: int = 0
-    cnt_exceed_axial: int = 0
-    cnt_exceed_lateral: int = 0
-    cnt_exceed_palm: int = 0
-
-    def add_data(self, cnt): self.cnt = cnt
-
-  def __init__(self):
+  def __init__(self, seed=None):
     """
     A mujoco environment
     """
@@ -80,6 +60,13 @@ class MjEnv():
     
     # create mujoco instance
     self.mj = MjClass()
+    if self.log_level == 0: self.mj.set.debug = False
+
+    # seed the environment
+    self.myseed = None
+    self.seed(seed)
+
+    # load the mujoco models
     self._load_object_set()
     self._load_xml()  
 
@@ -107,6 +94,8 @@ class MjEnv():
 
     return
 
+  # ----- semi-private functions, advanced use ----- #
+
   def _load_xml(self, test=None, index=None):
     """
     Load the mujoco instance with the given mjcf xml file name
@@ -132,7 +121,7 @@ class MjEnv():
 
   def _load_object_set(self, name=None, mjcf_path=None):
     """
-    Determine how many model xml files are in the object set
+    Load and determine how many model xml files are in the object set
     """
 
     # if a mjcf_path is given, override, otherwise we use default
@@ -289,13 +278,6 @@ class MjEnv():
 
     return
 
-  def _seed(seed):
-    """
-    Set the seed for the environment
-    """
-
-    np.random.seed(seed)
-
   def _end_test(self):
     """
     End test mode, called automatically and sets the test_completed flag
@@ -327,7 +309,7 @@ class MjEnv():
     trial_data.obj_trial = self.current_test_trial.obj_trial
     trial_data.object_name = test_report.object_name
     trial_data.reward = self.track.cumulative_reward
-    trial_data.add_data(test_report.cnt)
+    trial_data.cnt = test_report.cnt
 
     # insert information into stored data list
     self.test_trials.append(trial_data)
@@ -344,6 +326,31 @@ class MjEnv():
       if (self.current_test_trial.obj_idx >= self.num_objects or
           self.current_test_trial.obj_idx >= self.test_obj_limit):
         self._end_test()
+  
+  # ----- public functions ----- #
+
+  def seed(self, seed=None):
+    """
+    Set the seed for the environment
+    """
+
+    # if we have not been given a seed
+    if seed is None:
+      # if we have previously had a seed, reuse the same one (eg reloading from pickle)
+      if self.myseed is not None:
+        seed = self.myseed
+      else:
+        # otherwise, get a random seed from [0, maxint]
+        seed = np.random.randint(0, 2_147_483_647)
+
+    # set the python random seed in numpy
+    np.random.seed(seed)
+
+    # set the same cpp random seed (reseeded upon cpp call to reset())
+    self.mj.set.random_seed = seed
+
+    # save the seed
+    self.myseed = seed
 
   def start_test(self):
     """

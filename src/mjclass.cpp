@@ -1,5 +1,8 @@
 #include "mjclass.h"
 
+// declare the random number generator
+std::unique_ptr<std::default_random_engine> MjType::generator;
+
 /* ----- constructors, destructor, and initialisers ----- */
 
 MjClass::MjClass()
@@ -187,6 +190,13 @@ void MjClass::configure_settings()
 
   // update the finger spring stiffness
   luke::set_finger_stiffness(model, s_.finger_stiffness);
+
+  // if we have a new random seed, create a new random generator
+  static uint old_random_seed = s_.random_seed + 1;
+  if (old_random_seed != s_.random_seed) {
+    MjType::generator.reset(new std::default_random_engine(s_.random_seed));
+    old_random_seed = s_.random_seed;
+  }
 
   // safety check
   if (s_.motor_state_sensor.read_rate >= 0)
@@ -413,6 +423,11 @@ void MjClass::monitor_sensors()
     gauges[1] = s_.bending_gauge.apply_normalisation(gauges[1]);
     gauges[2] = s_.bending_gauge.apply_normalisation(gauges[2]);
 
+    // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
+    gauges[0] = s_.bending_gauge.apply_noise(gauges[0], uniform_dist);
+    gauges[1] = s_.bending_gauge.apply_noise(gauges[1], uniform_dist);
+    gauges[2] = s_.bending_gauge.apply_noise(gauges[2], uniform_dist);
+
     // save
     finger1_gauge.add(gauges[0]);
     finger2_gauge.add(gauges[1]);
@@ -445,6 +460,11 @@ void MjClass::monitor_sensors()
     axial_gauges[1] = s_.axial_gauge.apply_normalisation(axial_gauges[1]);
     axial_gauges[2] = s_.axial_gauge.apply_normalisation(axial_gauges[2]);
 
+    // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
+    axial_gauges[0] = s_.axial_gauge.apply_noise(axial_gauges[0], uniform_dist);
+    axial_gauges[1] = s_.axial_gauge.apply_noise(axial_gauges[1], uniform_dist);
+    axial_gauges[2] = s_.axial_gauge.apply_noise(axial_gauges[2], uniform_dist);
+
     // save
     finger1_axial_gauge.add(axial_gauges[0]);
     finger2_axial_gauge.add(axial_gauges[1]);
@@ -468,6 +488,9 @@ void MjClass::monitor_sensors()
     // normalise
     palm_reading = s_.axial_gauge.apply_normalisation(palm_reading);
 
+    // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
+    palm_reading = s_.axial_gauge.apply_noise(palm_reading, uniform_dist);
+
     // save
     palm_sensor.add(palm_reading);
 
@@ -486,13 +509,16 @@ void MjClass::monitor_sensors()
     x = s_.wrist_sensor_XY.apply_normalisation(x);
     y = s_.wrist_sensor_XY.apply_normalisation(y);
 
+    // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
+    x = s_.wrist_sensor_XY.apply_noise(x, uniform_dist);
+    y = s_.wrist_sensor_XY.apply_noise(y, uniform_dist);
+
     // save
     wrist_X_sensor.add(x);
     wrist_Y_sensor.add(y);
     
     // record time
     wristXY_timestamps.add(data->time);
-    
   }
 
   // check the wrist sensor Z force
@@ -503,6 +529,9 @@ void MjClass::monitor_sensors()
 
     // normalise
     z = s_.wrist_sensor_Z.apply_normalisation(z);
+
+    // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
+    z = s_.wrist_sensor_Z.apply_noise(z, uniform_dist);
 
     // save
     wrist_Z_sensor.add(z);
@@ -529,6 +558,12 @@ void MjClass::sense_gripper_state()
   state_vec[3] = normalise_between(
     state_vec[3], luke::Target::base_z_min, luke::Target::base_z_max);
 
+  // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
+  state_vec[0] = s_.motor_state_sensor.apply_noise(state_vec[0], uniform_dist);
+  state_vec[1] = s_.motor_state_sensor.apply_noise(state_vec[1], uniform_dist);
+  state_vec[2] = s_.motor_state_sensor.apply_noise(state_vec[2], uniform_dist);
+  state_vec[3] = s_.base_state_sensor.apply_noise(state_vec[3], uniform_dist);
+
   // save reading
   x_motor_position.add(state_vec[0]);
   y_motor_position.add(state_vec[1]);
@@ -541,9 +576,24 @@ void MjClass::sense_gripper_state()
 
 void MjClass::update_env()
 {
-  /* track the position and state of the object */
+  /* Update tracking of the simulation environement to determine whether events
+  have occured. These events are how reward() and is_done() determine progress.
+  
+  This function is split into four parts:
 
-  /* ----- get information from simulation ----- */
+    1. extract information from the simulation, forces, positions, etc into the env_ variable
+    2. determine if binary events have triggered eg is the object lifted up
+    3. input values for linear events eg what is the palm force
+    4. resolve all events and counts, done automatically
+
+  To add a new event, edit part 1. to calculate the values needed to judge your
+  event. Then add logic to get the value of your event in part 2. if binary or
+  part 3. if linear. Done! Ensure your event is also added in simsettings.h
+  The rest is done automatically by macros.
+
+  */
+
+  /* ----- get information from simulation (EDIT here to get extra information) ----- */
 
   // get information about the object from the simluation
   env_.obj.qpos = luke::get_object_qpos(model, data);
@@ -589,13 +639,14 @@ void MjClass::update_env()
     forces.obj.finger1_local[1], forces.obj.finger2_local[1], forces.obj.finger3_local[1]
   });
 
-  /* ----- detect state of binary events ----- */
+  /* ----- detect state of binary events (EDIT here to add a binary event) ----- */
 
   // another step has been made
   env_.cnt.step_num.value = true;
 
-  // lifted is true if ground force is 0 and lift distance is exceeded
-  if (ground_force_mag < ftol)
+  // lifted is true if both the object and gripper have zero axial force from the ground
+  if (ground_force_mag < ftol and 
+      env_.grp.peak_finger_axial_force < ftol)
     env_.cnt.lifted.value = true;
 
   // check if the object has gone out of bounds
@@ -635,7 +686,7 @@ void MjClass::update_env()
   if (env_.cnt.object_stable.value and env_.cnt.target_height.value)
     env_.cnt.stable_height.value = true;
 
-  /* ----- detect state of linear events (also save reward scaled value) ----- */
+  /* ----- input state value of linear events (EDIT here to add a linear event) ----- */
 
   env_.cnt.exceed_axial.value = env_.grp.peak_finger_axial_force;
   env_.cnt.exceed_lateral.value = env_.grp.peak_finger_lateral_force;
@@ -643,13 +694,14 @@ void MjClass::update_env()
   env_.cnt.exceed_palm.value = env_.obj.palm_axial_force;
   env_.cnt.finger_force.value = env_.obj.avg_finger_force;
   
-  // testing for linear goals
+  // testing: track info for linear goals
   env_.cnt.finger1_force.value = finger1_force_mag;
   env_.cnt.finger2_force.value = finger2_force_mag;
   env_.cnt.finger3_force.value = finger3_force_mag;
   env_.cnt.ground_force.value = ground_force_mag;
 
-  // update the counts of these events
+  /* ----- resolve linear events and update counts of all events (no editing needed) ----- */
+
   update_events(env_.cnt, s_);
 
   if (s_.debug) env_.cnt.print();
@@ -1723,6 +1775,10 @@ void MjType::Settings::update_sensor_settings(double time_since_last_sample)
   // turn on normalisation behaviour for all sensors
   set_use_normalisation(true);
 
+  // apply noise settings
+  set_use_noise(all_sensors_use_noise);
+  apply_noise_params(); // currently prevents customising sensors differently
+
   // set the number of previous steps to sample back for all sensors
   set_sensor_prev_steps_to(sensor_n_prev_steps);
 
@@ -1764,6 +1820,57 @@ void MjType::Settings::set_use_normalisation(bool set_as)
   #undef SS
   #undef BR
   #undef LR
+}
+
+void MjType::Settings::set_use_noise(bool set_as)
+{
+  /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
+     eg instead of using TRIGGER we need to use s_.NAME.trigger */
+
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, IN_USE, NORM, READRATE) NAME.use_noise = set_as;
+  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
+  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
+  
+    // run the macro and disable all the sensors
+    LUKE_MJSETTINGS
+  
+  #undef XX
+  #undef SS
+  #undef BR
+  #undef LR
+}
+
+void MjType::Settings::apply_noise_params()
+{
+  /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
+     eg instead of using TRIGGER we need to use s_.NAME.trigger */
+
+  #define XX(NAME, TYPE, VALUE)
+
+  #define SS(NAME, IN_USE, NORM, READRATE)       \
+            NAME.noise_mag = sensor_noise_mag;   \
+            NAME.noise_std = sensor_noise_std;   \
+            NAME.noise_mu = sensor_noise_mu;
+
+  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
+  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
+  
+    // run the macro and disable all the sensors
+    LUKE_MJSETTINGS
+  
+  #undef XX
+  #undef SS
+  #undef BR
+  #undef LR
+
+  // manually override the state sensors
+  motor_state_sensor.noise_mag = state_noise_mag;
+  motor_state_sensor.noise_mu = state_noise_mu;
+  motor_state_sensor.noise_std = state_noise_std;
+  base_state_sensor.noise_mag = state_noise_mag;
+  base_state_sensor.noise_mu = state_noise_mu;
+  base_state_sensor.noise_std = state_noise_std;
 }
 
 void MjType::Settings::scale_rewards(float scale)
@@ -1826,7 +1933,7 @@ void update_events(MjType::EventTrack& events, MjType::Settings& settings)
                                   events.NAME.value + events.NAME.value;     \
             events.NAME.abs += events.NAME.value;                            \
             events.NAME.last_value = events.NAME.value;                      \
-            events.NAME.value = false; // reset
+            events.NAME.value = false; // reset for next step
 
   #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)               \
             active = false;                                                  \
@@ -1837,7 +1944,7 @@ void update_events(MjType::EventTrack& events, MjType::Settings& settings)
             events.NAME.row = events.NAME.row * active + active;             \
             events.NAME.abs += active;                                       \
             events.NAME.last_value = events.NAME.value;                      \
-            events.NAME.value = 0.0; // reset
+            events.NAME.value = 0.0; // reset for next step
 
     // run the macro to create the code
     LUKE_MJSETTINGS
