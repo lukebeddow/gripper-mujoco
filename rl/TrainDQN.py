@@ -40,6 +40,7 @@ class TrainDQN():
   class Parameters:
 
     # key learning hyperparameters
+    object_set: str = "set2_fullset_795"
     batch_size: int = 128  
     learning_rate: float = 0.0001
     gamma: float = 0.999 
@@ -53,11 +54,16 @@ class TrainDQN():
     adam_beta2: float = 0.999
 
     # memory replay and HER settings
-    memory_replay: int = 50000
+    memory_replay: int = 50_000
     min_memory_replay: int = 5000
     use_HER: bool = False
     HER_mode: str = "final" # or 'future' or 'episode'
-    HER_k: int = 4          
+    HER_k: int = 4
+
+    # curriculum learning
+    use_curriculum: bool = False
+    curriculum_ep_num: int = 8000
+    curriculum_object_set: str = "set2_fullset_795"
 
     # data logging settings
     save_freq: int = 1000
@@ -558,7 +564,7 @@ class TrainDQN():
       return
 
   def __init__(self, run_name=None, group_name=None, device=None, use_wandb=None, 
-               no_plot=None, log_level=None):
+               no_plot=None, log_level=None, object_set=None, use_curriculum=None):
 
     # define key training parameters
     self.params = TrainDQN.Parameters()
@@ -576,13 +582,15 @@ class TrainDQN():
     if group_name is None:
       group_name = datetime.now().strftime("%d-%m-%y")
 
-    # configure options
+    # configure input options
     self.run_name = run_name
     self.group_name = group_name
     self.savedir = "models/dqn/"
-    if device != None: self.device = device
-    else: self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if device is None: device = "cuda"
+    self.set_device(device)
     self.log_level = 1 if log_level is None else log_level
+    self.params.use_curriculum = True if use_curriculum is True else False
+    if object_set is not None: self.params.object_set = object_set
 
     # wandb options
     self.wandb_init_flag = False
@@ -603,11 +611,6 @@ class TrainDQN():
       import matplotlib.pyplot as plt
       self.fig, self.axs = plt.subplots(2, 1)
       self.no_plot = False
-      
-    # print important info
-    if self.log_level > 0:
-      print("Using machine:", self.machine)
-      print("Using device:", self.device)
 
   def init(self, network):
     """
@@ -616,6 +619,9 @@ class TrainDQN():
 
     # are we using HER (python OVERRIDES cpp)
     self.env.mj.set.use_HER = self.params.use_HER
+
+    # load the object set from params
+    self.load_object_set()
 
     # now update the environment with correct numbers of actions and observations
     self.env._update_n_actions_obs()
@@ -664,15 +670,41 @@ class TrainDQN():
                  notes=self.wandb_note, group=self.group_name)
       self.wandb_init_flag = True
 
-    # print important info
+    # print important info about class settings
     if self.log_level > 0:
-      print("Using model:", self.policy_net.name)
-      print("Network inputs (n_obs):", self.env.n_obs)
-      print("Network outputs (n_actions):", self.env.n_actions)
-      print("Using HER:", self.params.use_HER)
-      print("Using wandb:", self.use_wandb)
-      print("Run name:", self.run_name)
-      print("Group name:", self.group_name)
+      print("TrainDQN init settings:")
+      print("\tUsing machine:", self.machine)
+      print("\tUsing device:", self.device.type)
+      print("\tUsing model:", self.policy_net.name)
+      print("\tUsing object set:", self.params.object_set)
+      print("\tNetwork inputs (n_obs):", self.env.n_obs)
+      print("\tNetwork outputs (n_actions):", self.env.n_actions)
+      print("\tUsing HER:", self.params.use_HER)
+      print("\tUsing wandb:", self.use_wandb)
+      print("\tUsing curriculum:", self.params.use_curriculum)
+      print("\tRun name:", self.run_name)
+      print("\tGroup name:", self.group_name)
+
+  def set_device(self, device):
+    """
+    Set the memory device to use
+    """
+    if device == "cuda":
+      self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    elif device == "cpu":
+      self.device = torch.device("cpu")
+    else:
+      raise RuntimeError("device should be 'cuda' or 'cpu'")
+
+  def load_object_set(self, object_set=None):
+    """
+    Load an object set into the simulation
+    """
+
+    if object_set is None: object_set = self.params.object_set[:]
+
+    self.env._load_object_set(object_set)
+    self.params.object_set = object_set
 
   def to_torch(self, data, dtype=None):
     """
@@ -977,18 +1009,31 @@ class TrainDQN():
 
     return
 
+  def curriculum_fcn(self, i_episode):
+    """
+    Implement a learning curriculum
+    """
+
+    self.curriculum_applied = False
+
+    if self.params.use_curriculum:
+      if not self.curriculum_applied:
+        if i_episode > self.params.curriculum_ep_num:
+          self.load_object_set(object_set=self.params.curriculum_object_set)
+          self.curriculum_applied = True
+
   def run_episode(self, i_episode, test=None):
     """
     Perform one episode of training or testing
     """
 
-    # for debugging, show memory usage (heapy does not seem to be accurate)
-    if i_episode % 1000 == 1 and not test:
-      theheap = guph.heap()
-      print("Heap total size is", theheap.size, "(", theheap.size / 1e6, "MB)")
-      print("The replay memory size is", asizeof.asizeof(self.memory) / 1e3, "kB",
-        "with length", len(self.memory))
-      print("The environment size is", asizeof.asizeof(self.env) / 1e3, "kB")
+    # # for debugging, show memory usage (heapy does not seem to be accurate)
+    # if i_episode % 1000 == 1 and not test:
+    #   theheap = guph.heap()
+    #   print("Heap total size is", theheap.size, "(", theheap.size / 1e6, "MB)")
+    #   print("The replay memory size is", asizeof.asizeof(self.memory) / 1e3, "kB",
+    #     "with length", len(self.memory))
+    #   print("The environment size is", asizeof.asizeof(self.env) / 1e3, "kB")
 
     # initialise environment and state
     obs = self.env.reset()
@@ -1102,6 +1147,9 @@ class TrainDQN():
 
       self.run_episode(i_episode)
 
+      # if we are using curriculum training
+      self.curriculum_fcn(i_episode)
+
       # update the target network every target_update episodes
       if i_episode % self.params.target_update == 0:
         self.target_net.load_state_dict(self.policy_net.state_dict())
@@ -1199,7 +1247,12 @@ class TrainDQN():
     param_str += "Network name: " + self.policy_net.name + "\n"
     param_str += "Save time and date: " + time_stamp + "\n"
     param_str += "Running on machine: " + self.machine + "\n"
+    param_str += "Running with device: " + self.device.type + "\n"
     param_str += "Object set in use: " + self.env.mj.object_set_name + "\n"
+    param_str += "Max episode steps: " + str(self.env.max_episode_steps) + "\n"
+    param_str += "Object position noise: " + str(self.env.object_position_noise_mm) + "\n"
+    param_str += "Task reload chance: " + str(self.env.task_reload_chance) + "\n"
+    param_str += "Random seed: " + str(self.env.myseed) + "\n"
 
     # convert parameters to a string
     param_str += "\nParameters dataclass:\n"
@@ -1271,17 +1324,12 @@ class TrainDQN():
     self.memory = load_data.memory
     self.env = load_data.env
     self.track = load_data.track
-
-    # delete later! for now enables backwards compatibility
-    try:
-      if self.track.plot_time_taken: pass
-    except:
-      self.track.plot_time_taken = False
       
     if load_data.extra != None:
       self.loaded_test_data = load_data.extra[0]
 
-    # reload environment
+    # reseed and reload environment
+    self.env.seed()      # reseeds with same seed as before (but not contiguous!)
     self.env._load_xml() # segfault without this
 
     # reinitialise to prepare for further training
@@ -1382,21 +1430,21 @@ if __name__ == "__main__":
 
   # ----- load ----- #
 
-  # # load
+  # load
   # net = networks.DQN_3L60
   # model.init(net)
-  # folderpath = "/home/luke/mymujoco/rl/models/dqn/15-06-22/"
-  # foldername = "luke-PC_15:10_A11"
-  # # model.device = "cuda"
-  # model.load(id=5, folderpath=folderpath, foldername=foldername)
+  folderpath = "/home/luke/mymujoco/rl/models/dqn/08-07-22/"
+  foldername = "cluster_17:39_A5"
+  # model.device = "cuda"
+  model.load(id=21, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
-  # train
-  net = networks.DQN_3L60
-  model.env.disable_rendering = False
-  model.env.mj.set.debug = False
-  model.train(network=net)
+  # # train
+  # net = networks.DQN_3L60
+  # model.env.disable_rendering = False
+  # model.env.mj.set.debug = False
+  # model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"

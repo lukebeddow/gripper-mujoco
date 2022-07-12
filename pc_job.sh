@@ -25,6 +25,7 @@ helpFunction()
 machine=luke-PC
 timestamp="$(date +%d-%m-%y-%H:%M)"
 FAKETTY=faketty
+LOGGING='Y'
 
 PY_ARGS=() # arguments passed directly into python without parsing
 
@@ -32,11 +33,16 @@ PY_ARGS=() # arguments passed directly into python without parsing
 for (( i = 1; i <= "$#"; i++ ));
 do
   case ${!i} in
+    # with arguments, incrememnt i
     -j | --jobs ) (( i++ )); jobs=${!i}; echo jobs are $jobs ;;
     -t | --timestamp ) (( i++ )); timestamp=${!i}; echo Timestamp set to $timestamp ;;
     -m | --machine ) (( i++ )); machine=${!i}; MACHINE="-m $machine"; echo Machine set to $machine ;;
-    -f | --no-faketty ) FAKETTY=; echo faketty disabled ;;
     -s | --stagger ) (( i++ )); STAGGER=${!i}; echo stagger is $STAGGER ;;
+    # without arguments
+    -f | --no-faketty ) FAKETTY=; echo faketty disabled ;;
+    -d | --debug ) LOGGING='N'; echo Debug mode on, terminal logging ;;
+    --print ) LOGGING='N'; PRINT="--print --no-wandb"; echo Printing mode on, no training ;;
+    # everything else passed directly to python
     * ) PY_ARGS+=( ${!i} ) ;;
   esac
 done
@@ -84,13 +90,29 @@ IND=0
 
 for I in ${ARRAY_INDEXES[@]}
 do
+
     JOB_NAME="${machine}_${timestamp}_A${I}"
+
+    # if we are logging terminal output to a seperate log file
+    if [ $LOGGING = 'Y' ]
+    then
+        # first create the needed file (: is null operator), then direct output to it
+        : > $LOG_FOLDER/$JOB_NAME
+        exec > $LOG_FOLDER/$JOB_NAME
+    fi
+
+    # execute the command in the background
     $FAKETTY python3 array_training_DQN.py \
         -j $I \
         -t $timestamp \
         $MACHINE \
         ${PY_ARGS[@]} \
-        > "$LOG_FOLDER/$JOB_NAME.txt" &
+        $PRINT \
+        &
+
+    # return output to terminal
+    exec > /dev/tty
+
     echo Submitted job: "$JOB_NAME"
 
     # for submitting staggered jobs
