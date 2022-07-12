@@ -2,18 +2,21 @@
 
 from datetime import datetime
 import dill as pickle
+import bz2
 import os
-import sys
 import shutil
 
-# # fix cuda problems and load on cpu: https://stackoverflow.com/questions/56369030/runtimeerror-attempting-to-deserialize-object-on-a-cuda-device
-# import torch
-# import io
-# class CPU_Unpickler(pickle.Unpickler):
-#     def find_class(self, module, name):
-#         if module == 'torch.storage' and name == '_load_from_bytes':
-#             return lambda b: torch.load(io.BytesIO(b), map_location='cpu')
-#         else: return super().find_class(module, name)
+# global variable, do we compress saved files with bz2 library
+use_compression = True
+
+def compressed_pickle(title, data):
+ with bz2.BZ2File(title, 'w') as f: 
+  pickle.dump(data, f)
+
+def decompress_pickle(file):
+ data = bz2.BZ2File(file, 'rb')
+ data = pickle.load(data)
+ return data
 
 class ModelSaver:
 
@@ -24,7 +27,7 @@ class ModelSaver:
 
     # user set parameters 
     self.default_num = 1             # starting number for saving files with numbers
-    self.file_ext = ".pickle"        # saved file extension for pickled files
+    self.file_ext = ".pbz2" if use_compression else ".pickle" # saved file extension
     self.file_num = "{:03d}"         # digit format for saving files with numbers
     self.date_str = "%d-%m-%Y-%H:%M" # date string, must be seperated by '-'
     self.folder_names = "train_{}/"  # default name of created folders, then formatted with date
@@ -363,9 +366,12 @@ class ModelSaver:
 
     # save
     print(f"Saving file {savepath + savename} with pickle ... ", end="")
-    with open(savepath + savename, 'wb') as openfile:
-      pickle.dump(pyobj, openfile)
-      print("finished")
+    if use_compression:
+      compressed_pickle(savepath + savename, pyobj)
+    else:
+      with open(savepath + savename, 'wb') as openfile:
+        pickle.dump(pyobj, openfile)
+    print("finished")
 
     # if we are asked to save a .txt file too
     if txtstr != None:
@@ -433,10 +439,12 @@ class ModelSaver:
         loadpath = new_loadpath
 
     print(f"Loading file {loadpath} with pickle ... ", end="")
-    with open(loadpath, 'rb') as f:
-      loaded_obj = pickle.load(f)
-      # loaded_obj = CPU_Unpickler(f).load()
-      print("finished")
+    if use_compression:
+      loaded_obj = decompress_pickle(f)
+    else:
+      with open(loadpath, 'rb') as f:
+        loaded_obj = pickle.load(f)
+    print("finished")
 
     self.last_loadpath = loadpath
 
