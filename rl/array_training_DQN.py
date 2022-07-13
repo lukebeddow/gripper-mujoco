@@ -699,12 +699,12 @@ if __name__ == "__main__":
     print("\t" + param_2, end="")
     exit()
 
-  # # lets use curriculum learning
-  # model.params.object_set = "set2_nocuboid_525"
-  # model.params.use_curriculum = True
-  # model.params.curriculum_ep_num = 8000
-  # model.params.curriculum_object_set = "set2_fullset_795"
-  # model.params.num_episodes = 15000
+  # lets use curriculum learning
+  model.params.object_set = "set2_nocuboid_525"
+  model.params.use_curriculum = True
+  model.params.curriculum_ep_num = 8000
+  model.params.curriculum_object_set = "set2_fullset_795"
+  model.params.num_episodes = 15000
 
   # perform the training with other parameters standard
   baseline_training(model, lr=this_lr, state_steps=this_sensor_step[1],

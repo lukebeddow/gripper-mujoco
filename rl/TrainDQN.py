@@ -603,6 +603,9 @@ class TrainDQN():
     self.HER_mode = None
     self.HER_k = None
 
+    # curriculum defaults
+    self.curriculum_applied = False
+
     # if we are plotting graphs during this training
     if no_plot == True:
       self.no_plot = True
@@ -1013,8 +1016,6 @@ class TrainDQN():
     """
     Implement a learning curriculum
     """
-
-    self.curriculum_applied = False
 
     if self.params.use_curriculum:
       if not self.curriculum_applied:
