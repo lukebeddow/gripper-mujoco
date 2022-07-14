@@ -12,7 +12,27 @@
 # echo commands
 echo Command line given arguments are: "$@"
 
-export LUKE_JOB_SUBMIT_TIME=$(date +%d-%m-%y-%H:%M)
 export OPENBLAS_NUM_THREADS=1 # fix for weird cluster bug
 
-qsub -V ~/mymujoco/array_job.sh -t $LUKE_JOB_SUBMIT_TIME
+# default options
+TIMESTAMP="--timestamp $(date +%d-%m-%y-%H:%M)"
+WANDB="--no-wandb"
+
+# loop through input args, look for script specific arguments
+for (( i = 1; i <= "$#"; i++ ));
+do
+  case ${!i} in
+    # with arguments, incrememnt i
+    -t | --timestamp ) (( i++ )); TIMESTAMP="-t ${!i}"; echo Timestamp set to ${!i} ;;
+    # without arguments
+    --yes-wandb ) WANDB=; echo use_wandb set to TRUE ;;
+    # everything else passed directly to python (note quoted inputs will UNQUOTE eg -j "1 2 3 4" > -j 1 2 3 4)
+    * ) ARGS+=( ${!i} ) ;;
+  esac
+done
+
+# submit the job and pass over any command line arguments (nb "$@" is required)
+qsub -V ~/mymujoco/array_job.sh \
+  $TIMESTAMP \
+  $WANDB \
+  ${ARGS[@]}

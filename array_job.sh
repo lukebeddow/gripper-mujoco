@@ -12,7 +12,7 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N ArrayTrain_28
+#$ -N ArrayTrain_29
 #$ -t 1-16
 
 # The code you want to run now goes here.
@@ -36,9 +36,9 @@ export OPENBLAS_NUM_THREADS=1
 
 cd ~/mymujoco/rl
 
-# run the script and pass in flags (always disable wandb)
+# run the script and pass in flags
+# NB "@" is required: see https://unix.stackexchange.com/questions/129072/whats-the-difference-between-and
 python3 array_training_DQN.py \
   -j ${SGE_TASK_ID} \
-  -n \
   "$@"
 date

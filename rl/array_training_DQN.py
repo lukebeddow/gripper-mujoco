@@ -561,6 +561,9 @@ if __name__ == "__main__":
 
   args = parser.parse_args()
 
+  # # parse arguments but allow unknown arguments
+  # args, unknown = parser.parse_known_args()
+
   # extract primary inputs
   inputarg = args.job
   timestamp = args.timestamp if args.timestamp else datetime.now().strftime(datestr)

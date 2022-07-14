@@ -440,7 +440,7 @@ class ModelSaver:
 
     print(f"Loading file {loadpath} with pickle ... ", end="")
     if use_compression:
-      loaded_obj = decompress_pickle(f)
+      loaded_obj = decompress_pickle(loadpath)
     else:
       with open(loadpath, 'rb') as f:
         loaded_obj = pickle.load(f)
