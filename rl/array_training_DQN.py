@@ -671,19 +671,19 @@ if __name__ == "__main__":
   baseline_training(model, lr=this_lr, ed=this_ed)
   """
 
-  # varying 4x4 = 16 possible trainings 1-16
-  sensor_steps_list = [(1, 1), (1, 2), (2, 2), (2, 3)]
-  lr_list = [5e-6, 1e-5, 5e-5, 1e-4]
+  # varying 6x5 = 16 possible trainings 1-30
+  stiffness_list = [5, 6, 7, 8, 9, 10]
+  sensors_list = [1, 2, 3, 4, 5]
 
   # lists are zero indexed so adjust inputarg
   inputarg -= 1
 
   # we vary wrt memory_list every inputarg increment
-  x = len(lr_list)
+  x = len(sensors_list)
 
   # get the sensors and memory size for this training
-  this_sensor_step = sensor_steps_list[inputarg // x]       # vary every x steps
-  this_lr = lr_list[inputarg % x]                           # vary every +1 & loop
+  this_stiffness = stiffness_list[inputarg // x]       # vary every x steps
+  this_sensors = sensors_list[inputarg % x]            # vary every +1 & loop
 
   # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
   #   A1, A2, A3, ...
@@ -691,8 +691,8 @@ if __name__ == "__main__":
   #   C1, C2, C3, ...
 
   # make note
-  param_1 = f"Sensor steps used: {this_sensor_step[0]}, state steps used: {this_sensor_step[1]}\n"
-  param_2 = f"Learning rate used {this_lr}\n"
+  param_1 = f"Finger stiffness used: {this_stiffness}\n"
+  param_2 = f"Sensors used: {this_sensors}\n"
   model.wandb_note += param_1 + param_2
 
   # if we are just printing help information
@@ -702,16 +702,18 @@ if __name__ == "__main__":
     print("\t" + param_2, end="")
     exit()
 
+  # set the finger stiffness
+  model.env.mj.set.finger_stiffness = this_stiffness
+
   # lets use curriculum learning
-  model.params.object_set = "set2_nocuboid_525"
+  model.params.object_set = "set3_nocuboid_525"
   model.params.use_curriculum = True
-  model.params.curriculum_ep_num = 8000
-  model.params.curriculum_object_set = "set2_fullset_795"
-  model.params.num_episodes = 15000
+  model.params.curriculum_ep_num = 10000
+  model.params.curriculum_object_set = "set3_fullset_795"
+  model.params.num_episodes = 20000
 
   # perform the training with other parameters standard
-  baseline_training(model, lr=this_lr, state_steps=this_sensor_step[1],
-                    sensor_steps=this_sensor_step[0])
+  baseline_training(model, sensors=this_sensors)
 
   # ----- END ----- #
 

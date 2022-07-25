@@ -30,6 +30,8 @@ class MjEnv():
     # saved after each test trial ends
     obj_idx: int = 0
     obj_trial: int = 0
+    obj_counter: int = 0
+    xml_file: int = 0
     reward: float = 0
     steps: int = 0
     object_name: str = ""
@@ -50,13 +52,16 @@ class MjEnv():
     # user defined testing parameters
     self.test_in_progress = False
     self.test_completed = False
-    self.test_trials_per_obj = 3
-    self.test_obj_limit = 1000  # limit number of objects in test, 1000~=no limit
+    self.test_trials_per_obj = 1
+    self.test_objects = 60
     
     # define file structure
     self.task_xml_folder = "task"
     self.task_xml_template = "gripper_task_{}.xml"
-    self.testing_xmls = 1                 # how many files reserved for testing
+    self.test_obj_per_file = 20           # how many test objects per file
+
+    # calculate how many files we need to reserve for testing
+    self.testing_xmls = int(np.ceil(self.test_objects / float(self.test_obj_per_file)))
     
     # create mujoco instance
     self.mj = MjClass()
@@ -102,13 +107,12 @@ class MjEnv():
     """
     if index:
       filename = self.task_xml_template.format(index)
-    elif test:
-      # get the random test xml file
-      r = np.random.randint(self.training_xmls, self.training_xmls + self.testing_xmls)
-      filename = self.task_xml_template.format(r)
+    elif test is not None:
+      # load the specified test xml
+      filename = self.task_xml_template.format(test)
     else:
       # get a random task xml file
-      r = np.random.randint(0, self.training_xmls)
+      r = np.random.randint(self.testing_xmls, self.testing_xmls + self.training_xmls)
       filename = self.task_xml_template.format(r)
 
     if self.log_level > 1: print("loading xml: ", filename)
@@ -143,7 +147,7 @@ class MjEnv():
     self.training_xmls = len(xml_files) - self.testing_xmls
 
     if self.training_xmls < 1:
-      raise RuntimeError(f"training xmls failed to be found in MjEnv at: {self.xml_path}")
+      raise RuntimeError(f"enough training xmls failed to be found in MjEnv at: {self.xml_path}")
 
   def _update_n_actions_obs(self):
     # get an updated number of actions and observations
@@ -319,14 +323,21 @@ class MjEnv():
 
     # if trials done, move to the next object, reset trial counter
     if self.current_test_trial.obj_trial >= self.test_trials_per_obj:
+
       self.current_test_trial.obj_idx += 1
       self.current_test_trial.obj_trial = 0
+      self.current_test_trial.obj_counter += 1
 
-      # if objects finished/exceeded, test is over
-      if (self.current_test_trial.obj_idx >= self.num_objects or
-          self.current_test_trial.obj_idx >= self.test_obj_limit):
+      # check if we have finished
+      if self.current_test_trial.obj_counter >= self.test_objects:
         self._end_test()
-  
+
+      # check if we need to load the next test object set
+      elif self.current_test_trial.obj_idx >= self.test_obj_per_file:
+        self.current_test_trial.xml_file += 1
+        self._load_xml(test=self.current_test_trial.xml_file)
+        self.current_test_trial.obj_idx = 0
+
   # ----- public functions ----- #
 
   def seed(self, seed=None):
@@ -357,11 +368,17 @@ class MjEnv():
     Begin test mode, should be called by class user
     """
 
+    # temporary repeat of __init__() code for backwards compatibility
+    self.test_trials_per_obj = 1
+    self.test_objects = 60
+    self.test_obj_per_file = 20           # how many test objects per file
+    self.testing_xmls = int(np.ceil(self.test_objects / float(self.test_obj_per_file)))
+
     self.current_test_trial = MjEnv.Test()
     self.test_trials = []
     self.test_in_progress = True
     self.test_completed = False
-    self._load_xml(test=True)
+    self._load_xml(test=0) # load first test set xml, always index 0
 
   def step(self, action):
     """

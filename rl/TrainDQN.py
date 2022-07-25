@@ -1391,7 +1391,7 @@ if __name__ == "__main__":
   # ----- prepare ----- #
 
   use_wandb = False
-  force_device = "cpu"
+  force_device = None # "cpu"
   no_plot = True
 
   model = TrainDQN(device=force_device, use_wandb=use_wandb, no_plot=no_plot)
@@ -1399,7 +1399,7 @@ if __name__ == "__main__":
   # if we want to adjust parameters
   # model.log_level = 2
   # model.params.num_episodes = 11
-  model.env.max_episode_steps = 20
+  # model.env.max_episode_steps = 20
   # model.params.wandb_freq_s = 5
   # model.env.mj.set.action_motor_steps = 350
   # model.env.disable_rendering = False
@@ -1434,10 +1434,10 @@ if __name__ == "__main__":
   # load
   # net = networks.DQN_3L60
   # model.init(net)
-  folderpath = "/home/luke/mymujoco/rl/models/dqn/08-07-22/"
-  foldername = "cluster_17:39_A5"
-  # model.device = "cuda"
-  model.load(id=21, folderpath=folderpath, foldername=foldername)
+  folderpath = "/home/luke/cluster/rl/models/dqn/19-07-22/"
+  foldername = "cluster_19:35_A12"
+  model.device = torch.device("cpu")
+  model.load(id=None, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
@@ -1483,9 +1483,9 @@ if __name__ == "__main__":
   # test
   model.env.mj.set.debug = False
   model.env.disable_rendering = False
-  model.env.test_trials_per_obj = 1
-  # model.env.test_obj_limit = 10
-  # model.env.max_episode_steps = 80
+  # model.env.test_trials_per_obj = 1
+  model.env.test_objects = 20
+  # model.env.max_episode_steps = 2
   # model.env.mj.set.step_num.set          (0,      70,   1)
   # model.env.mj.set.exceed_limits.set     (-0.005, True,   10)
   # model.env.mj.set.exceed_axial.set      (-0.005, True,   10,    3.0,  6.0,  -1)

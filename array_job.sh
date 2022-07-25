@@ -12,8 +12,8 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N ArrayTrain_29
-#$ -t 1-16
+#$ -N ArrayTrain_31
+#$ -t 1-30
 
 # The code you want to run now goes here.
 

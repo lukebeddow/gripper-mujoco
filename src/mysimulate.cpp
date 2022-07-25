@@ -137,6 +137,7 @@ enum
     SECT_GRIPPER,   // added by luke
     SECT_OBJECT,    // added by luke
     SECT_ACTION,    // added by luke
+    SECT_SETTINGS,  // added by luke
     NSECT1
 };
 
@@ -1187,6 +1188,40 @@ void makeActionsUI(int oldstate)
     mjui_add(&ui1, defActions);
 }
 
+void makeSettingsUI(int oldstate)
+{
+    mjuiDef defActions[] =
+    {
+        {mjITEM_SECTION, "Sim Settings",    oldstate,  NULL,   " #500"},
+        // {mjITEM_CHECKINT, "pris 1",   2,  &myMjClass.model->eq_active[0], " #501"},
+        // {mjITEM_CHECKINT, "pris 2",   2,  &myMjClass.model->eq_active[1], " #502"},
+        // {mjITEM_CHECKINT, "pris 3",   2,  &myMjClass.model->eq_active[2], " #503"},
+        // {mjITEM_CHECKINT, "rev 1",   2,  &myMjClass.model->eq_active[3], " #504"},
+        // {mjITEM_CHECKINT, "rev 2",   2,  &myMjClass.model->eq_active[4], " #505"},
+        // {mjITEM_CHECKINT, "rev 3",   2,  &myMjClass.model->eq_active[5], " #506"},
+        {mjITEM_BUTTON, "pris 1",   2,  NULL, " #501"},
+        {mjITEM_BUTTON, "pris 2",   2,  NULL, " #502"},
+        {mjITEM_BUTTON, "pris 3",   2,  NULL, " #503"},
+        {mjITEM_BUTTON, "rev 1",   2,   NULL, " #504"},
+        {mjITEM_BUTTON, "rev 2",   2,   NULL, " #505"},
+        {mjITEM_BUTTON, "rev 3",   2,   NULL, " #506"},
+        {mjITEM_BUTTON, "palm",    2,   NULL, " #507"},
+
+        // {mjITEM_BUTTON, "Action 7 (H-)",           2,  NULL,   " #310"},
+        // {mjITEM_BUTTON, "Reward",                  2,  NULL,   " #311"},
+        // {mjITEM_CHECKINT, "Debug",     2, &myMjClass.s_.debug,   " #312"},
+        // {mjITEM_CHECKINT, "Env steps", 2, &settings.env_steps, " #313"},
+        // {mjITEM_SLIDERINT, "No. steps",            2, 
+        //     &myMjClass.s_.action_motor_steps,             "0 2000"},
+        // {mjITEM_SLIDERNUM, "Base trans.",          2, 
+        //     &myMjClass.s_.action_base_translation,        "0.0 0.05"},
+        // {mjITEM_SLIDERINT, "Action steps",          2, 
+        //     &myMjClass.s_.sim_steps_per_action,           "0 2000"},
+        {mjITEM_END}
+    };
+
+    mjui_add(&ui1, defActions);
+}
 
 void makeObjectUI(int oldstate)
 {
@@ -1387,6 +1422,7 @@ void makesections(void)
     makeGripperUI(oldstate1[SECT_GRIPPER]);
     makeObjectUI(oldstate1[SECT_OBJECT]);
     makeActionsUI(oldstate1[SECT_ACTION]);
+    makeSettingsUI(oldstate1[SECT_SETTINGS]);
 }
 
 
@@ -1923,6 +1959,16 @@ void uiEvent(mjuiState* state)
                     luke::target_.end.update_x_th_z();
                     break;
                 }
+            }
+        }
+
+        else if (it and it->sectionid == SECT_SETTINGS)
+        {
+            switch (it->itemid)
+            {
+                case 0: case 1: case 2: case 3: case 4: case 5: case 6:
+                    luke::toggle_constraint(myMjClass.model, myMjClass.data, it->itemid);
+                    break;
             }
         }
 
@@ -2598,43 +2644,48 @@ int main(int argc, const char** argv)
     // initialize everything
     init();
 
-    std::string default_path = "/home/luke/gripper_repo_ws/src/gripper_v2/"
-        "gripper_description/urdf/mujoco/mjcf";
-
-    #if defined(LUKE_MJCF_PATH)
-    #if defined(LUKE_DEFAULTOBJECTS)
-        default_path = LUKE_MJCF_PATH;
-        default_path += '/';
-        // default_path += "set2_nocuboid_525"; // override object set
-        default_path += LUKE_DEFAULTOBJECTS;
-    #endif
-    #endif
-    
+    // defaults
+    std::string default_path = "/home/luke/mymujoco/mjcf/";
+    std::string object_set = "set2_nocuboid_525";
     std::string gripper_file = "/gripper_mujoco.xml";
     std::string panda_file = "/panda_mujoco.xml";
     std::string both_file = "/panda_and_gripper_mujoco.xml";
     std::string task_file = "/gripper_task.xml";
 
+    // have defaults been overidden with globals?
+    #if defined(LUKE_MJCF_PATH)
+        default_path = LUKE_MJCF_PATH;
+        default_path += '/';
+    #endif
+
+    #if defined(LUKE_DEFAULTOBJECTS)
+        object_set = LUKE_DEFAULTOBJECTS;
+    #endif
+
     // default configuration
-    std::string filepath = default_path + task_file;
+    std::string filepath = default_path + object_set + "/task/gripper_task_0.xml";
 
     // if we receive command line arguments
     if (argc > 1) {
         if (not strcmp(argv[1], "gripper")) {
-        filepath = default_path + gripper_file;
+        filepath = default_path + object_set + gripper_file;
         }
         else if (not strcmp(argv[1], "panda")) {
-            filepath = default_path + panda_file;
+            filepath = default_path + object_set + panda_file;
         }
         else if (not strcmp(argv[1], "both")) {
-            filepath = default_path + both_file;
+            filepath = default_path + object_set + both_file;
         }
         else if (not strcmp(argv[1], "task")) {
 
-            filepath = default_path + task_file;
+            filepath = default_path + object_set + task_file;
 
             if (argc > 2) {
-                filepath = default_path + "/task/gripper_task_" + argv[2] + ".xml";
+                filepath = default_path + object_set + "/task/gripper_task_" + argv[2] + ".xml";
+            }
+
+            if (argc > 3) {
+                filepath = default_path + argv[3] + "/task/gripper_task_" + argv[2] + ".xml";
             }
 
         }
@@ -2645,6 +2696,9 @@ int main(int argc, const char** argv)
     else {
         printf("No command line arguments detected, using default model\n");
     }
+
+    // echo file input
+    printf("mysimulate loading mjcf from: %s\n", filepath.c_str());
 
     // mju_strncpy(filename, argv[1], 1000);
     mju_strncpy(filename, filepath.c_str(), 1000);

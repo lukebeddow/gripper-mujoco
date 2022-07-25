@@ -420,6 +420,27 @@ struct Target {
 
     return out;
   }
+
+  bool x_moving() {
+    if (end.get_x_step() == next.get_x_step()) {
+      return false;
+    }
+    return true;
+  }
+
+  bool y_moving() {
+    if (end.get_y_step() == next.get_y_step()) {
+      return false;
+    }
+    return true;
+  }
+
+  bool z_moving() {
+    if (end.get_z_step() == next.get_z_step()) {
+      return false;
+    }
+    return true;
+  }
 };
 
 } // namespace Luke
