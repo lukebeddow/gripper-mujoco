@@ -7,6 +7,12 @@
 #   $ ./pc_job.sh -j "1 2 3" -c -t 07-06-22-16:34 -m luke-PC
 #   
 
+# define key directory structure
+path_to_mymujoco=~/mymujoco
+python_folder=rl
+mujoco_lib_path=~/mujoco-2.1.5/lib
+LOG_FOLDER=~/training_logs
+
 helpFunction()
 {
    echo -e "\nUsage:"
@@ -16,10 +22,19 @@ helpFunction()
    echo -e "\nOptions:"
    echo -e "\t -j, --jobs ['ARGS'] jobs to run (need to be in quotes), eg -j '1 2 3 4'"
    echo -e "\t -s, --stagger [ARG] staggered job, submit jobs in groups of ARG eg 3 at a time"
-   echo -e "\t -f, --no-faketty disable faketty output file logging "
+   echo -e "\t -f, --no-faketty disable faketty output file logging"
+   echo -e "\t -d, --debug print output in the terminal, not a log file"
+   echo -e "\t --print special mode for array_training_dqn.py where index options are printed"
    echo -e "\t -h print help information"
    exit 1 # exit script after printing help
 }
+
+# from: https://stackoverflow.com/questions/1401002/how-to-trick-an-application-into-thinking-its-stdout-is-a-terminal-not-a-pipe
+faketty() {
+    script -qfc "$(printf "%q " "$@")" /dev/null
+}
+
+# ----- handle inputs ----- #
 
 # defaults
 machine=luke-PC
@@ -56,19 +71,13 @@ then
     helpFunction
 fi
 
-# from: https://stackoverflow.com/questions/1401002/how-to-trick-an-application-into-thinking-its-stdout-is-a-terminal-not-a-pipe
-faketty() {
-    script -qfc "$(printf "%q " "$@")" /dev/null
-}
+# ----- begin main shell scripting ----- #
 
 # add mujoco to the shared library path
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/mujoco-2.1.5/lib
-
-# where to save terminal output to
-LOG_FOLDER=~/training_logs
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$mujoco_lib_path
 
 # navigate to correct directory
-cd ~/mymujoco/rl || exit
+cd $path_to_mymujoco/$python_folder || exit
 
 # extract the job indicies
 ARRAY_INDEXES=("$jobs")

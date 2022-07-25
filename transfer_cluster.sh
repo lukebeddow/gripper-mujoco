@@ -166,6 +166,26 @@ then
    fi
 fi
 
+# cluster - cluster specific scripts ending in 'cluster.sh'
+if [ "$command" = "cluster" ] || [ "$command" = "all" ] \
+   || { [ "$command" = "source" ] && [ "$direction" = "up" ]; }
+then
+   if [ "$direction" = "up" ]
+   then
+      echo uploading *cluster.sh to /$UPLOADTO
+      sshpass -f $PASSFILE scp -P $PORT \
+         ~/$UPLOADFROM/*cluster.sh \
+         lbeddow@localhost:~/$UPLOADTO/
+   fi
+   if [ "$direction" = "down" ]
+   then 
+      echo downloading *cluster.sh to /$DOWNLOADTO
+      sshpass -f $PASSFILE scp -P $PORT \
+         lbeddow@localhost:~/$DOWNLOADFROM/*cluster.sh \
+         ~/$DOWNLOADTO/
+   fi
+fi
+
 # mjcf - transfer xml files
 if [ "$command" = "mjcf" ]
 then
