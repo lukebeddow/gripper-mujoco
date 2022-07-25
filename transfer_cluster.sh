@@ -40,21 +40,28 @@ do
 done
 
 # print helpFunction in case parameters are empty
-if [ -z "$direction" ] || [ -z "$command" ] && [ -z "$filename" ]
+if  [[ -z "$command" && -z "$filename" || -z "$direction"  ]]
 then
    echo "All or some of the parameters are empty";
    helpFunction
 fi
 
-# echo parameter selection to the user
-echo "direction is: $direction"
-echo "command is: $command"
-echo "filename is: $filename"
-
+# check direction is a valid choice
 if [ "$direction" != "up" ] && [ "$direction" != "down" ]
 then
    echo "Direction can only be 'up' or 'down'";
    helpFunction
+fi
+
+# echo parameter selection to the user
+echo "direction is: $direction"
+if [[ ! -z "$command" ]]
+then 
+   echo "command is: $command"; 
+fi
+if [[ ! -z "$filename" ]]
+then
+   echo "filename is: $filename";
 fi
 
 # python - transfer the source code in rl and rl/env
