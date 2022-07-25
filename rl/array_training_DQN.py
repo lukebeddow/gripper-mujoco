@@ -183,7 +183,8 @@ def create_reward_function(model, style="negative", options=[]):
 
   return model
 
-def add_sensors(model, num=10, sensor_mode=1, state_mode=0):
+def add_sensors(model, num=10, sensor_mode=1, state_mode=0, sensor_steps=1,
+  state_steps=2, noise_std=0.015):
   """
   Add a number of sensors
   """
@@ -192,10 +193,18 @@ def add_sensors(model, num=10, sensor_mode=1, state_mode=0):
   model.env.mj.set.sensor_sample_mode = sensor_mode
   model.env.mj.set.state_sample_mode = state_mode
 
+  # add minor gaussian sensing noise with mean 0
+  model.env.mj.set.sensor_noise_std = noise_std
+  model.env.mj.set.state_noise_std = noise_std
+
   # default: state sensor and bending gauge sensor
   model.env.mj.set.motor_state_sensor.in_use = True
   model.env.mj.set.motor_state_sensor.read_rate = -1
   model.env.mj.set.bending_gauge.in_use = True
+
+  # set the number of steps in the past we use for observations
+  model.env.mj.set.sensor_n_prev_steps = sensor_steps
+  model.env.mj.set.state_n_prev_steps = state_steps
 
   # state sensor with two readings (current, prev)
   if num >= 1: model.env.mj.set.motor_state_sensor.read_rate = -2
@@ -217,7 +226,10 @@ def add_sensors(model, num=10, sensor_mode=1, state_mode=0):
   # finger axial gauges
   if num >= 5: model.env.mj.set.axial_gauge.in_use = True
 
-  model.wandb_note += f"Num sensors: {num}, state mode: {state_mode}, sensor mode: {sensor_mode}\n"
+  model.wandb_note += (
+    f"Num sensors: {num}, state mode: {state_mode}, sensor mode: {sensor_mode}" +
+    f", state steps: {state_steps}, sensor steps: {sensor_steps}"
+  )
 
   return model
 
@@ -313,13 +325,11 @@ def apply_to_all_models(model):
   as a reference for which options are possible to change.
   """
 
-  # set up the object set
-  model.env._load_object_set(name="set2_nocuboid_525")
-
   # number of steps in an episode
   model.env.max_episode_steps = 250
 
   # key learning hyperparameters
+  model.params.object_set = "set2_nocuboid_525"
   model.params.batch_size = 128
   model.params.learning_rate = 0.0001
   model.params.gamma = 0.999
@@ -339,7 +349,12 @@ def apply_to_all_models(model):
   model.params.HER_mode = "final"
   model.params.HER_k = 4
 
-  # data logging
+  # curriculum learning
+  model.params.use_curriculum = False
+  model.params.curriculum_ep_num = 8000
+  model.params.curriculum_object_set = "set2_fullset_795"
+
+  # data loggings
   model.params.save_freq = 1_000
   model.params.test_freq = 1_000
   model.params.plot_freq_s = 300
@@ -355,6 +370,7 @@ def apply_to_all_models(model):
   model.env.mj.set.render_on_step = False
 
   # define lengths and forces
+  model.env.mj.set.finger_stiffness = 5
   model.env.mj.set.oob_distance = 75e-3
   model.env.mj.set.done_height = 35e-3
   model.env.mj.set.stable_finger_force = 0.4
@@ -382,14 +398,26 @@ def apply_to_all_models(model):
   model.env.mj.set.quit_on_reward_above = 1e6
   model.env.mj.set.quit_reward_capped = False
 
-  # disable use of all sensors, then add back defaults
+  # disable use of all sensors
   model.env.mj.set.disable_sensors()
+  model.env.mj.set.sensor_n_prev_steps = 1 # lookback only 1 step
+  model.env.mj.set.state_n_prev_steps = 1 # lookback only 1 step
+
+  # add back default sensors
   model.env.mj.set.motor_state_sensor.in_use = True
   model.env.mj.set.bending_gauge.in_use = True
 
-  # set state sensors to default of one reading only
+  # ensure state sensors only give one reading per step (read_rate < 0)
   model.env.mj.set.motor_state_sensor.read_rate = -1
   model.env.mj.set.base_state_sensor.read_rate = -1
+
+  # sensor noise options
+  model.env.mj.set.sensor_noise_mag = 0
+  model.env.mj.set.sensor_noise_mu = 0
+  model.env.mj.set.sensor_noise_std = 0
+  model.env.mj.set.state_noise_mag = 0
+  model.env.mj.set.state_noise_mu = 0
+  model.env.mj.set.state_noise_std = 0
 
   # logging/plotting options
   model.track.moving_avg_num = 100
@@ -449,7 +477,7 @@ def logging_job(model, run_name, group_name):
   model.plot(force=True, hang=True)
 
 def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=5, network=networks.DQN_3L60, 
-                      memory=50_000):
+                      memory=50_000, state_steps=2, sensor_steps=1):
   """
   Runs a baseline training on the model
   """
@@ -467,12 +495,21 @@ def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=5, network=network
   
   # configure rewards and sensors
   model = create_reward_function(model, style="mixed_v2", options=[])
-  model = add_sensors(model, num=sensors, sensor_mode=1, state_mode=0)
+  model = add_sensors(model, num=sensors, sensor_mode=1, state_mode=0,
+                      state_steps=state_steps, sensor_steps=sensor_steps)
   model = setup_HER(model, use=False)
+
+  # print details THIS LINE ISN'T WORKING FOR SOME REASON
+  print("\nWandb note is:", model.wandb_note)
 
   # train and finish
   model.train(network)
   exit()
+
+def print_info(model):
+  """
+  
+  """
 
 if __name__ == "__main__":
 
@@ -492,6 +529,7 @@ if __name__ == "__main__":
     -n, --no-wandb          no weights and biases, disable live logging
     --device                what device to use, 'cpu' or 'cuda'
     --savedir               directory to save/load into eg '/home/luke/models/'
+    --print                 print info on current comparison parameters
 
   Examples:
     ./array_training_DQN.py -j 1
@@ -505,7 +543,7 @@ if __name__ == "__main__":
   datestr = "%d-%m-%Y-%H:%M" # all date inputs must follow this format
 
   # print all the inputs we have received
-  print("Script inputs are:", sys.argv[1:])
+  print("array_training_DQN.py inputs are:", sys.argv[1:])
 
   # define arguments and parse them
   parser = argparse.ArgumentParser()
@@ -519,19 +557,28 @@ if __name__ == "__main__":
   parser.add_argument("-n", "--no-wandb",     action="store_true") # no wandb logging
   parser.add_argument("--device",             default=None)        # override device
   parser.add_argument("--savedir",            default=None)        # override save/load directory
+  parser.add_argument("--print",              action="store_true") # don't train, print help
 
   args = parser.parse_args()
+
+  # # parse arguments but allow unknown arguments
+  # args, unknown = parser.parse_known_args()
 
   # extract primary inputs
   inputarg = args.job
   timestamp = args.timestamp if args.timestamp else datetime.now().strftime(datestr)
   if args.no_wandb: use_wandb = False
 
+  if args.print: 
+    args.log_wandb = False
+    log_level = 0
+
   # echo these inputs
-  print("Input arg:", inputarg)
-  print("Timestamp is:", timestamp)
-  print("Use wandb is", use_wandb)
-  print()
+  if log_level > 0:
+    print("Input arg:", inputarg)
+    print("Timestamp is:", timestamp)
+    print("Use wandb is", use_wandb)
+    print()
 
   # seperate process for safety
   sleep(inputarg)
@@ -541,51 +588,54 @@ if __name__ == "__main__":
   save_suffix = f"{timestamp[-5:]}_A{inputarg}" # only include hr:min
 
   # create and configure the model to default
-  model = TrainDQN(use_wandb=use_wandb, no_plot=no_plot, log_level=log_level)
+  model = TrainDQN(use_wandb=use_wandb, no_plot=no_plot, log_level=log_level,
+                   object_set = args.object_set)
   model = apply_to_all_models(model)
 
   # cpu training only on cluster or PC
   if model.machine in ["cluster", "luke-PC"] and args.device is None: 
-    model.device = "cpu"
-    print("Setting to default 'cpu' device")
+    model.set_device("cpu")
+    if log_level > 0: print("Setting to default 'cpu' device")
   elif args.device is not None:
-    print(f"Device override of '{args.device}'")
-    model.device = args.device
+    if log_level > 0: print(f"Device override of '{args.device}'")
+    model.set_device(args.device)
 
   # override default run/group names
   model.run_name = f"{model.machine}_{save_suffix}"
   model.group_name = timestamp[:8] # include only day-month-year
 
   if args.machine is not None:
-    print(f"Machine override of '{args.machine}'")
+    if log_level > 0: print(f"Machine override of '{args.machine}'")
     model.run_name = f"{args.machine}_{save_suffix}"
 
-  # override default object set
-  if args.object_set is not None:
-    # this does not work for continue training, as that loads the old set
-    print(f"Object set override of '{args.object_set}'")
-    model.env._load_object_set(name=args.object_set)
+  # # override default object set
+  # if args.object_set is not None:
+  #   # this does not work for continue training, as that loads the old set
+  #   print(f"Object set override of '{args.object_set}'")
+  #   model.env._load_object_set(name=args.object_set)
 
   # override save location
   if args.savedir is not None:
-    print(f"Savedir override of '{args.savedir}'")
+    if log_level > 0: print(f"Savedir override of '{args.savedir}'")
     model.savedir = args.savedir
 
-  print("Run group is:", model.group_name)
-  print("Run name is:", model.run_name)
+  if log_level > 0:
+    print("Run group is:", model.group_name)
+    print("Run name is:", model.run_name)
 
   # ----- SPECIAL JOB OPTIONS ----- #
 
   # if we are resuming training (currently can only resume on the SAME machine)
   if args.resume:
-    print("Resuming training")
+    if log_level > 0: print("Resuming training")
+    # we need to pass the object set to override the loaded default
     continue_training(model, model.run_name, model.group_name,
                       object_set=args.object_set)
     exit()
 
   # if we are doing a logging job
   if args.log_wandb or args.plot: 
-    print(f"Logging job, plot is {args.plot} and wandb is {args.log_wandb}")
+    if log_level > 0: print(f"Logging job, plot is {args.plot} and wandb is {args.log_wandb}")
     model.no_plot = not args.plot
     model.use_wandb = args.log_wandb
     logging_job(model, model.run_name, model.group_name)
@@ -612,40 +662,58 @@ if __name__ == "__main__":
   this_lr = lr_list[inputarg // x]           # vary every x steps
   this_ed = ed_list[inputarg % x]            # vary every step & loop
 
+  # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
+  #   A1, A2, A3, ...
+  #   B1, B2, B3, ...
+  #   C1, C2, C3, ...
+
   # perform the training with other parameters standard
   baseline_training(model, lr=this_lr, ed=this_ed)
   """
 
-  # new baseline test
-  baseline_training(model, sensors=inputarg)
-
-  # ----- nothing below here as exit() used ----- #
-  
-  # varying 5x5 = 25 possible trainings 1-25
+  # varying 6x5 = 16 possible trainings 1-30
+  stiffness_list = [5, 6, 7, 8, 9, 10]
   sensors_list = [1, 2, 3, 4, 5]
-  memory_list = [20, 40, 80, 200, 500] # 40 episodes of memory = 10_000 memory (250 steps)
 
-  # lists are zero indexed so adjust inputarg to 0-17
+  # lists are zero indexed so adjust inputarg
   inputarg -= 1
 
   # we vary wrt memory_list every inputarg increment
-  x = len(memory_list)
+  x = len(sensors_list)
 
   # get the sensors and memory size for this training
-  this_sensor = sensors_list[inputarg // x]       # vary every x steps
-  this_memory = memory_list[inputarg % x] * 250   # vary every +1 & loop
+  this_stiffness = stiffness_list[inputarg // x]       # vary every x steps
+  this_sensors = sensors_list[inputarg % x]            # vary every +1 & loop
+
+  # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
+  #   A1, A2, A3, ...
+  #   B1, B2, B3, ...
+  #   C1, C2, C3, ...
 
   # make note
-  model.wandb_note += f"Sensors used: {this_sensor}\n"
-  model.wandb_note += f"Memory size used: {this_memory} ({this_memory / 250} episdoes)\n"
+  param_1 = f"Finger stiffness used: {this_stiffness}\n"
+  param_2 = f"Sensors used: {this_sensors}\n"
+  model.wandb_note += param_1 + param_2
 
-  # temporary options
-  model.params.save_freq = 1000
-  model.params.test_freq = 1000
-  model.params.num_episodes = 20_000
+  # if we are just printing help information
+  if args.print:
+    print("Input arg", inputarg + 1)
+    print("\t" + param_1, end="")
+    print("\t" + param_2, end="")
+    exit()
+
+  # set the finger stiffness
+  model.env.mj.set.finger_stiffness = this_stiffness
+
+  # lets use curriculum learning
+  model.params.object_set = "set3_nocuboid_525"
+  model.params.use_curriculum = True
+  model.params.curriculum_ep_num = 10000
+  model.params.curriculum_object_set = "set3_fullset_795"
+  model.params.num_episodes = 20000
 
   # perform the training with other parameters standard
-  baseline_training(model, sensors=this_sensor, memory=this_memory)
+  baseline_training(model, sensors=this_sensors)
 
   # ----- END ----- #
 

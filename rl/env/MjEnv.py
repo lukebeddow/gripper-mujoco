@@ -26,36 +26,18 @@ class MjEnv():
     last_reward: float = 0
     cumulative_reward: float = 0
 
-  # @dataclass
   class Test:
     # saved after each test trial ends
     obj_idx: int = 0
     obj_trial: int = 0
+    obj_counter: int = 0
+    xml_file: int = 0
     reward: float = 0
     steps: int = 0
     object_name: str = ""
+    cnt = None
 
-    # conditions of the object at episode end
-    lifted: bool = False
-    stable: bool = False
-    oob: bool = False
-    target_height: bool = False
-    stable_height: bool = False
-    palm_force: float = 0
-    finger_force: float = 0
-
-    # counts during the episode of events
-    cnt_lifted: int = 0
-    cnt_object_contact: int = 0
-    cnt_palm_force: int = 0
-    cnt_exceed_limits: int = 0
-    cnt_exceed_axial: int = 0
-    cnt_exceed_lateral: int = 0
-    cnt_exceed_palm: int = 0
-
-    def add_data(self, cnt): self.cnt = cnt
-
-  def __init__(self):
+  def __init__(self, seed=None):
     """
     A mujoco environment
     """
@@ -70,16 +52,26 @@ class MjEnv():
     # user defined testing parameters
     self.test_in_progress = False
     self.test_completed = False
-    self.test_trials_per_obj = 3
-    self.test_obj_limit = 1000  # limit number of objects in test, 1000~=no limit
+    self.test_trials_per_obj = 1
+    self.test_objects = 60
     
     # define file structure
     self.task_xml_folder = "task"
     self.task_xml_template = "gripper_task_{}.xml"
-    self.testing_xmls = 1                 # how many files reserved for testing
+    self.test_obj_per_file = 20           # how many test objects per file
+
+    # calculate how many files we need to reserve for testing
+    self.testing_xmls = int(np.ceil(self.test_objects / float(self.test_obj_per_file)))
     
     # create mujoco instance
     self.mj = MjClass()
+    if self.log_level == 0: self.mj.set.debug = False
+
+    # seed the environment
+    self.myseed = None
+    self.seed(seed)
+
+    # load the mujoco models
     self._load_object_set()
     self._load_xml()  
 
@@ -107,19 +99,20 @@ class MjEnv():
 
     return
 
+  # ----- semi-private functions, advanced use ----- #
+
   def _load_xml(self, test=None, index=None):
     """
     Load the mujoco instance with the given mjcf xml file name
     """
     if index:
       filename = self.task_xml_template.format(index)
-    elif test:
-      # get the random test xml file
-      r = np.random.randint(self.training_xmls, self.training_xmls + self.testing_xmls)
-      filename = self.task_xml_template.format(r)
+    elif test is not None:
+      # load the specified test xml
+      filename = self.task_xml_template.format(test)
     else:
       # get a random task xml file
-      r = np.random.randint(0, self.training_xmls)
+      r = np.random.randint(self.testing_xmls, self.testing_xmls + self.training_xmls)
       filename = self.task_xml_template.format(r)
 
     if self.log_level > 1: print("loading xml: ", filename)
@@ -132,7 +125,7 @@ class MjEnv():
 
   def _load_object_set(self, name=None, mjcf_path=None):
     """
-    Determine how many model xml files are in the object set
+    Load and determine how many model xml files are in the object set
     """
 
     # if a mjcf_path is given, override, otherwise we use default
@@ -154,17 +147,13 @@ class MjEnv():
     self.training_xmls = len(xml_files) - self.testing_xmls
 
     if self.training_xmls < 1:
-      raise RuntimeError(f"training xmls failed to be found in MjEnv at: {self.xml_path}")
+      raise RuntimeError(f"enough training xmls failed to be found in MjEnv at: {self.xml_path}")
 
   def _update_n_actions_obs(self):
     # get an updated number of actions and observations
 
     self.n_actions = self.mj.get_n_actions()
     self.n_obs = self.mj.get_n_obs()
-
-    # for testing
-    print("n_actions is", self.n_actions)
-    print("n_obs is", self.n_obs)
 
   def _make_event_track(self):
     """
@@ -293,13 +282,6 @@ class MjEnv():
 
     return
 
-  def _seed(seed):
-    """
-    Set the seed for the environment
-    """
-
-    np.random.seed(seed)
-
   def _end_test(self):
     """
     End test mode, called automatically and sets the test_completed flag
@@ -331,7 +313,7 @@ class MjEnv():
     trial_data.obj_trial = self.current_test_trial.obj_trial
     trial_data.object_name = test_report.object_name
     trial_data.reward = self.track.cumulative_reward
-    trial_data.add_data(test_report.cnt)
+    trial_data.cnt = test_report.cnt
 
     # insert information into stored data list
     self.test_trials.append(trial_data)
@@ -341,24 +323,62 @@ class MjEnv():
 
     # if trials done, move to the next object, reset trial counter
     if self.current_test_trial.obj_trial >= self.test_trials_per_obj:
+
       self.current_test_trial.obj_idx += 1
       self.current_test_trial.obj_trial = 0
+      self.current_test_trial.obj_counter += 1
 
-      # if objects finished/exceeded, test is over
-      if (self.current_test_trial.obj_idx >= self.num_objects or
-          self.current_test_trial.obj_idx >= self.test_obj_limit):
+      # check if we have finished
+      if self.current_test_trial.obj_counter >= self.test_objects:
         self._end_test()
+
+      # check if we need to load the next test object set
+      elif self.current_test_trial.obj_idx >= self.test_obj_per_file:
+        self.current_test_trial.xml_file += 1
+        self._load_xml(test=self.current_test_trial.xml_file)
+        self.current_test_trial.obj_idx = 0
+
+  # ----- public functions ----- #
+
+  def seed(self, seed=None):
+    """
+    Set the seed for the environment
+    """
+
+    # if we have not been given a seed
+    if seed is None:
+      # if we have previously had a seed, reuse the same one (eg reloading from pickle)
+      if self.myseed is not None:
+        seed = self.myseed
+      else:
+        # otherwise, get a random seed from [0, maxint]
+        seed = np.random.randint(0, 2_147_483_647)
+
+    # set the python random seed in numpy
+    np.random.seed(seed)
+
+    # set the same cpp random seed (reseeded upon cpp call to reset())
+    self.mj.set.random_seed = seed
+
+    # save the seed
+    self.myseed = seed
 
   def start_test(self):
     """
     Begin test mode, should be called by class user
     """
 
+    # temporary repeat of __init__() code for backwards compatibility
+    self.test_trials_per_obj = 1
+    self.test_objects = 60
+    self.test_obj_per_file = 20           # how many test objects per file
+    self.testing_xmls = int(np.ceil(self.test_objects / float(self.test_obj_per_file)))
+
     self.current_test_trial = MjEnv.Test()
     self.test_trials = []
     self.test_in_progress = True
     self.test_completed = False
-    self._load_xml(test=True)
+    self._load_xml(test=0) # load first test set xml, always index 0
 
   def step(self, action):
     """
@@ -455,25 +475,45 @@ if __name__ == "__main__":
 
   mj = MjEnv()
 
-  mj.mj.set.wipe_rewards()
-  mj.mj.set.lifted.set(100, 10, 1)
-  print(mj._get_cpp_settings())
+  
+  # mj.mj.set.set_sensor_prev_steps_to(3)
+  mj.mj.set.sensor_n_prev_steps = 1
+  mj.mj.set.state_n_prev_steps = 1
+  mj.mj.set.sensor_sample_mode = 3
+  mj.mj.set.debug = False
+  mj.reset()
 
-  with open("test_file.pickle", 'wb') as f:
-    pickle.dump(mj, f)
-    print("Pickle saved")
+  for i in range(20):
+    mj.step(np.random.randint(0,8))
 
-  with open("test_file.pickle", 'rb') as f:
-    mj = pickle.load(f)
-    print("Pickle loaded")
+  print("\n\n\nSTART")
 
-  mj._load_xml(index=0)
-  mj._load_xml(index=1)
-  mj._load_xml(index=2)
+  for i in range (3):
+    print("\nObservation", i)
+    # mj.step(np.random.randint(0,8))
+    mj.step(2)
+    # print(mj.mj.get_observation())
+    
 
-  mj.step(0)
+  # mj.mj.set.wipe_rewards()
+  # mj.mj.set.lifted.set(100, 10, 1)
+  # print(mj._get_cpp_settings())
 
-  print(mj._get_cpp_settings())
+  # with open("test_file.pickle", 'wb') as f:
+  #   pickle.dump(mj, f)
+  #   print("Pickle saved")
+
+  # with open("test_file.pickle", 'rb') as f:
+  #   mj = pickle.load(f)
+  #   print("Pickle loaded")
+
+  # mj._load_xml(index=0)
+  # mj._load_xml(index=1)
+  # mj._load_xml(index=2)
+
+  # mj.step(0)
+
+  # print(mj._get_cpp_settings())
 
   # obs = mj.mj.get_observation()
   # print(obs)

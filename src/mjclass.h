@@ -12,6 +12,8 @@
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <random>
+#include <memory>
 
 #include "simsettings.h"
 #include "myfunctions.h"
@@ -25,6 +27,9 @@
 namespace MjType
 {
   /* types used inside the MjClass, including data structures */
+
+  // random generator pointer, seeded in MjClass::configure_settings()
+  extern std::unique_ptr<std::default_random_engine> generator;
 
   // what are the possible actions (order matters - see configure_settings())
   struct Action {
@@ -48,19 +53,31 @@ namespace MjType
     enum {
       raw = 0,
       change,
-      average
+      average,
+      median
     };
   };
 
   // sensor type for sensing in simulation
   struct Sensor {
 
-    bool in_use;            // is this sensor currently in use
-    float normalise;        // value with which to normalise readings to [-1,1]
-    float read_rate;        // rate in Hz which this sensor is read
-    double last_read_time;  // time in seconds sensor was last read
+    // initialised settings from simsettings.h
+    bool in_use = false;                // is this sensor currently in use
+    float normalise = 1;                // value with which to normalise readings to [-1,1]
+    float read_rate = 1;                // rate in Hz which this sensor is read
 
-    bool use_normalisation = true; // are we using normalisation
+    // user options that can be overriden
+    bool use_normalisation = true;      // are we using normalisation
+    bool use_noise = true;              // are we adding synthetic nois
+    float noise_mag = 0;                // magnitude of added noise
+    float noise_mu = 0;                 // mean of noise (ie zero error)
+    float noise_std = -1;               // std deviation of noise (< 0 means flat)
+
+    // internal variables set via functions, do not touch
+    double last_read_time = 0;          // time in seconds sensor was last read
+    int prev_steps = 1;                 // back how many previous steps do we read
+    int readings_per_step = 1;          // how many readings during action execution
+    int total_readings = 1;             // how many samples back do we start reading
 
     Sensor(bool in_use, float normalise, float read_rate)
       : in_use(in_use), normalise(normalise), read_rate(read_rate)
@@ -103,6 +120,46 @@ namespace MjType
       }
     }
 
+    float apply_noise(float value, std::uniform_real_distribution<float>& uniform_dist)
+    {
+      /* add noise to a reading */
+
+      if (not use_noise) return value;
+
+      constexpr float two_pi = 2.0 * M_PI;
+      constexpr float epsilon = std::numeric_limits<float>::epsilon();
+
+      // calculate a uniform random noise
+      if (noise_std < epsilon) {
+        float noise = noise_mu + noise_mag * (2 * uniform_dist(*MjType::generator) - 1);
+        value += noise;
+      }
+      // use the box mueller transform to calculate normal noise
+      else {
+
+        // get random values, ensuring u1 isn't 0 (division by 0 error)
+        float u1, u2;
+        do {
+          u1 = uniform_dist(*MjType::generator);
+        }
+        while (u1 <= epsilon);
+        u2 = uniform_dist(*MjType::generator);
+
+        // compute z0 and z1
+        float mag = noise_std * std::sqrt(-2.0 * std::log(u1));
+        float z0 = mag * std::cos(two_pi * u2) + noise_mu;
+        // float z1 = mag * std::sin(two_pi * u2) + noise_mu; // not needed
+  
+        value += z0;
+      }
+
+      // ensure we remain in bounds
+      if (value > 1) value = 1;
+      else if (value < -1) value = -1;
+
+      return value;
+    }
+
     bool ready_to_read(double current_time_seconds) 
     {
       /* return true if the sensor is ready to read, also saves last read time
@@ -120,73 +177,136 @@ namespace MjType
       else return false;
     }
 
-    int get_n_readings(float time_since_last_sample)
+    void update_n_readings(int readings_since_last_step, int set_prev_steps_to)
     {
-      /* get the number of readings since the last sample, with overlap, so the
-      final reading in the last sample will be the first reading in this one */
+      /* update reading information but specifying how many readings have arrived
+      SINCE the last sample (NOT inclusive of the last sample), as well as overriding
+      the number of previous steps */
 
-      int n_readings;
+      prev_steps = set_prev_steps_to;
+      readings_per_step = readings_since_last_step;
 
-      // how many readings since last sample, with overlap
-      if (read_rate > 0) {
-        double readings_since_step = time_since_last_sample * read_rate;
-        n_readings = std::ceil(readings_since_step);
+      // how many readings to account for previous samples
+      if (readings_per_step <= 1) {
+        total_readings = prev_steps;
       }
       else {
-        n_readings = -1 * read_rate;
+        total_readings = 1 + readings_per_step * prev_steps;
       }
-
-      return n_readings;
     }
 
-    std::vector<luke::gfloat> raw_sample(luke::SlidingWindow<luke::gfloat> data, 
-      float time_since_last_sample)
+    void update_n_readings(float time_since_last_sample)
+    {
+      /* get the number of readings SINCE the last sample without overlap based
+      on the read rate (Hz) of the sensor and the time elapsed */
+
+      // how many readings since last sample
+      double readings_since_step = time_since_last_sample * read_rate;
+      readings_per_step = std::floor(readings_since_step);
+
+      // how many readings to account for previous samples
+      if (readings_per_step <= 1) {
+        readings_per_step = 1;
+        total_readings = prev_steps;
+      }
+      else {
+        total_readings = 1 + readings_per_step * prev_steps;
+      }
+    }
+
+    std::vector<luke::gfloat> raw_sample(luke::SlidingWindow<luke::gfloat> data)
     {
       /* sample some data from a given time interval in seconds */
 
-      int n_readings = get_n_readings(time_since_last_sample);
-
-      return data.read(n_readings);
+      return data.read(total_readings);
     }
 
-    std::vector<luke::gfloat> change_sample(luke::SlidingWindow<luke::gfloat> data,
-      float time_since_last_sample)
+    std::vector<luke::gfloat> change_sample(luke::SlidingWindow<luke::gfloat> data)
     {
       /* sample the first and last reading as well as the change [x0, dx, x1] */
 
-      int n_readings = get_n_readings(time_since_last_sample);
+      // make the return vector, first element is furthest back reading
+      std::vector<luke::gfloat> result(2 * prev_steps + 1);
+      result[0] = data.read_element(total_readings - 1); // read_element is 0 indexed
 
-      std::vector<luke::gfloat> result(3);
-      result[0] = data.read_element(n_readings - 1); // read_element 0 indexed
-      result[2] = data.read_element();
-      result[1] = result[2] - result[0];
+      // loop through steps to add in elements
+      for (int i = 0; i < prev_steps; i++) {
+        int first_sample = total_readings - 1 - i * readings_per_step;
+        result[i * 2 + 2] = data.read_element(first_sample - readings_per_step);
+        result[i * 2 + 1] = result[i * 2 + 2] - result[i * 2];
+      }
 
       return result;
     }
 
-    std::vector<luke::gfloat> average_sample(luke::SlidingWindow<luke::gfloat> data,
-      float time_since_last_sample)
+    std::vector<luke::gfloat> average_sample(luke::SlidingWindow<luke::gfloat> data)
     {
       /* sample the first and last reading as well as the average [x0, xbar, x1] */
 
-      int n_readings = get_n_readings(time_since_last_sample);
+      // make the return vector, first element is furthest back reading
+      std::vector<luke::gfloat> result(2 * prev_steps + 1);
+      result[0] = data.read_element(total_readings - 1);
 
-      std::vector<luke::gfloat> all = data.read(n_readings);
+      // loop through steps to add in elements
+      for (int i = 0; i < prev_steps; i++) {
+        int first_sample = total_readings - 1 - i * readings_per_step;
+        result[i * 2 + 2] = data.read_element(first_sample - readings_per_step);
 
-      luke::gfloat mean = 0.0;
-
-      for (uint i = 0; i < all.size(); i++) {
-        mean += all[i];
+        // sum intermediate values and get the mean
+        result[i * 2 + 1] = 0;
+        for (int j = 0; j < readings_per_step + 1; j++) {
+          result[i * 2 + 1] += data.read_element(first_sample - j);
+        }
+        result[i * 2 + 1] /= readings_per_step + 1;
       }
-
-      mean /= (luke::gfloat)all.size();
-
-      std::vector<luke::gfloat> result {
-        all[0], mean, all[all.size() - 1]
-      };
 
       return result;
     }
+
+    std::vector<luke::gfloat> median_sample(luke::SlidingWindow<luke::gfloat> data)
+    {
+      /* sample the first and last reading as well as the average [x0, xbar, x1] */
+
+      // make the return vector, first element is furthest back reading
+      std::vector<luke::gfloat> result(2 * prev_steps + 1);
+      result[0] = data.read_element(total_readings - 1);
+
+      // loop through steps to add in elements
+      for (int i = 0; i < prev_steps; i++) {
+        int first_sample = total_readings - 1 - i * readings_per_step;
+        result[i * 2 + 2] = data.read_element(first_sample - readings_per_step);
+
+        // put the data values in a new vector for this step
+        std::vector<luke::gfloat> values;
+        for (int j = 0; j < readings_per_step + 1; j++) {
+          values.push_back(data.read_element(first_sample - j));
+        }
+
+        // should never be empty (readings_per_step = 0)
+        if (values.empty()) {
+          result[i * 2 + 1] = 0.0;
+          continue;
+        }
+
+        // get the centre of the vector and find the median
+        int n = values.size() / 2;
+        nth_element(values.begin(), values.begin() + n, values.end());
+        luke::gfloat med = values[n];
+
+        // if median of even number of values, get the largest value up to n
+        if (!(values.size() & 1)) { //If the set size is even
+          auto max_it = max_element(values.begin(), values.begin() + n);
+          // the median is the aveage of these two adjacent values
+          med = (*max_it + med) / 2.0;
+        }
+
+        // save the result
+        result[i * 2 + 1] = med;
+      }
+
+      return result;
+    }
+
   };
 
   // what key events will we keep track of in the simulation
@@ -214,7 +334,7 @@ namespace MjType
 
     // create an event for each reward, binary->binary, linear->linear
     #define XX(NAME, TYPE, VALUE)
-    #define SS(NAME, USED, NORMALISE, READ_RATE)
+    #define SS(NAME, IN_USE, NORM, READRATE)
     #define BR(NAME, REWARD, DONE, TRIGGER) BinaryEvent NAME;
     #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) LinearEvent NAME;
       // run the macro to create the code
@@ -233,7 +353,7 @@ namespace MjType
       /* run the reset function for all members of the class */
 
       #define XX(NAME, TYPE, VALUE)
-      #define SS(NAME, USED, NORMALISE, READ_RATE)
+      #define SS(NAME, IN_USE, NORM, READRATE)
       #define BR(NAME, REWARD, DONE, TRIGGER) NAME.reset();
       #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) NAME.reset();
 
@@ -251,7 +371,7 @@ namespace MjType
       /* calculate the percentage of steps where this event occured */
 
       #define XX(NAME, TYPE, VALUE)
-      #define SS(NAME, USED, NORMALISE, READ_RATE)
+      #define SS(NAME, IN_USE, NORM, READRATE)
 
       #define BR(NAME, REWARD, DONE, TRIGGER)                             \
                 NAME.percent = (100.0 * NAME.abs) / (float) step_num.abs;
@@ -318,7 +438,7 @@ namespace MjType
 
     // create an event for each reward, default none involved
     #define XX(NAME, TYPE, VALUE)
-    #define SS(NAME, USED, NORMALISE, READ_RATE)
+    #define SS(NAME, IN_USE, NORM, READRATE)
     #define BR(NAME, REWARD, DONE, TRIGGER) Event NAME;
     #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) Event NAME;
       // run the macro to create the code
@@ -341,7 +461,7 @@ namespace MjType
       /* reset the goal */
 
       #define XX(NAME, TYPE, VALUE)
-      #define SS(NAME, USED, NORMALISE, READ_RATE)
+      #define SS(NAME, IN_USE, NORM, READRATE)
       #define BR(NAME, REWARD, DONE, TRIGGER)                                  \
                 NAME.state = -1.0;                                             \
                 if (reset_involved) { NAME.involved = false; }                    
@@ -367,7 +487,7 @@ namespace MjType
 
     // define the assignment code we want for X, BR, LR
     #define XX(name, type, value) type name { value };
-    #define SS(name, use, norm, readrate) Sensor name { use, norm, readrate };
+    #define SS(name, in_use, norm, readrate) Sensor name { in_use, norm, readrate };
     #define BR(name, reward, done, trigger) BinaryReward name { reward, done, trigger };
     #define LR(name, reward, done, trigger, min, max, overshoot) \
               LinearReward name { reward, done, trigger, min, max, overshoot };
@@ -387,7 +507,10 @@ namespace MjType
     void disable_sensors();
     void scale_rewards(float scale); 
     void set_use_normalisation(bool set_as);
-
+    void set_use_noise(bool set_as);
+    void set_sensor_prev_steps_to(int prev_steps);
+    void update_sensor_settings(double time_since_last_sample);
+    void apply_noise_params();
   };
 
   // data on the simulated objects and environment
@@ -555,6 +678,9 @@ public:
   // for measuring timings
   typedef std::chrono::high_resolution_clock time_;
 
+  // for uniform random numbers [0.0, 1.0]
+  std::uniform_real_distribution<float> uniform_dist {0.0, 1.0};
+
   // parameters set at compile time
   static constexpr double ftol = 1e-5;             // floating point tolerance
   static constexpr int gauge_buffer_size = 50;     // buffer to store gauge data 
@@ -571,9 +697,9 @@ public:
 
   // function pointers for sampling functions
   std::vector<luke::gfloat> (MjType::Sensor::*sampleFcnPtr)
-    (luke::SlidingWindow<luke::gfloat>, float);
+    (luke::SlidingWindow<luke::gfloat>);
   std::vector<luke::gfloat> (MjType::Sensor::*stateFcnPtr)
-    (luke::SlidingWindow<luke::gfloat>, float);
+    (luke::SlidingWindow<luke::gfloat>);
 
   // path information for loading models, have we defined defaults?
   #if defined(LUKE_MJCF_PATH)
@@ -627,6 +753,7 @@ public:
   luke::SlidingWindow<luke::gfloat> wrist_Z_sensor { gauge_buffer_size };
 
   // track the timestamps of sensor updates, this is for plotting in mysimlulate.cpp
+  luke::SlidingWindow<float> step_timestamps { gauge_buffer_size };
   luke::SlidingWindow<float> gauge_timestamps { gauge_buffer_size };
   luke::SlidingWindow<float> axial_timestamps { gauge_buffer_size };
   luke::SlidingWindow<float> palm_timestamps { gauge_buffer_size };
@@ -680,6 +807,8 @@ public:
   void reset_object();
   void spawn_object(int index);
   void spawn_object(int index, double xpos, double ypos, double zrot);
+  void add_noise_to_base(double base_noise);
+  void add_noise_to_motors(std::vector<luke::gfloat> motor_noise);
   bool is_done();
   std::vector<luke::gfloat> get_observation();
   std::vector<float> get_event_state();

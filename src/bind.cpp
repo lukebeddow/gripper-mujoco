@@ -49,6 +49,8 @@ PYBIND11_MODULE(bind, m) {
     .def("reset_object", &MjClass::reset_object)
     .def("spawn_object", static_cast<void (MjClass::*)(int)>(&MjClass::spawn_object)) /* see bottom */
     .def("spawn_object", static_cast<void (MjClass::*)(int, double, double, double)>(&MjClass::spawn_object))
+    .def("add_noise_to_base", &MjClass::add_noise_to_base)
+    .def("add_noise_to_motors", &MjClass::add_noise_to_motors)
     .def("is_done", &MjClass::is_done)
     .def("get_observation", &MjClass::get_observation)
     .def("get_event_state", &MjClass::get_event_state)
@@ -127,6 +129,7 @@ PYBIND11_MODULE(bind, m) {
     .def("disable_sensors", &MjType::Settings::disable_sensors)
     .def("scale_rewards", &MjType::Settings::scale_rewards)
     .def("set_use_normalisation", &MjType::Settings::set_use_normalisation)
+    .def("set_sensor_prev_steps_to", &MjType::Settings::set_sensor_prev_steps_to)
 
     // use a macro to create code snippets for all of the settings
     #define XX(name, type, value) .def_readwrite(#name, &MjType::Settings::name)
@@ -381,18 +384,23 @@ PYBIND11_MODULE(bind, m) {
   // set up sensor type so python can interact and change them
   {py::class_<MjType::Sensor>(m, "Sensor")
 
-    .def(py::init<float, bool, int>())
+    .def(py::init<bool, float, float>())
     .def("set", &MjType::Sensor::set)
 
     .def_readwrite("in_use", &MjType::Sensor::in_use)
     .def_readwrite("normalise", &MjType::Sensor::normalise)
     .def_readwrite("read_rate", &MjType::Sensor::read_rate)
+    .def_readwrite("prev_steps", &MjType::Sensor::prev_steps)
 
     // pickle support
     .def(py::pickle(
       [](const MjType::Sensor r) { // __getstate___
         /* return a tuple that fully encodes the state of the object */
-        return py::make_tuple(r.in_use, r.normalise, r.read_rate);
+        return py::make_tuple(
+          r.in_use, 
+          r.normalise, 
+          r.read_rate
+        );
       },
       [](py::tuple t) { // __setstate__
 
@@ -400,7 +408,8 @@ PYBIND11_MODULE(bind, m) {
           throw std::runtime_error("MjType::Sensor py::pickle got invalid state");
 
         // create new c++ instance with old data
-        MjType::Sensor out(t[0].cast<bool>(), t[1].cast<float>(), t[2].cast<float>());
+        MjType::Sensor out(t[0].cast<bool>(), t[1].cast<float>(), 
+          t[2].cast<float>());
 
         return out;
       }

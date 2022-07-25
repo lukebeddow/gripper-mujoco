@@ -386,8 +386,14 @@ struct Target {
   std::array<double, 6> base {};      // target of base joints (only [0] used for z)
   std::array<double, 7> panda {};     // target for panda joints (never used)
 
+  std::array<luke::gfloat, 7> gripper_noise {};
+  std::array<luke::gfloat, 6> base_noise {};
+
   static constexpr double base_z_min = -0.1;
   static constexpr double base_z_max = 0.1;
+
+  // calibration value since z height will not be perfect from controller stiffness
+  double z_offset = 0;
 
   // static constexpr std::array<double, 6> base_lims_max {0.1, 1, 1, 1, 1, 1};
   // static constexpr std::array<double, 6> base_lims_min {-0.1, -1, -1, -1, -1, -1};
@@ -413,6 +419,27 @@ struct Target {
     };
 
     return out;
+  }
+
+  bool x_moving() {
+    if (end.get_x_step() == next.get_x_step()) {
+      return false;
+    }
+    return true;
+  }
+
+  bool y_moving() {
+    if (end.get_y_step() == next.get_y_step()) {
+      return false;
+    }
+    return true;
+  }
+
+  bool z_moving() {
+    if (end.get_z_step() == next.get_z_step()) {
+      return false;
+    }
+    return true;
   }
 };
 
