@@ -10,3 +10,4 @@ bin/
 *.pyc
 **/wandb/
 libs/
+key.txt
