@@ -117,6 +117,23 @@ void run_test(int num_episodes, int step_cap, int reload_rate)
 
 int main(int argc, char** argv)
 {
+  MjType::Sensor x(true, -1, -1);
+  luke::SlidingWindow<luke::gfloat> data(50);
+
+  for (int i = 0; i < 25; i++) {
+    data.add(i);
+  }
+
+  std::vector<luke::gfloat> y = x.raw_sample(data);
+
+  std::cout << "Data is: "; data.print();
+  luke::print_vec(y, "result is");
+
+  return 0;
+
+
+
+
   /* ----- run a test of 10 learning steps ----- */
 
   // luke::Gripper grip;

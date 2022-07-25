@@ -36,6 +36,7 @@ void print_vec(std::vector<mjtNum> v, std::string name);
 void print_vec(std::vector<gfloat> v, std::string name);
 void print_vec(std::vector<QPos> v, std::string name);
 void print_vec(std::vector<std::string> v, std::string name);
+bool strcmp_w_sub(std::string ref_str, std::string sub_str, int num);
 
 // initialising, setup, and utilities
 void init(mjModel* model, mjData* data);
@@ -43,12 +44,20 @@ void init_J(mjModel* model, mjData* data);
 void print_joint_names(mjModel* model);
 void get_joint_indexes(mjModel* model);
 void get_joint_addresses(mjModel* model);
+void set_finger_stiffness(mjModel* model, mjtNum stiffness);
 void configure_qpos(mjModel* model, mjData* data);
+void configure_constraints(mjModel* model, mjData* data);
 void keyframe(mjModel* model, mjData* data, std::string keyframe_name);
 void keyframe(mjModel* model, mjData* data, int keyframe_index);
 void reset(mjModel* model, mjData* data);
 void wipe_settled();
 void calibrate_reset(mjModel* model, mjData* data);
+void add_base_joint_noise(std::vector<luke::gfloat> noise);
+void add_gripper_joint_noise(std::vector<luke::gfloat> noise);
+void snap_to_target();
+void reset_constraints(mjModel* model, mjData* data);
+void toggle_constraint(mjModel* model, mjData* data, int id);
+void set_constraint(mjModel* model, mjData* data, int id, bool set_as);
 
 // simulation
 void before_step(mjModel* model, mjData* data);
@@ -61,9 +70,10 @@ void control_panda(const mjModel* model, mjData* data);
 void control_gripper(const mjModel* model, mjData* data, Gripper& target);
 void control_base(const mjModel* model, mjData* data);
 void update_state(const mjModel* model, mjData* data);
-void update_stepper(const mjModel* model, mjData* data);
+void update_stepper(mjModel* model, mjData* data);
 void update_objects(const mjModel* model, mjData* data);
-void update_all(const mjModel* model, mjData* data);
+void update_all(mjModel* model, mjData* data);
+void update_constraints(mjModel* model, mjData* data);
 
 // monitor
 void check_settling();

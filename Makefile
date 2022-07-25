@@ -31,7 +31,7 @@ OUTCPP := bin
 OUTPY := rl/env/mjpy
 
 # default object set name
-DEFAULT_OBJECTSET = set2_nocuboid_525
+DEFAULT_OBJECTSET = set2_fullset_795
 
 # do we want to prevent any rendering libraries from compiling (1=True, 0=false)
 PREVENT_RENDERING = 0

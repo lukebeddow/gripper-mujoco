@@ -53,6 +53,7 @@ mjvFigure figbendgauge;
 mjvFigure figaxialgauge;
 mjvFigure figpalm;
 mjvFigure figwrist;
+mjvFigure figmotors;
 
 // OpenGL rendering and UI
 GLFWvidmode vmode;
@@ -87,12 +88,17 @@ struct
     int axialgauge = 0;         // added by luke
     int palmsensor = 0;         // added by luke
     int wristsensor = 0;        // added by luke
+    int statesensor = 0;        // added by luke
     int allsensors = 0;         // added by luke
     int object_int = 0;         // added by luke
     int env_steps = 1;          // added by luke
     int object_x_noise_mm = 0;  // added by luke
     int object_y_noise_mm = 0;  // added by luke
     int object_z_rot_deg = 0;   // added by luke
+
+    float sensor_mag = 0;
+    float sensor_mu = 0;
+    float sensor_std = 0;
 
     // simulation
     int run = 1;
@@ -131,6 +137,7 @@ enum
     SECT_GRIPPER,   // added by luke
     SECT_OBJECT,    // added by luke
     SECT_ACTION,    // added by luke
+    SECT_SETTINGS,  // added by luke
     NSECT1
 };
 
@@ -172,10 +179,14 @@ const mjuiDef defOption[] =
     {mjITEM_CHECKINT,  "Axial gauge",   2, &settings.axialgauge,    " #402"}, // added by luke
     {mjITEM_CHECKINT,  "Palm sensor",   2, &settings.palmsensor,    " #403"}, // added by luke
     {mjITEM_CHECKINT,  "Wrist sensor",  2, &settings.wristsensor,   " #404"}, // added by luke
-    {mjITEM_CHECKINT,  "All sensors",   2, &settings.allsensors,    " #405"}, // added by luke
+    {mjITEM_CHECKINT,  "Motor sensor",  2, &settings.statesensor,   " #405"}, // added by luke
+    {mjITEM_CHECKINT,  "All sensors",   2, &settings.allsensors,    " #406"}, // added by luke
+    {mjITEM_CHECKINT,  "Use noise",     2, &myMjClass.s_.all_sensors_use_noise, " #407"},  // added by luke
+    {mjITEM_SLIDERNUM, "Noise mag",     2, &myMjClass.s_.sensor_noise_mag,   "0.0 1.0"},   // added by luke
+    {mjITEM_SLIDERNUM, "Noise mean",    2, &myMjClass.s_.sensor_noise_mu,    "-1.0 1.0"},  // added by luke
+    {mjITEM_SLIDERNUM, "Noise std",     2, &myMjClass.s_.sensor_noise_std,   "-0.1 1.0"},  // added by luke
     {mjITEM_END}
 };
-
 
 // simulation section of UI
 const mjuiDef defSimulation[] =
@@ -592,10 +603,11 @@ void lukesensorfigsinit(void)
     mjv_defaultFigure(&figaxialgauge);
     mjv_defaultFigure(&figpalm);
     mjv_defaultFigure(&figwrist);
+    mjv_defaultFigure(&figmotors);
 
     // what figures are we initialising
     std::vector<mjvFigure*> myfigs {
-        &figbendgauge, &figaxialgauge, &figpalm, &figwrist
+        &figbendgauge, &figaxialgauge, &figpalm, &figwrist, &figmotors
     };
 
     // initialise all figures the same
@@ -628,6 +640,7 @@ void lukesensorfigsinit(void)
     strcpy(figaxialgauge.title, "Axial gauges");
     strcpy(figpalm.title, "Palm sensor");
     strcpy(figwrist.title, "Wrist sensor");
+    strcpy(figmotors.title, "Motor states");
 
     // add legends
     strcpy(figbendgauge.linename[0], "1");
@@ -640,6 +653,10 @@ void lukesensorfigsinit(void)
     strcpy(figwrist.linename[0], "X");
     strcpy(figwrist.linename[1], "Y");
     strcpy(figwrist.linename[2], "Z");
+    strcpy(figmotors.linename[0], "X");
+    strcpy(figmotors.linename[1], "Y");
+    strcpy(figmotors.linename[2], "Z");
+    strcpy(figmotors.linename[3], "H");
 }
 
 
@@ -665,12 +682,17 @@ void lukesensorfigsupdate(void)
     std::vector<luke::gfloat> wXdata = myMjClass.wrist_X_sensor.read(gnum);
     std::vector<luke::gfloat> wYdata = myMjClass.wrist_Y_sensor.read(gnum);
     std::vector<luke::gfloat> wZdata = myMjClass.wrist_Z_sensor.read(gnum);
+    std::vector<luke::gfloat> mXdata = myMjClass.x_motor_position.read(gnum);
+    std::vector<luke::gfloat> mYdata = myMjClass.y_motor_position.read(gnum);
+    std::vector<luke::gfloat> mZdata = myMjClass.z_motor_position.read(gnum);
+    std::vector<luke::gfloat> mHdata = myMjClass.z_base_position.read(gnum);
 
     // get the corresponding timestamps
     std::vector<float> btdata = myMjClass.gauge_timestamps.read(gnum);
     std::vector<float> atdata = myMjClass.axial_timestamps.read(gnum);
     std::vector<float> ptdata = myMjClass.palm_timestamps.read(gnum);
     std::vector<float> wtdata = myMjClass.wristZ_timestamps.read(gnum);
+    std::vector<float> mtdata = myMjClass.step_timestamps.read(gnum);
 
     // package sensor data pointers in iterable vectors
     std::vector<std::vector<luke::gfloat>*> bdata {
@@ -685,18 +707,21 @@ void lukesensorfigsupdate(void)
     std::vector<std::vector<luke::gfloat>*> wdata {
         &wXdata, &wYdata, &wZdata
     };
+    std::vector<std::vector<luke::gfloat>*> mdata {
+        &mXdata, &mYdata, &mZdata, &mHdata  
+    };
 
     // package figures into iterable vector
     std::vector<mjvFigure*> myfigs {
-        &figbendgauge, &figaxialgauge, &figpalm, &figwrist
+        &figbendgauge, &figaxialgauge, &figpalm, &figwrist, &figmotors
     };
 
     // package sensor data in same order as figures
     std::vector< std::vector<std::vector<luke::gfloat>*>* > sensordata {
-        &bdata, &adata, &pdata, &wdata
+        &bdata, &adata, &pdata, &wdata, &mdata
     };
     std::vector<std::vector<float>*> timedata {
-        &btdata, &atdata, &ptdata, &wtdata
+        &btdata, &atdata, &ptdata, &wtdata, &mtdata
     };
 
     // maximum number of lines on a figure
@@ -739,21 +764,37 @@ void lukesensorfigshow(mjrRect rect)
 {
     // what figures are showing
     std::vector<mjvFigure*> myfigs {
-        &figbendgauge, &figaxialgauge, &figpalm, &figwrist
+        &figbendgauge, &figaxialgauge, &figpalm, &figwrist, &figmotors
     };
     // what settings determine if these are showing
     std::vector<int> flags {
         settings.bendgauge, 
         settings.axialgauge, 
         settings.palmsensor,
-        settings.wristsensor
+        settings.wristsensor,
+        settings.statesensor
     };
 
     // how many graphs do we need to fit
     int num = myfigs.size();
+    int to_show = 0;
+
+    if (settings.allsensors) {
+        to_show = num;
+    }
+    else {
+        for (int i = 0; i < myfigs.size(); i++) {
+            if (flags[i] != 0) {
+                to_show += 1;
+            }
+        }
+    }
+
+    // maximum size
+    if (to_show < 3) to_show = 3;
 
     // constant width with and without profiler
-    int width = settings.profiler ? rect.width / 3 : rect.width / num;
+    int width = settings.profiler ? rect.width / 3 : rect.width / to_show;
     int show = 0;
 
     for (int i = 0; i < myfigs.size(); i++) {
@@ -1147,6 +1188,40 @@ void makeActionsUI(int oldstate)
     mjui_add(&ui1, defActions);
 }
 
+void makeSettingsUI(int oldstate)
+{
+    mjuiDef defActions[] =
+    {
+        {mjITEM_SECTION, "Sim Settings",    oldstate,  NULL,   " #500"},
+        // {mjITEM_CHECKINT, "pris 1",   2,  &myMjClass.model->eq_active[0], " #501"},
+        // {mjITEM_CHECKINT, "pris 2",   2,  &myMjClass.model->eq_active[1], " #502"},
+        // {mjITEM_CHECKINT, "pris 3",   2,  &myMjClass.model->eq_active[2], " #503"},
+        // {mjITEM_CHECKINT, "rev 1",   2,  &myMjClass.model->eq_active[3], " #504"},
+        // {mjITEM_CHECKINT, "rev 2",   2,  &myMjClass.model->eq_active[4], " #505"},
+        // {mjITEM_CHECKINT, "rev 3",   2,  &myMjClass.model->eq_active[5], " #506"},
+        {mjITEM_BUTTON, "pris 1",   2,  NULL, " #501"},
+        {mjITEM_BUTTON, "pris 2",   2,  NULL, " #502"},
+        {mjITEM_BUTTON, "pris 3",   2,  NULL, " #503"},
+        {mjITEM_BUTTON, "rev 1",   2,   NULL, " #504"},
+        {mjITEM_BUTTON, "rev 2",   2,   NULL, " #505"},
+        {mjITEM_BUTTON, "rev 3",   2,   NULL, " #506"},
+        {mjITEM_BUTTON, "palm",    2,   NULL, " #507"},
+
+        // {mjITEM_BUTTON, "Action 7 (H-)",           2,  NULL,   " #310"},
+        // {mjITEM_BUTTON, "Reward",                  2,  NULL,   " #311"},
+        // {mjITEM_CHECKINT, "Debug",     2, &myMjClass.s_.debug,   " #312"},
+        // {mjITEM_CHECKINT, "Env steps", 2, &settings.env_steps, " #313"},
+        // {mjITEM_SLIDERINT, "No. steps",            2, 
+        //     &myMjClass.s_.action_motor_steps,             "0 2000"},
+        // {mjITEM_SLIDERNUM, "Base trans.",          2, 
+        //     &myMjClass.s_.action_base_translation,        "0.0 0.05"},
+        // {mjITEM_SLIDERINT, "Action steps",          2, 
+        //     &myMjClass.s_.sim_steps_per_action,           "0 2000"},
+        {mjITEM_END}
+    };
+
+    mjui_add(&ui1, defActions);
+}
 
 void makeObjectUI(int oldstate)
 {
@@ -1347,6 +1422,7 @@ void makesections(void)
     makeGripperUI(oldstate1[SECT_GRIPPER]);
     makeObjectUI(oldstate1[SECT_OBJECT]);
     makeActionsUI(oldstate1[SECT_ACTION]);
+    makeSettingsUI(oldstate1[SECT_SETTINGS]);
 }
 
 
@@ -1691,6 +1767,26 @@ void uiEvent(mjuiState* state)
             case 10:            // Vertical sync
                 glfwSwapInterval(settings.vsync);
                 break;
+            
+
+            case 18:            // apply noise
+            case 19:            // mag slider
+            case 20:            // mean slider
+            case 21:            // std slider
+                // myMjClass.tick();
+                // while (myMjClass.tock() < 1) {};
+                // throw std::runtime_error("");
+                // std::cout << it->itemid << '\n';
+
+                myMjClass.s_.state_noise_mag = myMjClass.s_.sensor_noise_mag;
+                myMjClass.s_.state_noise_mu = myMjClass.s_.sensor_noise_mu;
+                myMjClass.s_.state_noise_std = myMjClass.s_.sensor_noise_std;
+                myMjClass.s_.set_use_noise(myMjClass.s_.all_sensors_use_noise);
+                myMjClass.s_.apply_noise_params();
+                break;
+
+            //     // do nothing
+            //     break;
             }
 
             // modify UI
@@ -1863,6 +1959,16 @@ void uiEvent(mjuiState* state)
                     luke::target_.end.update_x_th_z();
                     break;
                 }
+            }
+        }
+
+        else if (it and it->sectionid == SECT_SETTINGS)
+        {
+            switch (it->itemid)
+            {
+                case 0: case 1: case 2: case 3: case 4: case 5: case 6:
+                    luke::toggle_constraint(myMjClass.model, myMjClass.data, it->itemid);
+                    break;
             }
         }
 
@@ -2538,42 +2644,48 @@ int main(int argc, const char** argv)
     // initialize everything
     init();
 
-    std::string default_path = "/home/luke/gripper_repo_ws/src/gripper_v2/"
-        "gripper_description/urdf/mujoco/mjcf";
-
-    #if defined(LUKE_MJCF_PATH)
-    #if defined(LUKE_DEFAULTOBJECTS)
-        default_path = LUKE_MJCF_PATH;
-        default_path += '/';
-        default_path += LUKE_DEFAULTOBJECTS;
-    #endif
-    #endif
-    
+    // defaults
+    std::string default_path = "/home/luke/mymujoco/mjcf/";
+    std::string object_set = "set2_nocuboid_525";
     std::string gripper_file = "/gripper_mujoco.xml";
     std::string panda_file = "/panda_mujoco.xml";
     std::string both_file = "/panda_and_gripper_mujoco.xml";
     std::string task_file = "/gripper_task.xml";
 
+    // have defaults been overidden with globals?
+    #if defined(LUKE_MJCF_PATH)
+        default_path = LUKE_MJCF_PATH;
+        default_path += '/';
+    #endif
+
+    #if defined(LUKE_DEFAULTOBJECTS)
+        object_set = LUKE_DEFAULTOBJECTS;
+    #endif
+
     // default configuration
-    std::string filepath = default_path + task_file;
+    std::string filepath = default_path + object_set + "/task/gripper_task_0.xml";
 
     // if we receive command line arguments
     if (argc > 1) {
         if (not strcmp(argv[1], "gripper")) {
-        filepath = default_path + gripper_file;
+        filepath = default_path + object_set + gripper_file;
         }
         else if (not strcmp(argv[1], "panda")) {
-            filepath = default_path + panda_file;
+            filepath = default_path + object_set + panda_file;
         }
         else if (not strcmp(argv[1], "both")) {
-            filepath = default_path + both_file;
+            filepath = default_path + object_set + both_file;
         }
         else if (not strcmp(argv[1], "task")) {
 
-            filepath = default_path + task_file;
+            filepath = default_path + object_set + task_file;
 
             if (argc > 2) {
-                filepath = default_path + "/task/gripper_task_" + argv[2] + ".xml";
+                filepath = default_path + object_set + "/task/gripper_task_" + argv[2] + ".xml";
+            }
+
+            if (argc > 3) {
+                filepath = default_path + argv[3] + "/task/gripper_task_" + argv[2] + ".xml";
             }
 
         }
@@ -2584,6 +2696,9 @@ int main(int argc, const char** argv)
     else {
         printf("No command line arguments detected, using default model\n");
     }
+
+    // echo file input
+    printf("mysimulate loading mjcf from: %s\n", filepath.c_str());
 
     // mju_strncpy(filename, argv[1], 1000);
     mju_strncpy(filename, filepath.c_str(), 1000);

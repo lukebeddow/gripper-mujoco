@@ -6,7 +6,7 @@ cd ~/
 rm *.o*
 
 # remove any model files
-rm -r ~/mymujoco/rl/models/*
+rm -r ~/mymujoco/rl/models/dqn
 
 # remove any wandb files
 rm -r ~/mymujoco/rl/wandb

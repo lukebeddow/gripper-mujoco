@@ -78,6 +78,62 @@ void print_vec(std::vector<std::string> v, std::string name) {
 template <typename T> int sign(T val) {
     return (T(0) < val) - (val < T(0));
 }
+bool strcmp_w_sub(std::string ref_str, std::string sub_str, int num) {
+  /* check if two strings are equal, but one string having a substitued value.
+  This value should be indicated by {X}, and will be swapped with integers
+  from 1 ... num. */
+
+  if (sub_str.size() < 3) {
+    throw std::runtime_error("string compare with substitution failed as input"
+      " string has size less than 3, and the substitution value is '{X}'");
+  }
+
+  int sub_idx;
+  std::string before_sub_str;
+  std::string after_sub_str;
+  bool found_sub = false;
+
+  // first find the substitution point
+  char c1;
+  char c2 = sub_str[0];
+  char c3 = sub_str[1];
+
+  for (int i = 2; i < sub_str.size(); i++) {
+
+    c1 = c2;
+    c2 = c3; 
+    c3 = sub_str[i];
+
+    if (c1 == '{' and c2 == 'X' and c3 == '}') {
+      before_sub_str = sub_str.substr(0, i - 2);
+      if (sub_str.size() == i + 1) {
+        after_sub_str = "";
+      }
+      else {
+        after_sub_str = sub_str.substr(i + 1, sub_str.size() - (i + 1));
+      }
+      found_sub = true;
+      break;
+    }
+  }
+
+  // if the sub string doesn't contain a substitution marker, do normal strcmp
+  if (not found_sub) {
+    return (ref_str == sub_str);
+  }
+
+  // otherwise perform the comparison with substitution
+  for (int i = 1; i < num + 1; i++) {
+
+    std::string to_comp = before_sub_str + std::to_string(i) + after_sub_str;
+
+    if (to_comp == ref_str) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 /* ----- Global variables and settings ----- */
 
@@ -119,6 +175,7 @@ struct JointSettings {
   struct {
     double finger_length = 235e-3;
     double segment_length = 0;                        // runtime depends
+    double finger_stiffness_N_per_m = 10;
   } dim;
 
   // strain gauge parameters
@@ -229,6 +286,13 @@ struct JointSettings {
     std::vector<mjtNum*> finger;
     std::vector<mjtNum*> base;
   } to_qvel;
+
+  // joint weld constraint indexes (for freezing/fixing joints)
+  struct {
+    std::vector<int> prismatic;
+    std::vector<int> revolute;
+    std::vector<int> palm;
+  } con_idx;
 
   // have the joints settled into equilibrium
   struct {
@@ -373,13 +437,17 @@ void init_J(mjModel* model, mjData* data)
   get_joint_indexes(model);
   get_joint_addresses(model);
 
-  if (debug) print_joint_names(model);
+  if (debug) {
+    print_joint_names(model);
+  }
 
   // resize state vectors and find qpos/qvel pointers
   configure_qpos(model, data);
 
   // calculate constants
   j_.dim.segment_length = j_.dim.finger_length / float(j_.num.per_finger);
+
+  configure_constraints(model, data);
 
   // // initialise the gains depending on our choice of control
   // if (j_.ctrl.stepper) {
@@ -391,13 +459,13 @@ void init_J(mjModel* model, mjData* data)
   //   j_.ctrl.kd.set(j_.ctrl.servo_kd);
   // }
 
-  // initialise the settling arrays to our default finger values
-  for (int i = 0; i < fingers_.size(); i++) {
-    for (int j = 0; j < j_.sim.n_arr; j++) {
-      (*finger_arrays_[i])[j][0] = fingers_[i]->step.x;
-      (*finger_arrays_[i])[j][1] = fingers_[i]->step.y;
-    }
-  }
+  // // initialise the settling arrays to our default finger values
+  // for (int i = 0; i < fingers_.size(); i++) {
+  //   for (int j = 0; j < j_.sim.n_arr; j++) {
+  //     (*finger_arrays_[i])[j][0] = fingers_[i]->step.x;
+  //     (*finger_arrays_[i])[j][1] = fingers_[i]->step.y;
+  //   }
+  // }
 }
 
 void reset(mjModel* model, mjData* data)
@@ -406,6 +474,9 @@ void reset(mjModel* model, mjData* data)
 
   // reset the targets
   target_.reset();
+
+  // disable any constraints
+  reset_constraints(model, data);
 
   // wipe object positions and reset
   mj_resetData(model, data);
@@ -474,8 +545,8 @@ void get_joint_indexes(mjModel* model)
     }
   }
 
-  // for testing
-  if (j_.num.finger != 27) throw std::runtime_error("j_.num.finger != 27");
+  // // for testing
+  // if (j_.num.finger != 27) throw std::runtime_error("j_.num.finger != 27");
 
   // hence per finger is this divided by 3
   j_.num.per_finger = j_.num.finger / 3;
@@ -555,6 +626,15 @@ void get_joint_addresses(mjModel* model)
   }
 }
 
+void set_finger_stiffness(mjModel* model, mjtNum stiffness)
+{
+  /* set the stiffness of the flexible finger joints */
+
+  for (int i : j_.idx.finger) {
+    model->jnt_stiffness[i] = stiffness;
+  }
+}
+
 void configure_qpos(mjModel* model, mjData* data)
 {
   /* sort out qpos and qvel information */
@@ -611,6 +691,171 @@ void configure_qpos(mjModel* model, mjData* data)
   }
 }
 
+void configure_constraints(mjModel* model, mjData* data)
+{
+  /* configure equality constraints for gripper motors */
+
+  constexpr char pris_b1[] = "gripper_base_link";
+  constexpr char pris_b2[] = "finger_{X}_intermediate";
+  constexpr char rev_b1[] = "finger_{X}_intermediate";
+  constexpr char rev_b2[] = "finger_{X}";
+  constexpr char palm_b1[] = "gripper_base_link";
+  constexpr char palm_b2[] = "palm";
+
+  for (int i = 0; i < model->neq; i++) {
+
+    std::string name1 = mj_id2name(model, mjOBJ_BODY, model->eq_obj1id[i]);
+    std::string name2 = mj_id2name(model, mjOBJ_BODY, model->eq_obj2id[i]);
+
+
+    if (debug) {
+      std::printf("Constraint %d has ids %d and %d, which are bodies %s and %s\n", 
+        i, model->eq_obj1id[i], model->eq_obj2id[i], name1.c_str(), name2.c_str());
+    }
+
+    // detect if it is a prismatic joint constraint
+    if ((strcmp_w_sub(name1, pris_b1, 3) or strcmp_w_sub(name1, pris_b2, 3)) and
+        (strcmp_w_sub(name2, pris_b1, 3) or strcmp_w_sub(name2, pris_b2, 3))) {
+      j_.con_idx.prismatic.push_back(i);
+    }
+
+    // detect if it is a revolute joint constraint
+    if ((strcmp_w_sub(name1, rev_b1, 3) or strcmp_w_sub(name1, rev_b2, 3)) and
+        (strcmp_w_sub(name2, rev_b1, 3) or strcmp_w_sub(name2, rev_b2, 3))) {
+      j_.con_idx.revolute.push_back(i);
+    }
+
+    // detect if it is a palm joint constraint
+    if ((strcmp_w_sub(name1, palm_b1, 3) or strcmp_w_sub(name1, palm_b2, 3)) and
+        (strcmp_w_sub(name2, palm_b1, 3) or strcmp_w_sub(name2, palm_b2, 3))) {
+      j_.con_idx.palm.push_back(i);
+    }
+
+    model->eq_active[i] = false;
+  }
+
+  if (debug) {
+    print_vec(j_.con_idx.prismatic, "prismatic joint constraints");
+    print_vec(j_.con_idx.revolute, "revolute joint constraints");
+    print_vec(j_.con_idx.palm, "palm joint constraints");
+  }
+}
+
+void reset_constraints(mjModel* model, mjData* data)
+{
+  /* reset all constraints to false */
+
+  for (int i : j_.con_idx.prismatic) {
+    set_constraint(model, data, i, false);
+  }
+  for (int i : j_.con_idx.revolute) {
+    set_constraint(model, data, i, false);
+  }
+  for (int i : j_.con_idx.palm) {
+    set_constraint(model, data, i, false);
+  }
+}
+
+void toggle_constraint(mjModel* model, mjData* data, int id)
+{
+  set_constraint(model, data, id, not model->eq_active[id]);
+}
+
+void set_constraint(mjModel* model, mjData* data, int id, bool set_as)
+{
+  /* toggle a constraint, if active lock the body in place relative to another */
+
+  if (set_as) {
+
+    // prepare and get indexes of position/rotation data
+    mjtNum body1_pos[3];
+    mjtNum body2_pos[3];
+    mjtNum body1_rot[9];
+    mjtNum body2_rot[9];
+    int con_id = id * mjNEQDATA; // index where we insert constraint data
+    int b1_pos_id = model->eq_obj1id[id] * 3;
+    int b2_pos_id = model->eq_obj2id[id] * 3;
+    int b1_rot_id = model->eq_obj1id[id] * 9;
+    int b2_rot_id = model->eq_obj2id[id] * 9;
+
+    // get the global rotation of the two bodies
+    for (int i = 0; i < 9; i++) {
+      body1_rot[i] = data->xmat[b1_rot_id + i];
+      body2_rot[i] = data->xmat[b2_rot_id + i];
+    }
+
+    // get the global position of the two bodies
+    for (int i = 0; i < 3; i++) {
+      body1_pos[i] = data->xpos[b1_pos_id + i];
+      body2_pos[i] = data->xpos[b2_pos_id + i];
+    }
+
+    // now find the local rotation, R12 = (R01)^T * R02
+    mjtNum R12[9];
+    mju_mulMatTMat(R12, body1_rot, body2_rot, 3, 3, 3);
+
+    // subract the vectors from each other, then rotate into frame 1 (from 0)
+    mjtNum vdiff[3];
+    mjtNum vec12[3];
+    vdiff[0] = body2_pos[0] - body1_pos[0];
+    vdiff[1] = body2_pos[1] - body1_pos[1];
+    vdiff[2] = body2_pos[2] - body1_pos[2];
+    mju_mulMatVec(vec12, body1_rot, vdiff, 3, 3);
+
+    // convert local rotation into a quaternion
+    mjtNum quat12[4];
+    mju_mat2Quat(quat12, R12);
+
+    // insert this info into the constraint
+    model->eq_data[con_id + 0] = vec12[0];
+    model->eq_data[con_id + 1] = vec12[1];
+    model->eq_data[con_id + 2] = vec12[2];
+    model->eq_data[con_id + 3] = quat12[0];
+    model->eq_data[con_id + 4] = quat12[1];
+    model->eq_data[con_id + 5] = quat12[2];
+    model->eq_data[con_id + 6] = quat12[3];
+
+    // activate the constraint
+    set_as = true;
+
+    /* for testing
+    std::cout << "Body 1 position is: ";
+    for (int i = 0; i < 3; i++) {
+      std::cout << body1_pos[i] << ", ";
+    }
+    std::cout << '\n';
+    std::cout << "Body 2 position is: ";
+    for (int i = 0; i < 3; i++) {
+      std::cout << body2_pos[i] << ", ";
+    }
+    std::cout << '\n';
+    std::cout << "Body 1 rotation is: ";
+    mjtNum b1Quat[4];
+    mju_mat2Quat(b1Quat, body1_rot);
+    for (int i = 0; i < 4; i++) {
+      std::cout << b1Quat[i] << ", ";
+    }
+    std::cout << '\n';
+    std::cout << "Body 2 rotation is: ";
+    mjtNum b2Quat[4];
+    mju_mat2Quat(b2Quat, body2_rot);
+    for (int i = 0; i < 4; i++) {
+      std::cout << b2Quat[i] << ", ";
+    }
+    std::cout << '\n';
+    std::cout << "Constraint data is: ";
+    for (int i = 0; i < 7; i++) {
+      std::cout << model->eq_data[con_id + i] << ", ";
+    }
+    std::cout << "\n\n";
+    */
+    
+  }
+
+  // set the constraint either active or inactive
+  model->eq_active[id] = set_as;
+}
+
 void keyframe(mjModel* model, mjData* data, std::string keyframe_name)
 {
   /* overload with keyframe name */
@@ -648,6 +893,8 @@ void calibrate_reset(mjModel* model, mjData* data)
   static bool first_call = true;
   static std::vector<mjtNum> control_signals;
   static std::vector<mjtNum> qpos_positions;
+
+  return;
 
   if (first_call) {
 
@@ -692,6 +939,76 @@ void calibrate_reset(mjModel* model, mjData* data)
   for (int i = 0; i < j_.num.gripper; i++) {
     (*j_.to_qpos.gripper[i]) = qpos_positions[k]; 
     k += 1;
+  }
+
+}
+
+void add_base_joint_noise(std::vector<luke::gfloat> noise)
+{
+  /* add noise in metres to resultant joint position */
+
+  if (noise.size() == 1) {
+    target_.base_noise[0] = noise[0];
+  }
+
+  else {
+    throw std::runtime_error("base noise must be specified as a 1 element vector"
+     " in add_gripper_joint_noise()");
+  }
+}
+
+void add_gripper_joint_noise(std::vector<luke::gfloat> noise)
+{
+  /* add noise in metres to resultant joint position */
+
+  if (noise.size() == 3) {
+    target_.gripper_noise[j_.gripper.prismatic[0]] = noise[0];
+    target_.gripper_noise[j_.gripper.prismatic[1]] = noise[0];
+    target_.gripper_noise[j_.gripper.prismatic[2]] = noise[0];
+    target_.gripper_noise[j_.gripper.revolute[0]] = noise[1];
+    target_.gripper_noise[j_.gripper.revolute[1]] = noise[1];
+    target_.gripper_noise[j_.gripper.revolute[2]] = noise[1];
+    target_.gripper_noise[j_.gripper.palm[0]] = noise[2];
+  }
+
+  else if (noise.size() == 7) {
+    target_.gripper_noise[j_.gripper.prismatic[0]] = noise[0];
+    target_.gripper_noise[j_.gripper.prismatic[1]] = noise[2];
+    target_.gripper_noise[j_.gripper.prismatic[2]] = noise[4];
+    target_.gripper_noise[j_.gripper.revolute[0]] = target_.end.calc_th(0, noise[1]);
+    target_.gripper_noise[j_.gripper.revolute[1]] = target_.end.calc_th(0, noise[3]);
+    target_.gripper_noise[j_.gripper.revolute[2]] = target_.end.calc_th(0, noise[5]);
+    target_.gripper_noise[j_.gripper.palm[0]] = noise[6];
+  }
+
+  else {
+    throw std::runtime_error("gripper noise must either be specified as a 3 element"
+     " or 7 element vector in add_gripper_joint_noise()");
+  }
+}
+
+void snap_to_target()
+{
+  /* force all of the joints to their target position (including noise) */
+
+  // snap the base, only z supported, note we have an offset
+  (*j_.to_qpos.base[0]) = target_.base[0] - target_.base_noise[0] - target_.z_offset; 
+
+  for (int i = 0; i < j_.num.gripper; i++) {
+    (*j_.to_qpos.gripper[i]) = target_.end.x + target_.gripper_noise[0];
+  }
+
+  // snap gripper joints
+  for (int i : j_.gripper.prismatic) {
+    (*j_.to_qpos.gripper[i]) = target_.end.x + target_.gripper_noise[i];
+  }
+
+  for (int i : j_.gripper.revolute) {
+    (*j_.to_qpos.gripper[i]) = target_.end.th + target_.gripper_noise[i];
+  }
+
+  for (int i : j_.gripper.palm) {
+    (*j_.to_qpos.gripper[i]) = target_.end.z + target_.gripper_noise[i];
   }
 
 }
@@ -872,7 +1189,7 @@ void control_gripper(const mjModel* model, mjData* data, Gripper& target)
 
   // input the control signals
   for (int i : j_.gripper.prismatic) {
-    u = ((*j_.to_qpos.gripper[i]) - target.x) * j_.ctrl.kp.x 
+    u = ((*j_.to_qpos.gripper[i]) + target_.gripper_noise[i] - target.x) * j_.ctrl.kp.x 
       + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.x;
     if (abs(u) > force_lim) {
       std::cout << "x frc limited from " << u << " to ";
@@ -883,7 +1200,7 @@ void control_gripper(const mjModel* model, mjData* data, Gripper& target)
   }
 
   for (int i : j_.gripper.revolute) {
-    u = ((*j_.to_qpos.gripper[i]) - target.th) * j_.ctrl.kp.y 
+    u = ((*j_.to_qpos.gripper[i]) + target_.gripper_noise[i] - target.th) * j_.ctrl.kp.y 
       + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.y;
     if (abs(u) > force_lim) {
       std::cout << "y frc limited from " << u << " to ";
@@ -894,7 +1211,7 @@ void control_gripper(const mjModel* model, mjData* data, Gripper& target)
   }
   
   for (int i : j_.gripper.palm) {
-    u = ((*j_.to_qpos.gripper[i]) - target.z) * j_.ctrl.kp.z 
+    u = ((*j_.to_qpos.gripper[i]) + target_.gripper_noise[i] - target.z) * j_.ctrl.kp.z 
       + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.z;
     if (abs(u) > force_lim) {
       std::cout << "z frc limited from " << u << " to ";
@@ -917,7 +1234,7 @@ void control_base(const mjModel* model, mjData* data)
   }
 
   for (int i = 0; i < j_.num.base; i++) {
-    u = ((*j_.to_qpos.base[i]) - target_.base[i]) * j_.ctrl.base_kp
+    u = ((*j_.to_qpos.base[i]) - target_.base_noise[i] - target_.base[i]) * j_.ctrl.base_kp
       + (*j_.to_qvel.base[i]) * j_.ctrl.base_kd;
     data->ctrl[n + i] = -u;
   }
@@ -965,7 +1282,7 @@ void update_state(const mjModel* model, mjData* data)
 
 }
 
-void update_all(const mjModel* model, mjData* data)
+void update_all(mjModel* model, mjData* data)
 {
   /* update the state of everything in the simulation */
 
@@ -979,11 +1296,13 @@ void update_all(const mjModel* model, mjData* data)
     throw std::runtime_error("non-stepper not implemented");
   }
 
-  // FOR TESTING
-
+  // // for testing
+  // update_state(model, data);
+  // j_.print_qpos();
+  // target_.end.print();
 }
 
-void update_stepper(const mjModel* model, mjData* data)
+void update_stepper(mjModel* model, mjData* data)
 {
   /* update the gripper joint positions and determine equilibirum/target_reached 
   assuming a stepper motor style */
@@ -993,9 +1312,16 @@ void update_stepper(const mjModel* model, mjData* data)
   bool stepped = false;
 
   if (data->time > last_step_time_ + time_per_step) {
+
+    // check if motors are moving, if not, lock them
+    update_constraints(model, data);
+
+    // apply a step to any motors still not at the target
     last_step_time_ = data->time;
     target_.next.step_to(target_.end, j_.ctrl.num_steps);
     stepped = true;
+
+    // uncomment these to see ratio of steps to waits
     // std::cout << "step!\n";
   }
   else {
@@ -1028,6 +1354,68 @@ void update_objects(const mjModel* model, mjData* data)
   // printf("qpos is xyz (%.3f, %.3f, %.3f)\n", test.x, test.y, test.z);
 
   // get_object_contact_forces(model, data);
+}
+
+void update_constraints(mjModel* model, mjData* data)
+{
+  /* control toggling of constraints which log motor positions once they finish
+  moving */
+
+  static bool old_x = false;
+  static bool old_y = false;
+  static bool old_z = false;
+
+  bool new_x = target_.x_moving();
+  bool new_y = target_.y_moving();
+  bool new_z = target_.z_moving();
+
+  if (new_x != old_x) {
+    if (new_x) {
+      // constraint enable is true
+      for (int i : j_.con_idx.prismatic) {
+        set_constraint(model, data, i, false);
+      }
+    }
+    else {
+      // constraint enable is false
+      for (int i : j_.con_idx.prismatic) {
+        set_constraint(model, data, i, true);
+      }
+    }
+    old_x = new_x;
+  }
+  
+  if (new_y != old_y) {
+    if (new_y) {
+      // constraint enable is true
+      for (int i : j_.con_idx.revolute) {
+        set_constraint(model, data, i, false);
+      }
+    }
+    else {
+      // constraint enable is false
+      for (int i : j_.con_idx.revolute) {
+        set_constraint(model, data, i, true);
+      }
+    }
+    old_y = new_y;
+  }
+
+  if (new_z != old_z) {
+    if (new_z) {
+      // constraint enable is true
+      for (int i : j_.con_idx.palm) {
+        set_constraint(model, data, i, false);
+      }
+    }
+    else {
+      // constraint enable is false
+      for (int i : j_.con_idx.palm) {
+        set_constraint(model, data, i, true);
+      }
+    }
+    old_z = new_z;
+  }
 }
 
 /* ----- monitor simulation ----- */

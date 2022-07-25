@@ -12,7 +12,7 @@
         <mesh name="palm collision" file="palm collision.STL"/>
     <include file="mjcf_include/assets.xml"/></asset>
     <worldbody>
-        <body name="gripper_base_link" pos="0 0 0.335" quat="0 1 0 0">
+        <body name="gripper_base_link" pos="0 0 0.386" quat="0 1 0 0">
             <inertial pos="0 0 0.025" quat="-0.00978477 0.713334 -0.700715 -0.00752147" mass="1.5" diaginertia="0.010083 0.00995 0.00512698"/>
             <joint name="world_to_base" pos="0 0 0" axis="0 0 1" type="slide" limited="true" range="-1 1" damping="1"/>
             <geom type="mesh" contype="0" conaffinity="0" group="1" mesh="main body visual"/>

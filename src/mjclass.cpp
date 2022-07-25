@@ -1,5 +1,8 @@
 #include "mjclass.h"
 
+// declare the random number generator
+std::unique_ptr<std::default_random_engine> MjType::generator;
+
 /* ----- constructors, destructor, and initialisers ----- */
 
 MjClass::MjClass()
@@ -146,6 +149,10 @@ void MjClass::configure_settings()
       sampleFcnPtr = &MjType::Sensor::average_sample;
       break;
     }
+    case MjType::Sample::median: {
+      sampleFcnPtr = &MjType::Sensor::median_sample;
+      break;
+    }
     default: {
       throw std::runtime_error("s_.sensor_sample_mode not set to legal value");
     }
@@ -165,6 +172,10 @@ void MjClass::configure_settings()
       stateFcnPtr = &MjType::Sensor::average_sample;
       break;
     }
+    case MjType::Sample::median: {
+      sampleFcnPtr = &MjType::Sensor::median_sample;
+      break;
+    }
     default: {
       throw std::runtime_error("s_.state_sample_mode not set to legal value");
     }
@@ -172,6 +183,20 @@ void MjClass::configure_settings()
 
   // enforce HER goals to trigger at 1 always
   default_goal_event_triggering();
+
+  // update the sensor number of readings based on time per step
+  double time_per_step = model->opt.timestep * s_.sim_steps_per_action;
+  s_.update_sensor_settings(time_per_step);
+
+  // update the finger spring stiffness
+  luke::set_finger_stiffness(model, s_.finger_stiffness);
+
+  // if we have a new random seed, create a new random generator
+  static uint old_random_seed = s_.random_seed + 1;
+  if (old_random_seed != s_.random_seed) {
+    MjType::generator.reset(new std::default_random_engine(s_.random_seed));
+    old_random_seed = s_.random_seed;
+  }
 
   // safety check
   if (s_.motor_state_sensor.read_rate >= 0)
@@ -245,6 +270,11 @@ void MjClass::reset()
   // reset the simulation
   luke::reset(model, data);
 
+  // // FOR TESTING - NOISE IS NOT WORKING
+  // std::vector<luke::gfloat> grip_noise = { 1e-3, 5e-3, 10e-3 };
+  // add_noise_to_base(6e-3);
+  // add_noise_to_motors(grip_noise);
+
   // reset sensor saved data
   finger1_gauge.reset();
   finger2_gauge.reset();
@@ -262,6 +292,7 @@ void MjClass::reset()
   z_base_position.reset();
 
   // reset timestamps for sensor readings
+  step_timestamps.reset();
   gauge_timestamps.reset();
   axial_timestamps.reset();
   palm_timestamps.reset();
@@ -392,6 +423,11 @@ void MjClass::monitor_sensors()
     gauges[1] = s_.bending_gauge.apply_normalisation(gauges[1]);
     gauges[2] = s_.bending_gauge.apply_normalisation(gauges[2]);
 
+    // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
+    gauges[0] = s_.bending_gauge.apply_noise(gauges[0], uniform_dist);
+    gauges[1] = s_.bending_gauge.apply_noise(gauges[1], uniform_dist);
+    gauges[2] = s_.bending_gauge.apply_noise(gauges[2], uniform_dist);
+
     // save
     finger1_gauge.add(gauges[0]);
     finger2_gauge.add(gauges[1]);
@@ -424,6 +460,11 @@ void MjClass::monitor_sensors()
     axial_gauges[1] = s_.axial_gauge.apply_normalisation(axial_gauges[1]);
     axial_gauges[2] = s_.axial_gauge.apply_normalisation(axial_gauges[2]);
 
+    // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
+    axial_gauges[0] = s_.axial_gauge.apply_noise(axial_gauges[0], uniform_dist);
+    axial_gauges[1] = s_.axial_gauge.apply_noise(axial_gauges[1], uniform_dist);
+    axial_gauges[2] = s_.axial_gauge.apply_noise(axial_gauges[2], uniform_dist);
+
     // save
     finger1_axial_gauge.add(axial_gauges[0]);
     finger2_axial_gauge.add(axial_gauges[1]);
@@ -447,6 +488,9 @@ void MjClass::monitor_sensors()
     // normalise
     palm_reading = s_.axial_gauge.apply_normalisation(palm_reading);
 
+    // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
+    palm_reading = s_.axial_gauge.apply_noise(palm_reading, uniform_dist);
+
     // save
     palm_sensor.add(palm_reading);
 
@@ -465,13 +509,16 @@ void MjClass::monitor_sensors()
     x = s_.wrist_sensor_XY.apply_normalisation(x);
     y = s_.wrist_sensor_XY.apply_normalisation(y);
 
+    // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
+    x = s_.wrist_sensor_XY.apply_noise(x, uniform_dist);
+    y = s_.wrist_sensor_XY.apply_noise(y, uniform_dist);
+
     // save
     wrist_X_sensor.add(x);
     wrist_Y_sensor.add(y);
     
     // record time
     wristXY_timestamps.add(data->time);
-    
   }
 
   // check the wrist sensor Z force
@@ -482,6 +529,9 @@ void MjClass::monitor_sensors()
 
     // normalise
     z = s_.wrist_sensor_Z.apply_normalisation(z);
+
+    // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
+    z = s_.wrist_sensor_Z.apply_noise(z, uniform_dist);
 
     // save
     wrist_Z_sensor.add(z);
@@ -508,18 +558,42 @@ void MjClass::sense_gripper_state()
   state_vec[3] = normalise_between(
     state_vec[3], luke::Target::base_z_min, luke::Target::base_z_max);
 
+  // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
+  state_vec[0] = s_.motor_state_sensor.apply_noise(state_vec[0], uniform_dist);
+  state_vec[1] = s_.motor_state_sensor.apply_noise(state_vec[1], uniform_dist);
+  state_vec[2] = s_.motor_state_sensor.apply_noise(state_vec[2], uniform_dist);
+  state_vec[3] = s_.base_state_sensor.apply_noise(state_vec[3], uniform_dist);
+
   // save reading
   x_motor_position.add(state_vec[0]);
   y_motor_position.add(state_vec[1]);
   z_motor_position.add(state_vec[2]);
   z_base_position.add(state_vec[3]);
+
+  // save the time the reading was made
+  step_timestamps.add(data->time);
 }
 
 void MjClass::update_env()
 {
-  /* track the position and state of the object */
+  /* Update tracking of the simulation environement to determine whether events
+  have occured. These events are how reward() and is_done() determine progress.
+  
+  This function is split into four parts:
 
-  /* ----- get information from simulation ----- */
+    1. extract information from the simulation, forces, positions, etc into the env_ variable
+    2. determine if binary events have triggered eg is the object lifted up
+    3. input values for linear events eg what is the palm force
+    4. resolve all events and counts, done automatically
+
+  To add a new event, edit part 1. to calculate the values needed to judge your
+  event. Then add logic to get the value of your event in part 2. if binary or
+  part 3. if linear. Done! Ensure your event is also added in simsettings.h
+  The rest is done automatically by macros.
+
+  */
+
+  /* ----- get information from simulation (EDIT here to get extra information) ----- */
 
   // get information about the object from the simluation
   env_.obj.qpos = luke::get_object_qpos(model, data);
@@ -565,13 +639,14 @@ void MjClass::update_env()
     forces.obj.finger1_local[1], forces.obj.finger2_local[1], forces.obj.finger3_local[1]
   });
 
-  /* ----- detect state of binary events ----- */
+  /* ----- detect state of binary events (EDIT here to add a binary event) ----- */
 
   // another step has been made
   env_.cnt.step_num.value = true;
 
-  // lifted is true if ground force is 0 and lift distance is exceeded
-  if (ground_force_mag < ftol)
+  // lifted is true if both the object and gripper have zero axial force from the ground
+  if (ground_force_mag < ftol and 
+      env_.grp.peak_finger_axial_force < ftol)
     env_.cnt.lifted.value = true;
 
   // check if the object has gone out of bounds
@@ -611,7 +686,7 @@ void MjClass::update_env()
   if (env_.cnt.object_stable.value and env_.cnt.target_height.value)
     env_.cnt.stable_height.value = true;
 
-  /* ----- detect state of linear events (also save reward scaled value) ----- */
+  /* ----- input state value of linear events (EDIT here to add a linear event) ----- */
 
   env_.cnt.exceed_axial.value = env_.grp.peak_finger_axial_force;
   env_.cnt.exceed_lateral.value = env_.grp.peak_finger_lateral_force;
@@ -619,13 +694,14 @@ void MjClass::update_env()
   env_.cnt.exceed_palm.value = env_.obj.palm_axial_force;
   env_.cnt.finger_force.value = env_.obj.avg_finger_force;
   
-  // testing for linear goals
+  // testing: track info for linear goals
   env_.cnt.finger1_force.value = finger1_force_mag;
   env_.cnt.finger2_force.value = finger2_force_mag;
   env_.cnt.finger3_force.value = finger3_force_mag;
   env_.cnt.ground_force.value = ground_force_mag;
 
-  // update the counts of these events
+  /* ----- resolve linear events and update counts of all events (no editing needed) ----- */
+
   update_events(env_.cnt, s_);
 
   if (s_.debug) env_.cnt.print();
@@ -810,7 +886,7 @@ bool MjClass::is_done()
 
   // general and sensor settings not used
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USE, NORM, READRATE)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
@@ -864,26 +940,40 @@ std::vector<luke::gfloat> MjClass::get_observation()
 {
   /* get an observation with n samples from the gauges */
 
+  // use for printing detailed observation debug information
+  constexpr bool debug_obs = false;
+
   std::vector<luke::gfloat> observation;
 
-  // how much time has elapsed since the last state
-  double time_per_step = model->opt.timestep * s_.sim_steps_per_action;
+  // // FOR TESTING
+  // std::cout << "Last 10 gauge 1 readings: ";
+  // finger1_gauge.print(10);
+
+  if (debug_obs) {
+    std::cout << "Observation information:\n";
+  }
 
   // get bending strain gauge sensor output
   if (s_.bending_gauge.in_use) {
 
     // sample data
     std::vector<luke::gfloat> f1 = 
-      (s_.bending_gauge.*sampleFcnPtr)(finger1_gauge, time_per_step);
+      (s_.bending_gauge.*sampleFcnPtr)(finger1_gauge);
     std::vector<luke::gfloat> f2 = 
-      (s_.bending_gauge.*sampleFcnPtr)(finger2_gauge, time_per_step);
+      (s_.bending_gauge.*sampleFcnPtr)(finger2_gauge);
     std::vector<luke::gfloat> f3 = 
-      (s_.bending_gauge.*sampleFcnPtr)(finger3_gauge, time_per_step);
+      (s_.bending_gauge.*sampleFcnPtr)(finger3_gauge);
 
     // insert data into observation output
     observation.insert(observation.end(), f1.begin(), f1.end());
     observation.insert(observation.end(), f2.begin(), f2.end());
     observation.insert(observation.end(), f3.begin(), f3.end());
+
+    if (debug_obs) {
+      luke::print_vec(f1, "Bending gauge 1");
+      luke::print_vec(f2, "Bending gauge 2");
+      luke::print_vec(f3, "Bending gauge 3");
+    }
   }
 
   // get axial strain gauge sensor output
@@ -891,16 +981,22 @@ std::vector<luke::gfloat> MjClass::get_observation()
 
     // sample data
     std::vector<luke::gfloat> a1 = 
-      (s_.axial_gauge.*sampleFcnPtr)(finger1_axial_gauge, time_per_step);
+      (s_.axial_gauge.*sampleFcnPtr)(finger1_axial_gauge);
     std::vector<luke::gfloat> a2 = 
-      (s_.axial_gauge.*sampleFcnPtr)(finger2_axial_gauge, time_per_step);
+      (s_.axial_gauge.*sampleFcnPtr)(finger2_axial_gauge);
     std::vector<luke::gfloat> a3 = 
-      (s_.axial_gauge.*sampleFcnPtr)(finger3_axial_gauge, time_per_step);
+      (s_.axial_gauge.*sampleFcnPtr)(finger3_axial_gauge);
 
     // insert data into observation output
     observation.insert(observation.end(), a1.begin(), a1.end());
     observation.insert(observation.end(), a2.begin(), a2.end());
     observation.insert(observation.end(), a3.begin(), a3.end());
+
+    if (debug_obs) {
+      luke::print_vec(a1, "Axial gauge 1");
+      luke::print_vec(a2, "Axial gauge 2");
+      luke::print_vec(a3, "Axial gauge 3");
+    }
   }
 
   // get palm sensor output
@@ -908,10 +1004,14 @@ std::vector<luke::gfloat> MjClass::get_observation()
 
     // sample data
     std::vector<luke::gfloat> p1 = 
-      (s_.palm_sensor.*sampleFcnPtr)(palm_sensor, time_per_step);
+      (s_.palm_sensor.*sampleFcnPtr)(palm_sensor);
 
     // insert data into observation output
     observation.insert(observation.end(), p1.begin(), p1.end());
+
+    if (debug_obs) {
+      luke::print_vec(p1, "Palm gauge");
+    }
   }
 
   // get wrist sensor XY output
@@ -919,13 +1019,18 @@ std::vector<luke::gfloat> MjClass::get_observation()
 
     // sample data
     std::vector<luke::gfloat> wX =
-      (s_.wrist_sensor_XY.*sampleFcnPtr)(wrist_X_sensor, time_per_step);
+      (s_.wrist_sensor_XY.*sampleFcnPtr)(wrist_X_sensor);
     std::vector<luke::gfloat> wY =
-      (s_.wrist_sensor_XY.*sampleFcnPtr)(wrist_Y_sensor, time_per_step);
+      (s_.wrist_sensor_XY.*sampleFcnPtr)(wrist_Y_sensor);
 
     // insert data into observation output
     observation.insert(observation.end(), wX.begin(), wX.end());
     observation.insert(observation.end(), wY.begin(), wY.end());
+
+    if (debug_obs) {
+      luke::print_vec(wX, "Wrist X");
+      luke::print_vec(wY, "Wrist Y");
+    }
   }
 
   // get wrist sensor Z output
@@ -933,10 +1038,14 @@ std::vector<luke::gfloat> MjClass::get_observation()
     
     // sample data
     std::vector<luke::gfloat> wZ =
-      (s_.wrist_sensor_XY.*sampleFcnPtr)(wrist_Z_sensor, time_per_step);
+      (s_.wrist_sensor_XY.*sampleFcnPtr)(wrist_Z_sensor);
 
     // insert data into observation output
     observation.insert(observation.end(), wZ.begin(), wZ.end());
+
+    if (debug_obs) {
+      luke::print_vec(wZ, "Wrist Z");
+    }
   }
 
   // get motor state output
@@ -944,27 +1053,41 @@ std::vector<luke::gfloat> MjClass::get_observation()
 
     // sample data
     std::vector<luke::gfloat> s1 = 
-      (s_.motor_state_sensor.*stateFcnPtr)(x_motor_position, time_per_step);
+      (s_.motor_state_sensor.*stateFcnPtr)(x_motor_position);
     std::vector<luke::gfloat> s2 = 
-      (s_.motor_state_sensor.*stateFcnPtr)(y_motor_position, time_per_step);
+      (s_.motor_state_sensor.*stateFcnPtr)(y_motor_position);
     std::vector<luke::gfloat> s3 = 
-      (s_.motor_state_sensor.*stateFcnPtr)(z_motor_position, time_per_step);
+      (s_.motor_state_sensor.*stateFcnPtr)(z_motor_position);
 
     // insert data into observation output
     observation.insert(observation.end(), s1.begin(), s1.end());
     observation.insert(observation.end(), s2.begin(), s2.end());
     observation.insert(observation.end(), s3.begin(), s3.end());
+    
+    if (debug_obs) {
+      luke::print_vec(s1, "Motor state X");
+      luke::print_vec(s2, "Motor state Y");
+      luke::print_vec(s3, "Motor state Z");
+    }
   }
 
   // get base state
   if (s_.base_state_sensor.in_use) {
 
     // sample data
-    std::vector<luke::gfloat> base = 
-      (s_.base_state_sensor.*stateFcnPtr)(z_base_position, time_per_step);
+    std::vector<luke::gfloat> bZ = 
+      (s_.base_state_sensor.*stateFcnPtr)(z_base_position);
 
     // insert data into observation output
-    observation.insert(observation.end(), base.begin(), base.end());
+    observation.insert(observation.end(), bZ.begin(), bZ.end());
+
+    if (debug_obs) {
+      luke::print_vec(bZ, "Base state Z");
+    }
+  }
+
+  if (debug_obs) {
+    std::cout << "End of observation (n_obs = " << observation.size() << ")\n";
   }
   
   return observation;
@@ -1067,6 +1190,23 @@ void MjClass::spawn_object(int index, double xpos, double ypos, double zrot)
   forward();
 }
 
+void MjClass::add_noise_to_base(double base_noise)
+{
+  /* move the base joints to slightly different home positions, noise in metres */
+
+  std::vector<luke::gfloat> noise = { (luke::gfloat) base_noise };
+  luke::add_base_joint_noise(noise);
+  luke::snap_to_target();
+}
+
+void MjClass::add_noise_to_motors(std::vector<luke::gfloat> motor_noise)
+{
+  /* move motor joints to slightly different home positions, noise in metres */
+
+  luke::add_gripper_joint_noise(motor_noise);
+  luke::snap_to_target();
+}
+
 float MjClass::reward()
 {
   /* calculate the reward available at the current simulation state */
@@ -1159,7 +1299,7 @@ int MjClass::get_n_obs()
 
 std::vector<float> MjClass::get_finger_gauge_data()
 {
-  /* report the most recent gauge data */
+  /* report the most recent gauge data in a vector { f1, f2, f3 } */
 
   std::vector<float> out;
 
@@ -1254,15 +1394,14 @@ void MjClass::input_real_data(std::vector<float> state_data,
 
 std::vector<float> MjClass::get_real_observation()
 {
-  /* get an observation of real data - n_samples_since_last should be inclusive, 
-  so if before we had [0,1,2] and now we have [0,1,2,3,4,5] then n=4 */
+  /* get an observation of real data, samples_since_last_obs should NOT be inclusive, 
+  so if before we had [0,1,2] and now we have [0,1,2,3,4,5] then n=3 */
 
-  // add +1 so that n_samples is inclusive of the last data point
-  samples_since_last_obs += 1;
-
-  // short-circuit timings to get set number of readings instead
-  s_.bending_gauge.read_rate = -1 * samples_since_last_obs;
-  s_.palm_sensor.read_rate = -1 * samples_since_last_obs;
+  // manually set reading settings to ensure correctness
+  s_.bending_gauge.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
+  s_.base_state_sensor.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
+  s_.palm_sensor.update_n_readings(samples_since_last_obs, s_.sensor_n_prev_steps);
+  s_.wrist_sensor_Z.update_n_readings(samples_since_last_obs, s_.sensor_n_prev_steps);
 
   // reset as we are about to return an observation
   samples_since_last_obs = 0;
@@ -1323,7 +1462,7 @@ MjType::EventTrack MjClass::add_events(MjType::EventTrack& e1, MjType::EventTrac
   MjType::EventTrack out;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             out.NAME.abs = e1.NAME.abs + e2.NAME.abs;                          \
@@ -1359,7 +1498,7 @@ void MjClass::default_goal_event_triggering()
   constexpr int default_trigger = 1;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (goal_.NAME.involved) { s_.NAME.trigger = default_trigger; }    
@@ -1596,11 +1735,66 @@ void MjType::Settings::disable_sensors()
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, DONTUSE1, DONTUSE2, DONTUSE3) NAME.in_use = false;
+  #define SS(NAME, IN_USE, NORM, READRATE) NAME.in_use = false;
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
   
     // run the macro and disable all the sensors
+    LUKE_MJSETTINGS
+  
+  #undef XX
+  #undef SS
+  #undef BR
+  #undef LR
+}
+
+void MjType::Settings::set_sensor_prev_steps_to(int prev_steps)
+{
+  /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
+     eg instead of using TRIGGER we need to use s_.NAME.trigger */
+
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, IN_USE, NORM, READRATE) NAME.prev_steps = prev_steps;
+  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
+  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
+  
+    // run the macro and disable all the sensors
+    LUKE_MJSETTINGS
+  
+  #undef XX
+  #undef SS
+  #undef BR
+  #undef LR
+}
+
+void MjType::Settings::update_sensor_settings(double time_since_last_sample)
+{
+  /* updates the number of reading each sensor is taking based on time between
+  samples and read rate */
+
+  // turn on normalisation behaviour for all sensors
+  set_use_normalisation(true);
+
+  // apply noise settings
+  set_use_noise(all_sensors_use_noise);
+  apply_noise_params(); // currently prevents customising sensors differently
+
+  // set the number of previous steps to sample back for all sensors
+  set_sensor_prev_steps_to(sensor_n_prev_steps);
+
+  // manually override state sensors
+  motor_state_sensor.prev_steps = state_n_prev_steps;
+  base_state_sensor.prev_steps = state_n_prev_steps;
+
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, IN_USE, NORM, READRATE)                    \
+            if (NAME.in_use) {                                \
+              NAME.update_n_readings(time_since_last_sample); \
+            }
+  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
+  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
+  
+    // run the macro and update all the sensors
     LUKE_MJSETTINGS
   
   #undef XX
@@ -1615,7 +1809,7 @@ void MjType::Settings::set_use_normalisation(bool set_as)
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, DONTUSE1, DONTUSE2, DONTUSE3) NAME.use_normalisation = set_as;
+  #define SS(NAME, IN_USE, NORM, READRATE) NAME.use_normalisation = set_as;
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
   
@@ -1626,6 +1820,57 @@ void MjType::Settings::set_use_normalisation(bool set_as)
   #undef SS
   #undef BR
   #undef LR
+}
+
+void MjType::Settings::set_use_noise(bool set_as)
+{
+  /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
+     eg instead of using TRIGGER we need to use s_.NAME.trigger */
+
+  #define XX(NAME, TYPE, VALUE)
+  #define SS(NAME, IN_USE, NORM, READRATE) NAME.use_noise = set_as;
+  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
+  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
+  
+    // run the macro and disable all the sensors
+    LUKE_MJSETTINGS
+  
+  #undef XX
+  #undef SS
+  #undef BR
+  #undef LR
+}
+
+void MjType::Settings::apply_noise_params()
+{
+  /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
+     eg instead of using TRIGGER we need to use s_.NAME.trigger */
+
+  #define XX(NAME, TYPE, VALUE)
+
+  #define SS(NAME, IN_USE, NORM, READRATE)       \
+            NAME.noise_mag = sensor_noise_mag;   \
+            NAME.noise_std = sensor_noise_std;   \
+            NAME.noise_mu = sensor_noise_mu;
+
+  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
+  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
+  
+    // run the macro and disable all the sensors
+    LUKE_MJSETTINGS
+  
+  #undef XX
+  #undef SS
+  #undef BR
+  #undef LR
+
+  // manually override the state sensors
+  motor_state_sensor.noise_mag = state_noise_mag;
+  motor_state_sensor.noise_mu = state_noise_mu;
+  motor_state_sensor.noise_std = state_noise_std;
+  base_state_sensor.noise_mag = state_noise_mag;
+  base_state_sensor.noise_mu = state_noise_mu;
+  base_state_sensor.noise_std = state_noise_std;
 }
 
 void MjType::Settings::scale_rewards(float scale)
@@ -1658,7 +1903,7 @@ void MjType::EventTrack::print()
   std::cout << "EventTrack = row (abs); "
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                               \
             << #NAME << " = " << NAME.row << " (" << NAME.abs << "); "
@@ -1682,13 +1927,13 @@ void update_events(MjType::EventTrack& events, MjType::Settings& settings)
   bool active = false; // is a linear reward active
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE)
   #define BR(NAME, REWARD, DONE, TRIGGER)                                    \
             events.NAME.row = events.NAME.row *                              \
                                   events.NAME.value + events.NAME.value;     \
             events.NAME.abs += events.NAME.value;                            \
             events.NAME.last_value = events.NAME.value;                      \
-            events.NAME.value = false; // reset
+            events.NAME.value = false; // reset for next step
 
   #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)               \
             active = false;                                                  \
@@ -1699,7 +1944,7 @@ void update_events(MjType::EventTrack& events, MjType::Settings& settings)
             events.NAME.row = events.NAME.row * active + active;             \
             events.NAME.abs += active;                                       \
             events.NAME.last_value = events.NAME.value;                      \
-            events.NAME.value = 0.0; // reset
+            events.NAME.value = 0.0; // reset for next step
 
     // run the macro to create the code
     LUKE_MJSETTINGS
@@ -1718,7 +1963,7 @@ float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings)
 
   // general and sensor settings not used
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USE, NORM, READRATE)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   /* do NOT use other fields than name as it will pull values from simsettings.h,
      eg instead of using TRIGGER we need to use settings.NAME.trigger */
@@ -1794,7 +2039,7 @@ float goal_rewards(MjType::EventTrack& events, MjType::Settings& settings,
 
   // general and sensor settings not used
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USE, NORM, READRATE)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   /* do NOT use other fields than name as it will pull values from simsettings.h,
      eg instead of using TRIGGER we need to use settings.NAME.trigger */
@@ -1850,7 +2095,7 @@ std::vector<float> MjType::EventTrack::vectorise()
   std::vector<float> out;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             out.push_back(NAME.row);
@@ -1886,7 +2131,7 @@ void MjType::EventTrack::unvectorise(std::vector<float> in)
   int i = 0;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             NAME.row = in[i] + 0.5; /* casts float -> int */                   \
@@ -1915,7 +2160,7 @@ std::vector<float> MjType::Goal::vectorise() const
   std::vector<float> out;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (NAME.involved) {                                               \
@@ -1954,7 +2199,7 @@ void MjType::Goal::unvectorise(std::vector<float> vec)
   int i = 0;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (NAME.involved) {                                               \
@@ -2026,7 +2271,7 @@ MjType::Goal score_goal(MjType::Goal const goal, MjType::EventTrack event,
   MjType::Goal new_goal;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (goal.NAME.involved) {                                          \
@@ -2085,7 +2330,7 @@ std::vector<std::string> MjType::Goal::goal_names()
   std::vector<std::string> goal_names;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (NAME.involved) { goal_names.push_back(#NAME); }
@@ -2114,7 +2359,7 @@ std::string MjType::Goal::get_goal_info()
   int i = 0;
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, USED, NORMALISE, READ_RATE)
+  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (NAME.involved) {                                               \
