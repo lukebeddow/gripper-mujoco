@@ -108,10 +108,6 @@ then
       sshpass -f $PASSFILE scp -P $PORT \
          ~/$UPLOADFROM/buildsettings.mk \
          lbeddow@localhost:~/$UPLOADTO/buildsettings.mk
-      echo uploading the configure.sh script
-      sshpass -f $PASSFILE scp -P $PORT \
-         ~/$UPLOADFROM/configure.sh \
-         lbeddow@localhost:~/$UPLOADTO/configure.sh
    fi
    if [ "$direction" = "down" ]
    then
@@ -122,10 +118,6 @@ then
       echo downloading the makefile to /$DOWNLOADTO
       sshpass -f $PASSFILE scp -P $PORT \
          lbeddow@localhost:~/$DOWNLOADFROM/Makefile \
-         ~/$DOWNLOADTO/
-      echo downloading the configure.sh script to /$DOWNLOADTO
-      sshpass -f $PASSFILE scp -P $PORT \
-         lbeddow@localhost:~/$UPLOADFROM/configure.sh \
          ~/$DOWNLOADTO/
    fi
 fi
@@ -174,8 +166,7 @@ then
 fi
 
 # cluster - cluster specific scripts ending in 'cluster.sh'
-if [ "$command" = "cluster" ] || [ "$command" = "all" ] \
-   || { [ "$command" = "source" ] && [ "$direction" = "up" ]; }
+if [ "$command" = "cluster" ] || [ "$command" = "all" ] || [ "$command" = "source" ]
 then
    if [ "$direction" = "up" ]
    then

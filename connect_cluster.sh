@@ -14,7 +14,7 @@ JOB_NODE=vic.cs.ucl.ac.uk
 terminator --new-tab -x sshpass -f $PASSFILE ssh -L $PORT:$JOB_NODE:22 $USERNAME@$LOGIN_NODE
 
 # make a new terminal tab for transfers
-terminator --new-tab --working-directory=~/cluster
+terminator --new-tab --working-directory=~/mymujoco
 
 # jump into the job submit node (sshpass doesn't work with double jump -J)
 ssh -J $USERNAME@$LOGIN_NODE $USERNAME@$JOB_NODE
