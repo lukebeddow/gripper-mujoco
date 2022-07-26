@@ -21,8 +21,9 @@ namespace render
 void mouse_button(GLFWwindow* window, int button, int act, int mods);
 void mouse_move(GLFWwindow* window, double xpos, double ypos);
 void scroll(GLFWwindow* window, double xoffset, double yoffset);
-void init(mjModel* m, mjData* d);
-bool render(mjModel* m, mjData* d);
+void init(mjModel* model, mjData* data);
+void reload_for_rendering(mjModel* model, mjData* data);
+bool render(mjModel* model, mjData* data);
 void finish();
 
 }

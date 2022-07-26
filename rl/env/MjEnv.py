@@ -86,17 +86,6 @@ class MjEnv():
     self.test = MjEnv.Test()
     self.prev_test = MjEnv.Test()
 
-    # # limits on gauge readings
-    # max_gauge = 50
-    # high = np.array(self.state_max 
-    #   + [max_gauge for i in range(3 * self.num_gauge_readings)], dtype=np.float32)
-    # low = np.array(self.state_min
-    #   + [-max_gauge for i in range(3 * self.num_gauge_readings)], dtype=np.float32)
-
-    # # define key gym variables
-    # self.action_space = gym.spaces.Discrete(self.num_actions)
-    # self.observation_space = gym.spaces.Box(low=low, high=high)
-
     return
 
   # ----- semi-private functions, advanced use ----- #
@@ -368,11 +357,11 @@ class MjEnv():
     Begin test mode, should be called by class user
     """
 
-    # temporary repeat of __init__() code for backwards compatibility
-    self.test_trials_per_obj = 1
-    self.test_objects = 60
-    self.test_obj_per_file = 20           # how many test objects per file
-    self.testing_xmls = int(np.ceil(self.test_objects / float(self.test_obj_per_file)))
+    # # temporary repeat of __init__() code for backwards compatibility
+    # self.test_trials_per_obj = 1
+    # self.test_objects = 60
+    # self.test_obj_per_file = 20           # how many test objects per file
+    # self.testing_xmls = int(np.ceil(self.test_objects / float(self.test_obj_per_file)))
 
     self.current_test_trial = MjEnv.Test()
     self.test_trials = []

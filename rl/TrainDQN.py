@@ -1484,9 +1484,11 @@ if __name__ == "__main__":
   # test
   model.env.mj.set.debug = False
   model.env.disable_rendering = False
-  # model.env.test_trials_per_obj = 1
-  model.env.test_objects = 20
-  # model.env.max_episode_steps = 2
+  model.env.test_trials_per_obj = 1
+  model.env.test_objects = 15
+  model.env.test_obj_per_file = 5
+  model.env.max_episode_steps = 20
+
   # model.env.mj.set.step_num.set          (0,      70,   1)
   # model.env.mj.set.exceed_limits.set     (-0.005, True,   10)
   # model.env.mj.set.exceed_axial.set      (-0.005, True,   10,    3.0,  6.0,  -1)
