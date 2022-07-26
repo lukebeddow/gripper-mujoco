@@ -29,7 +29,7 @@ namespace MjType
   /* types used inside the MjClass, including data structures */
 
   // random generator pointer, seeded in MjClass::configure_settings()
-  extern std::unique_ptr<std::default_random_engine> generator;
+  extern std::shared_ptr<std::default_random_engine> generator;
 
   // what are the possible actions (order matters - see configure_settings())
   struct Action {
@@ -807,8 +807,7 @@ public:
   void reset_object();
   void spawn_object(int index);
   void spawn_object(int index, double xpos, double ypos, double zrot);
-  void add_noise_to_base(double base_noise);
-  void add_noise_to_motors(std::vector<luke::gfloat> motor_noise);
+  void randomise_object_colour();
   bool is_done();
   std::vector<luke::gfloat> get_observation();
   std::vector<float> get_event_state();

@@ -386,9 +386,6 @@ struct Target {
   std::array<double, 6> base {};      // target of base joints (only [0] used for z)
   std::array<double, 7> panda {};     // target for panda joints (never used)
 
-  std::array<luke::gfloat, 7> gripper_noise {};
-  std::array<luke::gfloat, 6> base_noise {};
-
   static constexpr double base_z_min = -0.1;
   static constexpr double base_z_max = 0.1;
 

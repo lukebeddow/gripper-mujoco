@@ -929,4 +929,102 @@ bool ObjectHandler::check_contact_forces(const mjModel* model, mjData* data)
   return true;
 }
 
+// change object parameters
+
+void ObjectHandler::set_colour(mjModel* model, std::vector<float> rgba)
+{
+  /* set the colour of the live object */
+
+  if (live_object == -1) {
+    return;
+  }
+
+  if (rgba.size() != 3 and rgba.size() != 4) {
+    throw std::runtime_error("set_colour() must receive a 3 element rgb vector or a 4 element rgba vector");
+  }
+
+  // index for rgba entries in mjModel
+  int rgba_idx = geom_id[live_object] * 4;
+
+  // set the colour parameters
+  model->geom_rgba[rgba_idx + 0] = rgba[0];
+  model->geom_rgba[rgba_idx + 1] = rgba[1];
+  model->geom_rgba[rgba_idx + 2] = rgba[2];
+
+  if (rgba.size() == 4)
+    model->geom_rgba[rgba_idx + 3] = rgba[3];
+
+}
+
+void ObjectHandler::set_friction(mjModel* model, mjtNum sliding_friction)
+{
+  /* set the live object sliding friction only */
+
+  std::vector<mjtNum> f { sliding_friction };
+  set_friction(model, f);
+}
+
+void ObjectHandler::set_friction(mjModel* model, std::vector<mjtNum> friction_triple)
+{
+  /* set the friction values for the live object. In mujoco these are:
+
+        { sliding_friction, torsional_friction, rolling_friction }
+        with defaults { 1, 0.005, 0.0001 }
+
+  Sliding friction acts along both axes of the tangent plane. Torsional friction
+  acts around the contact normal. Rolling friction acst around both axes of the
+  tangent plane.
+
+  These 3 parameters are combined into 5dof frictional contacts, and the two 3dof
+  vectors are combined in a contact based on the solmix and priority attributes.
+  In general, whatever geom has higher values will be used - unless you specify a
+  higher priority for the less friction geom.
+  */
+
+  if (live_object == -1) {
+    return;
+  }
+
+  if (friction_triple.size() == 0 or friction_triple.size() > 3) {
+    throw std::runtime_error("set_friction() must receive a vector from 1-3 elements");
+  }
+
+  // index for friction entries in mjModel
+  int fidx = geom_id[live_object] * 3;
+
+  model->geom_friction[fidx + 0] = friction_triple[0]; // sliding friction
+
+  if (friction_triple.size() > 1)
+    model->geom_friction[fidx + 1] = friction_triple[1]; // torsional friction
+
+  if (friction_triple.size() > 2)
+    model->geom_friction[fidx + 2] = friction_triple[2]; // rolling friction
+
+}
+
+void ObjectHandler::randomise_all_colours(mjModel* model, 
+  std::shared_ptr<std::default_random_engine> generator)
+{
+  /* randomise the colours of all objects */
+
+  std::uniform_real_distribution<double> distribution(0.0, 1.0);
+
+  std::vector<float> rgba(4);
+
+  for (int i : geom_id) {
+    
+    // get random numbers from [0.0, 1.0]
+    rgba[0] = distribution(*generator);
+    rgba[1] = distribution(*generator);
+    rgba[2] = distribution(*generator);
+    rgba[3] = distribution(*generator);
+
+    // set the colour parameters
+    model->geom_rgba[i * 4 + 0] = rgba[0];
+    model->geom_rgba[i * 4 + 1] = rgba[1];
+    model->geom_rgba[i * 4 + 2] = rgba[2];
+    // model->geom_rgba[i * 4 + 3] = rgba[3];
+  }
+}
+
 } // namespace luke

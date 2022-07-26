@@ -1,7 +1,7 @@
 #include "mjclass.h"
 
 // declare the random number generator
-std::unique_ptr<std::default_random_engine> MjType::generator;
+std::shared_ptr<std::default_random_engine> MjType::generator;
 
 /* ----- constructors, destructor, and initialisers ----- */
 
@@ -323,6 +323,9 @@ void MjClass::reset()
 
   // ensure the simulation settings are all ready to go
   configure_settings();
+
+  if (s_.randomise_colours)
+    luke::randomise_all_colours(model, MjType::generator);
 }
 
 void MjClass::step()
@@ -1190,21 +1193,11 @@ void MjClass::spawn_object(int index, double xpos, double ypos, double zrot)
   forward();
 }
 
-void MjClass::add_noise_to_base(double base_noise)
+void MjClass::randomise_object_colour()
 {
-  /* move the base joints to slightly different home positions, noise in metres */
+  /* randomise the colour of the object */
 
-  std::vector<luke::gfloat> noise = { (luke::gfloat) base_noise };
-  luke::add_base_joint_noise(noise);
-  luke::snap_to_target();
-}
-
-void MjClass::add_noise_to_motors(std::vector<luke::gfloat> motor_noise)
-{
-  /* move motor joints to slightly different home positions, noise in metres */
-
-  luke::add_gripper_joint_noise(motor_noise);
-  luke::snap_to_target();
+  luke::randomise_object_colour(model, MjType::generator);
 }
 
 float MjClass::reward()

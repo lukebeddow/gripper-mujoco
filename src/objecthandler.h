@@ -5,6 +5,8 @@
 #include <vector>
 #include <array>
 #include <chrono>
+#include <random>
+#include <memory>
 
 #include "mujoco.h"
 #include "customtypes.h"
@@ -135,6 +137,13 @@ struct ObjectHandler {
   Forces extract_forces(const mjModel* model, mjData* data);
   Forces_faster extract_forces_faster(const mjModel* model, mjData* data);
   bool check_contact_forces(const mjModel* model, mjData* data);
+
+  // set object properties
+  void set_colour(mjModel* model, std::vector<float> rgba);
+  void set_friction(mjModel* model, mjtNum sliding_friction);
+  void set_friction(mjModel* model, std::vector<mjtNum> friction_triple);
+  void randomise_all_colours(mjModel* model, 
+    std::shared_ptr<std::default_random_engine> generator);
 
   // misc
   void print();

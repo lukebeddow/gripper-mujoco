@@ -1206,6 +1206,9 @@ void makeSettingsUI(int oldstate)
         {mjITEM_BUTTON, "rev 2",   2,   NULL, " #505"},
         {mjITEM_BUTTON, "rev 3",   2,   NULL, " #506"},
         {mjITEM_BUTTON, "palm",    2,   NULL, " #507"},
+        {mjITEM_CHECKINT, "curve_validation", 2, &myMjClass.s_.curve_validation, " #508"},
+        {mjITEM_SLIDERNUM, "finger_stiffness", 2, &myMjClass.s_.finger_stiffness, "1.0 20.0"},
+        {mjITEM_CHECKINT, "randomise_colours", 2, &myMjClass.s_.randomise_colours, " #508"},
 
         // {mjITEM_BUTTON, "Action 7 (H-)",           2,  NULL,   " #310"},
         // {mjITEM_BUTTON, "Reward",                  2,  NULL,   " #311"},
@@ -1265,6 +1268,8 @@ void makeObjectUI(int oldstate)
         {mjITEM_BUTTON,    "All forces",     2, NULL,                    " #303"},
         {mjITEM_BUTTON,    "Print curve fit",2, NULL,                    " #304"},
         {mjITEM_BUTTON,    "Wipe curve fit", 2, NULL,                    " #305"},
+        {mjITEM_BUTTON,    "Rand. colour",  2, NULL,                     " #306"},
+
         // {mjITEM_BUTTON,    "Copy pose",     2, NULL,                    " #304"},
         {mjITEM_SLIDERINT, "Live Object",   3, &settings.object_int,    "0 20"},
         {mjITEM_SLIDERINT, "x noise",       3, &settings.object_x_noise_mm, "-10 10"},
@@ -2059,6 +2064,9 @@ void uiEvent(mjuiState* state)
             case 7: {
                 std::cout << "Wiping curve validation data\n";
                 myMjClass.curve_validation_data_.entries.clear();
+            }
+            case 8: {           // randomise object colour
+                myMjClass.randomise_object_colour();
             }
             }
         }

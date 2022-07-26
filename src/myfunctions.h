@@ -14,6 +14,8 @@
 #include <array>
 #include <algorithm>
 #include <cstdio>
+#include <memory>
+#include <random>
 
 #include "armadillo"
 
@@ -52,9 +54,6 @@ void keyframe(mjModel* model, mjData* data, int keyframe_index);
 void reset(mjModel* model, mjData* data);
 void wipe_settled();
 void calibrate_reset(mjModel* model, mjData* data);
-void add_base_joint_noise(std::vector<luke::gfloat> noise);
-void add_gripper_joint_noise(std::vector<luke::gfloat> noise);
-void snap_to_target();
 void reset_constraints(mjModel* model, mjData* data);
 void toggle_constraint(mjModel* model, mjData* data, int id);
 void set_constraint(mjModel* model, mjData* data, int id, bool set_as);
@@ -111,6 +110,8 @@ void spawn_object(mjModel* model, mjData* data, int idx, QPos pose);
 QPos get_object_qpos(mjModel* model, mjData* data);
 Forces get_object_forces(const mjModel* model, mjData* data);
 Forces_faster get_object_forces_faster(const mjModel* model, mjData* data);
+void randomise_object_colour(mjModel* model, std::shared_ptr<std::default_random_engine> generator);
+void randomise_all_colours(mjModel* model, std::shared_ptr<std::default_random_engine> generator);
 
 // other
 gfloat verify_armadillo_gauge(const mjData* data, int finger,

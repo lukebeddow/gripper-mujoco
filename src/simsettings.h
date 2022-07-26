@@ -31,6 +31,7 @@
   XX(  curve_validation,        bool,     false)    /* save finger curve data for testing */\
   XX(  finger_stiffness,        double,       5)    /* mujoco finger joint spring stiffness, units unknown */\
   XX(  random_seed,             uint,         0)    /* random seed */\
+  XX(  randomise_colours,       bool,      true)    /* randomise the colours of the objects */\
   /*
   HER settings */\
   XX(  use_HER,                 bool,     false)    /* use hindsight experience replay (HER) */\

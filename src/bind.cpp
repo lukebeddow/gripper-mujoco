@@ -49,8 +49,7 @@ PYBIND11_MODULE(bind, m) {
     .def("reset_object", &MjClass::reset_object)
     .def("spawn_object", static_cast<void (MjClass::*)(int)>(&MjClass::spawn_object)) /* see bottom */
     .def("spawn_object", static_cast<void (MjClass::*)(int, double, double, double)>(&MjClass::spawn_object))
-    .def("add_noise_to_base", &MjClass::add_noise_to_base)
-    .def("add_noise_to_motors", &MjClass::add_noise_to_motors)
+    .def("randomise_object_colour", &MjClass::randomise_object_colour)
     .def("is_done", &MjClass::is_done)
     .def("get_observation", &MjClass::get_observation)
     .def("get_event_state", &MjClass::get_event_state)
