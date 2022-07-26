@@ -46,6 +46,7 @@ void init_J(mjModel* model, mjData* data);
 void print_joint_names(mjModel* model);
 void get_joint_indexes(mjModel* model);
 void get_joint_addresses(mjModel* model);
+void get_geom_indexes(mjModel* model);
 void set_finger_stiffness(mjModel* model, mjtNum stiffness);
 void configure_qpos(mjModel* model, mjData* data);
 void configure_constraints(mjModel* model, mjData* data);
@@ -110,8 +111,11 @@ void spawn_object(mjModel* model, mjData* data, int idx, QPos pose);
 QPos get_object_qpos(mjModel* model, mjData* data);
 Forces get_object_forces(const mjModel* model, mjData* data);
 Forces_faster get_object_forces_faster(const mjModel* model, mjData* data);
-void randomise_object_colour(mjModel* model, std::shared_ptr<std::default_random_engine> generator);
+void set_object_colour(mjModel* model, std::vector<float> rgba);
+void set_ground_colour(mjModel* model, std::vector<float> rgba);
 void randomise_all_colours(mjModel* model, std::shared_ptr<std::default_random_engine> generator);
+void default_colours(mjModel* model);
+void set_finger_colour(mjModel* model, std::vector<float> rgba, int finger_num);
 
 // other
 gfloat verify_armadillo_gauge(const mjData* data, int finger,

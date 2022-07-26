@@ -808,6 +808,8 @@ public:
   void spawn_object(int index);
   void spawn_object(int index, double xpos, double ypos, double zrot);
   void randomise_object_colour();
+  void randomise_ground_colour();
+  void randomise_finger_colours();
   bool is_done();
   std::vector<luke::gfloat> get_observation();
   std::vector<float> get_event_state();

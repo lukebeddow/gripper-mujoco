@@ -3,6 +3,14 @@
 namespace luke
 {
 
+// due to excentric c++11, need to declare the consexpr char[] to prevent linker error
+constexpr char ObjectHandler::finger1_body_name[];
+constexpr char ObjectHandler::finger2_body_name[];
+constexpr char ObjectHandler::finger3_body_name[];
+constexpr char ObjectHandler::palm_body_name[];
+constexpr char ObjectHandler::gnd_geom_name[];
+constexpr char ObjectHandler::geom_suffix[];
+
 ObjectHandler::ObjectHandler() 
 {
   /* constructor */
@@ -58,7 +66,7 @@ void ObjectHandler::init(mjModel* model, mjData* data)
       qpos[i].update(model, data, qposadr[i]);
       reset_qpos[i] = qpos[i];
       qveladr[i] = model->jnt_dofadr[model->body_jntadr[j]];
-      std::string geom_name = names[i] + "_geom";
+      std::string geom_name = names[i] + geom_suffix;
       geom_id[i] = mj_name2id(model, mjOBJ_GEOM, geom_name.c_str());
     }
     else {
@@ -79,10 +87,13 @@ void ObjectHandler::init(mjModel* model, mjData* data)
   }
 
   // get the body ids for fingers and palm (for contact forces)
-  f1_idx = mj_name2id(model, mjOBJ_BODY, "finger_1");
-  f2_idx = mj_name2id(model, mjOBJ_BODY, "finger_2");
-  f3_idx = mj_name2id(model, mjOBJ_BODY, "finger_3");
-  pm_idx = mj_name2id(model, mjOBJ_BODY, "palm");
+  f1_idx = mj_name2id(model, mjOBJ_BODY, finger1_body_name);
+  f2_idx = mj_name2id(model, mjOBJ_BODY, finger2_body_name);
+  f3_idx = mj_name2id(model, mjOBJ_BODY, finger3_body_name);
+  pm_idx = mj_name2id(model, mjOBJ_BODY, palm_body_name);
+  
+  // get the geom id for the ground (for changing colour)
+  gnd_geom_id = mj_name2id(model, mjOBJ_GEOM, gnd_geom_name);
 
   // update the reset keyframe now objects are settled
   overwrite_keyframe(model, data);
@@ -144,7 +155,7 @@ void ObjectHandler::remove_collisions(mjModel* model, mjData* data)
     std::string namestr(name1); 
 
     // if it is the ground geom, set to 11 (already at 01)
-    if (namestr == "ground_geom") {
+    if (namestr == gnd_geom_name) {
       model->geom_contype[i] = COL_all;
       model->geom_conaffinity[i] = COL_all;
       // std::cout << "ground geom " << model->geom_contype[i] << '\n';
@@ -956,6 +967,24 @@ void ObjectHandler::set_colour(mjModel* model, std::vector<float> rgba)
 
 }
 
+void ObjectHandler::set_ground_colour(mjModel* model, std::vector<float> rgba)
+{
+  if (rgba.size() != 3 and rgba.size() != 4) {
+    throw std::runtime_error("set_ground_colour() must receive a 3 element rgb vector or a 4 element rgba vector");
+  }
+
+  // index for rgba entries in mjModel
+  int rgba_idx = gnd_geom_id * 4;
+
+  // set the colour parameters
+  model->geom_rgba[rgba_idx + 0] = rgba[0];
+  model->geom_rgba[rgba_idx + 1] = rgba[1];
+  model->geom_rgba[rgba_idx + 2] = rgba[2];
+
+  if (rgba.size() == 4)
+    model->geom_rgba[rgba_idx + 3] = rgba[3];
+}
+
 void ObjectHandler::set_friction(mjModel* model, mjtNum sliding_friction)
 {
   /* set the live object sliding friction only */
@@ -1012,7 +1041,7 @@ void ObjectHandler::randomise_all_colours(mjModel* model,
   std::vector<float> rgba(4);
 
   for (int i : geom_id) {
-    
+
     // get random numbers from [0.0, 1.0]
     rgba[0] = distribution(*generator);
     rgba[1] = distribution(*generator);
@@ -1023,8 +1052,28 @@ void ObjectHandler::randomise_all_colours(mjModel* model,
     model->geom_rgba[i * 4 + 0] = rgba[0];
     model->geom_rgba[i * 4 + 1] = rgba[1];
     model->geom_rgba[i * 4 + 2] = rgba[2];
-    // model->geom_rgba[i * 4 + 3] = rgba[3];
+    model->geom_rgba[i * 4 + 3] = 1.0; // a is currently not randomised
   }
+}
+
+void ObjectHandler::default_colours(mjModel* model)
+{
+  /* restore all objects to default colour */
+
+  for (int i : geom_id) {
+
+    // set the colour parameters
+    model->geom_rgba[i * 4 + 0] = 0.5;
+    model->geom_rgba[i * 4 + 1] = 0.5;
+    model->geom_rgba[i * 4 + 2] = 0.5;
+    model->geom_rgba[i * 4 + 3] = 1.0;
+
+  }
+
+  model->geom_rgba[gnd_geom_id * 4 + 0] = 0.5;
+  model->geom_rgba[gnd_geom_id * 4 + 1] = 0.5;
+  model->geom_rgba[gnd_geom_id * 4 + 2] = 0.5;
+  model->geom_rgba[gnd_geom_id * 4 + 3] = 0.5;
 }
 
 } // namespace luke
