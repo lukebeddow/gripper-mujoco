@@ -192,12 +192,6 @@ struct JointSettings {
     bool stepper = true;
     int num_steps = 10;
     double pulses_per_s = 2000;
-    double stepper_kp = 10.0;
-    double stepper_kd = 0.5;
-    double servo_kp = 4.0;
-    double servo_kd = 0.4;
-    // Gain kp {10, 10, 100};
-    // Gain kd {0.5, 0.5, 0.5};
     Gain kp {100, 100, 1000};
     Gain kd {1, 1, 1};
     double base_kp = 2000;
@@ -294,6 +288,14 @@ struct JointSettings {
     std::vector<int> palm;
   } con_idx;
 
+  // segmented finger geom ids for colour changing fingers
+  struct {
+    std::vector<int> finger1;
+    std::vector<int> finger2;
+    std::vector<int> finger3;
+    std::vector<int> palm;
+  } geom_idx;
+
   // have the joints settled into equilibrium
   struct {
     std::array<std::array<int, 2>, sim.n_arr> finger1_arr {};
@@ -364,6 +366,12 @@ struct JointSettings {
     print_vec(qvel.gripper, "gripper joint qvel");
     print_vec(qvel.finger, "finger joint qvel");
     print_vec(qvel.base, "base joint qvel");
+  }
+  void print_geom_idx() {
+    print_vec(geom_idx.finger1, "finger1 geom idx");
+    print_vec(geom_idx.finger2, "finger2 geom idx");
+    print_vec(geom_idx.finger3, "finger3 geom idx");
+    print_vec(geom_idx.palm, "palm geom idx");
   }
   void print_settled() {
     std::cout << "Settled: " << settle.finger1 << " " << settle.finger2
@@ -436,6 +444,7 @@ void init_J(mjModel* model, mjData* data)
   // use joint names to get body indexes and qpos/qvel addresses
   get_joint_indexes(model);
   get_joint_addresses(model);
+  get_geom_indexes(model);
 
   if (debug) {
     print_joint_names(model);
@@ -448,16 +457,6 @@ void init_J(mjModel* model, mjData* data)
   j_.dim.segment_length = j_.dim.finger_length / float(j_.num.per_finger);
 
   configure_constraints(model, data);
-
-  // // initialise the gains depending on our choice of control
-  // if (j_.ctrl.stepper) {
-  //   j_.ctrl.kp.set(j_.ctrl.stepper_kp);
-  //   j_.ctrl.kd.set(j_.ctrl.stepper_kd);
-  // }
-  // else {
-  //   j_.ctrl.kp.set(j_.ctrl.servo_kp);
-  //   j_.ctrl.kd.set(j_.ctrl.servo_kd);
-  // }
 
   // // initialise the settling arrays to our default finger values
   // for (int i = 0; i < fingers_.size(); i++) {
@@ -583,6 +582,59 @@ void get_joint_indexes(mjModel* model)
     j_.print_in_use();
     j_.print_num();
     j_.print_idx();
+  }
+}
+
+void get_geom_indexes(mjModel* model)
+{
+  /* get the indexes of the geoms for the fingers */
+
+  // each geom has both a 'collision' and 'visual' version, so we collect both
+  std::vector<std::string> geom_suffixes { "collision", "visual" };
+
+  for (std::string geom_tag : geom_suffixes) {
+
+    for (int i = 0; i < j_.num.finger; i++) {
+
+      std::string geom_name = "finger_" + std::to_string(i / j_.num.per_finger + 1)  // finger_X, X=1,2,3
+        + "_segment_link_" + std::to_string(i % j_.num.per_finger + 2)               // links go 2-10 for 10 segments
+        + "_geom_" + geom_tag;
+
+      int x = mj_name2id(model, mjOBJ_GEOM, geom_name.c_str());
+
+      if (i < j_.num.per_finger) {
+        j_.geom_idx.finger1.push_back(x);
+      }
+      else if (i < 2 * j_.num.per_finger) {
+        j_.geom_idx.finger2.push_back(x);
+      }
+      else if (i < 3 * j_.num.per_finger) {
+        j_.geom_idx.finger3.push_back(x);
+      }
+      else {
+        throw std::runtime_error("get_geom_indexes() found inconsistent finger segment numbers");
+      }
+    }
+
+    // now add the hook links
+    std::string f1_hook = "finger_1_segment_link_" + std::to_string(j_.num.per_finger + 1)
+      + "_geom_hook_" + geom_tag;
+    std::string f2_hook = "finger_2_segment_link_" + std::to_string(j_.num.per_finger + 1)
+      + "_geom_hook_" + geom_tag;
+    std::string f3_hook = "finger_3_segment_link_" + std::to_string(j_.num.per_finger + 1)
+      + "_geom_hook_" + geom_tag;
+
+    j_.geom_idx.finger1.push_back(mj_name2id(model, mjOBJ_GEOM, f1_hook.c_str()));
+    j_.geom_idx.finger2.push_back(mj_name2id(model, mjOBJ_GEOM, f2_hook.c_str()));
+    j_.geom_idx.finger3.push_back(mj_name2id(model, mjOBJ_GEOM, f3_hook.c_str()));
+
+    // now add the palm link
+    std::string palm_geom_name = "palm_geom_" + geom_tag;
+    j_.geom_idx.palm.push_back(mj_name2id(model, mjOBJ_GEOM, palm_geom_name.c_str()));
+  }
+
+  if (debug) {
+    j_.print_geom_idx();
   }
 }
 
@@ -893,8 +945,6 @@ void calibrate_reset(mjModel* model, mjData* data)
   static bool first_call = true;
   static std::vector<mjtNum> control_signals;
   static std::vector<mjtNum> qpos_positions;
-
-  return;
 
   if (first_call) {
 
@@ -1981,6 +2031,44 @@ void default_colours(mjModel* model)
   /* restore colours to default values */
 
   oh_.default_colours(model);
+
+  std::vector<float> rgba_default { 0.5, 0.5, 0.5, 1.0 };
+  set_finger_colour(model, rgba_default, 1);
+  set_finger_colour(model, rgba_default, 2);
+  set_finger_colour(model, rgba_default, 3);
+  set_finger_colour(model, rgba_default, 4); // 4 means palm
+}
+
+void set_finger_colour(mjModel* model, std::vector<float> rgba, int finger_num)
+{
+  /* set the segmented finger all to one colour, finger_num = 1,2,3, or 4 (4 means palm) */
+
+  if (rgba.size() != 3 and rgba.size() != 4) {
+    throw std::runtime_error("set_finger_colour() not given a rgba vector of size 3 or 4");
+  }
+
+  // make a pointer to a vector so we can flexibly swap between different fingers
+  std::vector<int>* fptr;
+
+  // assign this pointer to one of the following options
+  if (finger_num == 1) fptr = &j_.geom_idx.finger1;
+  else if (finger_num == 2) fptr = &j_.geom_idx.finger2;
+  else if (finger_num == 3) fptr = &j_.geom_idx.finger3;
+  else if (finger_num == 4) fptr = &j_.geom_idx.palm;
+  else {
+    throw std::runtime_error("set_finger_colour() expects finger_num equal to either 1,2,3 or 4 (4 is palm)");
+  }
+
+  // loop through the vector we assigned and update the colour
+  for (int i : *fptr) {
+    model->geom_rgba[i * 4 + 0] = rgba[0];
+    model->geom_rgba[i * 4 + 1] = rgba[1];
+    model->geom_rgba[i * 4 + 2] = rgba[2];
+
+    // if an a value is given, set this too
+    if (rgba.size() == 4)
+      model->geom_rgba[i * 4 + 3] = rgba[3];
+  }
 }
 
 } // namespace luke

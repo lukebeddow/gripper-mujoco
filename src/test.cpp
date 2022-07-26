@@ -117,109 +117,18 @@ void run_test(int num_episodes, int step_cap, int reload_rate)
 
 int main(int argc, char** argv)
 {
-  MjType::Sensor x(true, -1, -1);
-  luke::SlidingWindow<luke::gfloat> data(50);
-
-  for (int i = 0; i < 25; i++) {
-    data.add(i);
-  }
-
-  std::vector<luke::gfloat> y = x.raw_sample(data);
-
-  std::cout << "Data is: "; data.print();
-  luke::print_vec(y, "result is");
-
-  return 0;
-
-
-
 
   /* ----- run a test of 10 learning steps ----- */
 
-  // luke::Gripper grip;
-  // luke::Gripper target;
+  // // precompiled settings
+  // /* settings of 20, 200, 20 -> initial time taken 52.6s, newest 42.6s (both laptop times, newest PC is 45.0s*/
+  // int num_episodes = 20;
+  // int step_cap = 200;
+  // int reload_rate = 20;
 
-  // grip.set_xyz_step(0, 0, 0);
-  // target.set_xyz_step(200, 400, 600);
-
-  // grip.step_to(target, 300);
-
-  // grip.print();
-
-  // grip.step_to(target, 300);
-
-  // grip.print();
-
-  // target.set_xyz_step(600, 400, 200);
-  
-  // grip.step_to(target, 300);
-
-  // grip.print();
-
-  // grip.step_to(target, 400);
-
-  // grip.print();
-
-  // grip.set_xy_mm(100, 100);
-
-  // std::cout << "Gripper set to (100, 100)\n";
-  // std::cout << "Gripper is (" << grip.get_x_mm() << ", " << grip.get_y_mm() << ")\n";
-  // std::cout << "Fingertip radius is " << grip.calc_fingertip_radius() * 1e3 << "mm\n";
-  // std::cout << "Max fingertip angle is " << grip.calc_max_fingertip_angle() * luke::Gripper::to_deg << "deg\n\n";
-
-  // grip.set_xy_mm(100, 90);
-
-  // std::cout << "Gripper set to (100, 90)\n";
-  // std::cout << "Gripper is (" << grip.get_x_mm() << ", " << grip.get_y_mm() << ")\n";
-  // std::cout << "Fingertip radius is " << grip.calc_fingertip_radius() * 1e3 << "mm\n";
-  // std::cout << "Max fingertip angle is " << grip.calc_max_fingertip_angle() * luke::Gripper::to_deg << "deg\n\n";
-
-  // grip.set_xy_mm(90, 90);
-
-  // std::cout << "Gripper set to (90, 90)\n";
-  // std::cout << "Gripper is (" << grip.get_x_mm() << ", " << grip.get_y_mm() << ")\n";
-  // std::cout << "Fingertip radius is " << grip.calc_fingertip_radius() * 1e3 << "mm\n";
-  // std::cout << "Max fingertip angle is " << grip.calc_max_fingertip_angle() * luke::Gripper::to_deg << "deg\n\n";
-
-  // grip.set_xy_mm(90, 80);
-
-  // std::cout << "Gripper set to (90, 80)\n";
-  // std::cout << "Gripper is (" << grip.get_x_mm() << ", " << grip.get_y_mm() << ")\n";
-  // std::cout << "Fingertip radius is " << grip.calc_fingertip_radius() * 1e3 << "mm\n";
-  // std::cout << "Max fingertip angle is " << grip.calc_max_fingertip_angle() * luke::Gripper::to_deg << "deg\n\n";
-
-  // grip.set_xy_mm(60, 50);
-
-  // std::cout << "Gripper set to (60, 50)\n";
-  // std::cout << "Gripper is (" << grip.get_x_mm() << ", " << grip.get_y_mm() << ")\n";
-  // std::cout << "Fingertip radius is " << grip.calc_fingertip_radius() * 1e3 << "mm\n";
-  // std::cout << "Max fingertip angle is " << grip.calc_max_fingertip_angle() * luke::Gripper::to_deg << "deg\n\n";
-
-  // grip.set_th_deg(7.40615);
-
-  // std::cout << "Gripper set to 7.40615 deg\n";
-  // std::cout << "Gripper is (60, ?, 0) with angle " << grip.get_th_deg() << "deg\n";
-  // std::cout << "Fingertip radius is " << grip.calc_fingertip_radius() * 1e3 << "mm\n";
-  // std::cout << "Max fingertip angle is " << grip.calc_max_fingertip_angle() * luke::Gripper::to_deg << "deg\n\n";
-
-  // grip.set_xy_mm(50, 50);
-
-  // std::cout << "Gripper set to (50, 50)\n";
-  // std::cout << "Gripper is (50, 50, 0)\n";
-  // std::cout << "Fingertip radius is " << grip.calc_fingertip_radius() * 1e3 << "mm\n";
-  // std::cout << "Max fingertip angle is " << grip.calc_max_fingertip_angle() * luke::Gripper::to_deg << "deg\n\n";
+  // run_test(num_episodes, step_cap, reload_rate);
 
   // return 0;
-
-  // precompiled settings
-  /* settings of 20, 200, 20 -> initial time taken 52.6s, newest 42.6s (both laptop times, newest PC is 45.0s*/
-  int num_episodes = 20;
-  int step_cap = 200;
-  int reload_rate = 20;
-
-  run_test(num_episodes, step_cap, reload_rate);
-
-  return 0;
 
   /* ----- load the gripper, generic testing ----- */
 

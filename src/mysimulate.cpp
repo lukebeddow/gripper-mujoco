@@ -1270,8 +1270,9 @@ void makeObjectUI(int oldstate)
         {mjITEM_BUTTON,    "Wipe curve fit", 2, NULL,                   " #305"},
         {mjITEM_BUTTON,    "obj. rgb rand",  2, NULL,                   " #306"},
         {mjITEM_BUTTON,    "gnd rgb rand",  2, NULL,                    " #307"},
-        {mjITEM_BUTTON,    "all rgb rand",  2, NULL,                    " #308"},
-        {mjITEM_BUTTON,    "none rgb rand", 2, NULL,                    " #309"},
+        {mjITEM_BUTTON,    "fing. rgb rand", 2, NULL,                   " #308"},
+        {mjITEM_BUTTON,    "all rgb rand",  2, NULL,                    " #309"},
+        {mjITEM_BUTTON,    "none rgb rand", 2, NULL,                    " #310"},
 
         // {mjITEM_BUTTON,    "Copy pose",     2, NULL,                    " #304"},
         {mjITEM_SLIDERINT, "Live Object",   3, &settings.object_int,    "0 20"},
@@ -2077,12 +2078,17 @@ void uiEvent(mjuiState* state)
                 myMjClass.randomise_ground_colour();
                 break;
             }
-            case 10: {
-                luke::randomise_all_colours(myMjClass.model, MjType::generator);
-                myMjClass.randomise_ground_colour();
+            case 10: {          // randomise finger colour
+                myMjClass.randomise_finger_colours();
                 break;
             }
-            case 11: {
+            case 11: {          // randomise all colours
+                luke::randomise_all_colours(myMjClass.model, MjType::generator);
+                myMjClass.randomise_ground_colour();
+                myMjClass.randomise_finger_colours();
+                break;
+            }
+            case 12: {          // restore default colours
                 luke::default_colours(myMjClass.model);
                 break;
             }

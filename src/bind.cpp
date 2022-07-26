@@ -51,6 +51,7 @@ PYBIND11_MODULE(bind, m) {
     .def("spawn_object", static_cast<void (MjClass::*)(int, double, double, double)>(&MjClass::spawn_object))
     .def("randomise_object_colour", &MjClass::randomise_object_colour)
     .def("randomise_ground_colour", &MjClass::randomise_ground_colour)
+    .def("randomise_finger_colours", &MjClass::randomise_finger_colours)
     .def("is_done", &MjClass::is_done)
     .def("get_observation", &MjClass::get_observation)
     .def("get_event_state", &MjClass::get_event_state)

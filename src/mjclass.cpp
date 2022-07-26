@@ -1221,6 +1221,23 @@ void MjClass::randomise_ground_colour()
   luke::set_ground_colour(model, rgb);
 }
 
+void MjClass::randomise_finger_colours()
+{
+  /* give all the fingers the same random colour */
+
+  std::vector<float> rgb(3);
+  std::uniform_real_distribution<double> distribution(0.0, 1.0);
+  rgb[0] = distribution(*MjType::generator);
+  rgb[1] = distribution(*MjType::generator);
+  rgb[2] = distribution(*MjType::generator);
+
+  // set each finger in turn to be the same colour
+  luke::set_finger_colour(model, rgb, 1);
+  luke::set_finger_colour(model, rgb, 2);
+  luke::set_finger_colour(model, rgb, 3);
+  luke::set_finger_colour(model, rgb, 4); // 4 means palm
+}
+
 float MjClass::reward()
 {
   /* calculate the reward available at the current simulation state */
