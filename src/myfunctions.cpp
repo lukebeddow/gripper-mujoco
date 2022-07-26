@@ -1955,24 +1955,32 @@ Forces_faster get_object_forces_faster(const mjModel* model, mjData* data)
   return oh_.extract_forces_faster(model, data);
 }
 
-void randomise_object_colour(mjModel* model, std::shared_ptr<std::default_random_engine> generator)
+void set_object_colour(mjModel* model, std::vector<float> rgba)
 {
-  /* randomise the colour of the main object */
+  /* set the colour of the main object */
 
-  std::vector<float> rgb(3);
-  std::uniform_real_distribution<double> distribution(0.0, 1.0);
-  rgb[0] = distribution(*generator);
-  rgb[1] = distribution(*generator);
-  rgb[2] = distribution(*generator);
+  oh_.set_colour(model, rgba);
+}
 
-  oh_.set_colour(model, rgb);
+void set_ground_colour(mjModel* model, std::vector<float> rgba)
+{
+  /* randomise the colour of the ground */
+
+  oh_.set_ground_colour(model, rgba);
 }
 
 void randomise_all_colours(mjModel* model, std::shared_ptr<std::default_random_engine> generator)
 {
-  /* randomise the colour of every object */
+  /* randomise the colour of every object but not the ground*/
 
   oh_.randomise_all_colours(model, generator);
+}
+
+void default_colours(mjModel* model)
+{
+  /* restore colours to default values */
+
+  oh_.default_colours(model);
 }
 
 } // namespace luke

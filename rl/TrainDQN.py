@@ -1148,9 +1148,6 @@ class TrainDQN():
 
       self.run_episode(i_episode)
 
-      # if we are using curriculum training
-      self.curriculum_fcn(i_episode)
-
       # update the target network every target_update episodes
       if i_episode % self.params.target_update == 0:
         self.target_net.load_state_dict(self.policy_net.state_dict())
@@ -1168,6 +1165,10 @@ class TrainDQN():
       # or only save the network
       elif i_episode % self.params.save_freq == 0:
         self.save()
+
+      # if we are using curriculum training, only update after a test
+      if i_episode % self.params.test_freq == 0 and i_episode != 0:
+        self.curriculum_fcn(i_episode)
 
     # update the target network at the end
     self.target_net.load_state_dict(self.policy_net.state_dict())

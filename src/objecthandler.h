@@ -20,6 +20,15 @@ typedef std::chrono::high_resolution_clock time_;
 struct ObjectHandler {
 
   /* member variables */
+
+  // define important names
+  constexpr static char finger1_body_name[] = "finger_1";
+  constexpr static char finger2_body_name[] = "finger_2";
+  constexpr static char finger3_body_name[] = "finger_3";
+  constexpr static char palm_body_name[] = "palm";
+  constexpr static char gnd_geom_name[] = "ground_geom";
+  constexpr static char geom_suffix[] = "_geom";    // object body name converts to geom name with this added
+
   std::vector<std::string> names;
   std::vector<bool> in_use;
   std::vector<int> idx;
@@ -37,6 +46,9 @@ struct ObjectHandler {
   int f2_idx;
   int f3_idx;
   int pm_idx;
+
+  // geom id of the ground
+  int gnd_geom_id;
 
   // extra tolerance when spawning objects in metres
   constexpr static double z_spawn_tolerance =  1e-6;
@@ -140,10 +152,12 @@ struct ObjectHandler {
 
   // set object properties
   void set_colour(mjModel* model, std::vector<float> rgba);
+  void set_ground_colour(mjModel* model, std::vector<float> rgba);
   void set_friction(mjModel* model, mjtNum sliding_friction);
   void set_friction(mjModel* model, std::vector<mjtNum> friction_triple);
   void randomise_all_colours(mjModel* model, 
     std::shared_ptr<std::default_random_engine> generator);
+  void default_colours(mjModel* model);
 
   // misc
   void print();

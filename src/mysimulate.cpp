@@ -1263,12 +1263,15 @@ void makeObjectUI(int oldstate)
         {mjITEM_BUTTON,    "Reset",         2, NULL,                    " #301"},
         {mjITEM_BUTTON,    "Respawn",       2, NULL,                    " #302"},
         {mjITEM_BUTTON,    "Print forces",  2, NULL,                    " #303"},
-        {mjITEM_BUTTON,    "Ground forces",  2, NULL,                    " #303"},
-        {mjITEM_BUTTON,    "Object forces",  2, NULL,                    " #303"},
-        {mjITEM_BUTTON,    "All forces",     2, NULL,                    " #303"},
-        {mjITEM_BUTTON,    "Print curve fit",2, NULL,                    " #304"},
-        {mjITEM_BUTTON,    "Wipe curve fit", 2, NULL,                    " #305"},
-        {mjITEM_BUTTON,    "Rand. colour",  2, NULL,                     " #306"},
+        {mjITEM_BUTTON,    "Ground forces",  2, NULL,                   " #303"},
+        {mjITEM_BUTTON,    "Object forces",  2, NULL,                   " #303"},
+        {mjITEM_BUTTON,    "All forces",     2, NULL,                   " #303"},
+        {mjITEM_BUTTON,    "Print curve fit",2, NULL,                   " #304"},
+        {mjITEM_BUTTON,    "Wipe curve fit", 2, NULL,                   " #305"},
+        {mjITEM_BUTTON,    "obj. rgb rand",  2, NULL,                   " #306"},
+        {mjITEM_BUTTON,    "gnd rgb rand",  2, NULL,                    " #307"},
+        {mjITEM_BUTTON,    "all rgb rand",  2, NULL,                    " #308"},
+        {mjITEM_BUTTON,    "none rgb rand", 2, NULL,                    " #309"},
 
         // {mjITEM_BUTTON,    "Copy pose",     2, NULL,                    " #304"},
         {mjITEM_SLIDERINT, "Live Object",   3, &settings.object_int,    "0 20"},
@@ -2064,9 +2067,24 @@ void uiEvent(mjuiState* state)
             case 7: {
                 std::cout << "Wiping curve validation data\n";
                 myMjClass.curve_validation_data_.entries.clear();
+                break;
             }
             case 8: {           // randomise object colour
                 myMjClass.randomise_object_colour();
+                break;
+            }
+            case 9: {           // randomise ground colour
+                myMjClass.randomise_ground_colour();
+                break;
+            }
+            case 10: {
+                luke::randomise_all_colours(myMjClass.model, MjType::generator);
+                myMjClass.randomise_ground_colour();
+                break;
+            }
+            case 11: {
+                luke::default_colours(myMjClass.model);
+                break;
             }
             }
         }
