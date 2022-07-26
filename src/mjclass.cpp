@@ -242,6 +242,9 @@ void MjClass::load(std::string model_path)
   // save the loadpath used
   current_load_path = model_path;
 
+  // we have loaded a new file
+  render_reload = true;
+
   init();
 }
 
@@ -376,6 +379,12 @@ bool MjClass::render()
     render::init(model, data);
     render_init = true;
   }
+  else if (render_reload) {
+    render::reload_for_rendering(model, data);
+  }
+
+  // init and reload perform the same job, so we no longer need to reload
+  render_reload = false;
 
   bool window_open = true;
 

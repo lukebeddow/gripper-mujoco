@@ -109,6 +109,21 @@ void init(mjModel* model, mjData* data)
     glfwSetScrollCallback(window, scroll);
 }
 
+void reload_for_rendering(mjModel* model, mjData* data)
+{
+    /* reload the scene after the model and data have changed */
+
+    m = model;
+    d = data;
+
+    // re-create scene and context
+    mjv_makeScene(m, &scn, 2000);
+    mjr_makeContext(m, &con, mjFONTSCALE_150);
+
+    // re-render
+    render(model, data);
+}
+
 // render the scene
 bool render(mjModel* model, mjData* data)
 {

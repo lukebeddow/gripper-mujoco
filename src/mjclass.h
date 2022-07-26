@@ -694,6 +694,7 @@ public:
   MjType::Settings s_;                          // simulation settings
   std::chrono::time_point<time_> start_time_;   // time from tick() call
   bool render_init = false;                     // have we initialised the render window
+  bool render_reload = false;                   // have we reloaded and need to update rendering
 
   // function pointers for sampling functions
   std::vector<luke::gfloat> (MjType::Sensor::*sampleFcnPtr)
