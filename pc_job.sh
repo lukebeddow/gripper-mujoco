@@ -55,7 +55,7 @@ do
     -s | --stagger ) (( i++ )); STAGGER=${!i}; echo stagger is $STAGGER ;;
     # without arguments
     -f | --no-faketty ) FAKETTY=; echo faketty disabled ;;
-    -d | --debug ) LOGGING='N'; echo Debug mode on, terminal logging ;;
+    -d | --debug ) LOGGING='N'; DEBUG="--no-wandb"; echo Debug mode on, terminal logging, no wandb ;;
     --print ) LOGGING='N'; PRINT="--print --no-wandb"; echo Printing mode on, no training ;;
     # everything else passed directly to python
     * ) PY_ARGS+=( ${!i} ) ;;
@@ -117,6 +117,7 @@ do
         $MACHINE \
         ${PY_ARGS[@]} \
         $PRINT \
+        $DEBUG \
         &
 
     # return output to terminal

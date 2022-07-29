@@ -184,7 +184,7 @@ def create_reward_function(model, style="negative", options=[]):
   return model
 
 def add_sensors(model, num=10, sensor_mode=1, state_mode=0, sensor_steps=1,
-  state_steps=2, noise_std=0.015):
+  state_steps=2, noise_std=0.015, z_state=None):
   """
   Add a number of sensors
   """
@@ -199,36 +199,27 @@ def add_sensors(model, num=10, sensor_mode=1, state_mode=0, sensor_steps=1,
 
   # default: state sensor and bending gauge sensor
   model.env.mj.set.motor_state_sensor.in_use = True
-  model.env.mj.set.motor_state_sensor.read_rate = -1
   model.env.mj.set.bending_gauge.in_use = True
 
   # set the number of steps in the past we use for observations
   model.env.mj.set.sensor_n_prev_steps = sensor_steps
   model.env.mj.set.state_n_prev_steps = state_steps
 
-  # state sensor with two readings (current, prev)
-  if num >= 1: model.env.mj.set.motor_state_sensor.read_rate = -2
-
   # palm force sensor
-  if num >= 2: model.env.mj.set.palm_sensor.in_use = True
+  if num >= 1: model.env.mj.set.palm_sensor.in_use = True
 
   # wrist z force sensor
-  if num >= 3: model.env.mj.set.wrist_sensor_Z.in_use = True
-
-  # # wrist xy force sensor WE DONT WANT THIS SENSOR
-  # if num >= 4: model.env.mj.set.wrist_sensor_XY.in_use = True
-
-  # base z position sensor
-  if num >= 4:
-    model.env.mj.set.base_state_sensor.in_use = True
-    model.env.mj.set.base_state_sensor.read_rate = -2
+  if num >= 2: model.env.mj.set.wrist_sensor_Z.in_use = True
 
   # finger axial gauges
-  if num >= 5: model.env.mj.set.axial_gauge.in_use = True
+  if num >= 3: model.env.mj.set.axial_gauge.in_use = True
+
+  # know where z is in physical space (base z state sensor)
+  if num >= 4 or z_state is True: model.env.mj.set.base_state_sensor.in_use = True
 
   model.wandb_note += (
     f"Num sensors: {num}, state mode: {state_mode}, sensor mode: {sensor_mode}" +
-    f", state steps: {state_steps}, sensor steps: {sensor_steps}"
+    f", state steps: {state_steps}, sensor steps: {sensor_steps}\n"
   )
 
   return model
@@ -477,7 +468,7 @@ def logging_job(model, run_name, group_name):
   model.plot(force=True, hang=True)
 
 def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=5, network=networks.DQN_3L60, 
-                      memory=50_000, state_steps=2, sensor_steps=1):
+                      memory=50_000, state_steps=2, sensor_steps=1, z_state=None):
   """
   Runs a baseline training on the model
   """
@@ -496,7 +487,8 @@ def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=5, network=network
   # configure rewards and sensors
   model = create_reward_function(model, style="mixed_v2", options=[])
   model = add_sensors(model, num=sensors, sensor_mode=1, state_mode=0,
-                      state_steps=state_steps, sensor_steps=sensor_steps)
+                      state_steps=state_steps, sensor_steps=sensor_steps,
+                      z_state=z_state)
   model = setup_HER(model, use=False)
 
   # print details THIS LINE ISN'T WORKING FOR SOME REASON
@@ -542,8 +534,8 @@ if __name__ == "__main__":
   log_level = 1
   datestr = "%d-%m-%Y-%H:%M" # all date inputs must follow this format
 
-  # print all the inputs we have received
-  print("array_training_DQN.py inputs are:", sys.argv[1:])
+  # # print all the inputs we have received
+  # print("array_training_DQN.py inputs are:", sys.argv[1:])
 
   # define arguments and parse them
   parser = argparse.ArgumentParser()
@@ -686,19 +678,36 @@ if __name__ == "__main__":
   baseline_training(model, sensors=this_sensors)
   """
 
-  # varying 6x5 = 16 possible trainings 1-30
-  stiffness_list = [5, 6, 7, 8, 9, 10]
-  sensors_list = [1, 2, 3, 4, 5]
+  # varying 6x6 = 36 possible trainings 1-36
+  sensors_list = [
+
+    (1, False, 1, 2), (1, True, 1, 2), 
+    (2, False, 1, 2), (2, True, 1, 2), 
+    (3, False, 1, 2), (3, True, 1, 2),
+    
+    (1, False, 2, 2), (1, True, 2, 2), 
+    (2, False, 2, 2), (2, True, 2, 2), 
+    (3, False, 2, 2), (3, True, 2, 2),
+  ]
+
+  networks_list = [
+    networks.DQN_3L60,
+    networks.DQN_3L100,
+    networks.DQN_4L60,
+    networks.DQN_4L100,
+    networks.DQN_5L60,
+    networks.DQN_5L100
+  ]
 
   # lists are zero indexed so adjust inputarg
   inputarg -= 1
 
   # we vary wrt memory_list every inputarg increment
-  x = len(sensors_list)
+  x = len(networks_list)
 
   # get the sensors and memory size for this training
-  this_stiffness = stiffness_list[inputarg // x]       # vary every x steps
-  this_sensors = sensors_list[inputarg % x]            # vary every +1 & loop
+  this_sensors = sensors_list[inputarg // x]         # vary every x steps
+  this_network = networks_list[inputarg % x]       # vary every +1 & loop
 
   # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
   #   A1, A2, A3, ...
@@ -706,8 +715,8 @@ if __name__ == "__main__":
   #   C1, C2, C3, ...
 
   # make note
-  param_1 = f"Finger stiffness used: {this_stiffness}\n"
-  param_2 = f"Sensors used: {this_sensors}\n"
+  param_1 = f"Sensor settings: num = {this_sensors[0]}, z_info = {this_sensors[1]}, sensor steps = {this_sensors[2]}, state steps = {this_sensors[3]}\n"
+  param_2 = f"Network used: {this_network.name}\n"
   model.wandb_note += param_1 + param_2
 
   # if we are just printing help information
@@ -718,18 +727,18 @@ if __name__ == "__main__":
     exit()
 
   # set the finger stiffness
-  model.env.mj.set.finger_stiffness = this_stiffness
+  model.env.mj.set.finger_stiffness = 8
 
   # lets use curriculum learning
   model.params.object_set = "set3_nocuboid_525"
   model.params.use_curriculum = True
   model.params.curriculum_ep_num = 10000
   model.params.curriculum_object_set = "set3_fullset_795"
-  model.params.num_episodes = 20000
+  model.params.num_episodes = 50000
 
   # perform the training with other parameters standard
-  baseline_training(model, sensors=this_sensors)
+  baseline_training(model, sensors=this_sensors[0], z_state=this_sensors[1], 
+                    sensor_steps=this_sensors[2], state_steps=this_sensors[3])
 
   # ----- END ----- #
-
    

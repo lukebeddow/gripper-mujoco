@@ -1017,11 +1017,29 @@ class TrainDQN():
     Implement a learning curriculum
     """
 
+    # if self.params.use_curriculum:
+    #   if not self.curriculum_applied:
+    #     if i_episode > self.params.curriculum_ep_num:
+    #       self.load_object_set(object_set=self.params.curriculum_object_set)
+    #       self.curriculum_applied = True
+
+    # define threshold for changing curriculum
+    threshold = 0.6
+
+    # extract details of how training is going
+    if len(self.track.avg_stable_height) > 0:
+      success_rate = self.track.avg_stable_height[-1]
+    else: return
+
     if self.params.use_curriculum:
       if not self.curriculum_applied:
-        if i_episode > self.params.curriculum_ep_num:
+        if True or success_rate > threshold:
           self.load_object_set(object_set=self.params.curriculum_object_set)
           self.curriculum_applied = True
+          labelstr = f"Hyperparameters after curriculum change which occured at episode {i_episode}\n"
+          labelstr += f"The success rate is {success_rate} and the threshold is {threshold}\n"
+          name = "hyperparameters_from_curriculum_change"
+          self.save_hyperparameters(labelstr, name)
 
   def run_episode(self, i_episode, test=None):
     """
@@ -1161,14 +1179,12 @@ class TrainDQN():
         # save the result
         self.save(txtstring=test_report, txtlabel="test_results", 
                   tupledata=additional_data)
+        # check if time to change curriculum following the test
+        self.curriculum_fcn(i_episode)
 
       # or only save the network
       elif i_episode % self.params.save_freq == 0:
         self.save()
-
-      # if we are using curriculum training, only update after a test
-      if i_episode % self.params.test_freq == 0 and i_episode != 0:
-        self.curriculum_fcn(i_episode)
 
     # update the target network at the end
     self.target_net.load_state_dict(self.policy_net.state_dict())
@@ -1176,14 +1192,13 @@ class TrainDQN():
     # save, log and plot now we are finished
     self.save(txtstring=f"Training finished after {i_episode} episodes",
               txtlabel="training_finished")
-    self.log_wandb()
-    self.plot()
-
-    # end of training
     if self.log_level > 0:
       print("Training complete, finished", i_episode, "episodes")
-
     self.env.render()
+    self.log_wandb(force=True)
+    self.plot(force=True, hang=True) # leave plots on screen if we are plotting
+
+    # end of training
     self.env.close()
 
   def test(self, pause_each_episode=None):
@@ -1230,6 +1245,8 @@ class TrainDQN():
     Save a text file with the current hyperparameters
     """
 
+    print_out = True
+
     param_str = ""
     time_stamp = datetime.now().strftime("%d-%m-%Y-%H:%M")
 
@@ -1265,6 +1282,9 @@ class TrainDQN():
 
     # add the c++ settings to the string
     param_str += "\n\n" + self.env._get_cpp_settings()
+
+    # if we are printing, put this info also into the terminal
+    if print_out: print(param_str)
 
     savepath = self.modelsaver.save(name, txtstr=param_str,
                                     txtonly=True)
