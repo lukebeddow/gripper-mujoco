@@ -606,6 +606,10 @@ class TrainDQN():
     # curriculum defaults
     self.curriculum_applied = False
 
+    # temporary experimental feature: cluster additional logging
+    if self.machine == "cluster": self.additional_logging = 25
+    else: self.additional_logging = None
+
     # if we are plotting graphs during this training
     if no_plot == True:
       self.no_plot = True
@@ -1186,6 +1190,14 @@ class TrainDQN():
       elif i_episode % self.params.save_freq == 0:
         self.save()
 
+      # temporary experimental feature: cluster logging up to first test
+      elif self.additional_logging is not None:
+        if i_episode < self.params.test_freq:
+          if i_episode % self.additional_logging == 0:
+            texttosave = f"Cluster training has reached episode {i_episode}"
+            self.modelsaver.save("cluster_episode_tracker", txtstr=texttosave, 
+                                 txtonly=True)
+
     # update the target network at the end
     self.target_net.load_state_dict(self.policy_net.state_dict())
 
@@ -1412,7 +1424,7 @@ if __name__ == "__main__":
   # ----- prepare ----- #
 
   use_wandb = False
-  force_device = None # "cpu"
+  force_device = "cpu"
   no_plot = True
 
   model = TrainDQN(device=force_device, use_wandb=use_wandb, no_plot=no_plot)
@@ -1420,7 +1432,7 @@ if __name__ == "__main__":
   # if we want to adjust parameters
   # model.log_level = 2
   # model.params.num_episodes = 11
-  # model.env.max_episode_steps = 20
+  model.env.max_episode_steps = 20
   # model.params.wandb_freq_s = 5
   # model.env.mj.set.action_motor_steps = 350
   # model.env.disable_rendering = False
@@ -1455,18 +1467,19 @@ if __name__ == "__main__":
   # load
   # net = networks.DQN_3L60
   # model.init(net)
-  folderpath = "/home/luke/cluster/rl/models/dqn/29-07-22/"
-  foldername = "cluster_14:04_A28"
-  model.device = torch.device("cpu")
-  model.load(id=39, folderpath=folderpath, foldername=foldername)
+  # folderpath = "/home/luke/cluster/rl/models/dqn/29-07-22/"
+  # foldername = "cluster_14:04_A28"
+  # model.device = torch.device("cpu")
+  # model.load(id=39, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
-  # # train
-  # net = networks.DQN_3L60
-  # model.env.disable_rendering = False
-  # model.env.mj.set.debug = False
-  # model.train(network=net)
+  # train
+  net = networks.DQN_3L60
+  model.env.disable_rendering = True
+  model.env.mj.set.debug = False
+  model.additional_logging = 10
+  model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
@@ -1502,10 +1515,10 @@ if __name__ == "__main__":
   # model = array_training_DQN.new_rewards(model)
 
   # test
-  model.env.mj.set.debug = False
-  model.env.disable_rendering = False
-  model.env.test_trials_per_obj = 1
-  model.env.test_objects = 15
+  # model.env.mj.set.debug = False
+  # model.env.disable_rendering = False
+  # model.env.test_trials_per_obj = 1
+  # model.env.test_objects = 15
   # model.env.test_obj_per_file = 5
   # model.env.max_episode_steps = 20
 
@@ -1513,14 +1526,14 @@ if __name__ == "__main__":
   # model.env.mj.set.exceed_limits.set     (-0.005, True,   10)
   # model.env.mj.set.exceed_axial.set      (-0.005, True,   10,    3.0,  6.0,  -1)
   # model.env.mj.set.exceed_lateral.set    (-0.005, True,   10,    4.0,  6.0,  -1)
-  input("Press enter to begin")
-  test_data = model.test(pause_each_episode=False)
+  # input("Press enter to begin")
+  # test_data = model.test(pause_each_episode=False)
 
   # save results
-  test_report = model.create_test_report(test_data)
-  model.modelsaver.new_folder(label="DQN_testing")
-  model.save_hyperparameters(labelstr=f"Loaded model path: {model.modelsaver.last_loadpath}\n")
-  model.save(txtstring=test_report, txtlabel="test_results_demo")
+  # test_report = model.create_test_report(test_data)
+  # model.modelsaver.new_folder(label="DQN_testing")
+  # model.save_hyperparameters(labelstr=f"Loaded model path: {model.modelsaver.last_loadpath}\n")
+  # model.save(txtstring=test_report, txtlabel="test_results_demo")
   
 
 
