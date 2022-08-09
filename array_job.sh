@@ -12,8 +12,8 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N ArrayTrain_33
-#$ -t 1-16
+#$ -N Array34_compare_rewards
+#$ -t 1-36
 
 # The code you want to run now goes here.
 

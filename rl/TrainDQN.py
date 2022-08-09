@@ -680,17 +680,17 @@ class TrainDQN():
     # print important info about class settings
     if self.log_level > 0:
       print("TrainDQN init settings:")
-      print("\tUsing machine:", self.machine)
-      print("\tUsing device:", self.device.type)
-      print("\tUsing model:", self.policy_net.name)
-      print("\tUsing object set:", self.params.object_set)
-      print("\tNetwork inputs (n_obs):", self.env.n_obs)
-      print("\tNetwork outputs (n_actions):", self.env.n_actions)
-      print("\tUsing HER:", self.params.use_HER)
-      print("\tUsing wandb:", self.use_wandb)
-      print("\tUsing curriculum:", self.params.use_curriculum)
-      print("\tRun name:", self.run_name)
-      print("\tGroup name:", self.group_name)
+      print(" -> Using machine:", self.machine)
+      print(" -> Using device:", self.device.type)
+      print(" -> Using model:", self.policy_net.name)
+      print(" -> Using object set:", self.params.object_set)
+      print(" -> Network inputs (n_obs):", self.env.n_obs)
+      print(" -> Network outputs (n_actions):", self.env.n_actions)
+      print(" -> Using HER:", self.params.use_HER)
+      print(" -> Using wandb:", self.use_wandb)
+      print(" -> Using curriculum:", self.params.use_curriculum)
+      print(" -> Run name:", self.run_name)
+      print(" -> Group name:", self.group_name)
 
   def set_device(self, device):
     """
@@ -1162,6 +1162,9 @@ class TrainDQN():
       hypername = f"hyperparameters_from_ep_{i_start}"
       self.save_hyperparameters(labelstr=continue_label, name=hypername)
 
+    if self.log_level > 0:
+      print(f"\nBEGIN TRAINING, target is {self.params.num_episodes} episodes\n", flush=True)
+
     # begin training episodes
     for i_episode in range(i_start + 1, self.params.num_episodes + 1):
 
@@ -1205,7 +1208,7 @@ class TrainDQN():
     self.save(txtstring=f"Training finished after {i_episode} episodes",
               txtlabel="training_finished")
     if self.log_level > 0:
-      print("Training complete, finished", i_episode, "episodes")
+      print("\nTRAINING COMPLETE, finished", i_episode, "episodes\n")
     self.env.render()
     self.log_wandb(force=True)
     self.plot(force=True, hang=True) # leave plots on screen if we are plotting
@@ -1268,11 +1271,11 @@ class TrainDQN():
     if name == None:
       name = "hyperparameters"
 
-    if self.wandb_note != "":
-      param_str += "Wandb note\n" + self.wandb_note + "\n"
-
     # capture parameters info
-    param_str += f"""Hyperparameters at training time:\n\n"""
+    param_str += f"""\nHyperparameters at training time:\n\n"""
+
+    if self.wandb_note != "":
+      param_str += "Wandb note:\n" + self.wandb_note + "\n"
 
     # add in some important information
     param_str += "Network name: " + self.policy_net.name + "\n"
