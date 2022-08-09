@@ -48,6 +48,7 @@ public:
 
   T read_element(int n) {
     // get the element added n steps ago - beware looping
+    if (n < 0) throw std::runtime_error("cannot read element with n < 0");
     int idx = i - n;
     while (idx < 0) idx += v.size();
     return v[idx];

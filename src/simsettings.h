@@ -79,7 +79,7 @@
   /* 
 
   2. Sensors
-      name                      used      normalise read-rate (NB read-rate <= 0 means 1 per step */\
+      name                      used      normalise read-rate (NB ignore read rate for state sensors) */\
   SS(  motor_state_sensor,      true,     0,        -1)  /* xyz motor states, normalise is ignored */\
   SS(  base_state_sensor,       true,     0,        -1)  /* base position state, normalise is ignored)*/\
   SS(  bending_gauge,           true,     100.0,    10)  /* strain gauge to measure finger bending */\

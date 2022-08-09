@@ -177,22 +177,27 @@ namespace MjType
       else return false;
     }
 
+    void update_n_readings()
+    {
+      /* use class settings to update the number of sensor readings expected at
+      the next sample. Note that this value is only used for sensor sampling and
+      also beware that for 'raw_sample()' this value will be +1 compared to the
+      actual number of readings */
+
+      total_readings = 1 + readings_per_step * prev_steps;
+    }
+
     void update_n_readings(int readings_since_last_step, int set_prev_steps_to)
     {
       /* update reading information but specifying how many readings have arrived
       SINCE the last sample (NOT inclusive of the last sample), as well as overriding
       the number of previous steps */
 
+      // set function inputs to class variables first
       prev_steps = set_prev_steps_to;
       readings_per_step = readings_since_last_step;
 
-      // how many readings to account for previous samples
-      if (readings_per_step <= 1) {
-        total_readings = prev_steps;
-      }
-      else {
-        total_readings = 1 + readings_per_step * prev_steps;
-      }
+      update_n_readings();
     }
 
     void update_n_readings(float time_since_last_sample)
@@ -204,21 +209,22 @@ namespace MjType
       double readings_since_step = time_since_last_sample * read_rate;
       readings_per_step = std::floor(readings_since_step);
 
-      // how many readings to account for previous samples
-      if (readings_per_step <= 1) {
-        readings_per_step = 1;
-        total_readings = prev_steps;
-      }
-      else {
-        total_readings = 1 + readings_per_step * prev_steps;
-      }
+      update_n_readings();
     }
 
     std::vector<luke::gfloat> raw_sample(luke::SlidingWindow<luke::gfloat> data)
     {
-      /* sample some data from a given time interval in seconds */
+      /* sample some data from a given time interval in seconds. The function
+      update_n_readings() works perfectly for all other sample modes, but gives
+      an answer +1 to what is needed by this function, so we read but -1 first.
+      
+      The reason for this is that raw_sample is different from other sampling
+      methods. One reading for raw_sample is a single number, but one reading
+      for change_sample is three numbers, the old reading, the change, and the
+      new reading. Since this includes the old reading and the new reading, from
+      raw_samples perspective this is actually two readings, not one. */
 
-      return data.read(total_readings);
+      return data.read(total_readings - 1);
     }
 
     std::vector<luke::gfloat> change_sample(luke::SlidingWindow<luke::gfloat> data)
@@ -265,7 +271,7 @@ namespace MjType
 
     std::vector<luke::gfloat> median_sample(luke::SlidingWindow<luke::gfloat> data)
     {
-      /* sample the first and last reading as well as the average [x0, xbar, x1] */
+      /* sample the first and last reading as well as the median [x0, xbar, x1] */
 
       // make the return vector, first element is furthest back reading
       std::vector<luke::gfloat> result(2 * prev_steps + 1);

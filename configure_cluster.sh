@@ -8,6 +8,3 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/clusterlibs/mujoco/mujoco210/bin
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/clusterlibs/mujoco/mujoco-2.1.5/lib
 
 scl enable devtoolset-8 bash
-
-# go to mymujoco ready for 'make cluster'
-cd ~/mymujoco

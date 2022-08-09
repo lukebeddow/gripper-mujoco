@@ -1033,7 +1033,7 @@ class TrainDQN():
 
     if self.params.use_curriculum:
       if not self.curriculum_applied:
-        if True or success_rate > threshold:
+        if success_rate > threshold:
           self.load_object_set(object_set=self.params.curriculum_object_set)
           self.curriculum_applied = True
           labelstr = f"Hyperparameters after curriculum change which occured at episode {i_episode}\n"
@@ -1455,10 +1455,10 @@ if __name__ == "__main__":
   # load
   # net = networks.DQN_3L60
   # model.init(net)
-  folderpath = "/home/luke/cluster/rl/models/dqn/19-07-22/"
-  foldername = "cluster_19:35_A12"
+  folderpath = "/home/luke/cluster/rl/models/dqn/29-07-22/"
+  foldername = "cluster_14:04_A28"
   model.device = torch.device("cpu")
-  model.load(id=None, folderpath=folderpath, foldername=foldername)
+  model.load(id=39, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
@@ -1506,8 +1506,8 @@ if __name__ == "__main__":
   model.env.disable_rendering = False
   model.env.test_trials_per_obj = 1
   model.env.test_objects = 15
-  model.env.test_obj_per_file = 5
-  model.env.max_episode_steps = 20
+  # model.env.test_obj_per_file = 5
+  # model.env.max_episode_steps = 20
 
   # model.env.mj.set.step_num.set          (0,      70,   1)
   # model.env.mj.set.exceed_limits.set     (-0.005, True,   10)

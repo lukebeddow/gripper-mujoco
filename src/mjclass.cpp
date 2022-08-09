@@ -178,7 +178,7 @@ void MjClass::configure_settings()
       break;
     }
     case MjType::Sample::median: {
-      sampleFcnPtr = &MjType::Sensor::median_sample;
+      stateFcnPtr = &MjType::Sensor::median_sample;
       break;
     }
     default: {
@@ -202,14 +202,6 @@ void MjClass::configure_settings()
     MjType::generator.reset(new std::default_random_engine(s_.random_seed));
     old_random_seed = s_.random_seed;
   }
-
-  // safety check
-  if (s_.motor_state_sensor.read_rate >= 0)
-    throw std::runtime_error("base_state_sensor read_rate must be a negative number"
-      ", read_rate = -1 means return 1 reading per read, -2 means 2 readings etc");
-  if (s_.base_state_sensor.read_rate >= 0)
-    throw std::runtime_error("base_state_sensor read_rate must be a negative number"
-      ", read_rate = -1 means return 1 reading per read, -2 means 2 readings etc");
 }
 
 /* ----- core functionality ----- */
@@ -1809,7 +1801,7 @@ void MjType::Settings::set_sensor_prev_steps_to(int prev_steps)
 
 void MjType::Settings::update_sensor_settings(double time_since_last_sample)
 {
-  /* updates the number of reading each sensor is taking based on time between
+  /* updates the number of readings each sensor is taking based on time between
   samples and read rate */
 
   // turn on normalisation behaviour for all sensors
@@ -1823,14 +1815,18 @@ void MjType::Settings::update_sensor_settings(double time_since_last_sample)
   set_sensor_prev_steps_to(sensor_n_prev_steps);
 
   // manually override state sensors
-  motor_state_sensor.prev_steps = state_n_prev_steps;
-  base_state_sensor.prev_steps = state_n_prev_steps;
+  int state_sensor_n_readings_per_step = 1;
+  motor_state_sensor.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
+  base_state_sensor.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)                    \
-            if (NAME.in_use) {                                \
-              NAME.update_n_readings(time_since_last_sample); \
-            }
+  
+  // update n_readings for all except state sensors
+  #define SS(NAME, IN_USE, NORM, READRATE)                       \
+            if (#NAME != "motor_state_sensor" and                \
+                #NAME != "base_state_sensor")                    \
+              NAME.update_n_readings(time_since_last_sample);
+
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
   

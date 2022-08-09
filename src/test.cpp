@@ -117,11 +117,33 @@ void run_test(int num_episodes, int step_cap, int reload_rate)
 
 int main(int argc, char** argv)
 {
+  MjType::Sensor mysensor(true, 1, 1);
+  mysensor.use_noise = false;
+  mysensor.use_normalisation = false;
+  mysensor.prev_steps = 3;
+  mysensor.readings_per_step = 1;
+  mysensor.update_n_readings();
+
+  luke::SlidingWindow<float> vec(10);
+
+  vec.add(1);
+  vec.add(2);
+  vec.add(3);
+  vec.add(4);
+  vec.add(5);
+  vec.add(6);
+
+  std::vector<float> sample = mysensor.change_sample(vec);
+
+  luke::print_vec(sample, "Sample is");
+  vec.print();
+
+  return 0;
 
   /* ----- run a test of 10 learning steps ----- */
 
   // // precompiled settings
-  // /* settings of 20, 200, 20 -> initial time taken 52.6s, newest 42.6s (both laptop times, newest PC is 45.0s*/
+  // /* settings of 20, 200, 20 -> initial time taken 52.6s, newest 42.6s (both laptop times, newest PC is 45.0s */
   // int num_episodes = 20;
   // int step_cap = 200;
   // int reload_rate = 20;

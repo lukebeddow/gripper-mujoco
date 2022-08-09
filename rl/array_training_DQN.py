@@ -183,27 +183,36 @@ def create_reward_function(model, style="negative", options=[]):
 
   return model
 
-def add_sensors(model, num=10, sensor_mode=1, state_mode=0, sensor_steps=1,
-  state_steps=2, noise_std=0.015, z_state=None):
+def add_sensors(model, num=None, sensor_mode=None, state_mode=None, sensor_steps=None,
+  state_steps=None, noise_std=None, z_state=None):
   """
   Add a number of sensors
   """
 
-  # what sensing mode (0=raw data, 1=change, 2=average)
-  model.env.mj.set.sensor_sample_mode = sensor_mode
-  model.env.mj.set.state_sample_mode = state_mode
+  if num is None: num = 10 # default, include all sensors
 
-  # add minor gaussian sensing noise with mean 0
-  model.env.mj.set.sensor_noise_std = noise_std
-  model.env.mj.set.state_noise_std = noise_std
+  # define defaults that can be overriden by function inputs
+  default_sensor_mode = 1
+  default_state_mode = 0
+  default_noise_std = 0.015
+  default_sensor_steps = 1
+  default_state_steps = 2
 
   # default: state sensor and bending gauge sensor
   model.env.mj.set.motor_state_sensor.in_use = True
   model.env.mj.set.bending_gauge.in_use = True
 
+  # what sensing mode (0=raw data, 1=change, 2=average, 3=median)
+  model.env.mj.set.sensor_sample_mode = sensor_mode if sensor_mode is not None else default_sensor_mode
+  model.env.mj.set.state_sample_mode = state_mode if state_mode is not None else default_state_mode
+
+  # add minor gaussian sensing noise with mean 0
+  model.env.mj.set.sensor_noise_std = noise_std if noise_std is not None else default_noise_std
+  model.env.mj.set.state_noise_std = noise_std if noise_std is not None else default_noise_std
+
   # set the number of steps in the past we use for observations
-  model.env.mj.set.sensor_n_prev_steps = sensor_steps
-  model.env.mj.set.state_n_prev_steps = state_steps
+  model.env.mj.set.sensor_n_prev_steps = sensor_steps if sensor_steps is not None else default_sensor_steps
+  model.env.mj.set.state_n_prev_steps = state_steps if state_steps is not None else default_state_steps
 
   # palm force sensor
   if num >= 1: model.env.mj.set.palm_sensor.in_use = True
@@ -467,8 +476,9 @@ def logging_job(model, run_name, group_name):
   model.log_wandb(force=True)
   model.plot(force=True, hang=True)
 
-def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=5, network=networks.DQN_3L60, 
-                      memory=50_000, state_steps=2, sensor_steps=1, z_state=None):
+def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=None, network=networks.DQN_3L60, 
+                      memory=50_000, state_steps=None, sensor_steps=None, z_state=None, sensor_mode=None,
+                      state_mode=None):
   """
   Runs a baseline training on the model
   """
@@ -486,7 +496,7 @@ def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=5, network=network
   
   # configure rewards and sensors
   model = create_reward_function(model, style="mixed_v2", options=[])
-  model = add_sensors(model, num=sensors, sensor_mode=1, state_mode=0,
+  model = add_sensors(model, num=sensors, sensor_mode=sensor_mode, state_mode=state_mode,
                       state_steps=state_steps, sensor_steps=sensor_steps,
                       z_state=z_state)
   model = setup_HER(model, use=False)
@@ -587,7 +597,7 @@ if __name__ == "__main__":
   # cpu training only on cluster or PC
   if model.machine in ["cluster", "luke-PC"] and args.device is None: 
     model.set_device("cpu")
-    if log_level > 0: print("Setting to default 'cpu' device")
+    if log_level > 0: print("Setting to default 'cpu' device, to override use '--device cuda'")
   elif args.device is not None:
     if log_level > 0: print(f"Device override of '{args.device}'")
     model.set_device(args.device)
@@ -678,36 +688,35 @@ if __name__ == "__main__":
   baseline_training(model, sensors=this_sensors)
   """
 
-  # varying 6x6 = 36 possible trainings 1-36
-  sensors_list = [
+  # varying 4x4 = possible trainings 1-16
+  raw = 0
+  change = 1
+  avg = 2
+  med = 3
 
-    (1, False, 1, 2), (1, True, 1, 2), 
-    (2, False, 1, 2), (2, True, 1, 2), 
-    (3, False, 1, 2), (3, True, 1, 2),
-    
-    (1, False, 2, 2), (1, True, 2, 2), 
-    (2, False, 2, 2), (2, True, 2, 2), 
-    (3, False, 2, 2), (3, True, 2, 2),
+  sensor_settings_list = [
+    (raw, 1),
+    (change, 1),
+    (avg, 1),
+    (med, 1),
   ]
 
-  networks_list = [
-    networks.DQN_3L60,
-    networks.DQN_3L100,
-    networks.DQN_4L60,
-    networks.DQN_4L100,
-    networks.DQN_5L60,
-    networks.DQN_5L100
+  state_settings_list = [
+    (raw, 2),
+    (change, 1),
+    (avg, 1),
+    (med, 1),
   ]
 
   # lists are zero indexed so adjust inputarg
   inputarg -= 1
 
   # we vary wrt memory_list every inputarg increment
-  x = len(networks_list)
+  x = len(state_settings_list)
 
   # get the sensors and memory size for this training
-  this_sensors = sensors_list[inputarg // x]         # vary every x steps
-  this_network = networks_list[inputarg % x]       # vary every +1 & loop
+  this_sensor = sensor_settings_list[inputarg // x]         # vary every x steps
+  this_state = state_settings_list[inputarg % x]            # vary every +1 & loop
 
   # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
   #   A1, A2, A3, ...
@@ -715,8 +724,8 @@ if __name__ == "__main__":
   #   C1, C2, C3, ...
 
   # make note
-  param_1 = f"Sensor settings: num = {this_sensors[0]}, z_info = {this_sensors[1]}, sensor steps = {this_sensors[2]}, state steps = {this_sensors[3]}\n"
-  param_2 = f"Network used: {this_network.name}\n"
+  param_1 = f"Sensor mode {this_sensor[0]} and prev_steps {this_sensor[1]}\n"
+  param_2 = f"State mode {this_state[0]} and prev_steps {this_state[1]}\n"
   model.wandb_note += param_1 + param_2
 
   # if we are just printing help information
@@ -734,11 +743,13 @@ if __name__ == "__main__":
   model.params.use_curriculum = True
   model.params.curriculum_ep_num = 10000
   model.params.curriculum_object_set = "set3_fullset_795"
-  model.params.num_episodes = 50000
+  model.params.num_episodes = 30000
 
   # perform the training with other parameters standard
-  baseline_training(model, sensors=this_sensors[0], z_state=this_sensors[1], 
-                    sensor_steps=this_sensors[2], state_steps=this_sensors[3])
+  baseline_training(model, sensor_mode=this_sensor[0],
+                           sensor_steps=this_sensor[1],
+                           state_mode=this_state[0],
+                           state_steps=this_state[1])
 
   # ----- END ----- #
    

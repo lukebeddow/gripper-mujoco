@@ -53,7 +53,7 @@ class MjEnv():
     self.test_in_progress = False
     self.test_completed = False
     self.test_trials_per_obj = 1
-    self.test_objects = 60
+    self.test_objects = 100
     
     # define file structure
     self.task_xml_folder = "task"
