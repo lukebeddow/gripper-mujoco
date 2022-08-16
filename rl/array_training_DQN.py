@@ -264,92 +264,6 @@ def add_sensors(model, num=None, sensor_mode=None, state_mode=None, sensor_steps
 
   return model
 
-def simplest_sphere_lifting(model):
-  # try only to lift objects with the fingers
-
-  # set up the object set
-  model.env._load_object_set(name="set1_sphereonly_120")
-
-  # data logging
-  model.params.save_freq = 500
-  model.params.test_freq = 2_000
-  model.params.wandb_freq_s = 300
-
-  # what actions are we using
-  model.env.mj.set.paired_motor_X_step = True
-  model.env.mj.set.use_palm_action = True
-  model.env.mj.set.use_height_action = False
-
-  # what sensing mode (0=raw data, 1=change, 2=average)
-  model.env.mj.set.sensor_sample_mode = 1
-  model.env.mj.set.state_sample_mode = 0
-
-  # reward each step                     reward   done   trigger
-  model.env.mj.set.step_num.set          (0,      False,   1)
-
-  # penalties and bonuses
-  pvalue = -0.025
-  pdone = 5
-  rvalue = 0.05
-
-  # penalties                            reward   done   trigger  min   max  overshoot
-  model.env.mj.set.exceed_limits.set     (pvalue, pdone,   1)
-  model.env.mj.set.exceed_axial.set      (pvalue, pdone,   1,     3.0,  6.0,  -1)
-  model.env.mj.set.exceed_lateral.set    (pvalue, pdone,   1,     4.0,  6.0,  -1)
-  model.env.mj.set.exceed_palm.set       (pvalue, pdone,   1,     6.0,  10.0, -1)
-
-  # binary rewards                       reward   done   trigger
-  model.env.mj.set.lifted.set            (rvalue, False,   1)
-  model.env.mj.set.target_height.set     (rvalue, False,   1)
-  # model.env.mj.set.object_stable.set     (rvalue, False,   1)
-  
-  # linear rewards                       reward   done   trigger min   max  overshoot
-  model.env.mj.set.finger_force.set      (rvalue, False,   1,    0.2,  1.0,  -1)
-  model.env.mj.set.palm_force.set        (rvalue, False,   1,    1.0,  6.0,  -1)
-
-  # scale based on steps allowed per episode
-  model.env.mj.set.scale_rewards(100 / model.env.max_episode_steps)
-
-  # end criteria                         reward   done   trigger
-  # model.env.mj.set.stable_height.set     (0.0,    True,    1)
-  model.env.mj.set.object_stable.set     (1.0,    True,    1)
-  model.env.mj.set.oob.set               (-1.0,   True,    1)
-
-  # termination with poor reward
-  model.env.mj.set.quit_on_reward_below = -1
-  model.env.mj.set.quit_reward_capped = True
-
-  model.wandb_note += "Simplest sphere lifting\n"
-
-  return model
-
-def finger_only_lifting(model):
-  # try only to lift objects with the fingers
-
-  model.env.mj.set.use_palm_action = False
-
-  # binary rewards                       reward   done   trigger
-  model.env.mj.set.step_num.set          (-0.01,  False,   1)
-  model.env.mj.set.lifted.set            (0.005,  False,   1)
-  
-  # linear rewards                       reward   done   trigger min   max  overshoot
-  model.env.mj.set.finger_force.set      (0.005,  False,   1,    0.2,  1.0,  -1)
-
-  # penalties                            reward   done   trigger min   max  overshoot
-  model.env.mj.set.exceed_limits.set     (-0.005, False,   1)
-  model.env.mj.set.exceed_axial.set      (-0.005, False,   1,    3.0,  6.0,  -1)
-  model.env.mj.set.exceed_lateral.set    (-0.005, False,   1,    4.0,  6.0,  -1)
-
-  # end criteria                         reward   done   trigger
-  model.env.mj.set.target_height.set     (0.0,    True,    1)
-  model.env.mj.set.oob.set               (-1.0,   True,    1)
-
-  # terminate episode when reward drops below -1.01, also cap at this value
-  model.env.mj.set.quit_on_reward_below = -2.01
-  model.env.mj.set.quit_reward_capped = True
-
-  return model
-
 def apply_to_all_models(model):
   """
   Settings we want to apply to every single running model. This can also be used
@@ -507,10 +421,10 @@ def logging_job(model, run_name, group_name):
   model.log_wandb(force=True)
   model.plot(force=True, hang=True)
 
-def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=None, network=networks.DQN_3L60, 
-                      memory=50_000, state_steps=None, sensor_steps=None, z_state=True, sensor_mode=None,
-                      state_mode=None, reward_style="mixed_v2", reward_options=[], scale_rewards=1,
-                      scale_penalties=1, penalty_termination=False):
+def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=None, network=networks.DQN_4L100, 
+                      memory=50_000, state_steps=1, sensor_steps=1, z_state=True, sensor_mode=2,
+                      state_mode=1, reward_style="mixed_v3", reward_options=[], scale_rewards=2.5,
+                      scale_penalties=1.0, penalty_termination=False, finger_stiffness=8):
   """
   Runs a baseline training on the model
   """
@@ -520,6 +434,7 @@ def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=None, network=netw
   model.params.learning_rate = lr
   model.params.eps_decay = eps_decay
   model.params.memory_replay = memory
+  model.env.mj.set.finger_stiffness = finger_stiffness
 
   # wandb notes
   model.wandb_note += f"Network: {network.name}\n"
@@ -538,11 +453,6 @@ def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=None, network=netw
   # train and finish
   model.train(network)
   exit()
-
-def print_info(model):
-  """
-  
-  """
 
 if __name__ == "__main__":
 
@@ -712,35 +622,36 @@ if __name__ == "__main__":
   baseline_training(model, sensors=this_sensors)
   """
 
-  # varying 6x6 = possible trainings 1-36
-  reward_scaling_list = [
-    (1,   1),
-    (2.5, 1), # current baseline
-    (1,   2.5),
-    (2.5, 2.5),
-    (7.5, 2.5),
-    (2.5, 7.5),
-    (7.5, 7.5),
+  # varying 5x3x2 = possible trainings 1-30
+  lr_list = [
+    1e-5,   1e-5,
+    2.5e-5, 2.5e-5,
+    5e-5,   5e-5,
+    7.5e-5, 7.5e-5,
+    1e-4,   1e-4
   ]
 
-  options_list = [
-    (False, False), # current baseline
-    (False, True),
-    (3,     False),
-    (3,     True),
-    (6,     False),
-    (6,     True)
+  eps_decay_list = [
+    2000,
+    4000,
+    6000,
   ]
+
+  curriculum_list = [False, True]
 
   # lists are zero indexed so adjust inputarg
   inputarg -= 1
 
   # we vary wrt memory_list every inputarg increment
-  x = len(options_list)
+  x = len(eps_decay_list)
 
   # get the sensors and memory size for this training
-  this_scaling = reward_scaling_list[inputarg // x]         # vary every x steps
-  this_option = options_list[inputarg % x]                  # vary every +1 & loop
+  this_lr = lr_list[inputarg // x]                # vary every x steps
+  this_eps_decay = eps_decay_list[inputarg % x]   # vary every +1 & loop
+
+  this_curriculum = curriculum_list[
+    (inputarg // x) % 2
+  ] # vary for each pair of lr values
 
   # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
   #   A1, A2, A3, ...
@@ -748,8 +659,9 @@ if __name__ == "__main__":
   #   C1, C2, C3, ...
 
   # make note
-  param_1 = f"Reward scaling {this_scaling[0]}, penalty scaling {this_scaling[1]}\n"
-  param_2 = f"Early temrination is {this_option[0]}, make all rewards binary is {this_option[1]}\n"
+  param_1 = f"Learning rate is {this_lr}\n"
+  param_2 = f"Eps decay is {this_eps_decay}\n"
+  param_3 = f"Curriculum learning is {this_curriculum}\n"
   model.wandb_note += param_1 + param_2
 
   # if we are just printing help information
@@ -757,22 +669,25 @@ if __name__ == "__main__":
     print("Input arg", inputarg + 1)
     print("\t" + param_1, end="")
     print("\t" + param_2, end="")
+    print("\t" + param_3, end="")
     exit()
 
-  # set the finger stiffness
-  model.env.mj.set.finger_stiffness = 8
+  # if we use curriculum learning
+  if this_curriculum:
+    model.params.object_set = "set3_nocuboid_525"
+    model.params.use_curriculum = True
+    model.params.curriculum_object_set = "set3_fullset_795"
+  else:
+    model.params.object_set = "set3_fullset_795"
 
-  # lets use curriculum learning
-  model.params.object_set = "set3_nocuboid_525"
-  model.params.use_curriculum = True
-  model.params.curriculum_ep_num = 10000
-  model.params.curriculum_object_set = "set3_fullset_795"
+  # set number of training episodes
   model.params.num_episodes = 30000
 
+  # only use realistic sensors
+  sensor_setup = 2
+
   # perform the training with other parameters standard
-  baseline_training(model, reward_style="mixed_v3", scale_rewards=this_scaling[0],
-                    scale_penalties=this_scaling[1], penalty_termination=this_option[0],
-                    reward_options=["make_binary"] if this_option[1] == True else []) 
+  baseline_training(model, lr=this_lr, eps_decay=this_eps_decay, sensors=sensor_setup) 
 
   # ----- END ----- #
    

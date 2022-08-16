@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import os
-import pickle
 import sys
 
 # get the path to this file and insert it to python path (for mjpy.bind)
@@ -346,22 +345,19 @@ class MjEnv():
     # set the python random seed in numpy
     np.random.seed(seed)
 
-    # set the same cpp random seed (reseeded upon cpp call to reset())
+    # set the same cpp random seed (reseeded upon call to reset())
     self.mj.set.random_seed = seed
 
     # save the seed
     self.myseed = seed
 
+    # tell the simulation to reload a new xml (upon call to reset())
+    self.reload_flag = True
+
   def start_test(self):
     """
     Begin test mode, should be called by class user
     """
-
-    # # temporary repeat of __init__() code for backwards compatibility
-    # self.test_trials_per_obj = 1
-    # self.test_objects = 60
-    # self.test_obj_per_file = 20           # how many test objects per file
-    # self.testing_xmls = int(np.ceil(self.test_objects / float(self.test_obj_per_file)))
 
     self.current_test_trial = MjEnv.Test()
     self.test_trials = []

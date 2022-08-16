@@ -1192,34 +1192,13 @@ void makeSettingsUI(int oldstate)
 {
     mjuiDef defActions[] =
     {
-        {mjITEM_SECTION, "Sim Settings",    oldstate,  NULL,   " #500"},
-        // {mjITEM_CHECKINT, "pris 1",   2,  &myMjClass.model->eq_active[0], " #501"},
-        // {mjITEM_CHECKINT, "pris 2",   2,  &myMjClass.model->eq_active[1], " #502"},
-        // {mjITEM_CHECKINT, "pris 3",   2,  &myMjClass.model->eq_active[2], " #503"},
-        // {mjITEM_CHECKINT, "rev 1",   2,  &myMjClass.model->eq_active[3], " #504"},
-        // {mjITEM_CHECKINT, "rev 2",   2,  &myMjClass.model->eq_active[4], " #505"},
-        // {mjITEM_CHECKINT, "rev 3",   2,  &myMjClass.model->eq_active[5], " #506"},
-        {mjITEM_BUTTON, "pris 1",   2,  NULL, " #501"},
-        {mjITEM_BUTTON, "pris 2",   2,  NULL, " #502"},
-        {mjITEM_BUTTON, "pris 3",   2,  NULL, " #503"},
-        {mjITEM_BUTTON, "rev 1",   2,   NULL, " #504"},
-        {mjITEM_BUTTON, "rev 2",   2,   NULL, " #505"},
-        {mjITEM_BUTTON, "rev 3",   2,   NULL, " #506"},
-        {mjITEM_BUTTON, "palm",    2,   NULL, " #507"},
-        {mjITEM_CHECKINT, "curve_validation", 2, &myMjClass.s_.curve_validation, " #508"},
-        {mjITEM_SLIDERNUM, "finger_stiffness", 2, &myMjClass.s_.finger_stiffness, "1.0 20.0"},
-        {mjITEM_CHECKINT, "randomise_colours", 2, &myMjClass.s_.randomise_colours, " #508"},
-
-        // {mjITEM_BUTTON, "Action 7 (H-)",           2,  NULL,   " #310"},
-        // {mjITEM_BUTTON, "Reward",                  2,  NULL,   " #311"},
-        // {mjITEM_CHECKINT, "Debug",     2, &myMjClass.s_.debug,   " #312"},
-        // {mjITEM_CHECKINT, "Env steps", 2, &settings.env_steps, " #313"},
-        // {mjITEM_SLIDERINT, "No. steps",            2, 
-        //     &myMjClass.s_.action_motor_steps,             "0 2000"},
-        // {mjITEM_SLIDERNUM, "Base trans.",          2, 
-        //     &myMjClass.s_.action_base_translation,        "0.0 0.05"},
-        // {mjITEM_SLIDERINT, "Action steps",          2, 
-        //     &myMjClass.s_.sim_steps_per_action,           "0 2000"},
+        {mjITEM_SECTION,  "Sim Settings",      oldstate,  NULL,   " #500"},
+        {mjITEM_CHECKINT, "Debug",             2, &myMjClass.s_.debug,             " #600"},
+        {mjITEM_SLIDERNUM,"mj timestep",       2, &myMjClass.s_.mujoco_timestep,   "0.0001 0.004"},
+        {mjITEM_CHECKINT, "curve_validation",  2, &myMjClass.s_.curve_validation,  " #601"},
+        {mjITEM_SLIDERNUM,"finger_stiffness",  2, &myMjClass.s_.finger_stiffness,  "1.0 20.0"},
+        {mjITEM_CHECKINT, "randomise_colours", 2, &myMjClass.s_.randomise_colours, " #602"},
+        
         {mjITEM_END}
     };
 
@@ -1973,12 +1952,12 @@ void uiEvent(mjuiState* state)
 
         else if (it and it->sectionid == SECT_SETTINGS)
         {
-            switch (it->itemid)
-            {
-                case 0: case 1: case 2: case 3: case 4: case 5: case 6:
-                    luke::toggle_constraint(myMjClass.model, myMjClass.data, it->itemid);
-                    break;
-            }
+            // switch (it->itemid)
+            // {
+            //     case 0: case 1: case 2: case 3: case 4: case 5: case 6:
+            //         luke::toggle_constraint(myMjClass.model, myMjClass.data, it->itemid);
+            //         break;
+            // }
         }
 
         else if (it and it->sectionid == SECT_ACTION)

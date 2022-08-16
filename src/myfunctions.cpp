@@ -783,6 +783,7 @@ void configure_constraints(mjModel* model, mjData* data)
       j_.con_idx.palm.push_back(i);
     }
 
+    // default, turn constraint off
     model->eq_active[i] = false;
   }
 

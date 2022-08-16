@@ -1197,7 +1197,7 @@ class TrainDQN():
       elif self.additional_logging is not None:
         if i_episode < self.params.test_freq:
           if i_episode % self.additional_logging == 0:
-            texttosave = f"Cluster training has reached episode {i_episode}"
+            texttosave = f"Cluster training has reached episode {i_episode}\n"
             self.modelsaver.save("cluster_episode_tracker", txtstr=texttosave, 
                                  txtonly=True)
 
@@ -1260,7 +1260,10 @@ class TrainDQN():
     Save a text file with the current hyperparameters
     """
 
-    print_out = True
+    if self.log_level > 0:
+      print_out = True
+    else:
+      print_out = False
 
     param_str = ""
     time_stamp = datetime.now().strftime("%d-%m-%Y-%H:%M")
@@ -1470,19 +1473,19 @@ if __name__ == "__main__":
   # load
   # net = networks.DQN_3L60
   # model.init(net)
-  # folderpath = "/home/luke/cluster/rl/models/dqn/29-07-22/"
-  # foldername = "cluster_14:04_A28"
-  # model.device = torch.device("cpu")
-  # model.load(id=39, folderpath=folderpath, foldername=foldername)
+  folderpath = "/home/luke/cluster/rl/models/dqn/09-08-22/"
+  foldername = "cluster_09:27_A12"
+  model.device = torch.device("cpu")
+  model.load(id=24, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
-  # train
-  net = networks.DQN_3L60
-  model.env.disable_rendering = True
-  model.env.mj.set.debug = False
-  model.additional_logging = 10
-  model.train(network=net)
+  # # train
+  # net = networks.DQN_3L60
+  # model.env.disable_rendering = True
+  # model.env.mj.set.debug = False
+  # model.additional_logging = 10
+  # model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
@@ -1518,10 +1521,10 @@ if __name__ == "__main__":
   # model = array_training_DQN.new_rewards(model)
 
   # test
-  # model.env.mj.set.debug = False
-  # model.env.disable_rendering = False
+  model.env.mj.set.debug = False
+  model.env.disable_rendering = False
   # model.env.test_trials_per_obj = 1
-  # model.env.test_objects = 15
+  model.env.test_objects = 30
   # model.env.test_obj_per_file = 5
   # model.env.max_episode_steps = 20
 
@@ -1529,14 +1532,14 @@ if __name__ == "__main__":
   # model.env.mj.set.exceed_limits.set     (-0.005, True,   10)
   # model.env.mj.set.exceed_axial.set      (-0.005, True,   10,    3.0,  6.0,  -1)
   # model.env.mj.set.exceed_lateral.set    (-0.005, True,   10,    4.0,  6.0,  -1)
-  # input("Press enter to begin")
-  # test_data = model.test(pause_each_episode=False)
+  input("Press enter to begin")
+  test_data = model.test(pause_each_episode=False)
 
   # save results
-  # test_report = model.create_test_report(test_data)
-  # model.modelsaver.new_folder(label="DQN_testing")
-  # model.save_hyperparameters(labelstr=f"Loaded model path: {model.modelsaver.last_loadpath}\n")
-  # model.save(txtstring=test_report, txtlabel="test_results_demo")
+  test_report = model.create_test_report(test_data)
+  model.modelsaver.new_folder(label="DQN_testing")
+  model.save_hyperparameters(labelstr=f"Loaded model path: {model.modelsaver.last_loadpath}\n")
+  model.save(txtstring=test_report, txtlabel="test_results_demo")
   
 
 
