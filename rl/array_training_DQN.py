@@ -418,8 +418,8 @@ def logging_job(model, run_name, group_name):
   model.track.success_rate_metric = "stable height"
   model.track.plot_time_taken = True
   
-  model.log_wandb(force=True)
-  model.plot(force=True, hang=True)
+  model.log_wandb(force=True, end=True)
+  model.plot(force=True, end=True, hang=True)
 
 def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=None, network=networks.DQN_4L100, 
                       memory=50_000, state_steps=1, sensor_steps=1, z_state=True, sensor_mode=2,
@@ -621,6 +621,20 @@ if __name__ == "__main__":
   # perform the training with standard baseline settings unless specified by args
   baseline_training(model, sensors=this_sensors)
   """
+
+  # scaling_list = [
+  #   (2.5, 1.0),
+  #   (2.5, 2.5),
+  #   (2.5, 7.5),
+  #   (7.5, 7.5),
+  # ]
+
+  # # lists are zero indexed
+  # inputarg -= 1
+
+  # model.params.num_episodes = 30000
+  # baseline_training(model, sensors=2, scale_rewards=scaling_list[inputarg][0],
+  #                   scale_penalties=scaling_list[inputarg][1]) 
 
   # varying 5x3x2 = possible trainings 1-30
   lr_list = [
