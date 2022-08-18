@@ -2,6 +2,7 @@
 #define MYFUNCTIONS_H_
 
 #include "mjxmacro.h"
+#include "mjvisualize.h"
 // #include "uitools.h"
 #include "mujoco.h"
 #include "stdio.h"
@@ -58,6 +59,7 @@ void calibrate_reset(mjModel* model, mjData* data);
 void reset_constraints(mjModel* model, mjData* data);
 void toggle_constraint(mjModel* model, mjData* data, int id);
 void set_constraint(mjModel* model, mjData* data, int id, bool set_as);
+void apply_tip_force(mjModel* model, mjData* data, double force);
 
 // simulation
 void before_step(mjModel* model, mjData* data);

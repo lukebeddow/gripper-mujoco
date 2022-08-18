@@ -1196,7 +1196,7 @@ void makeSettingsUI(int oldstate)
         {mjITEM_CHECKINT, "Debug",             2, &myMjClass.s_.debug,             " #600"},
         {mjITEM_SLIDERNUM,"mj timestep",       2, &myMjClass.s_.mujoco_timestep,   "0.0001 0.004"},
         {mjITEM_CHECKINT, "curve_validation",  2, &myMjClass.s_.curve_validation,  " #601"},
-        {mjITEM_SLIDERNUM,"finger_stiffness",  2, &myMjClass.s_.finger_stiffness,  "1.0 20.0"},
+        {mjITEM_SLIDERNUM,"finger_stiffness",  2, &myMjClass.s_.finger_stiffness,  "1.0 25.0"},
         {mjITEM_CHECKINT, "randomise_colours", 2, &myMjClass.s_.randomise_colours, " #602"},
         
         {mjITEM_END}

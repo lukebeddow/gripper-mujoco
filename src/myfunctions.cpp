@@ -994,6 +994,53 @@ void calibrate_reset(mjModel* model, mjData* data)
 
 }
 
+void apply_tip_force(mjModel* model, mjData* data, double force)
+{
+  /* apply a horizontal force to the tip of the finger */
+
+  // for (int i = 0; i < model->nbody; i++) {
+  //   std::string name = mj_id2name(model, mjOBJ_BODY, i);
+  //   std::printf("id %d has name %s\n", i, name.c_str());
+  // }
+
+  // throw std::runtime_error("stop");
+
+  mjvPerturb p;
+
+  // for lock the fingers in place
+  for (int i : j_.con_idx.prismatic) {
+    set_constraint(model, data, i, true);
+  }
+  for (int i : j_.con_idx.revolute) {
+    set_constraint(model, data, i, true);
+  }
+
+  // loop through and apply force to fingertips
+  for (int i = 0; i < 3; i++) {
+
+    // get the tip of the finger
+    int idx = j_.idx.finger[(i + 1) * j_.num.per_finger - 1];
+
+    
+
+    // apply force in cartesian space (joint space is qfrc_applied)
+    data->xfrc_applied[idx * 6 + 0] = force;
+
+    // mjtNum fvec[3] = { force, 0, 0 };
+    // mjtNum tvec[3] = { 0, 0, 0 };
+    // mjtNum point[3] = { 0, 0, 0 };
+
+    // mj_applyFT(model, data, fvec, tvec, point, idx, data->qfrc_applied);
+
+    // p.select = idx;
+    // p.localpos[0] = point[0];
+    // p.localpos[1] = point[1];
+    // p.localpos[2] = point[2];
+
+    // mjv_applyPerturbForce(model, data, &p);
+  }
+}
+
 void wipe_settled()
 {
   /* wipes the settled and target reached states, to give an action time to
