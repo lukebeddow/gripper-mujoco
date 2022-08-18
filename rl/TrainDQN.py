@@ -359,10 +359,17 @@ class TrainDQN():
       Log scatter graph of best model performance
       """
 
-      table = wandb.Table(data=[[best_ep, best_sr]], columns = ["Training episode", "Best success rate"])
+      X = "Training episode"
+      Y = "Best success rate"
 
-      wandb.log({"Best success rate scatter" : wandb.plot.scatter(table, "Episode", "Best success rate",
-                                                                  title="Best success rate and occurance episode")})
+      xdata = [best_ep]
+      ydata = [best_sr]
+      data = [[x, y] for (x, y) in zip(xdata, ydata)]
+
+      table = wandb.Table(data=data, columns = [X, Y])
+
+      wandb.log({"Best success rate scatter" : wandb.plot.scatter(table, X, Y,
+                                                 title="Best success rate and occurance episode")})
 
     def plot_wandb(self, xdata, ydata, xlabel, ylabel, title):
       # plot data to weights and biases
@@ -810,9 +817,9 @@ class TrainDQN():
       if self.params.use_curriculum:
         if self.curriculum_applied is not None and self.curriculum_applied > 1:
           from_episode = self.curriculum_applied
-          print_details = f"curriculum applied at {self.curriculum_applied}"
+          print_details = f"(curriculum applied at {self.curriculum_applied})"
         else:
-          print_details = "curriculum not applied"
+          print_details = "(curriculum not applied)"
       else: 
         from_episode = None
         print_details = ""
@@ -821,7 +828,7 @@ class TrainDQN():
       best_sr, best_ep = self.track.calc_best_performance(from_episode=from_episode)
       self.track.log_performance_scatter(best_ep, best_sr)
 
-      print(f"Run best performance is {best_sr} at episode {best_ep}" + " (" + print_details + ")")
+      print(f"Run best performance is {best_sr} at episode {best_ep} " + print_details)
 
     if hang == True:
       plt.ioff()
@@ -865,7 +872,7 @@ class TrainDQN():
       best_sr, best_ep = self.track.calc_best_performance(from_episode=from_episode)
       self.track.log_performance_scatter(best_ep, best_sr)
 
-      print(f"Run best performance is {best_sr} at episode {best_ep}" + " (" + print_details + ")")
+      print(f"Run best performance is {best_sr} at episode {best_ep} " + print_details)
 
   def create_test_report(self, test_data, i_episode=None):
     """
