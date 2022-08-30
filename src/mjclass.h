@@ -592,7 +592,9 @@ namespace MjType
 
   // data to validate the curve fitting
   struct CurveFitData {
+
     struct PoseData {
+
       struct FingerData {
 
         std::vector<float> x;         // segment end x positions
@@ -600,63 +602,196 @@ namespace MjType
         std::vector<float> coeff;     // curve fit coefficients
         std::vector<float> errors;    // curve fit point prediction errors
 
-        void print_vec(std::vector<float> v, std::string name) {
-          std::cout << name << ":\n";
-          if (v.size() == 0) {
-            std::cout << "empty\n";
-            return;
+        std::vector<float> joints;    // joint values
+        std::vector<float> pred_j;    // errors vs simple joint calculation
+        std::vector<float> pred_x;    // predicted x in simple model
+        std::vector<float> pred_y;    // predicted y in simple model
+        std::vector<float> theory_y;  // theory predicted y deflection
+
+        struct Error {
+          float x_wrt_pred_x = 0;
+          float x_wrt_pred_x_percent = 0;
+          float x_wrt_pred_x_tipratio = 0;
+
+          float y_wrt_pred_y = 0;
+          float y_wrt_pred_y_percent = 0;
+          float y_wrt_pred_y_tipratio = 0;
+
+          float y_wrt_theory_y = 0;
+          float y_wrt_theory_y_percent = 0;
+          float y_wrt_theory_y_tipratio = 0;
+
+          float y_pred_wrt_theory_y = 0;
+          float y_pred_wrt_theory_y_percent = 0;
+          float y_pred_wrt_theory_y_tipratio = 0;
+
+          float j_wrt_pred_j = 0;
+          float j_wrt_pred_j_percent = 0;
+
+          float x_tip_wrt_pred_x = 0;
+          float y_tip_wrt_pred_y = 0;
+          float y_tip_wrt_theory_y = 0;
+
+          void print() {
+            std::printf("Avg. per joint:     \t error   \t %%error \t tipratio\n");
+            std::printf("x wrt pred_x        \t %.3f mm \t %.3f%% \t %.3f%%\n",        x_wrt_pred_x * 1000,        x_wrt_pred_x_percent * 100,        x_wrt_pred_x_tipratio * 100);
+            std::printf("y wrt pred_y        \t %.3f mm \t %.3f%% \t %.3f%%\n",        y_wrt_pred_y * 1000,        y_wrt_pred_y_percent * 100,        y_wrt_pred_y_tipratio * 100);
+            std::printf("y wrt theory_y      \t %.3f mm \t %.3f%% \t %.3f%%\n",      y_wrt_theory_y * 1000,      y_wrt_theory_y_percent * 100,      y_wrt_theory_y_tipratio * 100);
+            std::printf("y_pred wrt theory_y \t %.3f mm \t %.3f%% \t %.3f%%\n", y_pred_wrt_theory_y * 1000, y_pred_wrt_theory_y_percent * 100, y_pred_wrt_theory_y_tipratio * 100);
+            std::printf("j wrt pred_j        \t %.3f deg \t %.3f%%\n", j_wrt_pred_j * (180 / 3.1415926536), j_wrt_pred_j_percent * 100);
+            std::printf("Free end tip error:\n");
+            std::printf("x tip wrt pred_x   \t %.3f mm\n", x_tip_wrt_pred_x * 1000);
+            std::printf("y tip wrt pred_y   \t %.3f mm\n", y_tip_wrt_pred_y * 1000);
+            std::printf("y tip wrt theory_y \t %.3f mm\n", y_tip_wrt_theory_y * 1000);
           }
-          for (unsigned int i = 0; i < v.size() - 1; i++) {
-            std::cout << v[i] << "\n";
+        } error;
+
+        void calc_error() {
+
+          // reset all error counts
+          Error blank_error;
+          error = blank_error;
+
+          // skip first entries as that is the fixed end
+          uint skip = 1;
+
+          // get length of vectors
+          uint N = y.size();
+
+          // float x_cum = 0;
+          // float y_cum = 0;
+          // float pred_y_cum = 0;
+          // float theory_y_cum = 0;
+
+          // loop and calculate abs and percentage errors sums
+          for (uint i = skip; i < N; i++) {
+            error.x_wrt_pred_x += abs(x[i] - pred_x[i]);
+            error.x_wrt_pred_x_percent += abs(x[i] - pred_x[i]) / pred_x[i];
+            error.y_wrt_pred_y += abs(y[i] - pred_y[i]);
+            error.y_wrt_pred_y_percent += abs(y[i] - pred_y[i]) / pred_y[i];
+            error.y_wrt_theory_y += abs(y[i] - theory_y[i]);
+            error.y_wrt_theory_y_percent += abs(y[i] - theory_y[i]) / theory_y[i];
+            error.y_pred_wrt_theory_y += abs(pred_y[i] - theory_y[i]);
+            error.y_pred_wrt_theory_y_percent += abs(pred_y[i] - theory_y[i]) / theory_y[i];
+            error.j_wrt_pred_j += abs(joints[i - 1] - pred_j[i - 1]);
+            error.j_wrt_pred_j_percent += abs(joints[i - 1] - pred_j[i - 1]) / pred_j[i - 1];
+
+            // // calculate the total deflection values (for average tipratio)
+            // x_cum += x[i]; 
+            // y_cum += y[i];
+            // pred_y_cum += pred_y[i];
+            // theory_y_cum += theory_y[i];
           }
-          std::cout << v[v.size() - 1] << "\n\n";
+
+          // divide to get average
+          error.x_wrt_pred_x /= (float)N;
+          error.x_wrt_pred_x_percent /= (float)N;
+          error.y_wrt_pred_y /= (float)N;
+          error.y_wrt_pred_y_percent /= (float)N;
+          error.y_wrt_theory_y /= (float)N;
+          error.y_wrt_theory_y_percent /= (float)N;
+          error.y_pred_wrt_theory_y /= (float)N;
+          error.y_pred_wrt_theory_y_percent /= (float)N;
+          error.j_wrt_pred_j /= (float)N;
+          error.j_wrt_pred_j_percent /= (float)N;
+
+          // get tip ratios from average error over max value
+          // // testing: use average y position, instead of tip position
+          // x_cum /= (float)N;
+          // y_cum /= (float)N;
+          // pred_y_cum /= (float)N;
+          // theory_y_cum /= (float)N;
+          error.x_wrt_pred_x_tipratio = error.x_wrt_pred_x / x[N - 1];
+          error.y_wrt_pred_y_tipratio = error.y_wrt_pred_y / y[N - 1];
+          error.y_wrt_theory_y_tipratio = error.y_wrt_theory_y / y[N - 1];
+          error.y_pred_wrt_theory_y_tipratio = error.y_pred_wrt_theory_y / pred_y[N - 1];
+
+          // get tip differences
+          error.x_tip_wrt_pred_x = x[N - 1] - pred_x[N - 1];
+          error.y_tip_wrt_pred_y = y[N - 1] - pred_y[N - 1];
+          error.y_tip_wrt_theory_y = y[N - 1] - theory_y[N - 1];
         }
-        void print() {
-          print_vec(x, "x positions");
-          print_vec(y, "y positions");
-          print_vec(coeff, "coefficients");
-          print_vec(errors, "errors");
-          std::cout << "-----end-----\n\n";
+
+        void print_table() {
+          float to_deg = (180.0 / 3.1415926535897);
+          std::cout << "n \t x \t x_p \t E_x \t y_t \t y \t y_p \t E_y \t j \t j_p \t E_j (units mm/deg)\n";
+          for (uint i = 0; i < x.size(); i++) {
+            std::printf("%i \t %.1f \t %.1f \t %.1f \t %.1f \t %.1f \t %.1f \t %.1f \t %.1f \t %.1f \t %.1f\n",
+              i, x[i] * 1000, pred_x[i] * 1000, (x[i] - pred_x[i]) * 1000,
+              theory_y[i] * 1000, y[i] * 1000, pred_y[i] * 1000, (y[i] - pred_y[i]) * 1000,
+              joints[i] * to_deg, pred_j[i] * to_deg, (joints[i] - pred_j[i]) * to_deg);
+          }
         }
       };
 
       FingerData f1;
       FingerData f2;
       FingerData f3;
+      FingerData::Error avg_error;
+      std::string tag_string;
 
+      void calc_error()
+      {
+        f1.calc_error();
+        f2.calc_error();
+        f3.calc_error();
+
+        avg_error.x_wrt_pred_x = (f1.error.x_wrt_pred_x + f2.error.x_wrt_pred_x + f3.error.x_wrt_pred_x) / 3;
+        avg_error.x_wrt_pred_x_percent = (f1.error.x_wrt_pred_x_percent + f2.error.x_wrt_pred_x_percent + f3.error.x_wrt_pred_x_percent) / 3;
+        avg_error.y_wrt_pred_y = (f1.error.y_wrt_pred_y + f2.error.y_wrt_pred_y + f3.error.y_wrt_pred_y) / 3;
+        avg_error.y_wrt_pred_y_percent = (f1.error.y_wrt_pred_y_percent + f2.error.y_wrt_pred_y_percent + f3.error.y_wrt_pred_y_percent) / 3;
+        avg_error.y_wrt_theory_y = (f1.error.y_wrt_theory_y + f2.error.y_wrt_theory_y + f3.error.y_wrt_theory_y) / 3;
+        avg_error.y_wrt_theory_y_percent = (f1.error.y_wrt_theory_y_percent + f2.error.y_wrt_theory_y_percent + f3.error.y_wrt_theory_y_percent) / 3;
+        avg_error.y_pred_wrt_theory_y = (f1.error.y_pred_wrt_theory_y + f2.error.y_pred_wrt_theory_y + f3.error.y_pred_wrt_theory_y) / 3;
+        avg_error.y_pred_wrt_theory_y_percent = (f1.error.y_pred_wrt_theory_y_percent + f2.error.y_pred_wrt_theory_y_percent + f3.error.y_pred_wrt_theory_y_percent) / 3;
+        avg_error.j_wrt_pred_j = (f1.error.j_wrt_pred_j + f2.error.j_wrt_pred_j + f3.error.j_wrt_pred_j) / 3;
+        avg_error.j_wrt_pred_j_percent = (f1.error.j_wrt_pred_j_percent + f2.error.j_wrt_pred_j_percent + f3.error.j_wrt_pred_j_percent) / 3;
+
+        avg_error.x_wrt_pred_x_tipratio = (f1.error.x_wrt_pred_x_tipratio + f2.error.x_wrt_pred_x_tipratio + f3.error.x_wrt_pred_x_tipratio) / 3;
+        avg_error.y_wrt_pred_y_tipratio = (f1.error.y_wrt_pred_y_tipratio + f2.error.y_wrt_pred_y_tipratio + f3.error.y_wrt_pred_y_tipratio) / 3;
+        avg_error.y_wrt_theory_y_tipratio = (f1.error.y_wrt_theory_y_tipratio + f2.error.y_wrt_theory_y_tipratio + f3.error.y_wrt_theory_y_tipratio) / 3;
+        avg_error.y_pred_wrt_theory_y_tipratio = (f1.error.y_pred_wrt_theory_y_tipratio + f2.error.y_pred_wrt_theory_y_tipratio + f3.error.y_pred_wrt_theory_y_tipratio) / 3;
+
+        avg_error.x_tip_wrt_pred_x = (f1.error.x_tip_wrt_pred_x + f2.error.x_tip_wrt_pred_x + f3.error.x_tip_wrt_pred_x) / 3;
+        avg_error.y_tip_wrt_pred_y = (f1.error.y_tip_wrt_pred_y + f2.error.y_tip_wrt_pred_y + f3.error.y_tip_wrt_pred_y) / 3;
+        avg_error.y_tip_wrt_theory_y = (f1.error.y_tip_wrt_theory_y + f2.error.y_tip_wrt_theory_y + f3.error.y_tip_wrt_theory_y) / 3;
+
+      }
+
+      void print() {
+
+        // print identifying information
+        std::cout << "Finger pose data: \t" << tag_string << '\n';
+
+        // print table data only for finger 1
+        f1.print_table();
+        
+        // update and print error calculations for all three fingers
+        calc_error();
+        avg_error.print();
+
+        std::cout << "\n\n";
+      }
     };
 
     // save a series of data points
     std::vector<PoseData> entries;
 
+    void update() {
+      for (uint i = 0; i < entries.size(); i++) entries[i].calc_error();
+    }
+
     void print() {
       for (unsigned int i = 0; i < entries.size(); i++) {
         std::cout << "ENTRY " << i << "\n";
-        std::cout << "Finger 1\n";
-        entries[i].f1.print();
-        std::cout << "Finger 2\n";
-        entries[i].f2.print();
-        std::cout << "Finger 3\n";
-        entries[i].f3.print();
+        entries[i].print();
         std::cout << "\n\n";
       }
     }
 
-    void print_errors() {
-      float cum_error = 0.0;
-      for (unsigned int i = 0; i < entries.size(); i++) {
-        for (unsigned int j = 0; j < entries[i].f1.errors.size(); j++) {
-          cum_error += abs(entries[i].f1.errors[j]);
-          cum_error += abs(entries[i].f2.errors[j]);
-          cum_error += abs(entries[i].f3.errors[j]);
-        }
-      }
-      float avg_error = cum_error / (3 * entries.size() * entries[0].f1.errors.size());
-
-      std::cout << "The average error from " << entries.size()
-        << " entries was " << avg_error << '\n';
+    void reset() {
+      std::vector<PoseData>().swap(entries);
     }
-
   };
 
   // calibration constants for gauge data
@@ -791,6 +926,7 @@ public:
   void load(std::string file_path);
   void load_relative(std::string file_path);
   void reset();
+  void hard_reset();
   void step();
   bool render();
 
@@ -838,13 +974,17 @@ public:
   int get_number_of_objects() { return env_.object_names.size(); }
   std::string get_current_object_name() { return env_.obj.name; }
   MjType::TestReport get_test_report();
-  void validate_curve();
+  MjType::CurveFitData::PoseData validate_curve();
+  MjType::CurveFitData::PoseData validate_curve_under_force(int force);
+  MjType::CurveFitData curve_validation_regime(bool print = true);
   void tick();
   float tock();
   MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2);
   void reset_goal();
   void print(std::string s) { std::printf("%s\n", s.c_str()); }
   void default_goal_event_triggering();
+  bool last_action_gripper();
+  bool last_action_panda();
 
 }; // class MjClass
 

@@ -29,6 +29,7 @@ PYBIND11_MODULE(bind, m) {
     .def("load", &MjClass::load)
     .def("load_relative", &MjClass::load_relative)
     .def("reset", &MjClass::reset)
+    .def("hard_reset", &MjClass::hard_reset)
     .def("step", &MjClass::step)
     .def("render", &MjClass::render)
 
@@ -77,6 +78,10 @@ PYBIND11_MODULE(bind, m) {
     .def("reset_goal", &MjClass::reset_goal)
     .def("print", &MjClass::print)
     .def("default_goal_event_triggering", &MjClass::default_goal_event_triggering)
+    .def("validate_under_force", &MjClass::validate_curve_under_force)
+    .def("curve_validation_regime", &MjClass::curve_validation_regime)
+    .def("last_action_gripper", &MjClass::last_action_gripper)
+    .def("last_action_panda", &MjClass::last_action_panda)
 
     // exposed variables
     .def_readwrite("set", &MjClass::s_)
@@ -583,28 +588,60 @@ PYBIND11_MODULE(bind, m) {
     ;
   }
 
-  // three classes to extract detailed curve fit data from the simulation
+  // four classes to extract detailed curve fit data from the simulation
+  {py::class_<MjType::CurveFitData::PoseData::FingerData::Error>(m, "Error")
+    .def(py::init<>())
+    .def_readonly("x_wrt_pred_x", &MjType::CurveFitData::PoseData::FingerData::Error::x_wrt_pred_x)
+    .def_readonly("x_wrt_pred_x_percent", &MjType::CurveFitData::PoseData::FingerData::Error::x_wrt_pred_x_percent)
+    .def_readonly("x_wrt_pred_x_tipratio", &MjType::CurveFitData::PoseData::FingerData::Error::x_wrt_pred_x_tipratio)
+    .def_readonly("y_wrt_pred_y", &MjType::CurveFitData::PoseData::FingerData::Error::y_wrt_pred_y)
+    .def_readonly("y_wrt_pred_y_percent", &MjType::CurveFitData::PoseData::FingerData::Error::y_wrt_pred_y_percent)
+    .def_readonly("y_wrt_pred_y_tipratio", &MjType::CurveFitData::PoseData::FingerData::Error::y_wrt_pred_y_tipratio)
+    .def_readonly("y_wrt_theory_y", &MjType::CurveFitData::PoseData::FingerData::Error::y_wrt_theory_y)
+    .def_readonly("y_wrt_theory_y_percent", &MjType::CurveFitData::PoseData::FingerData::Error::y_wrt_theory_y_percent)
+    .def_readonly("y_wrt_theory_y_tipratio", &MjType::CurveFitData::PoseData::FingerData::Error::y_wrt_theory_y_tipratio)
+    .def_readonly("y_pred_wrt_theory_y", &MjType::CurveFitData::PoseData::FingerData::Error::y_pred_wrt_theory_y)
+    .def_readonly("y_pred_wrt_theory_y_percent", &MjType::CurveFitData::PoseData::FingerData::Error::y_pred_wrt_theory_y_percent)
+    .def_readonly("y_pred_wrt_theory_y_tipratio", &MjType::CurveFitData::PoseData::FingerData::Error::y_pred_wrt_theory_y_tipratio)
+    .def_readonly("j_wrt_pred_j", &MjType::CurveFitData::PoseData::FingerData::Error::j_wrt_pred_j)
+    .def_readonly("j_wrt_pred_j_percent", &MjType::CurveFitData::PoseData::FingerData::Error::j_wrt_pred_j_percent)
+    .def_readonly("x_tip_wrt_pred_x", &MjType::CurveFitData::PoseData::FingerData::Error::x_tip_wrt_pred_x)
+    .def_readonly("y_tip_wrt_pred_y", &MjType::CurveFitData::PoseData::FingerData::Error::y_tip_wrt_pred_y)
+    .def_readonly("y_tip_wrt_theory_y", &MjType::CurveFitData::PoseData::FingerData::Error::y_tip_wrt_theory_y)
+    ;
+  }
+
   {py::class_<MjType::CurveFitData::PoseData::FingerData>(m, "FingerData")
     .def(py::init<>())
-    .def_readwrite("x", &MjType::CurveFitData::PoseData::FingerData::x)
-    .def_readwrite("y", &MjType::CurveFitData::PoseData::FingerData::y)
-    .def_readwrite("coeff", &MjType::CurveFitData::PoseData::FingerData::coeff)
-    .def_readwrite("errors", &MjType::CurveFitData::PoseData::FingerData::errors)
+    .def_readonly("x", &MjType::CurveFitData::PoseData::FingerData::x)
+    .def_readonly("y", &MjType::CurveFitData::PoseData::FingerData::y)
+    .def_readonly("coeff", &MjType::CurveFitData::PoseData::FingerData::coeff)
+    .def_readonly("errors", &MjType::CurveFitData::PoseData::FingerData::errors)
+    .def_readonly("joints", &MjType::CurveFitData::PoseData::FingerData::joints)
+    .def_readonly("pred_j", &MjType::CurveFitData::PoseData::FingerData::pred_j)
+    .def_readonly("pred_x", &MjType::CurveFitData::PoseData::FingerData::pred_x)
+    .def_readonly("pred_y", &MjType::CurveFitData::PoseData::FingerData::pred_y)
+    .def_readonly("theory_y", &MjType::CurveFitData::PoseData::FingerData::theory_y)
+    .def_readonly("error", &MjType::CurveFitData::PoseData::FingerData::error)
     ;
   }
 
   {py::class_<MjType::CurveFitData::PoseData>(m, "PoseData")
     .def(py::init<>())
-    .def_readwrite("f1", &MjType::CurveFitData::PoseData::f1)
-    .def_readwrite("f2", &MjType::CurveFitData::PoseData::f2)
-    .def_readwrite("f3", &MjType::CurveFitData::PoseData::f3)
+    .def("print", &MjType::CurveFitData::PoseData::print)
+    .def_readonly("f1", &MjType::CurveFitData::PoseData::f1)
+    .def_readonly("f2", &MjType::CurveFitData::PoseData::f2)
+    .def_readonly("f3", &MjType::CurveFitData::PoseData::f3)
+    .def_readonly("avg_error", &MjType::CurveFitData::PoseData::avg_error)
+    .def_readonly("tag_string", &MjType::CurveFitData::PoseData::tag_string)
     ;
   }
 
   {py::class_<MjType::CurveFitData>(m, "CurveFitData")
-
     .def(py::init<>())
-    .def_readwrite("entries", &MjType::CurveFitData::entries)
+    .def_readonly("entries", &MjType::CurveFitData::entries)
+    .def("update", &MjType::CurveFitData::update)
+    .def("print", &MjType::CurveFitData::print)
     ;
   }
 
