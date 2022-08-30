@@ -1499,7 +1499,7 @@ class TrainDQN():
 
     # or add extra episodes on to what has already been done
     elif extra_episodes != None:
-      self.params.num_episodes = self.track.episodes_done + extra_episodes
+      self.params.num_episodes = self.params.num_episodes + extra_episodes
 
     # or if we have done exactly our target episodes, double the target
     elif self.params.num_episodes == self.track.episodes_done:
@@ -1566,8 +1566,8 @@ if __name__ == "__main__":
   # load
   # net = networks.DQN_3L60
   # model.init(net)
-  folderpath = "/home/luke/cluster/rl/models/dqn/09-08-22/"
-  foldername = "cluster_09:27_A12"
+  folderpath = "/home/luke/cluster/rl/models/dqn/16-08-22/"
+  foldername = "cluster_16:42_A30"
   model.device = torch.device("cpu")
   model.load(id=24, folderpath=folderpath, foldername=foldername)
 

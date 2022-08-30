@@ -2,7 +2,6 @@
 #define MYFUNCTIONS_H_
 
 #include "mjxmacro.h"
-#include "mjvisualize.h"
 // #include "uitools.h"
 #include "mujoco.h"
 #include "stdio.h"
@@ -54,12 +53,13 @@ void configure_constraints(mjModel* model, mjData* data);
 void keyframe(mjModel* model, mjData* data, std::string keyframe_name);
 void keyframe(mjModel* model, mjData* data, int keyframe_index);
 void reset(mjModel* model, mjData* data);
+void reset_J();
 void wipe_settled();
 void calibrate_reset(mjModel* model, mjData* data);
 void reset_constraints(mjModel* model, mjData* data);
 void toggle_constraint(mjModel* model, mjData* data, int id);
 void set_constraint(mjModel* model, mjData* data, int id, bool set_as);
-void apply_tip_force(mjModel* model, mjData* data, double force);
+void apply_tip_force(mjModel* model, mjData* data, double force, bool reset = false);
 
 // simulation
 void before_step(mjModel* model, mjData* data);
@@ -72,6 +72,7 @@ void control_panda(const mjModel* model, mjData* data);
 void control_gripper(const mjModel* model, mjData* data, Gripper& target);
 void control_base(const mjModel* model, mjData* data);
 void update_state(const mjModel* model, mjData* data);
+void print_state(const mjModel* model, mjData* data);
 void update_stepper(mjModel* model, mjData* data);
 void update_objects(const mjModel* model, mjData* data);
 void update_all(mjModel* model, mjData* data);
@@ -123,6 +124,11 @@ void set_finger_colour(mjModel* model, std::vector<float> rgba, int finger_num);
 gfloat verify_armadillo_gauge(const mjData* data, int finger,
   std::vector<float>& vec_joint_x, std::vector<float>& vec_joint_y,
   std::vector<float>& vec_coefficients, std::vector<float>& vec_errors);
+gfloat verify_small_angle_model(const mjData* data, int finger,
+  std::vector<float>& joint_angles, std::vector<float>& joint_pred,
+  std::vector<float>& pred_x, std::vector<float>& pred_y, std::vector<float>& theory_y,
+  float force, float finger_stiffness);
+int last_action_robot();
 
 } // namespace luke
 

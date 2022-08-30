@@ -103,7 +103,10 @@ class MjEnv():
       r = np.random.randint(self.testing_xmls, self.testing_xmls + self.training_xmls)
       filename = self.task_xml_template.format(r)
 
-    if self.log_level > 1: print("loading xml: ", filename)
+    if self.log_level > 2: 
+      print("Load path: ", self.mj.model_folder_path
+            + self.mj.object_set_name + "/" + self.task_xml_folder)
+    if self.log_level > 1: print("Loading xml: ", filename)
 
     # load the new task xml (old model/data are deleted)
     self.mj.load_relative(self.task_xml_folder + '/' + filename)
