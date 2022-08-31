@@ -460,6 +460,9 @@ void init_J(mjModel* model, mjData* data)
   configure_qpos(model, data);
 
   // calculate constants
+  j_.dim.segment_length = j_.dim.finger_length / float(j_.num.per_finger);
+
+  /* new code, uncomment once backwards compatibility is not an issue
   int N = j_.num.per_finger;
   int Ntotal = j_.num.per_finger + j_.dim.fixed_first_segment;
   j_.dim.segment_length = j_.dim.finger_length / float(Ntotal);
@@ -472,6 +475,7 @@ void init_J(mjModel* model, mjData* data)
     j_.dim.stiffness_c = ( j_.dim.EI / (2 * j_.dim.finger_length) ) 
        * ( (float)((N + 1)*(N + 2)) / N);
   }
+  */
 
   if (debug) {
     std::cout << "Number of finger joints N is " << j_.num.per_finger << '\n';
@@ -713,6 +717,7 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
 {
   /* set the stiffness of the flexible finger joints */
 
+  /* new code, uncomment once backwards compatibility is not an issue
   int N = j_.num.per_finger;
 
   // loop over all three fingers
@@ -732,11 +737,12 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
       model->jnt_stiffness[idx] = c;
     }
   }
+  */
 
   // old code, set all stiffness to the given function input
-  // for (int i : j_.idx.finger) {
-  //   model->jnt_stiffness[i] = stiffness;
-  // }
+  for (int i : j_.idx.finger) {
+    model->jnt_stiffness[i] = stiffness;
+  }
 }
 
 void configure_qpos(mjModel* model, mjData* data)
@@ -1776,8 +1782,10 @@ gfloat read_armadillo_gauge(const mjData* data, int finger)
   arma::vec cumulative(j_.num.per_finger, arma::fill::zeros);
   arma::mat finger_xy(j_.num.per_finger + 1, 2, arma::fill::zeros);
 
-  // first segment is locked, so first finger x value is end of this
-  finger_xy(0, 0) = j_.dim.segment_length;
+  /* new code, uncomment once backwards compatibility is not an issue
+  // // first segment is locked, so first finger x value is end of this
+  // finger_xy(0, 0) = j_.dim.segment_length;
+  */
 
   for (int i = 0; i < j_.num.per_finger; i++) {
 
