@@ -608,6 +608,16 @@ PYBIND11_MODULE(bind, m) {
     .def_readonly("x_tip_wrt_pred_x", &MjType::CurveFitData::PoseData::FingerData::Error::x_tip_wrt_pred_x)
     .def_readonly("y_tip_wrt_pred_y", &MjType::CurveFitData::PoseData::FingerData::Error::y_tip_wrt_pred_y)
     .def_readonly("y_tip_wrt_theory_y", &MjType::CurveFitData::PoseData::FingerData::Error::y_tip_wrt_theory_y)
+    .def_readonly("y_pred_tip_wrt_theory_y", &MjType::CurveFitData::PoseData::FingerData::Error::y_pred_tip_wrt_theory_y)
+    .def_readonly("x_tip_wrt_pred_x_percent", &MjType::CurveFitData::PoseData::FingerData::Error::x_tip_wrt_pred_x_percent)
+    .def_readonly("y_tip_wrt_pred_y_percent", &MjType::CurveFitData::PoseData::FingerData::Error::y_tip_wrt_pred_y_percent)
+    .def_readonly("y_tip_wrt_theory_y_percent", &MjType::CurveFitData::PoseData::FingerData::Error::y_tip_wrt_theory_y_percent)
+    .def_readonly("y_pred_tip_wrt_theory_y_percent", &MjType::CurveFitData::PoseData::FingerData::Error::y_pred_tip_wrt_theory_y_percent)
+    .def_readonly("std_x_wrt_pred_x", &MjType::CurveFitData::PoseData::FingerData::Error::std_x_wrt_pred_x)
+    .def_readonly("std_y_wrt_pred_y", &MjType::CurveFitData::PoseData::FingerData::Error::std_y_wrt_pred_y)
+    .def_readonly("std_y_wrt_theory_y", &MjType::CurveFitData::PoseData::FingerData::Error::std_y_wrt_theory_y)
+    .def_readonly("std_y_pred_wrt_theory_y", &MjType::CurveFitData::PoseData::FingerData::Error::std_y_pred_wrt_theory_y)
+    .def_readonly("std_j_wrt_pred_j", &MjType::CurveFitData::PoseData::FingerData::Error::std_j_wrt_pred_j)
     ;
   }
 
@@ -622,6 +632,8 @@ PYBIND11_MODULE(bind, m) {
     .def_readonly("pred_x", &MjType::CurveFitData::PoseData::FingerData::pred_x)
     .def_readonly("pred_y", &MjType::CurveFitData::PoseData::FingerData::pred_y)
     .def_readonly("theory_y", &MjType::CurveFitData::PoseData::FingerData::theory_y)
+    .def_readonly("theory_x_curve", &MjType::CurveFitData::PoseData::FingerData::theory_x_curve)
+    .def_readonly("theory_y_curve", &MjType::CurveFitData::PoseData::FingerData::theory_y_curve)
     .def_readonly("error", &MjType::CurveFitData::PoseData::FingerData::error)
     ;
   }

@@ -1521,12 +1521,15 @@ MjType::CurveFitData::PoseData MjClass::validate_curve()
 
   luke::verify_small_angle_model(data, 0, pose.f1.joints, 
     pose.f1.pred_j, pose.f1.pred_x, pose.f1.pred_y, pose.f1.theory_y,
+    pose.f1.theory_x_curve, pose.f1.theory_y_curve,
     -1 * s_.curve_validation, s_.finger_stiffness);
   luke::verify_small_angle_model(data, 1, pose.f2.joints, 
     pose.f2.pred_j, pose.f2.pred_x, pose.f2.pred_y, pose.f2.theory_y,
+    pose.f2.theory_x_curve, pose.f2.theory_y_curve,
     -1 * s_.curve_validation, s_.finger_stiffness);
   luke::verify_small_angle_model(data, 2, pose.f3.joints, 
     pose.f3.pred_j, pose.f3.pred_x, pose.f3.pred_y, pose.f3.theory_y,
+    pose.f3.theory_x_curve, pose.f3.theory_y_curve,
     -1 * s_.curve_validation, s_.finger_stiffness);
 
   // calculate errors

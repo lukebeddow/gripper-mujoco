@@ -358,16 +358,16 @@ struct JointSettings {
     print_vec(qveladr.base, "base joint qvel addresses");
   }
   void print_qpos() {
-    // std::cout << "Please note, qpos and qvel are no longer used. To see them for "
-    //   "debugging, please run the function update_state() before printing\n";
+    std::cout << "Please note, qpos and qvel are no longer used. To see them for "
+      "debugging, please run the function update_state() before printing\n";
     print_vec(qpos.panda, "panda joint qpos");
     print_vec(qpos.gripper, "gripper joint qpos");
     print_vec(qpos.finger, "finger joint qpos");
     print_vec(qpos.base, "base joint qpos");
   }
   void print_qvel() {
-    // std::cout << "Please note, qpos and qvel are no longer used. To see them for "
-    //   "debugging, please run the function update_state() before printing\n";
+    std::cout << "Please note, qpos and qvel are no longer used. To see them for "
+      "debugging, please run the function update_state() before printing\n";
     print_vec(qvel.panda, "panda joint qvel");
     print_vec(qvel.gripper, "gripper joint qvel");
     print_vec(qvel.finger, "finger joint qvel");
@@ -460,10 +460,18 @@ void init_J(mjModel* model, mjData* data)
   configure_qpos(model, data);
 
   // calculate constants
-  j_.dim.segment_length = j_.dim.finger_length / float(j_.num.per_finger + 1);
   int N = j_.num.per_finger;
-  j_.dim.stiffness_c = ( j_.dim.EI / (2 * j_.dim.finger_length) ) 
-    * ( (float)(N * (N*N + 6*N + 11)) / (float)((N + 1) * (N + 1)) );
+  int Ntotal = j_.num.per_finger + j_.dim.fixed_first_segment;
+  j_.dim.segment_length = j_.dim.finger_length / float(Ntotal);
+
+  if (j_.dim.fixed_first_segment) {
+    j_.dim.stiffness_c = ( j_.dim.EI / (2 * j_.dim.finger_length) ) 
+      * ( (float)(N * (N*N + 6*N + 11)) / (float)((N + 1) * (N + 1)) );
+  }
+  else {
+    j_.dim.stiffness_c = ( j_.dim.EI / (2 * j_.dim.finger_length) ) 
+       * ( (float)((N + 1)*(N + 2)) / N);
+  }
 
   if (debug) {
     std::cout << "Number of finger joints N is " << j_.num.per_finger << '\n';
@@ -716,7 +724,8 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
       int idx = j_.idx.finger[i * N + (n - 1)];
 
       // determine the joint stiffness
-      float c = (j_.dim.stiffness_c * (N - n + 1)) / (float)(n + 1);
+      // float c = (j_.dim.stiffness_c * (N - n + 1)) / (float)(n + 1);
+      float c = (j_.dim.stiffness_c * (N - n + 1)) / (float) n;
 
       std::cout << "idx " << idx << " has c_n = " << c << '\n';
 
@@ -1863,8 +1872,11 @@ gfloat verify_armadillo_gauge(const mjData* data, int finger,
   arma::vec cumulative(j_.num.per_finger, arma::fill::zeros);
   arma::mat finger_xy(j_.num.per_finger + 1, 2, arma::fill::zeros);
 
-  // first segment is locked, so first finger x value is end of this
-  finger_xy(0, 0) = j_.dim.segment_length;
+  // if first segment is locked
+  if (j_.dim.fixed_first_segment)
+    finger_xy(0, 0) = j_.dim.segment_length;
+  else
+    finger_xy(0, 0) = 0;
 
   for (int i = 0; i < j_.num.per_finger; i++) {
 
@@ -1977,40 +1989,62 @@ gfloat verify_armadillo_gauge(const mjData* data, int finger,
 gfloat verify_small_angle_model(const mjData* data, int finger,
   std::vector<float>& joint_angles, std::vector<float>& joint_pred,
   std::vector<float>& pred_x, std::vector<float>& pred_y, std::vector<float>& theory_y,
+  std::vector<float>& theory_x_curve, std::vector<float>& theory_y_curve,
   float force, float finger_stiffness)
 {
   /* evaluate the difference in joint angle between the actual and model
   predicted values */
+
+  int ffs =  j_.dim.fixed_first_segment;
 
   int N = j_.num.per_finger;
   joint_angles.resize(N);
   joint_pred.resize(N);
   pred_x.resize(N + 1);
   pred_y.resize(N + 1);
-  theory_y.resize(N + 1);
-  std::vector<float> theory_x(N + 1);
+  theory_y.resize(N + 1 + ffs);
+  std::vector<float> theory_x(N + 1 + ffs);
+
+  int theory_N = 50;
+  float theory_step = j_.dim.finger_length / (float) theory_N;
+  theory_x_curve.resize(theory_N);
+  theory_y_curve.resize(theory_N);
+
   std::vector<float> joint_errors(N);
 
   float cum_error = 0;
   float cum_pred_angle = 0;
-  pred_x[0] = j_.dim.segment_length;
+
+  if (j_.dim.fixed_first_segment) {
+    pred_x[0] = j_.dim.segment_length;
+    theory_x[1] = j_.dim.segment_length;
+    theory_y[1] = (force * std::pow(theory_x[1], 3)) / (3 * j_.dim.EI); 
+  }
+  else {
+    pred_x[0] = 0; 
+  }
+
   pred_y[0] = 0;
-  theory_x[0] = j_.dim.segment_length;
+  theory_x[0] = 0;
   theory_y[0] = 0;
+  theory_x_curve[0] = 0;
+  theory_y_curve[0] = 0;
 
   // get the joint values for this finger
   for (int i = 0; i < N; i++) {
 
     // determine the joint stiffness of this joint
     int n = i + 1;
-    float c = (j_.dim.stiffness_c * (N - n + 1)) / (float)(n + 1);
+    // float c = (j_.dim.stiffness_c * (N - n + 1)) / (float)(n + 1);
+    float c = (j_.dim.stiffness_c * (N - n + 1)) / (float) n;
 
     // actual joint values
     joint_angles[i] = *j_.to_qpos.finger[i + finger * N];
-  
+
     // predicted joint values
     joint_pred[i] = ((float)(N - n + 1) / (float)(N + 1)) 
                         * ((force * j_.dim.finger_length) / (c));
+    // joint_pred[i] = ((N - n + 1) * force * j_.dim.finger_length) / ((N * c);
 
     // joint angle error
     joint_errors[i] = joint_angles[i] - joint_pred[i];
@@ -2022,13 +2056,15 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
     pred_y[i + 1] = pred_y[i] + j_.dim.segment_length * std::sin(cum_pred_angle);
 
     // theory y position
-    theory_x[i + 1] = theory_x[i] + j_.dim.segment_length;
-    theory_y[i + 1] = (force * std::pow(theory_x[i + 1], 3)) / (3 * j_.dim.EI); 
+    theory_x[i + 1 + ffs] = theory_x[i + ffs] + j_.dim.segment_length;
+    theory_y[i + 1 + ffs] = (force * std::pow(theory_x[i + 1 + ffs], 3)) / (3 * j_.dim.EI); 
   }
 
-  // this value is unset, tie it to zero
-  joint_angles[N - 1] = 0.0;
-  joint_pred[N - 1] = 0.0;
+  // create theory curve
+  for (int i = 0; i < theory_N - 1; i++) {
+    theory_x_curve[i + 1] = theory_x_curve[i] + theory_step;
+    theory_y_curve[i + 1] = (force * std::pow(theory_x_curve[i + 1], 3)) / (3 * j_.dim.EI); 
+  }
 
   // return average error
   return (gfloat) cum_error / N;

@@ -606,7 +606,9 @@ namespace MjType
         std::vector<float> pred_j;    // errors vs simple joint calculation
         std::vector<float> pred_x;    // predicted x in simple model
         std::vector<float> pred_y;    // predicted y in simple model
-        std::vector<float> theory_y;  // theory predicted y deflection
+        std::vector<float> theory_y;  // theory predicted y deflection at joint positions
+        std::vector<float> theory_x_curve;  // smooth theory curve
+        std::vector<float> theory_y_curve;  // smooth theory curve
 
         struct Error {
           float x_wrt_pred_x = 0;
@@ -631,18 +633,30 @@ namespace MjType
           float x_tip_wrt_pred_x = 0;
           float y_tip_wrt_pred_y = 0;
           float y_tip_wrt_theory_y = 0;
+          float y_pred_tip_wrt_theory_y = 0;
+
+          float x_tip_wrt_pred_x_percent = 0;
+          float y_tip_wrt_pred_y_percent = 0;
+          float y_tip_wrt_theory_y_percent = 0;
+          float y_pred_tip_wrt_theory_y_percent = 0;
+          
+          float std_x_wrt_pred_x = 0;
+          float std_y_wrt_pred_y = 0;
+          float std_y_wrt_theory_y = 0;
+          float std_y_pred_wrt_theory_y = 0;
+          float std_j_wrt_pred_j = 0;
 
           void print() {
-            std::printf("Avg. per joint:     \t error   \t %%error \t tipratio\n");
-            std::printf("x wrt pred_x        \t %.3f mm \t %.3f%% \t %.3f%%\n",        x_wrt_pred_x * 1000,        x_wrt_pred_x_percent * 100,        x_wrt_pred_x_tipratio * 100);
-            std::printf("y wrt pred_y        \t %.3f mm \t %.3f%% \t %.3f%%\n",        y_wrt_pred_y * 1000,        y_wrt_pred_y_percent * 100,        y_wrt_pred_y_tipratio * 100);
-            std::printf("y wrt theory_y      \t %.3f mm \t %.3f%% \t %.3f%%\n",      y_wrt_theory_y * 1000,      y_wrt_theory_y_percent * 100,      y_wrt_theory_y_tipratio * 100);
-            std::printf("y_pred wrt theory_y \t %.3f mm \t %.3f%% \t %.3f%%\n", y_pred_wrt_theory_y * 1000, y_pred_wrt_theory_y_percent * 100, y_pred_wrt_theory_y_tipratio * 100);
-            std::printf("j wrt pred_j        \t %.3f deg \t %.3f%%\n", j_wrt_pred_j * (180 / 3.1415926536), j_wrt_pred_j_percent * 100);
-            std::printf("Free end tip error:\n");
-            std::printf("x tip wrt pred_x   \t %.3f mm\n", x_tip_wrt_pred_x * 1000);
-            std::printf("y tip wrt pred_y   \t %.3f mm\n", y_tip_wrt_pred_y * 1000);
-            std::printf("y tip wrt theory_y \t %.3f mm\n", y_tip_wrt_theory_y * 1000);
+            std::printf("Avg. per joint:     \t error   \t %%error \t tip err \t %%tip err \t std dev\n");
+            std::printf("x wrt pred_x        \t %.3f mm \t %.3f%% \t %.3f mm \t %.3f%% \t %.1f mm\n",        x_wrt_pred_x * 1000,        x_wrt_pred_x_percent * 100,        x_tip_wrt_pred_x * 1000,        x_tip_wrt_pred_x_percent * 100,        std_x_wrt_pred_x * 1000);
+            std::printf("y wrt pred_y        \t %.3f mm \t %.3f%% \t %.3f mm \t %.3f%% \t %.1f mm\n",        y_wrt_pred_y * 1000,        y_wrt_pred_y_percent * 100,        y_tip_wrt_pred_y * 1000,        y_tip_wrt_pred_y_percent * 100,        std_y_wrt_pred_y * 1000);
+            std::printf("y wrt theory_y      \t %.3f mm \t %.3f%% \t %.3f mm \t %.3f%% \t %.1f mm\n",      y_wrt_theory_y * 1000,      y_wrt_theory_y_percent * 100,      y_tip_wrt_theory_y * 1000,      y_tip_wrt_theory_y_percent * 100,      std_y_wrt_theory_y * 1000);
+            std::printf("y_pred wrt theory_y \t %.3f mm \t %.3f%% \t %.3f mm \t %.3f%% \t %.1f mm\n", y_pred_wrt_theory_y * 1000, y_pred_wrt_theory_y_percent * 100, y_pred_tip_wrt_theory_y * 1000, y_pred_tip_wrt_theory_y_percent * 100, std_y_pred_wrt_theory_y * 1000);
+            std::printf("j wrt pred_j        \t %.3f deg \t %.3f%% \t        \t        \t %.1f deg\n", j_wrt_pred_j * (180 / 3.1415926536), j_wrt_pred_j_percent * 100, std_j_wrt_pred_j * (180 / 3.1415926536));
+            // std::printf("Free end tip error:\n");
+            // std::printf("x tip wrt pred_x   \t %.3f mm\n", x_tip_wrt_pred_x * 1000);
+            // std::printf("y tip wrt pred_y   \t %.3f mm\n", y_tip_wrt_pred_y * 1000);
+            // std::printf("y tip wrt theory_y \t %.3f mm\n", y_tip_wrt_theory_y * 1000);
           }
         } error;
 
@@ -655,16 +669,16 @@ namespace MjType
           // skip first entries as that is the fixed end
           uint skip = 1;
 
-          // get length of vectors
-          uint N = y.size();
+          // get length of vectors (this is N+1)
+          uint Np1 = y.size();
 
-          // float x_cum = 0;
-          // float y_cum = 0;
-          // float pred_y_cum = 0;
-          // float theory_y_cum = 0;
+          float x_cum = 0;
+          float y_cum = 0;
+          float pred_y_cum = 0;
+          float theory_y_cum = 0;
 
           // loop and calculate abs and percentage errors sums
-          for (uint i = skip; i < N; i++) {
+          for (uint i = skip; i < Np1; i++) {
             error.x_wrt_pred_x += abs(x[i] - pred_x[i]);
             error.x_wrt_pred_x_percent += abs(x[i] - pred_x[i]) / pred_x[i];
             error.y_wrt_pred_y += abs(y[i] - pred_y[i]);
@@ -676,40 +690,59 @@ namespace MjType
             error.j_wrt_pred_j += abs(joints[i - 1] - pred_j[i - 1]);
             error.j_wrt_pred_j_percent += abs(joints[i - 1] - pred_j[i - 1]) / pred_j[i - 1];
 
-            // // calculate the total deflection values (for average tipratio)
-            // x_cum += x[i]; 
-            // y_cum += y[i];
-            // pred_y_cum += pred_y[i];
-            // theory_y_cum += theory_y[i];
+            // calculate the total deflection values (for average tipratio)
+            x_cum += x[i]; 
+            y_cum += y[i];
+            pred_y_cum += pred_y[i];
+            theory_y_cum += theory_y[i];
           }
 
           // divide to get average
-          error.x_wrt_pred_x /= (float)N;
-          error.x_wrt_pred_x_percent /= (float)N;
-          error.y_wrt_pred_y /= (float)N;
-          error.y_wrt_pred_y_percent /= (float)N;
-          error.y_wrt_theory_y /= (float)N;
-          error.y_wrt_theory_y_percent /= (float)N;
-          error.y_pred_wrt_theory_y /= (float)N;
-          error.y_pred_wrt_theory_y_percent /= (float)N;
-          error.j_wrt_pred_j /= (float)N;
-          error.j_wrt_pred_j_percent /= (float)N;
+          float N = Np1 - 1.0;
+          error.x_wrt_pred_x /= N;
+          error.x_wrt_pred_x_percent /= N;
+          error.y_wrt_pred_y /= N;
+          error.y_wrt_pred_y_percent /= N;
+          error.y_wrt_theory_y /= N;
+          error.y_wrt_theory_y_percent /= N;
+          error.y_pred_wrt_theory_y /= N;
+          error.y_pred_wrt_theory_y_percent /= N;
+          error.j_wrt_pred_j /= N;
+          error.j_wrt_pred_j_percent /= N;
 
           // get tip ratios from average error over max value
-          // // testing: use average y position, instead of tip position
-          // x_cum /= (float)N;
-          // y_cum /= (float)N;
-          // pred_y_cum /= (float)N;
-          // theory_y_cum /= (float)N;
-          error.x_wrt_pred_x_tipratio = error.x_wrt_pred_x / x[N - 1];
-          error.y_wrt_pred_y_tipratio = error.y_wrt_pred_y / y[N - 1];
-          error.y_wrt_theory_y_tipratio = error.y_wrt_theory_y / y[N - 1];
-          error.y_pred_wrt_theory_y_tipratio = error.y_pred_wrt_theory_y / pred_y[N - 1];
+          error.x_wrt_pred_x_tipratio = error.x_wrt_pred_x / x[Np1 - 1];
+          error.y_wrt_pred_y_tipratio = error.y_wrt_pred_y / y[Np1 - 1];
+          error.y_wrt_theory_y_tipratio = error.y_wrt_theory_y / y[Np1 - 1];
+          error.y_pred_wrt_theory_y_tipratio = error.y_pred_wrt_theory_y / pred_y[Np1 - 1];
 
           // get tip differences
-          error.x_tip_wrt_pred_x = x[N - 1] - pred_x[N - 1];
-          error.y_tip_wrt_pred_y = y[N - 1] - pred_y[N - 1];
-          error.y_tip_wrt_theory_y = y[N - 1] - theory_y[N - 1];
+          error.x_tip_wrt_pred_x = x[Np1 - 1] - pred_x[Np1 - 1];
+          error.y_tip_wrt_pred_y = y[Np1 - 1] - pred_y[Np1 - 1];
+          error.y_tip_wrt_theory_y = y[Np1 - 1] - theory_y[Np1 - 1];
+          error.y_pred_tip_wrt_theory_y = pred_y[Np1 - 1] - theory_y[Np1 - 1];
+
+          // get tip difference percentages
+          error.x_tip_wrt_pred_x_percent = abs(error.x_tip_wrt_pred_x) / pred_x[Np1 - 1];
+          error.y_tip_wrt_pred_y_percent = abs(error.y_tip_wrt_pred_y) / pred_y[Np1 - 1];
+          error.y_tip_wrt_theory_y_percent = abs(error.y_tip_wrt_theory_y) / theory_y[Np1 - 1];
+          error.y_pred_tip_wrt_theory_y_percent = abs(error.y_pred_tip_wrt_theory_y) / theory_y[Np1 - 1];
+
+          // loop through to get standard deviation
+          for (uint i = skip; i < N; i++) {
+            error.std_x_wrt_pred_x += std::pow(x[i] - pred_x[i] - error.x_wrt_pred_x, 2);
+            error.std_y_wrt_pred_y += std::pow(y[i] - pred_y[i] - error.y_wrt_pred_y, 2);
+            error.std_y_wrt_theory_y += std::pow(y[i] - theory_y[i] - error.y_wrt_theory_y, 2);
+            error.std_y_pred_wrt_theory_y += std::pow(pred_y[i] - theory_y[i] - error.y_pred_wrt_theory_y, 2);
+            error.std_j_wrt_pred_j += std::pow(joints[i] - pred_j[i] - error.j_wrt_pred_j, 2);
+          }
+
+          // average and square root
+          error.std_x_wrt_pred_x = std::sqrt(error.std_x_wrt_pred_x / N);
+          error.std_y_wrt_pred_y = std::sqrt(error.std_y_wrt_pred_y / N);
+          error.std_y_wrt_theory_y = std::sqrt(error.std_y_wrt_theory_y / N);
+          error.std_y_pred_wrt_theory_y = std::sqrt(error.std_y_pred_wrt_theory_y / N);
+          error.std_j_wrt_pred_j = std::sqrt(error.std_j_wrt_pred_j / N);
         }
 
         void print_table() {
@@ -736,26 +769,37 @@ namespace MjType
         f2.calc_error();
         f3.calc_error();
 
-        avg_error.x_wrt_pred_x = (f1.error.x_wrt_pred_x + f2.error.x_wrt_pred_x + f3.error.x_wrt_pred_x) / 3;
-        avg_error.x_wrt_pred_x_percent = (f1.error.x_wrt_pred_x_percent + f2.error.x_wrt_pred_x_percent + f3.error.x_wrt_pred_x_percent) / 3;
-        avg_error.y_wrt_pred_y = (f1.error.y_wrt_pred_y + f2.error.y_wrt_pred_y + f3.error.y_wrt_pred_y) / 3;
-        avg_error.y_wrt_pred_y_percent = (f1.error.y_wrt_pred_y_percent + f2.error.y_wrt_pred_y_percent + f3.error.y_wrt_pred_y_percent) / 3;
-        avg_error.y_wrt_theory_y = (f1.error.y_wrt_theory_y + f2.error.y_wrt_theory_y + f3.error.y_wrt_theory_y) / 3;
-        avg_error.y_wrt_theory_y_percent = (f1.error.y_wrt_theory_y_percent + f2.error.y_wrt_theory_y_percent + f3.error.y_wrt_theory_y_percent) / 3;
-        avg_error.y_pred_wrt_theory_y = (f1.error.y_pred_wrt_theory_y + f2.error.y_pred_wrt_theory_y + f3.error.y_pred_wrt_theory_y) / 3;
-        avg_error.y_pred_wrt_theory_y_percent = (f1.error.y_pred_wrt_theory_y_percent + f2.error.y_pred_wrt_theory_y_percent + f3.error.y_pred_wrt_theory_y_percent) / 3;
-        avg_error.j_wrt_pred_j = (f1.error.j_wrt_pred_j + f2.error.j_wrt_pred_j + f3.error.j_wrt_pred_j) / 3;
-        avg_error.j_wrt_pred_j_percent = (f1.error.j_wrt_pred_j_percent + f2.error.j_wrt_pred_j_percent + f3.error.j_wrt_pred_j_percent) / 3;
+        avg_error.x_wrt_pred_x = (f1.error.x_wrt_pred_x + f2.error.x_wrt_pred_x + f3.error.x_wrt_pred_x) / 3.0;
+        avg_error.x_wrt_pred_x_percent = (f1.error.x_wrt_pred_x_percent + f2.error.x_wrt_pred_x_percent + f3.error.x_wrt_pred_x_percent) / 3.0;
+        avg_error.y_wrt_pred_y = (f1.error.y_wrt_pred_y + f2.error.y_wrt_pred_y + f3.error.y_wrt_pred_y) / 3.0;
+        avg_error.y_wrt_pred_y_percent = (f1.error.y_wrt_pred_y_percent + f2.error.y_wrt_pred_y_percent + f3.error.y_wrt_pred_y_percent) / 3.0;
+        avg_error.y_wrt_theory_y = (f1.error.y_wrt_theory_y + f2.error.y_wrt_theory_y + f3.error.y_wrt_theory_y) / 3.0;
+        avg_error.y_wrt_theory_y_percent = (f1.error.y_wrt_theory_y_percent + f2.error.y_wrt_theory_y_percent + f3.error.y_wrt_theory_y_percent) / 3.0;
+        avg_error.y_pred_wrt_theory_y = (f1.error.y_pred_wrt_theory_y + f2.error.y_pred_wrt_theory_y + f3.error.y_pred_wrt_theory_y) / 3.0;
+        avg_error.y_pred_wrt_theory_y_percent = (f1.error.y_pred_wrt_theory_y_percent + f2.error.y_pred_wrt_theory_y_percent + f3.error.y_pred_wrt_theory_y_percent) / 3.0;
+        avg_error.j_wrt_pred_j = (f1.error.j_wrt_pred_j + f2.error.j_wrt_pred_j + f3.error.j_wrt_pred_j) / 3.0;
+        avg_error.j_wrt_pred_j_percent = (f1.error.j_wrt_pred_j_percent + f2.error.j_wrt_pred_j_percent + f3.error.j_wrt_pred_j_percent) / 3.0;
 
-        avg_error.x_wrt_pred_x_tipratio = (f1.error.x_wrt_pred_x_tipratio + f2.error.x_wrt_pred_x_tipratio + f3.error.x_wrt_pred_x_tipratio) / 3;
-        avg_error.y_wrt_pred_y_tipratio = (f1.error.y_wrt_pred_y_tipratio + f2.error.y_wrt_pred_y_tipratio + f3.error.y_wrt_pred_y_tipratio) / 3;
-        avg_error.y_wrt_theory_y_tipratio = (f1.error.y_wrt_theory_y_tipratio + f2.error.y_wrt_theory_y_tipratio + f3.error.y_wrt_theory_y_tipratio) / 3;
-        avg_error.y_pred_wrt_theory_y_tipratio = (f1.error.y_pred_wrt_theory_y_tipratio + f2.error.y_pred_wrt_theory_y_tipratio + f3.error.y_pred_wrt_theory_y_tipratio) / 3;
+        avg_error.x_wrt_pred_x_tipratio = (f1.error.x_wrt_pred_x_tipratio + f2.error.x_wrt_pred_x_tipratio + f3.error.x_wrt_pred_x_tipratio) / 3.0;
+        avg_error.y_wrt_pred_y_tipratio = (f1.error.y_wrt_pred_y_tipratio + f2.error.y_wrt_pred_y_tipratio + f3.error.y_wrt_pred_y_tipratio) / 3.0;
+        avg_error.y_wrt_theory_y_tipratio = (f1.error.y_wrt_theory_y_tipratio + f2.error.y_wrt_theory_y_tipratio + f3.error.y_wrt_theory_y_tipratio) / 3.0;
+        avg_error.y_pred_wrt_theory_y_tipratio = (f1.error.y_pred_wrt_theory_y_tipratio + f2.error.y_pred_wrt_theory_y_tipratio + f3.error.y_pred_wrt_theory_y_tipratio) / 3.0;
 
-        avg_error.x_tip_wrt_pred_x = (f1.error.x_tip_wrt_pred_x + f2.error.x_tip_wrt_pred_x + f3.error.x_tip_wrt_pred_x) / 3;
-        avg_error.y_tip_wrt_pred_y = (f1.error.y_tip_wrt_pred_y + f2.error.y_tip_wrt_pred_y + f3.error.y_tip_wrt_pred_y) / 3;
-        avg_error.y_tip_wrt_theory_y = (f1.error.y_tip_wrt_theory_y + f2.error.y_tip_wrt_theory_y + f3.error.y_tip_wrt_theory_y) / 3;
+        avg_error.x_tip_wrt_pred_x = (f1.error.x_tip_wrt_pred_x + f2.error.x_tip_wrt_pred_x + f3.error.x_tip_wrt_pred_x) / 3.0;
+        avg_error.y_tip_wrt_pred_y = (f1.error.y_tip_wrt_pred_y + f2.error.y_tip_wrt_pred_y + f3.error.y_tip_wrt_pred_y) / 3.0;
+        avg_error.y_tip_wrt_theory_y = (f1.error.y_tip_wrt_theory_y + f2.error.y_tip_wrt_theory_y + f3.error.y_tip_wrt_theory_y) / 3.0;
+        avg_error.y_pred_tip_wrt_theory_y = (f1.error.y_pred_tip_wrt_theory_y + f2.error.y_pred_tip_wrt_theory_y + f3.error.y_pred_tip_wrt_theory_y) / 3.0;
 
+        avg_error.x_tip_wrt_pred_x_percent = (f1.error.x_tip_wrt_pred_x_percent + f2.error.x_tip_wrt_pred_x_percent + f3.error.x_tip_wrt_pred_x_percent) / 3.0;
+        avg_error.y_tip_wrt_pred_y_percent = (f1.error.y_tip_wrt_pred_y_percent + f2.error.y_tip_wrt_pred_y_percent + f3.error.y_tip_wrt_pred_y_percent) / 3.0;
+        avg_error.y_tip_wrt_theory_y_percent = (f1.error.y_tip_wrt_theory_y_percent + f2.error.y_tip_wrt_theory_y_percent + f3.error.y_tip_wrt_theory_y_percent) / 3.0;
+        avg_error.y_pred_tip_wrt_theory_y_percent = (f1.error.y_pred_tip_wrt_theory_y_percent + f2.error.y_pred_tip_wrt_theory_y_percent + f3.error.y_pred_tip_wrt_theory_y_percent) / 3.0;
+
+        avg_error.std_x_wrt_pred_x = (f1.error.std_x_wrt_pred_x + f2.error.std_x_wrt_pred_x + f3.error.std_x_wrt_pred_x) / 3.0;
+        avg_error.std_y_wrt_pred_y = (f1.error.std_y_wrt_pred_y + f2.error.std_y_wrt_pred_y + f3.error.std_y_wrt_pred_y) / 3.0;
+        avg_error.std_y_wrt_theory_y = (f1.error.std_y_wrt_theory_y + f2.error.std_y_wrt_theory_y + f3.error.std_y_wrt_theory_y) / 3.0;
+        avg_error.std_y_pred_wrt_theory_y = (f1.error.std_y_pred_wrt_theory_y + f2.error.std_y_pred_wrt_theory_y + f3.error.std_y_pred_wrt_theory_y) / 3.0;
+        avg_error.std_j_wrt_pred_j = (f1.error.std_j_wrt_pred_j + f2.error.std_j_wrt_pred_j + f3.error.std_j_wrt_pred_j) / 3.0;
       }
 
       void print() {

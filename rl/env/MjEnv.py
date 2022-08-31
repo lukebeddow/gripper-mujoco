@@ -413,7 +413,7 @@ class MjEnv():
 
     return to_return
 
-  def reset(self):
+  def reset(self, hard=None):
     """
     Reset the simulation to the start
     """
@@ -427,7 +427,8 @@ class MjEnv():
         self._load_xml()
 
     # reset the simulation and spawn a new random object
-    self.mj.reset()
+    if hard is True: self.mj.hard_reset()
+    else: self.mj.reset()
     self._spawn_object()
 
     return self._next_observation()

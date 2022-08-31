@@ -127,6 +127,7 @@ gfloat verify_armadillo_gauge(const mjData* data, int finger,
 gfloat verify_small_angle_model(const mjData* data, int finger,
   std::vector<float>& joint_angles, std::vector<float>& joint_pred,
   std::vector<float>& pred_x, std::vector<float>& pred_y, std::vector<float>& theory_y,
+  std::vector<float>& theory_x_curve, std::vector<float>& theory_y_curve,
   float force, float finger_stiffness);
 int last_action_robot();
 
