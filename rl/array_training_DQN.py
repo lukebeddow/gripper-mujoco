@@ -421,7 +421,7 @@ def logging_job(model, run_name, group_name):
   model.log_wandb(force=True, end=True)
   model.plot(force=True, end=True, hang=True)
 
-def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=None, network=networks.DQN_4L100, 
+def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=2, network=networks.DQN_4L100, 
                       memory=50_000, state_steps=1, sensor_steps=1, z_state=True, sensor_mode=2,
                       state_mode=1, reward_style="mixed_v3", reward_options=[], scale_rewards=2.5,
                       scale_penalties=1.0, penalty_termination=False, finger_stiffness=8):
@@ -622,27 +622,26 @@ if __name__ == "__main__":
   baseline_training(model, sensors=this_sensors)
   """
 
-  # scaling_list = [
-  #   (2.5, 1.0),
-  #   (2.5, 2.5),
-  #   (2.5, 7.5),
-  #   (7.5, 7.5),
-  # ]
+  sensors_list = [
+    0, # bending and z state
+    1, # + palm
+    2  # + wrist
+  ]
 
-  # # lists are zero indexed
-  # inputarg -= 1
+  # lists are zero indexed
+  inputarg -= 1
 
-  # model.params.num_episodes = 30000
-  # baseline_training(model, sensors=2, scale_rewards=scaling_list[inputarg][0],
-  #                   scale_penalties=scaling_list[inputarg][1]) 
+  model.params.num_episodes = 40000
+  baseline_training(model, sensors=sensors_list[inputarg]) 
 
-  # varying 5x3x2 = possible trainings 1-30
+  # varying 6x3 = possible trainings 1-18
   lr_list = [
-    1e-5,   1e-5,
-    2.5e-5, 2.5e-5,
-    5e-5,   5e-5,
-    7.5e-5, 7.5e-5,
-    1e-4,   1e-4
+    (1e-5, False),   
+    (1e-5, True),
+    (5e-5, False),   
+    (5e-5, True),
+    (1e-4, False),   
+    (1e-4, True)
   ]
 
   eps_decay_list = [
@@ -650,8 +649,6 @@ if __name__ == "__main__":
     4000,
     6000,
   ]
-
-  curriculum_list = [False, True]
 
   # lists are zero indexed so adjust inputarg
   inputarg -= 1
@@ -661,11 +658,7 @@ if __name__ == "__main__":
 
   # get the sensors and memory size for this training
   this_lr = lr_list[inputarg // x]                # vary every x steps
-  this_eps_decay = eps_decay_list[inputarg % x]   # vary every +1 & loop
-
-  this_curriculum = curriculum_list[
-    (inputarg // x) % 2
-  ] # vary for each pair of lr values
+  this_eps_decay = eps_decay_list[inputarg % x]       # vary every +1 & loop
 
   # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
   #   A1, A2, A3, ...
@@ -673,9 +666,9 @@ if __name__ == "__main__":
   #   C1, C2, C3, ...
 
   # make note
-  param_1 = f"Learning rate is {this_lr}\n"
+  param_1 = f"Learning rate is {this_lr[0]}\n"
   param_2 = f"Eps decay is {this_eps_decay}\n"
-  param_3 = f"Curriculum learning is {this_curriculum}\n"
+  param_3 = f"Curriculum learning is {this_lr[1]}\n"
   model.wandb_note += param_1 + param_2
 
   # if we are just printing help information
@@ -687,7 +680,7 @@ if __name__ == "__main__":
     exit()
 
   # if we use curriculum learning
-  if this_curriculum:
+  if this_lr[1]:
     model.params.object_set = "set3_nocuboid_525"
     model.params.use_curriculum = True
     model.params.curriculum_object_set = "set3_fullset_795"
@@ -697,11 +690,8 @@ if __name__ == "__main__":
   # set number of training episodes
   model.params.num_episodes = 30000
 
-  # only use realistic sensors
-  sensor_setup = 2
-
   # perform the training with other parameters standard
-  baseline_training(model, lr=this_lr, eps_decay=this_eps_decay, sensors=sensor_setup) 
+  baseline_training(model, lr=this_lr[0], eps_decay=this_eps_decay) 
 
   # ----- END ----- #
    

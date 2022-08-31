@@ -12,8 +12,8 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N Array35_baseline
-#$ -t 1-30
+#$ -N Array36_baseline2
+#$ -t 1-18
 
 # The code you want to run now goes here.
 

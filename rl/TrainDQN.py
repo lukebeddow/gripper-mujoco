@@ -1499,7 +1499,7 @@ class TrainDQN():
 
     # or add extra episodes on to what has already been done
     elif extra_episodes != None:
-      self.params.num_episodes = self.track.episodes_done + extra_episodes
+      self.params.num_episodes = self.params.num_episodes + extra_episodes
 
     # or if we have done exactly our target episodes, double the target
     elif self.params.num_episodes == self.track.episodes_done:
