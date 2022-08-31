@@ -417,7 +417,7 @@ std::vector<bool*> finger_settled_ {
   &j_.settle.finger1, &j_.settle.finger2, &j_.settle.finger3
 };
 
-constexpr static bool debug = true; // turn on/off debug mode for this file only
+constexpr static bool debug = false; // turn on/off debug mode for this file only
 
 /* ----- initialising, setup, and utilities ----- */
 
