@@ -12,7 +12,11 @@
 
 #$ -S /bin/bash
 #$ -j y
+<<<<<<< HEAD
 #$ -N Array36_baseline2
+=======
+#$ -N Array37_baseline2
+>>>>>>> 4afdcecb76346d1fc2b0f8ee6ab66bda779e81fe
 #$ -t 1-18
 
 # The code you want to run now goes here.

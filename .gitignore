@@ -11,3 +11,4 @@ bin/
 **/wandb/
 libs/
 key.txt
+**/set_test*

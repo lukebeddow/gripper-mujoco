@@ -174,8 +174,14 @@ struct JointSettings {
   // key dimensions and details
   struct {
     double finger_length = 235e-3;
+    double finger_thickness = 0.9e-3;
+    double finger_width = 28e-3;
+    double E = 200e9;
+    double I = (finger_width * std::pow(finger_thickness, 3)) / 12.0;
+    double EI = E * I;
+    bool fixed_first_segment;                         // runtime depends
+    double stiffness_c = 0;                           // runtime depends
     double segment_length = 0;                        // runtime depends
-    double finger_stiffness_N_per_m = 10;
   } dim;
 
   // strain gauge parameters
@@ -411,7 +417,7 @@ std::vector<bool*> finger_settled_ {
   &j_.settle.finger1, &j_.settle.finger2, &j_.settle.finger3
 };
 
-constexpr static bool debug = false;
+constexpr static bool debug = true; // turn on/off debug mode for this file only
 
 /* ----- initialising, setup, and utilities ----- */
 
@@ -454,7 +460,23 @@ void init_J(mjModel* model, mjData* data)
   configure_qpos(model, data);
 
   // calculate constants
-  j_.dim.segment_length = j_.dim.finger_length / float(j_.num.per_finger);
+  int N = j_.num.per_finger;
+  int Ntotal = j_.num.per_finger + j_.dim.fixed_first_segment;
+  j_.dim.segment_length = j_.dim.finger_length / float(Ntotal);
+
+  if (j_.dim.fixed_first_segment) {
+    j_.dim.stiffness_c = ( j_.dim.EI / (2 * j_.dim.finger_length) ) 
+      * ( (float)(N * (N*N + 6*N + 11)) / (float)((N + 1) * (N + 1)) );
+  }
+  else {
+    j_.dim.stiffness_c = ( j_.dim.EI / (2 * j_.dim.finger_length) ) 
+       * ( (float)((N + 1)*(N + 2)) / N);
+  }
+
+  if (debug) {
+    std::cout << "Number of finger joints N is " << j_.num.per_finger << '\n';
+    std::cout << "Joint stiffness c is " << j_.dim.stiffness_c << '\n';
+  }
 
   configure_constraints(model, data);
 
@@ -537,10 +559,15 @@ void get_joint_indexes(mjModel* model)
 
   // count how many segment joints we have
   j_.num.finger = 0;
+  j_.dim.fixed_first_segment = true;
   for (int i = 0; i < model->njnt; i++) {
     std::string x = mj_id2name(model, mjOBJ_JOINT, i);
     if (x.substr(0,6) == "finger" and x.substr(9, 13) == "segment_joint") {
       j_.num.finger += 1;
+      // if we have a segment_joint_0 then there is not a fixed first joint
+      if (x.substr(9, 15) == "segment_joint_0") {
+        j_.dim.fixed_first_segment = false;
+      }
     }
   }
 
@@ -553,10 +580,11 @@ void get_joint_indexes(mjModel* model)
   if (j_.num.finger > 0) {
 
     j_.in_use.finger = true;
+    int ffs = (int) j_.dim.fixed_first_segment;
 
     // add the names of every finger joint to the global vector
     for (int i = 1; i <= 3; i++) {
-      for (int k = 1; k <= j_.num.per_finger; k++) {
+      for (int k = ffs; k < j_.num.per_finger + ffs; k++) {
         // create the joint name string and add it to the vector
         std::string next = "finger_" + std::to_string(i)
           + "_segment_joint_" + std::to_string(k);
@@ -582,6 +610,7 @@ void get_joint_indexes(mjModel* model)
     j_.print_in_use();
     j_.print_num();
     j_.print_idx();
+    std::cout << "Fixed first segment is: " << j_.dim.fixed_first_segment << '\n';
   }
 }
 
@@ -592,12 +621,14 @@ void get_geom_indexes(mjModel* model)
   // each geom has both a 'collision' and 'visual' version, so we collect both
   std::vector<std::string> geom_suffixes { "collision", "visual" };
 
+  int ffs = j_.dim.fixed_first_segment;
+
   for (std::string geom_tag : geom_suffixes) {
 
     for (int i = 0; i < j_.num.finger; i++) {
 
       std::string geom_name = "finger_" + std::to_string(i / j_.num.per_finger + 1)  // finger_X, X=1,2,3
-        + "_segment_link_" + std::to_string(i % j_.num.per_finger + 2)               // links go 2-10 for 10 segments
+        + "_segment_link_" + std::to_string(i % j_.num.per_finger + 1 + ffs)         // links go 2-10 for 10 segments
         + "_geom_" + geom_tag;
 
       int x = mj_name2id(model, mjOBJ_GEOM, geom_name.c_str());
@@ -617,11 +648,11 @@ void get_geom_indexes(mjModel* model)
     }
 
     // now add the hook links
-    std::string f1_hook = "finger_1_segment_link_" + std::to_string(j_.num.per_finger + 1)
+    std::string f1_hook = "finger_1_segment_link_" + std::to_string(j_.num.per_finger + ffs)
       + "_geom_hook_" + geom_tag;
-    std::string f2_hook = "finger_2_segment_link_" + std::to_string(j_.num.per_finger + 1)
+    std::string f2_hook = "finger_2_segment_link_" + std::to_string(j_.num.per_finger + ffs)
       + "_geom_hook_" + geom_tag;
-    std::string f3_hook = "finger_3_segment_link_" + std::to_string(j_.num.per_finger + 1)
+    std::string f3_hook = "finger_3_segment_link_" + std::to_string(j_.num.per_finger + ffs)
       + "_geom_hook_" + geom_tag;
 
     j_.geom_idx.finger1.push_back(mj_name2id(model, mjOBJ_GEOM, f1_hook.c_str()));
@@ -682,9 +713,30 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
 {
   /* set the stiffness of the flexible finger joints */
 
-  for (int i : j_.idx.finger) {
-    model->jnt_stiffness[i] = stiffness;
+  int N = j_.num.per_finger;
+
+  // loop over all three fingers
+  for (int i = 0; i < 3; i++) {
+
+    // loop from n=1 to N
+    for (int n = 1; n < N + 1; n++) {
+
+      int idx = j_.idx.finger[i * N + (n - 1)];
+
+      // determine the joint stiffness
+      // float c = (j_.dim.stiffness_c * (N - n + 1)) / (float)(n + 1);
+      float c = (j_.dim.stiffness_c * (N - n + 1)) / (float) n;
+
+      std::cout << "idx " << idx << " has c_n = " << c << '\n';
+
+      model->jnt_stiffness[idx] = c;
+    }
   }
+
+  // old code, set all stiffness to the given function input
+  // for (int i : j_.idx.finger) {
+  //   model->jnt_stiffness[i] = stiffness;
+  // }
 }
 
 void configure_qpos(mjModel* model, mjData* data)
@@ -994,6 +1046,76 @@ void calibrate_reset(mjModel* model, mjData* data)
 
 }
 
+void apply_tip_force(mjModel* model, mjData* data, double force, bool reset)
+{
+  /* apply a horizontal force to the tip of the finger */
+  
+  static bool first_call = true;
+  static std::vector<int> tip_idx;
+  static mjtNum tip_mat1[9];
+  static mjtNum tip_mat2[9];
+  static mjtNum tip_mat3[9];
+  static std::vector<mjtNum*> tip_mat{ tip_mat1, tip_mat2, tip_mat3 };
+
+  // the first time this function is called, find the tip body indexes
+  if (first_call or reset) {
+
+    if (reset) tip_idx.clear();
+
+    // get the name of the last finger link (hook link is removed by mujoco as fixed joint)
+    int tip_num = j_.num.per_finger + j_.dim.fixed_first_segment;
+    std::string tip_name = "finger_{X}_segment_link_" + std::to_string(tip_num);
+
+    for (int i = 0; i < model->nbody; i++) {
+      std::string name = mj_id2name(model, mjOBJ_BODY, i);
+      if (strcmp_w_sub(name, tip_name, 3)) {
+        tip_idx.push_back(i);
+      }
+    }
+
+    if (debug) {
+      print_vec(tip_idx, "finger body tip_idx");
+    }
+    
+    if (tip_idx.size() != 3) {
+      throw std::runtime_error("tip_idx vector in apply_tip_force(...) has size != 3");
+    }
+
+    // find the starting body orientation
+    for (int i = 0; i < 3; i++) {
+      for (int j = 0; j < 9; j++) {
+        tip_mat[i][j] = data->xmat[tip_idx[i] * 9 + j];
+      }
+    }
+
+    first_call = false;
+  }
+
+  // for lock the fingers in place
+  for (int i : j_.con_idx.prismatic) {
+    set_constraint(model, data, i, true);
+  }
+  for (int i : j_.con_idx.revolute) {
+    set_constraint(model, data, i, true);
+  }
+
+  // loop through and apply force to fingertips
+  for (int i = 0; i < 3; i++) {
+
+    // prepare to apply force outwards on fingertips
+    mjtNum fvec[3] = { 0, 0, -force };
+    mjtNum rotfvec[3];
+
+    // rotate into the tip frame to pull directly horizontal
+    mju_mulMatVec(rotfvec, tip_mat[i], fvec, 3, 3);
+
+    // apply force in cartesian space (joint space is qfrc_applied)
+    data->xfrc_applied[tip_idx[i] * 6 + 0] = rotfvec[0];
+    data->xfrc_applied[tip_idx[i] * 6 + 1] = rotfvec[1];
+    data->xfrc_applied[tip_idx[i] * 6 + 2] = rotfvec[2];
+  }
+}
+
 void wipe_settled()
 {
   /* wipes the settled and target reached states, to give an action time to
@@ -1014,7 +1136,6 @@ void before_step(mjModel* model, mjData* data)
   mju_zero(data->ctrl, model->nu);
   mju_zero(data->qfrc_applied, model->nv);
   mju_zero(data->xfrc_applied, 6 * model->nbody);
-
 }
 
 void step(mjModel* model, mjData* data)
@@ -1172,33 +1293,33 @@ void control_gripper(const mjModel* model, mjData* data, Gripper& target)
   for (int i : j_.gripper.prismatic) {
     u = ((*j_.to_qpos.gripper[i]) - target.x) * j_.ctrl.kp.x 
       + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.x;
-    if (abs(u) > force_lim) {
-      std::cout << "x frc limited from " << u << " to ";
-      u = force_lim * sign(u);
-      std::cout << u << '\n';
-    }
+    // if (abs(u) > force_lim) {
+    //   std::cout << "x frc limited from " << u << " to ";
+    //   u = force_lim * sign(u);
+    //   std::cout << u << '\n';
+    // }
     data->ctrl[n + i] = -u;
   }
 
   for (int i : j_.gripper.revolute) {
     u = ((*j_.to_qpos.gripper[i]) - target.th) * j_.ctrl.kp.y 
       + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.y;
-    if (abs(u) > force_lim) {
-      std::cout << "y frc limited from " << u << " to ";
-      u = force_lim * sign(u);
-      std::cout << u << '\n';
-    }
+    // if (abs(u) > force_lim) {
+    //   std::cout << "y frc limited from " << u << " to ";
+    //   u = force_lim * sign(u);
+    //   std::cout << u << '\n';
+    // }
     data->ctrl[n + i] = -u;
   }
   
   for (int i : j_.gripper.palm) {
     u = ((*j_.to_qpos.gripper[i]) - target.z) * j_.ctrl.kp.z 
       + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.z;
-    if (abs(u) > force_lim) {
-      std::cout << "z frc limited from " << u << " to ";
-      u = force_lim * sign(u);
-      std::cout << u << '\n';
-    }
+    // if (abs(u) > force_lim) {
+    //   std::cout << "z frc limited from " << u << " to ";
+    //   u = force_lim * sign(u);
+    //   std::cout << u << '\n';
+    // }
     data->ctrl[n + i] = -u;
   }
 }
@@ -1261,6 +1382,15 @@ void update_state(const mjModel* model, mjData* data)
   // j_.print_qpos();
   // j_.print_qvel();
 
+}
+
+void print_state(const mjModel* model, mjData* data)
+{
+  /* print the qpos of all the joints */
+
+  update_state(model, data);
+  j_.print_qpos();
+  j_.print_qvel();
 }
 
 void update_all(mjModel* model, mjData* data)
@@ -1532,6 +1662,8 @@ bool set_gripper_target_step(int x, int y, int z)
 {
   /* set a step target for the gripper motors */
 
+  target_.last_robot = Target::Robot::gripper;
+
   // return false if target is outside motor limits
   return target_.end.set_xyz_step(x, y, z);
 }
@@ -1539,6 +1671,8 @@ bool set_gripper_target_step(int x, int y, int z)
 bool set_gripper_target_m(double x, double y, double z)
 {
   /* set a motor state target for the gripper, returns true when reached */
+
+  target_.last_robot = Target::Robot::gripper;
 
   // return false if the target is outside motor limits
   return target_.end.set_xyz_m(x, y, z);
@@ -1548,6 +1682,8 @@ bool set_gripper_target_m_rad(double x, double th, double z)
 {
   /* sets a joint state target for the gripper, returns true when reached */
 
+  target_.last_robot = Target::Robot::gripper;
+
   // return false if the target is outside motor limits
   return target_.end.set_xyz_m(x, th, z);
 }
@@ -1555,6 +1691,8 @@ bool set_gripper_target_m_rad(double x, double th, double z)
 bool move_gripper_target_step(int x, int y, int z)
 {
   /* adjust the gripper target by the indicated number of steps */
+
+  target_.last_robot = Target::Robot::gripper;
 
   // return false if the target is outside motor limits
   return target_.end.set_xyz_step(target_.end.step.x + x, target_.end.step.y + y, 
@@ -1565,6 +1703,8 @@ bool move_gripper_target_m(double x, double y, double z)
 {
   /* adjust gripper target by the indicated distances in metres */
 
+  target_.last_robot = Target::Robot::gripper;
+
   // return false if the target is outside motor limits
   return target_.end.set_xyz_m(target_.end.x + x, target_.end.y + y,
     target_.end.z + z);
@@ -1574,6 +1714,8 @@ bool move_gripper_target_m_rad(double x, double th, double z)
 {
   /* adjust the gripper joint values */
 
+  target_.last_robot = Target::Robot::gripper;
+
   // return false if the target is outside motor limits
   return target_.end.set_xyz_m_rad(target_.end.x + x, target_.end.th + th, 
     target_.end.z + z);
@@ -1582,6 +1724,8 @@ bool move_gripper_target_m_rad(double x, double th, double z)
 bool move_base_target_m(double x, double y, double z)
 {
   /* move the base target in x, y, z */
+
+  target_.last_robot = Target::Robot::panda;
 
   /* only z motion currently implemented */
   target_.base[0] += z;
@@ -1632,6 +1776,9 @@ gfloat read_armadillo_gauge(const mjData* data, int finger)
   arma::vec cumulative(j_.num.per_finger, arma::fill::zeros);
   arma::mat finger_xy(j_.num.per_finger + 1, 2, arma::fill::zeros);
 
+  // first segment is locked, so first finger x value is end of this
+  finger_xy(0, 0) = j_.dim.segment_length;
+
   for (int i = 0; i < j_.num.per_finger; i++) {
 
     // keep cumulative total of angular sum
@@ -1670,9 +1817,7 @@ gfloat read_armadillo_gauge(const mjData* data, int finger)
   gfloat k = y / j_.gauge.xpos_cubed;
 
   // transfer to SI units for force (optional)
-  constexpr gfloat E = 200e9;
-  constexpr gfloat I = (28e-3 * std::pow(0.9e-3, 3)) / 12.0;
-  gfloat P = k * (3 * E * I);
+  gfloat P = k * (3 * j_.dim.EI);
 
   /* the SI result is not accurate because the finger stiffness is not
   accurate (here we do not have the right E). However, tuning the stiffness
@@ -1717,13 +1862,21 @@ gfloat verify_armadillo_gauge(const mjData* data, int finger,
 
   // get the joint values for this finger
   for (int i = 0; i < j_.num.per_finger; i++) {
-    joint_values(i) = 
-      data->qpos[j_.idx.finger[i + finger * j_.num.per_finger]];
+    // joint_values(i) = 
+    //   data->qpos[j_.idx.finger[i + finger * j_.num.per_finger]];
+
+    joint_values(i) = *j_.to_qpos.finger[i + finger * j_.num.per_finger];
   }
 
   // next convert this into X and Y coordinates
   arma::vec cumulative(j_.num.per_finger, arma::fill::zeros);
   arma::mat finger_xy(j_.num.per_finger + 1, 2, arma::fill::zeros);
+
+  // if first segment is locked
+  if (j_.dim.fixed_first_segment)
+    finger_xy(0, 0) = j_.dim.segment_length;
+  else
+    finger_xy(0, 0) = 0;
 
   for (int i = 0; i < j_.num.per_finger; i++) {
 
@@ -1763,9 +1916,7 @@ gfloat verify_armadillo_gauge(const mjData* data, int finger,
   gfloat k = y / j_.gauge.xpos_cubed;
 
   // transfer to SI units for force (optional)
-  constexpr gfloat E = 200e9;
-  constexpr gfloat I = (28e-3 * std::pow(0.9e-3, 3)) / 12.0;
-  gfloat P = k * (3 * E * I);
+  gfloat P = k * (3 * j_.dim.EI);
 
   /* the SI result is not accurate because the finger stiffness is not
   accurate (here we do not have the right E). However, tuning the stiffness
@@ -1819,6 +1970,7 @@ gfloat verify_armadillo_gauge(const mjData* data, int finger,
   }
 
   // evaluate the predicted y position and resulting error
+  float cum_error = 0;
   for (int i = 0; i < num_points; i++) {
     float y = 0.0;
     for (int j = 0; j < num_coeff; j++) {
@@ -1826,11 +1978,96 @@ gfloat verify_armadillo_gauge(const mjData* data, int finger,
     }
     float error = vec_joint_y[i] - y;
     vec_errors[i] = error;
+    cum_error += abs(error);
   }
 
-  /* ----- end read/verify differences ----- */
+  return cum_error / num_points;
 
-  return P;
+  /* ----- end read/verify differences ----- */
+}
+
+gfloat verify_small_angle_model(const mjData* data, int finger,
+  std::vector<float>& joint_angles, std::vector<float>& joint_pred,
+  std::vector<float>& pred_x, std::vector<float>& pred_y, std::vector<float>& theory_y,
+  std::vector<float>& theory_x_curve, std::vector<float>& theory_y_curve,
+  float force, float finger_stiffness)
+{
+  /* evaluate the difference in joint angle between the actual and model
+  predicted values */
+
+  int ffs =  j_.dim.fixed_first_segment;
+
+  int N = j_.num.per_finger;
+  joint_angles.resize(N);
+  joint_pred.resize(N);
+  pred_x.resize(N + 1);
+  pred_y.resize(N + 1);
+  theory_y.resize(N + 1 + ffs);
+  std::vector<float> theory_x(N + 1 + ffs);
+
+  int theory_N = 50;
+  float theory_step = j_.dim.finger_length / (float) theory_N;
+  theory_x_curve.resize(theory_N);
+  theory_y_curve.resize(theory_N);
+
+  std::vector<float> joint_errors(N);
+
+  float cum_error = 0;
+  float cum_pred_angle = 0;
+
+  if (j_.dim.fixed_first_segment) {
+    pred_x[0] = j_.dim.segment_length;
+    theory_x[1] = j_.dim.segment_length;
+    theory_y[1] = (force * std::pow(theory_x[1], 3)) / (3 * j_.dim.EI); 
+  }
+  else {
+    pred_x[0] = 0; 
+  }
+
+  pred_y[0] = 0;
+  theory_x[0] = 0;
+  theory_y[0] = 0;
+  theory_x_curve[0] = 0;
+  theory_y_curve[0] = 0;
+
+  // get the joint values for this finger
+  for (int i = 0; i < N; i++) {
+
+    // determine the joint stiffness of this joint
+    int n = i + 1;
+    // float c = (j_.dim.stiffness_c * (N - n + 1)) / (float)(n + 1);
+    float c = (j_.dim.stiffness_c * (N - n + 1)) / (float) n;
+
+    // actual joint values
+    joint_angles[i] = *j_.to_qpos.finger[i + finger * N];
+
+    // predicted joint values
+    joint_pred[i] = ((float)(N - n + 1) / (float)(N + 1)) 
+                        * ((force * j_.dim.finger_length) / (c));
+    // joint_pred[i] = ((N - n + 1) * force * j_.dim.finger_length) / ((N * c);
+
+    // joint angle error
+    joint_errors[i] = joint_angles[i] - joint_pred[i];
+    cum_error += abs(joint_errors[i]);
+
+    // predicted xy positions
+    cum_pred_angle += joint_pred[i];
+    pred_x[i + 1] = pred_x[i] + j_.dim.segment_length * std::cos(cum_pred_angle);
+    pred_y[i + 1] = pred_y[i] + j_.dim.segment_length * std::sin(cum_pred_angle);
+
+    // theory y position
+    theory_x[i + 1 + ffs] = theory_x[i + ffs] + j_.dim.segment_length;
+    theory_y[i + 1 + ffs] = (force * std::pow(theory_x[i + 1 + ffs], 3)) / (3 * j_.dim.EI); 
+  }
+
+  // create theory curve
+  for (int i = 0; i < theory_N - 1; i++) {
+    theory_x_curve[i + 1] = theory_x_curve[i] + theory_step;
+    theory_y_curve[i + 1] = (force * std::pow(theory_x_curve[i + 1], 3)) / (3 * j_.dim.EI); 
+  }
+
+  // return average error
+  return (gfloat) cum_error / N;
 }
 
 std::vector<gfloat> get_gauge_data(const mjModel* model, mjData* data)
@@ -2070,6 +2307,19 @@ void set_finger_colour(mjModel* model, std::vector<float> rgba, int finger_num)
     if (rgba.size() == 4)
       model->geom_rgba[i * 4 + 3] = rgba[3];
   }
+}
+
+/* ----- misc ----- */
+
+int last_action_robot()
+{
+  /* which robot was the last robot used for a change in target.
+        0 = none,
+        1 = gripper,
+        2 = panda
+  */
+
+  return target_.last_robot;
 }
 
 } // namespace luke

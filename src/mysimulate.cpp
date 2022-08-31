@@ -1194,9 +1194,9 @@ void makeSettingsUI(int oldstate)
     {
         {mjITEM_SECTION,  "Sim Settings",      oldstate,  NULL,   " #500"},
         {mjITEM_CHECKINT, "Debug",             2, &myMjClass.s_.debug,             " #600"},
-        {mjITEM_SLIDERNUM,"mj timestep",       2, &myMjClass.s_.mujoco_timestep,   "0.0001 0.004"},
-        {mjITEM_CHECKINT, "curve_validation",  2, &myMjClass.s_.curve_validation,  " #601"},
-        {mjITEM_SLIDERNUM,"finger_stiffness",  2, &myMjClass.s_.finger_stiffness,  "1.0 20.0"},
+        {mjITEM_SLIDERNUM,"mj timestep",       2, &myMjClass.s_.mujoco_timestep,   "0.00001 0.003"},
+        {mjITEM_SLIDERINT,"curve_validation",  2, &myMjClass.s_.curve_validation,  "-10 1"},
+        {mjITEM_SLIDERNUM,"finger_stiffness",  2, &myMjClass.s_.finger_stiffness,  "1.0 25.0"},
         {mjITEM_CHECKINT, "randomise_colours", 2, &myMjClass.s_.randomise_colours, " #602"},
         
         {mjITEM_END}
@@ -1247,6 +1247,7 @@ void makeObjectUI(int oldstate)
         {mjITEM_BUTTON,    "All forces",     2, NULL,                   " #303"},
         {mjITEM_BUTTON,    "Print curve fit",2, NULL,                   " #304"},
         {mjITEM_BUTTON,    "Wipe curve fit", 2, NULL,                   " #305"},
+        {mjITEM_BUTTON,    "Validate regime",2, NULL,                   " #311"},
         {mjITEM_BUTTON,    "obj. rgb rand",  2, NULL,                   " #306"},
         {mjITEM_BUTTON,    "gnd rgb rand",  2, NULL,                    " #307"},
         {mjITEM_BUTTON,    "fing. rgb rand", 2, NULL,                   " #308"},
@@ -2040,8 +2041,8 @@ void uiEvent(mjuiState* state)
             }
             case 6: {            // Print curve fit validation
                 std::cout << "Printing curve validation data\n";
+                myMjClass.validate_curve();
                 myMjClass.curve_validation_data_.print();
-                myMjClass.curve_validation_data_.print_errors();
                 break;
             }
             case 7: {
@@ -2049,25 +2050,30 @@ void uiEvent(mjuiState* state)
                 myMjClass.curve_validation_data_.entries.clear();
                 break;
             }
-            case 8: {           // randomise object colour
+            case 8: {
+                std::cout << "Running curve validation regime\n";
+                myMjClass.curve_validation_regime();
+                break;
+            }
+            case 9: {           // randomise object colour
                 myMjClass.randomise_object_colour();
                 break;
             }
-            case 9: {           // randomise ground colour
+            case 10: {           // randomise ground colour
                 myMjClass.randomise_ground_colour();
                 break;
             }
-            case 10: {          // randomise finger colour
+            case 11: {          // randomise finger colour
                 myMjClass.randomise_finger_colours();
                 break;
             }
-            case 11: {          // randomise all colours
+            case 12: {          // randomise all colours
                 luke::randomise_all_colours(myMjClass.model, MjType::generator);
                 myMjClass.randomise_ground_colour();
                 myMjClass.randomise_finger_colours();
                 break;
             }
-            case 12: {          // restore default colours
+            case 13: {          // restore default colours
                 luke::default_colours(myMjClass.model);
                 break;
             }
