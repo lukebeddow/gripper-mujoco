@@ -1,9 +1,9 @@
 # These are flags you must include - Two memory and one runtime.
-# Runtime is either seconds or hours:min:sec (1day=24, 2days=48, 3days=72, 4days=96)
+# Runtime is either seconds or hours:min:sec (1day=24, 2days=48, 3days=72, 4days=96, 5days=120)
 
 #$ -l tmem=4G
 #$ -l h_vmem=4G
-#$ -l h_rt=71:59:0 
+#$ -l h_rt=120:0:0 
 
 # Some important notes
 #dollar -t X-Y   -> submit array job inclusive of both X and Y
@@ -12,8 +12,8 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N ArrayTrain_31
-#$ -t 1-30
+#$ -N Array37_baseline2
+#$ -t 1-18
 
 # The code you want to run now goes here.
 

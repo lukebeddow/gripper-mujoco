@@ -1192,34 +1192,13 @@ void makeSettingsUI(int oldstate)
 {
     mjuiDef defActions[] =
     {
-        {mjITEM_SECTION, "Sim Settings",    oldstate,  NULL,   " #500"},
-        // {mjITEM_CHECKINT, "pris 1",   2,  &myMjClass.model->eq_active[0], " #501"},
-        // {mjITEM_CHECKINT, "pris 2",   2,  &myMjClass.model->eq_active[1], " #502"},
-        // {mjITEM_CHECKINT, "pris 3",   2,  &myMjClass.model->eq_active[2], " #503"},
-        // {mjITEM_CHECKINT, "rev 1",   2,  &myMjClass.model->eq_active[3], " #504"},
-        // {mjITEM_CHECKINT, "rev 2",   2,  &myMjClass.model->eq_active[4], " #505"},
-        // {mjITEM_CHECKINT, "rev 3",   2,  &myMjClass.model->eq_active[5], " #506"},
-        {mjITEM_BUTTON, "pris 1",   2,  NULL, " #501"},
-        {mjITEM_BUTTON, "pris 2",   2,  NULL, " #502"},
-        {mjITEM_BUTTON, "pris 3",   2,  NULL, " #503"},
-        {mjITEM_BUTTON, "rev 1",   2,   NULL, " #504"},
-        {mjITEM_BUTTON, "rev 2",   2,   NULL, " #505"},
-        {mjITEM_BUTTON, "rev 3",   2,   NULL, " #506"},
-        {mjITEM_BUTTON, "palm",    2,   NULL, " #507"},
-        {mjITEM_CHECKINT, "curve_validation", 2, &myMjClass.s_.curve_validation, " #508"},
-        {mjITEM_SLIDERNUM, "finger_stiffness", 2, &myMjClass.s_.finger_stiffness, "1.0 20.0"},
-        {mjITEM_CHECKINT, "randomise_colours", 2, &myMjClass.s_.randomise_colours, " #508"},
-
-        // {mjITEM_BUTTON, "Action 7 (H-)",           2,  NULL,   " #310"},
-        // {mjITEM_BUTTON, "Reward",                  2,  NULL,   " #311"},
-        // {mjITEM_CHECKINT, "Debug",     2, &myMjClass.s_.debug,   " #312"},
-        // {mjITEM_CHECKINT, "Env steps", 2, &settings.env_steps, " #313"},
-        // {mjITEM_SLIDERINT, "No. steps",            2, 
-        //     &myMjClass.s_.action_motor_steps,             "0 2000"},
-        // {mjITEM_SLIDERNUM, "Base trans.",          2, 
-        //     &myMjClass.s_.action_base_translation,        "0.0 0.05"},
-        // {mjITEM_SLIDERINT, "Action steps",          2, 
-        //     &myMjClass.s_.sim_steps_per_action,           "0 2000"},
+        {mjITEM_SECTION,  "Sim Settings",      oldstate,  NULL,   " #500"},
+        {mjITEM_CHECKINT, "Debug",             2, &myMjClass.s_.debug,             " #600"},
+        {mjITEM_SLIDERNUM,"mj timestep",       2, &myMjClass.s_.mujoco_timestep,   "0.00001 0.003"},
+        {mjITEM_SLIDERINT,"curve_validation",  2, &myMjClass.s_.curve_validation,  "-10 1"},
+        {mjITEM_SLIDERNUM,"finger_stiffness",  2, &myMjClass.s_.finger_stiffness,  "1.0 25.0"},
+        {mjITEM_CHECKINT, "randomise_colours", 2, &myMjClass.s_.randomise_colours, " #602"},
+        
         {mjITEM_END}
     };
 
@@ -1268,6 +1247,7 @@ void makeObjectUI(int oldstate)
         {mjITEM_BUTTON,    "All forces",     2, NULL,                   " #303"},
         {mjITEM_BUTTON,    "Print curve fit",2, NULL,                   " #304"},
         {mjITEM_BUTTON,    "Wipe curve fit", 2, NULL,                   " #305"},
+        {mjITEM_BUTTON,    "Validate regime",2, NULL,                   " #311"},
         {mjITEM_BUTTON,    "obj. rgb rand",  2, NULL,                   " #306"},
         {mjITEM_BUTTON,    "gnd rgb rand",  2, NULL,                    " #307"},
         {mjITEM_BUTTON,    "fing. rgb rand", 2, NULL,                   " #308"},
@@ -1973,12 +1953,12 @@ void uiEvent(mjuiState* state)
 
         else if (it and it->sectionid == SECT_SETTINGS)
         {
-            switch (it->itemid)
-            {
-                case 0: case 1: case 2: case 3: case 4: case 5: case 6:
-                    luke::toggle_constraint(myMjClass.model, myMjClass.data, it->itemid);
-                    break;
-            }
+            // switch (it->itemid)
+            // {
+            //     case 0: case 1: case 2: case 3: case 4: case 5: case 6:
+            //         luke::toggle_constraint(myMjClass.model, myMjClass.data, it->itemid);
+            //         break;
+            // }
         }
 
         else if (it and it->sectionid == SECT_ACTION)
@@ -2061,8 +2041,8 @@ void uiEvent(mjuiState* state)
             }
             case 6: {            // Print curve fit validation
                 std::cout << "Printing curve validation data\n";
+                myMjClass.validate_curve();
                 myMjClass.curve_validation_data_.print();
-                myMjClass.curve_validation_data_.print_errors();
                 break;
             }
             case 7: {
@@ -2070,25 +2050,30 @@ void uiEvent(mjuiState* state)
                 myMjClass.curve_validation_data_.entries.clear();
                 break;
             }
-            case 8: {           // randomise object colour
+            case 8: {
+                std::cout << "Running curve validation regime\n";
+                myMjClass.curve_validation_regime();
+                break;
+            }
+            case 9: {           // randomise object colour
                 myMjClass.randomise_object_colour();
                 break;
             }
-            case 9: {           // randomise ground colour
+            case 10: {           // randomise ground colour
                 myMjClass.randomise_ground_colour();
                 break;
             }
-            case 10: {          // randomise finger colour
+            case 11: {          // randomise finger colour
                 myMjClass.randomise_finger_colours();
                 break;
             }
-            case 11: {          // randomise all colours
+            case 12: {          // randomise all colours
                 luke::randomise_all_colours(myMjClass.model, MjType::generator);
                 myMjClass.randomise_ground_colour();
                 myMjClass.randomise_finger_colours();
                 break;
             }
-            case 12: {          // restore default colours
+            case 13: {          // restore default colours
                 luke::default_colours(myMjClass.model);
                 break;
             }

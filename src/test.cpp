@@ -5,7 +5,7 @@
 #include "mjclass.h"
 #include "myfunctions.h"
 
-int num_xml_tasks = 4; // intentionally low number to allow different object sets
+int num_xml_tasks = 4; // intentionally low number to accomodate different object sets
 bool print_step = false;
 bool print_ep = true;
 bool debug_print = false;
@@ -117,11 +117,33 @@ void run_test(int num_episodes, int step_cap, int reload_rate)
 
 int main(int argc, char** argv)
 {
+  // MjType::Sensor mysensor(true, 1, 1);
+  // mysensor.use_noise = false;
+  // mysensor.use_normalisation = false;
+  // mysensor.prev_steps = 3;
+  // mysensor.readings_per_step = 1;
+  // mysensor.update_n_readings();
+
+  // luke::SlidingWindow<float> vec(10);
+
+  // vec.add(1);
+  // vec.add(2);
+  // vec.add(3);
+  // vec.add(4);
+  // vec.add(5);
+  // vec.add(6);
+
+  // std::vector<float> sample = mysensor.change_sample(vec);
+
+  // luke::print_vec(sample, "Sample is");
+  // vec.print();
+
+  // return 0;
 
   /* ----- run a test of 10 learning steps ----- */
 
   // // precompiled settings
-  // /* settings of 20, 200, 20 -> initial time taken 52.6s, newest 42.6s (both laptop times, newest PC is 45.0s*/
+  // /* settings of 20, 200, 20 -> initial time taken 52.6s, newest 42.6s (both laptop times, newest PC is 45.0s */
   // int num_episodes = 20;
   // int step_cap = 200;
   // int reload_rate = 20;
@@ -137,35 +159,85 @@ int main(int argc, char** argv)
   MjClass mjObj;
   mjObj.load_relative(relpath);
 
+  // change settings
+  mjObj.s_.mujoco_timestep = 1.8e-3;
+  mjObj.s_.sensor_n_prev_steps = 2;
+  mjObj.s_.sensor_sample_mode = MjType::Sample::change;
+
+  // apply changes and begin simulating
+  mjObj.reset();
   mjObj.spawn_object(0);
+  mjObj.set_step_target(6000, 7000, 0);
+
+  // disable all other sensors except wrist Z sensor gauge
+  mjObj.s_.motor_state_sensor.in_use = false;
+  mjObj.s_.base_state_sensor.in_use = false;
+  mjObj.s_.bending_gauge.in_use = false;
+  mjObj.s_.axial_gauge.in_use = false;
+  mjObj.s_.palm_sensor.in_use = false;
+  mjObj.s_.wrist_sensor_XY.in_use = false;
+
+  // turn on noise so values vary
+  mjObj.s_.wrist_sensor_Z.use_noise = true;
+  mjObj.s_.wrist_sensor_Z.noise_std = 0.5;
+  mjObj.s_.wrist_sensor_Z.noise_mu = 0.8;
+
+  double start_time = mjObj.data->time;
 
   for (int i = 0; i < 10; i++) {
+
+    while (true) {
+      char c;
+      std::cin >> c;
+
+      if (c == 'f') {
+        for (int i = 0; i < 10; i++) mjObj.step();
+      }
+      else if (c == 'q') {
+        for (int i = 0; i < 100; i++) mjObj.step();
+      }
+      else if (c == 's') {
+        for (int i = 0; i < mjObj.s_.sim_steps_per_action; i++) mjObj.step();
+      }
+      else if (c == 'p') {
+        luke::print_vec(mjObj.get_observation(), "Observation");
+        continue;
+      }
+
+      mjObj.step();
+
+      std::printf("Time is: %.1f ms, ", (mjObj.data->time - start_time ) * 1000);
+      mjObj.wrist_Z_sensor.print(10);
+
+      
+    }
+
     mjObj.step();
     // mjObj.render();
   }
 
-  MjType::Goal goal;
-  MjClass mj;
+  MjType::Sensor mysensor(true, 1, 1);
+  mysensor.use_noise = false;
+  mysensor.use_normalisation = false;
+  mysensor.prev_steps = 3;
+  mysensor.readings_per_step = 1;
+  mysensor.update_n_readings();
 
-  goal.step_num.involved = true;
-  goal.lifted.involved = true;
-  goal.stable_height.involved = true;
-  goal.finger_force.involved = true;
-  goal.oob.involved = true;
+  luke::SlidingWindow<float> vec(10);
 
-  goal.step_num.state = true;
-  goal.oob.state = true;
-  goal.finger_force.state = true;
+  vec.add(1);
+  vec.add(2);
+  vec.add(3);
+  vec.add(4);
+  vec.add(5);
+  vec.add(6);
 
-  goal.print();
+  std::vector<float> sample = mysensor.change_sample(vec);
 
-  // std::cout << mjObj.reward(goal) << '\n';
+  luke::print_vec(sample, "Sample is");
+  vec.print();
 
-  std::vector<float> test { -1, 1, 1, -1, -1 };
-  goal.unvectorise(test);
-
-  goal.print();
-
+  return 0;
   // std::cout << mjObj.reward(goal) << '\n';
 
   return 0;

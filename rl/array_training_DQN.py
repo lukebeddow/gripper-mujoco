@@ -12,7 +12,7 @@ from random import random
 import networks
 import argparse
 
-def set_penalties(model, value, done=False, trigger=1):
+def set_penalties(model, value, done=False, trigger=1, make_binary=None):
   """
   Set penalty rewards with given value, alongside defaults
   """
@@ -23,9 +23,16 @@ def set_penalties(model, value, done=False, trigger=1):
   model.env.mj.set.exceed_lateral.set    (value,  done,  trigger, 4.0,  6.0,  -1)
   model.env.mj.set.exceed_palm.set       (value,  done,  trigger, 6.0,  10.0, -1)
 
+  # make rewards binary trigger by setting 'max' to 'min' for immediate saturation
+  if make_binary == True:
+    tol = 1e-5 # just in case add a tiny tolerance
+    model.env.mj.set.exceed_axial.max = model.env.mj.set.exceed_axial.min + tol
+    model.env.mj.set.exceed_lateral.max = model.env.mj.set.exceed_lateral.min + tol
+    model.env.mj.set.exceed_palm.max = model.env.mj.set.exceed_palm.min + tol
+
   return model
 
-def set_bonuses(model, value):
+def set_bonuses(model, value, make_binary=None):
   """
   Set bonus rewards with a given value
   """
@@ -38,6 +45,12 @@ def set_bonuses(model, value):
   # linear rewards                       reward   done   trigger min   max  overshoot
   model.env.mj.set.finger_force.set      (value,  False,   1,    0.2,  1.0,  -1)
   model.env.mj.set.palm_force.set        (value,  False,   1,    1.0,  6.0,  -1)
+
+  # make linear rewards binary by setting 'max' to 'min' for immediate saturation
+  if make_binary == True:
+    tol = 1e-5 # just in case add a tiny tolerance
+    model.env.mj.set.finger_force.max = model.env.mj.set.finger_force.min + tol
+    model.env.mj.set.palm_force.max = model.env.mj.set.palm_force.min + tol
 
   return model
 
@@ -94,7 +107,8 @@ def setup_HER(model, use=True, style="basic", mode="final", k=4):
 
   return model
 
-def create_reward_function(model, style="negative", options=[]):
+def create_reward_function(model, style="negative", options=[], scale_rewards=1, scale_penalties=1,
+                           penalty_termination=False):
   """
   Set the reward structure for the learning, with different style options
   """
@@ -134,9 +148,26 @@ def create_reward_function(model, style="negative", options=[]):
     # reward each step                     reward   done   trigger
     model.env.mj.set.step_num.set          (-0.01,  False,   1)
     # penalties and bonuses
-    model = set_bonuses(model, 0.005)
+    model = set_bonuses(model, 0.005,
+                        make_binary=True if "make_binary" in options else None)
     model = set_penalties(model, -0.002,  
-                          done=5 if "terminate_early" in options else False)
+                          done=5 if "terminate_early" in options else False,
+                          make_binary=True if "make_binary" in options else None)
+    # scale based on steps allowed per episode
+    model.env.mj.set.scale_rewards(100 / model.env.max_episode_steps)
+    # end criteria                         reward   done   trigger
+    model.env.mj.set.stable_height.set     (1.0,    True,    1)
+    model.env.mj.set.oob.set               (-1.0,   True,    1)
+
+  elif style == "mixed_v3":
+    # reward each step                     reward   done   trigger
+    model.env.mj.set.step_num.set          (-0.01,  False,   1)
+    # penalties and bonuses
+    model = set_bonuses(model, 0.002 * scale_rewards,
+                        make_binary=True if "make_binary" in options else None)
+    model = set_penalties(model, -0.002 * scale_penalties,  
+                          done=penalty_termination,
+                          make_binary=True if "make_binary" in options else None)
     # scale based on steps allowed per episode
     model.env.mj.set.scale_rewards(100 / model.env.max_episode_steps)
     # end criteria                         reward   done   trigger
@@ -183,13 +214,26 @@ def create_reward_function(model, style="negative", options=[]):
 
   return model
 
-def add_sensors(model, num=10, sensor_mode=1, state_mode=0, sensor_steps=1,
-  state_steps=2, noise_std=0.015):
+def add_sensors(model, num=None, sensor_mode=None, state_mode=None, sensor_steps=None,
+  state_steps=None, noise_std=None, z_state=None):
   """
   Add a number of sensors
   """
 
-  # what sensing mode (0=raw data, 1=change, 2=average)
+  if num is None: num = 10 # default, include all sensors
+
+  # define defaults that can be overriden by function inputs
+  if sensor_mode is None: sensor_mode = 1
+  if state_mode is None: state_mode = 0
+  if noise_std is None: noise_std = 0.015
+  if sensor_steps is None: sensor_steps = 1
+  if state_steps is None: state_steps = 2
+
+  # default: state sensor and bending gauge sensor
+  model.env.mj.set.motor_state_sensor.in_use = True
+  model.env.mj.set.bending_gauge.in_use = True
+
+  # what sensing mode (0=raw data, 1=change, 2=average, 3=median)
   model.env.mj.set.sensor_sample_mode = sensor_mode
   model.env.mj.set.state_sample_mode = state_mode
 
@@ -197,125 +241,26 @@ def add_sensors(model, num=10, sensor_mode=1, state_mode=0, sensor_steps=1,
   model.env.mj.set.sensor_noise_std = noise_std
   model.env.mj.set.state_noise_std = noise_std
 
-  # default: state sensor and bending gauge sensor
-  model.env.mj.set.motor_state_sensor.in_use = True
-  model.env.mj.set.motor_state_sensor.read_rate = -1
-  model.env.mj.set.bending_gauge.in_use = True
-
   # set the number of steps in the past we use for observations
   model.env.mj.set.sensor_n_prev_steps = sensor_steps
   model.env.mj.set.state_n_prev_steps = state_steps
 
-  # state sensor with two readings (current, prev)
-  if num >= 1: model.env.mj.set.motor_state_sensor.read_rate = -2
-
   # palm force sensor
-  if num >= 2: model.env.mj.set.palm_sensor.in_use = True
+  if num >= 1: model.env.mj.set.palm_sensor.in_use = True
 
   # wrist z force sensor
-  if num >= 3: model.env.mj.set.wrist_sensor_Z.in_use = True
-
-  # # wrist xy force sensor WE DONT WANT THIS SENSOR
-  # if num >= 4: model.env.mj.set.wrist_sensor_XY.in_use = True
-
-  # base z position sensor
-  if num >= 4:
-    model.env.mj.set.base_state_sensor.in_use = True
-    model.env.mj.set.base_state_sensor.read_rate = -2
+  if num >= 2: model.env.mj.set.wrist_sensor_Z.in_use = True
 
   # finger axial gauges
-  if num >= 5: model.env.mj.set.axial_gauge.in_use = True
+  if num >= 3: model.env.mj.set.axial_gauge.in_use = True
+
+  # know where z is in physical space (base z state sensor)
+  if num >= 4 or z_state is True: model.env.mj.set.base_state_sensor.in_use = True
 
   model.wandb_note += (
     f"Num sensors: {num}, state mode: {state_mode}, sensor mode: {sensor_mode}" +
-    f", state steps: {state_steps}, sensor steps: {sensor_steps}"
+    f", state steps: {state_steps}, sensor steps: {sensor_steps}, sensor noise std: {noise_std}\n"
   )
-
-  return model
-
-def simplest_sphere_lifting(model):
-  # try only to lift objects with the fingers
-
-  # set up the object set
-  model.env._load_object_set(name="set1_sphereonly_120")
-
-  # data logging
-  model.params.save_freq = 500
-  model.params.test_freq = 2_000
-  model.params.wandb_freq_s = 300
-
-  # what actions are we using
-  model.env.mj.set.paired_motor_X_step = True
-  model.env.mj.set.use_palm_action = True
-  model.env.mj.set.use_height_action = False
-
-  # what sensing mode (0=raw data, 1=change, 2=average)
-  model.env.mj.set.sensor_sample_mode = 1
-  model.env.mj.set.state_sample_mode = 0
-
-  # reward each step                     reward   done   trigger
-  model.env.mj.set.step_num.set          (0,      False,   1)
-
-  # penalties and bonuses
-  pvalue = -0.025
-  pdone = 5
-  rvalue = 0.05
-
-  # penalties                            reward   done   trigger  min   max  overshoot
-  model.env.mj.set.exceed_limits.set     (pvalue, pdone,   1)
-  model.env.mj.set.exceed_axial.set      (pvalue, pdone,   1,     3.0,  6.0,  -1)
-  model.env.mj.set.exceed_lateral.set    (pvalue, pdone,   1,     4.0,  6.0,  -1)
-  model.env.mj.set.exceed_palm.set       (pvalue, pdone,   1,     6.0,  10.0, -1)
-
-  # binary rewards                       reward   done   trigger
-  model.env.mj.set.lifted.set            (rvalue, False,   1)
-  model.env.mj.set.target_height.set     (rvalue, False,   1)
-  # model.env.mj.set.object_stable.set     (rvalue, False,   1)
-  
-  # linear rewards                       reward   done   trigger min   max  overshoot
-  model.env.mj.set.finger_force.set      (rvalue, False,   1,    0.2,  1.0,  -1)
-  model.env.mj.set.palm_force.set        (rvalue, False,   1,    1.0,  6.0,  -1)
-
-  # scale based on steps allowed per episode
-  model.env.mj.set.scale_rewards(100 / model.env.max_episode_steps)
-
-  # end criteria                         reward   done   trigger
-  # model.env.mj.set.stable_height.set     (0.0,    True,    1)
-  model.env.mj.set.object_stable.set     (1.0,    True,    1)
-  model.env.mj.set.oob.set               (-1.0,   True,    1)
-
-  # termination with poor reward
-  model.env.mj.set.quit_on_reward_below = -1
-  model.env.mj.set.quit_reward_capped = True
-
-  model.wandb_note += "Simplest sphere lifting\n"
-
-  return model
-
-def finger_only_lifting(model):
-  # try only to lift objects with the fingers
-
-  model.env.mj.set.use_palm_action = False
-
-  # binary rewards                       reward   done   trigger
-  model.env.mj.set.step_num.set          (-0.01,  False,   1)
-  model.env.mj.set.lifted.set            (0.005,  False,   1)
-  
-  # linear rewards                       reward   done   trigger min   max  overshoot
-  model.env.mj.set.finger_force.set      (0.005,  False,   1,    0.2,  1.0,  -1)
-
-  # penalties                            reward   done   trigger min   max  overshoot
-  model.env.mj.set.exceed_limits.set     (-0.005, False,   1)
-  model.env.mj.set.exceed_axial.set      (-0.005, False,   1,    3.0,  6.0,  -1)
-  model.env.mj.set.exceed_lateral.set    (-0.005, False,   1,    4.0,  6.0,  -1)
-
-  # end criteria                         reward   done   trigger
-  model.env.mj.set.target_height.set     (0.0,    True,    1)
-  model.env.mj.set.oob.set               (-1.0,   True,    1)
-
-  # terminate episode when reward drops below -1.01, also cap at this value
-  model.env.mj.set.quit_on_reward_below = -2.01
-  model.env.mj.set.quit_reward_capped = True
 
   return model
 
@@ -473,11 +418,13 @@ def logging_job(model, run_name, group_name):
   model.track.success_rate_metric = "stable height"
   model.track.plot_time_taken = True
   
-  model.log_wandb(force=True)
-  model.plot(force=True, hang=True)
+  model.log_wandb(force=True, end=True)
+  model.plot(force=True, end=True, hang=True)
 
-def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=5, network=networks.DQN_3L60, 
-                      memory=50_000, state_steps=2, sensor_steps=1):
+def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=None, network=networks.DQN_4L100, 
+                      memory=50_000, state_steps=1, sensor_steps=1, z_state=True, sensor_mode=2,
+                      state_mode=1, reward_style="mixed_v3", reward_options=[], scale_rewards=2.5,
+                      scale_penalties=1.0, penalty_termination=False, finger_stiffness=8):
   """
   Runs a baseline training on the model
   """
@@ -487,6 +434,7 @@ def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=5, network=network
   model.params.learning_rate = lr
   model.params.eps_decay = eps_decay
   model.params.memory_replay = memory
+  model.env.mj.set.finger_stiffness = finger_stiffness
 
   # wandb notes
   model.wandb_note += f"Network: {network.name}\n"
@@ -494,22 +442,17 @@ def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=5, network=network
   model.wandb_note += f"eps_decay = {eps_decay}\n"
   
   # configure rewards and sensors
-  model = create_reward_function(model, style="mixed_v2", options=[])
-  model = add_sensors(model, num=sensors, sensor_mode=1, state_mode=0,
-                      state_steps=state_steps, sensor_steps=sensor_steps)
+  model = create_reward_function(model, style=reward_style, options=reward_options,
+                                 scale_rewards=scale_rewards, scale_penalties=scale_penalties,
+                                 penalty_termination=penalty_termination)
+  model = add_sensors(model, num=sensors, sensor_mode=sensor_mode, state_mode=state_mode,
+                      state_steps=state_steps, sensor_steps=sensor_steps,
+                      z_state=z_state)
   model = setup_HER(model, use=False)
-
-  # print details THIS LINE ISN'T WORKING FOR SOME REASON
-  print("\nWandb note is:", model.wandb_note)
 
   # train and finish
   model.train(network)
   exit()
-
-def print_info(model):
-  """
-  
-  """
 
 if __name__ == "__main__":
 
@@ -542,8 +485,8 @@ if __name__ == "__main__":
   log_level = 1
   datestr = "%d-%m-%Y-%H:%M" # all date inputs must follow this format
 
-  # print all the inputs we have received
-  print("array_training_DQN.py inputs are:", sys.argv[1:])
+  # # print all the inputs we have received
+  # print("array_training_DQN.py inputs are:", sys.argv[1:])
 
   # define arguments and parse them
   parser = argparse.ArgumentParser()
@@ -575,16 +518,15 @@ if __name__ == "__main__":
 
   # echo these inputs
   if log_level > 0:
-    print("Input arg:", inputarg)
-    print("Timestamp is:", timestamp)
-    print("Use wandb is", use_wandb)
-    print()
+    print("\narray_training_DQN is preparing to train:")
+    print(" -> Input arg:", inputarg)
+    print(" -> Timestamp is:", timestamp)
+    print(" -> Use wandb is:", use_wandb)
 
   # seperate process for safety
   sleep(inputarg)
   sleep(random())
 
-  # save_suffix = f"A{inputarg}_{timestamp[-5:]}" # only include hr:min
   save_suffix = f"{timestamp[-5:]}_A{inputarg}" # only include hr:min
 
   # create and configure the model to default
@@ -595,9 +537,9 @@ if __name__ == "__main__":
   # cpu training only on cluster or PC
   if model.machine in ["cluster", "luke-PC"] and args.device is None: 
     model.set_device("cpu")
-    if log_level > 0: print("Setting to default 'cpu' device")
+    if log_level > 0: print(" -> Setting to default 'cpu' device, to override use '--device cuda'")
   elif args.device is not None:
-    if log_level > 0: print(f"Device override of '{args.device}'")
+    if log_level > 0: print(f" -> Device override of '{args.device}'")
     model.set_device(args.device)
 
   # override default run/group names
@@ -605,23 +547,17 @@ if __name__ == "__main__":
   model.group_name = timestamp[:8] # include only day-month-year
 
   if args.machine is not None:
-    if log_level > 0: print(f"Machine override of '{args.machine}'")
+    if log_level > 0: print(f" -> Machine override of '{args.machine}'")
     model.run_name = f"{args.machine}_{save_suffix}"
-
-  # # override default object set
-  # if args.object_set is not None:
-  #   # this does not work for continue training, as that loads the old set
-  #   print(f"Object set override of '{args.object_set}'")
-  #   model.env._load_object_set(name=args.object_set)
 
   # override save location
   if args.savedir is not None:
-    if log_level > 0: print(f"Savedir override of '{args.savedir}'")
+    if log_level > 0: print(f" -> Savedir override of '{args.savedir}'")
     model.savedir = args.savedir
 
   if log_level > 0:
-    print("Run group is:", model.group_name)
-    print("Run name is:", model.run_name)
+    print(" -> Run group is:", model.group_name)
+    print(" -> Run name is:", model.run_name, "\n")
 
   # ----- SPECIAL JOB OPTIONS ----- #
 
@@ -686,19 +622,50 @@ if __name__ == "__main__":
   baseline_training(model, sensors=this_sensors)
   """
 
-  # varying 6x5 = 16 possible trainings 1-30
-  stiffness_list = [5, 6, 7, 8, 9, 10]
-  sensors_list = [1, 2, 3, 4, 5]
+  # scaling_list = [
+  #   (2.5, 1.0),
+  #   (2.5, 2.5),
+  #   (2.5, 7.5),
+  #   (7.5, 7.5),
+  # ]
+
+  # # lists are zero indexed
+  # inputarg -= 1
+
+  # model.params.num_episodes = 30000
+  # baseline_training(model, sensors=2, scale_rewards=scaling_list[inputarg][0],
+  #                   scale_penalties=scaling_list[inputarg][1]) 
+
+  # varying 5x3x2 = possible trainings 1-30
+  lr_list = [
+    1e-5,   1e-5,
+    2.5e-5, 2.5e-5,
+    5e-5,   5e-5,
+    7.5e-5, 7.5e-5,
+    1e-4,   1e-4
+  ]
+
+  eps_decay_list = [
+    2000,
+    4000,
+    6000,
+  ]
+
+  curriculum_list = [False, True]
 
   # lists are zero indexed so adjust inputarg
   inputarg -= 1
 
   # we vary wrt memory_list every inputarg increment
-  x = len(sensors_list)
+  x = len(eps_decay_list)
 
   # get the sensors and memory size for this training
-  this_stiffness = stiffness_list[inputarg // x]       # vary every x steps
-  this_sensors = sensors_list[inputarg % x]            # vary every +1 & loop
+  this_lr = lr_list[inputarg // x]                # vary every x steps
+  this_eps_decay = eps_decay_list[inputarg % x]   # vary every +1 & loop
+
+  this_curriculum = curriculum_list[
+    (inputarg // x) % 2
+  ] # vary for each pair of lr values
 
   # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
   #   A1, A2, A3, ...
@@ -706,8 +673,9 @@ if __name__ == "__main__":
   #   C1, C2, C3, ...
 
   # make note
-  param_1 = f"Finger stiffness used: {this_stiffness}\n"
-  param_2 = f"Sensors used: {this_sensors}\n"
+  param_1 = f"Learning rate is {this_lr}\n"
+  param_2 = f"Eps decay is {this_eps_decay}\n"
+  param_3 = f"Curriculum learning is {this_curriculum}\n"
   model.wandb_note += param_1 + param_2
 
   # if we are just printing help information
@@ -715,21 +683,25 @@ if __name__ == "__main__":
     print("Input arg", inputarg + 1)
     print("\t" + param_1, end="")
     print("\t" + param_2, end="")
+    print("\t" + param_3, end="")
     exit()
 
-  # set the finger stiffness
-  model.env.mj.set.finger_stiffness = this_stiffness
+  # if we use curriculum learning
+  if this_curriculum:
+    model.params.object_set = "set3_nocuboid_525"
+    model.params.use_curriculum = True
+    model.params.curriculum_object_set = "set3_fullset_795"
+  else:
+    model.params.object_set = "set3_fullset_795"
 
-  # lets use curriculum learning
-  model.params.object_set = "set3_nocuboid_525"
-  model.params.use_curriculum = True
-  model.params.curriculum_ep_num = 10000
-  model.params.curriculum_object_set = "set3_fullset_795"
-  model.params.num_episodes = 20000
+  # set number of training episodes
+  model.params.num_episodes = 30000
+
+  # only use realistic sensors
+  sensor_setup = 2
 
   # perform the training with other parameters standard
-  baseline_training(model, sensors=this_sensors)
+  baseline_training(model, lr=this_lr, eps_decay=this_eps_decay, sensors=sensor_setup) 
 
   # ----- END ----- #
-
    

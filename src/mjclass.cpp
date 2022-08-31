@@ -178,7 +178,7 @@ void MjClass::configure_settings()
       break;
     }
     case MjType::Sample::median: {
-      sampleFcnPtr = &MjType::Sensor::median_sample;
+      stateFcnPtr = &MjType::Sensor::median_sample;
       break;
     }
     default: {
@@ -202,14 +202,6 @@ void MjClass::configure_settings()
     MjType::generator.reset(new std::default_random_engine(s_.random_seed));
     old_random_seed = s_.random_seed;
   }
-
-  // safety check
-  if (s_.motor_state_sensor.read_rate >= 0)
-    throw std::runtime_error("base_state_sensor read_rate must be a negative number"
-      ", read_rate = -1 means return 1 reading per read, -2 means 2 readings etc");
-  if (s_.base_state_sensor.read_rate >= 0)
-    throw std::runtime_error("base_state_sensor read_rate must be a negative number"
-      ", read_rate = -1 means return 1 reading per read, -2 means 2 readings etc");
 }
 
 /* ----- core functionality ----- */
@@ -278,11 +270,6 @@ void MjClass::reset()
   // reset the simulation
   luke::reset(model, data);
 
-  // // FOR TESTING - NOISE IS NOT WORKING
-  // std::vector<luke::gfloat> grip_noise = { 1e-3, 5e-3, 10e-3 };
-  // add_noise_to_base(6e-3);
-  // add_noise_to_motors(grip_noise);
-
   // reset sensor saved data
   finger1_gauge.reset();
   finger2_gauge.reset();
@@ -325,12 +312,26 @@ void MjClass::reset()
   samples_since_last_obs = 0;
 
   // empty any curve validation data
-  if (s_.curve_validation) {
-    curve_validation_data_.entries.clear();
-  }
+  curve_validation_data_.reset();
 
   // ensure the simulation settings are all ready to go
   configure_settings();
+}
+
+void MjClass::hard_reset()
+{
+  /* a complete reset, use this when you want to load a new model file
+  which has a different number of gripper joints eg a different number
+  of segments */
+
+  // reinitialise the joint settings structure
+  luke::init_J(model, data);
+
+  // reset the tip force
+  luke::apply_tip_force(model, data, 0, true);
+
+  // regular reset code
+  reset();
 }
 
 void MjClass::step()
@@ -340,6 +341,12 @@ void MjClass::step()
   // tick();
 
   luke::before_step(model, data);
+
+  // if doing curve validation, can apply a set tip force
+  if (s_.curve_validation < 0) {
+    luke::apply_tip_force(model, data, -1 * s_.curve_validation);
+  }
+
   luke::step(model, data);
   luke::after_step(model, data);
 
@@ -449,9 +456,6 @@ void MjClass::monitor_sensors()
 
     // record time
     gauge_timestamps.add(data->time);
-
-    // whilst testing: are we validating finger curvature?
-    if (s_.curve_validation) validate_curve();
   }
 
   // check the axial strain gauges
@@ -1449,6 +1453,8 @@ std::vector<float> MjClass::get_real_observation()
   return get_observation();
 }
 
+
+
 /* ----- misc ----- */
 
 void MjClass::tick()
@@ -1468,6 +1474,26 @@ float MjClass::tock()
   return elapsed;
 }
 
+bool MjClass::last_action_gripper()
+{
+  /* was the last action performed on the gripper */
+
+  if (luke::last_action_robot() == luke::Target::Robot::gripper)
+    return true;
+  else
+    return false;
+}
+
+bool MjClass::last_action_panda()
+{
+  /* was the last action performed on the panda */
+
+  if (luke::last_action_robot() == luke::Target::Robot::panda)
+    return true;
+  else 
+    return false;
+}
+
 MjType::TestReport MjClass::get_test_report()
 {
   /* fills out and returns the test report */
@@ -1479,20 +1505,92 @@ MjType::TestReport MjClass::get_test_report()
   return testReport_;
 }
 
-void MjClass::validate_curve()
+MjType::CurveFitData::PoseData MjClass::validate_curve()
 {
   /* for testing the curvature of the fingers */
 
   // extract the finger data
   MjType::CurveFitData::PoseData pose;
+
   luke::verify_armadillo_gauge(data, 0,
     pose.f1.x, pose.f1.y, pose.f1.coeff, pose.f1.errors);
   luke::verify_armadillo_gauge(data, 1,
     pose.f2.x, pose.f2.y, pose.f2.coeff, pose.f2.errors);
   luke::verify_armadillo_gauge(data, 2,
     pose.f3.x, pose.f3.y, pose.f3.coeff, pose.f3.errors);
+
+  luke::verify_small_angle_model(data, 0, pose.f1.joints, 
+    pose.f1.pred_j, pose.f1.pred_x, pose.f1.pred_y, pose.f1.theory_y,
+    pose.f1.theory_x_curve, pose.f1.theory_y_curve,
+    -1 * s_.curve_validation, s_.finger_stiffness);
+  luke::verify_small_angle_model(data, 1, pose.f2.joints, 
+    pose.f2.pred_j, pose.f2.pred_x, pose.f2.pred_y, pose.f2.theory_y,
+    pose.f2.theory_x_curve, pose.f2.theory_y_curve,
+    -1 * s_.curve_validation, s_.finger_stiffness);
+  luke::verify_small_angle_model(data, 2, pose.f3.joints, 
+    pose.f3.pred_j, pose.f3.pred_x, pose.f3.pred_y, pose.f3.theory_y,
+    pose.f3.theory_x_curve, pose.f3.theory_y_curve,
+    -1 * s_.curve_validation, s_.finger_stiffness);
+
+  // calculate errors
+  pose.calc_error();
+
   // save
   curve_validation_data_.entries.push_back(pose);
+
+  return pose;
+}
+
+MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(int force)
+{
+  /* determine the cubic fit error and displacement of the fingers under
+  a given force */
+
+  // set the force
+  s_.curve_validation = -1 * force;
+
+  // step the simulation to allow the forces to settle
+  float time_to_settle = 2;
+  int steps_to_make = time_to_settle / s_.mujoco_timestep;
+  // std::cout << "Stepping for " << steps_to_make << " steps to allow settling\n";
+  for (int i = 0; i < steps_to_make; i++) {
+    step();
+  }
+
+  // evaluate the finger pose
+  MjType::CurveFitData::PoseData pose;
+  pose = validate_curve();
+  pose.tag_string = "Force is " + std::to_string(force) + " N";
+  
+  return pose;
+}
+
+MjType::CurveFitData MjClass::curve_validation_regime(bool print)
+{
+  /* peform test battery to validate finger bending, print is false by default */
+
+  MjType::CurveFitData data;
+
+  bool debug_state = s_.debug;
+
+  s_.debug = false;
+
+  int max_force = 5;
+
+  for (int i = 1; i < max_force + 1; i++) {
+    
+    MjType::CurveFitData::PoseData pose;
+    pose = validate_curve_under_force(i);
+    if (print) pose.print();
+    data.entries.push_back(pose);
+  }
+
+  s_.debug = debug_state;
+
+  // overwrite the internal curve validation data
+  curve_validation_data_ = data;
+
+  return data;
 }
 
 MjType::EventTrack MjClass::add_events(MjType::EventTrack& e1, MjType::EventTrack& e2)
@@ -1809,7 +1907,7 @@ void MjType::Settings::set_sensor_prev_steps_to(int prev_steps)
 
 void MjType::Settings::update_sensor_settings(double time_since_last_sample)
 {
-  /* updates the number of reading each sensor is taking based on time between
+  /* updates the number of readings each sensor is taking based on time between
   samples and read rate */
 
   // turn on normalisation behaviour for all sensors
@@ -1823,14 +1921,18 @@ void MjType::Settings::update_sensor_settings(double time_since_last_sample)
   set_sensor_prev_steps_to(sensor_n_prev_steps);
 
   // manually override state sensors
-  motor_state_sensor.prev_steps = state_n_prev_steps;
-  base_state_sensor.prev_steps = state_n_prev_steps;
+  int state_sensor_n_readings_per_step = 1;
+  motor_state_sensor.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
+  base_state_sensor.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
 
   #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)                    \
-            if (NAME.in_use) {                                \
-              NAME.update_n_readings(time_since_last_sample); \
-            }
+  
+  // update n_readings for all except state sensors
+  #define SS(NAME, IN_USE, NORM, READRATE)                       \
+            if (#NAME != "motor_state_sensor" and                \
+                #NAME != "base_state_sensor")                    \
+              NAME.update_n_readings(time_since_last_sample);
+
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
   

@@ -386,6 +386,17 @@ struct Target {
   std::array<double, 6> base {};      // target of base joints (only [0] used for z)
   std::array<double, 7> panda {};     // target for panda joints (never used)
 
+  struct Robot {
+    enum {
+      none = 0,
+      gripper,
+      panda
+    };
+  };
+
+  // what was the last robot motion achieved with
+  int last_robot = Robot::none;
+
   static constexpr double base_z_min = -0.1;
   static constexpr double base_z_max = 0.1;
 

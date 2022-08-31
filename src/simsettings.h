@@ -27,11 +27,11 @@
                                 type      value
   general */\
   XX(  debug,                   bool,     true)     /* print debug info to terminal */\
-  XX(  mujoco_timestep,         float,    0.002)    /* sim timestep in seconds - default 0.002 */\
-  XX(  curve_validation,        bool,     false)    /* save finger curve data for testing */\
-  XX(  finger_stiffness,        double,       5)    /* mujoco finger joint spring stiffness, units unknown */\
-  XX(  random_seed,             uint,         0)    /* random seed */\
-  XX(  randomise_colours,       bool,      true)    /* randomise the colours of the objects */\
+  XX(  mujoco_timestep,         double,   0.0005)    /* sim timestep in seconds - default 0.002 */\
+  XX(  curve_validation,        int,      false)    /* save finger curve data for testing, -ve number sets tip force */\
+  XX(  finger_stiffness,        double,   10)        /* mujoco finger joint spring stiffness, units unknown */\
+  XX(  random_seed,             uint,     0)        /* random seed */\
+  XX(  randomise_colours,       bool,     true)     /* randomise the colours of the objects */\
   /*
   HER settings */\
   XX(  use_HER,                 bool,     false)    /* use hindsight experience replay (HER) */\
@@ -46,12 +46,12 @@
   XX(  sensor_n_prev_steps,     int,      1)        /* how many steps back do we sample with sensors */\
   XX(  state_n_prev_steps,      int,      1)        /* how many steps back do we sample with state sensors */\
   XX(  all_sensors_use_noise,   bool,     false)    /* do all of the sensors use noise */\
-  XX(  sensor_noise_mag,        double,    0.0)     /* noise magnitude if using uniform distribution (std <= 0) */\
-  XX(  sensor_noise_mu,         double,    0.0)     /* abs range of sensor mean shift */\
-  XX(  sensor_noise_std,        double,    0.015)   /* std deviation of noise, <= 0 means uniform */\
-  XX(  state_noise_mag,         double,    0.0)     /* noise magnitude if using uniform distribution (std <= 0)*/\
-  XX(  state_noise_mu,          double,    0.0)     /* abs range of state sensor mean shift*/\
-  XX(  state_noise_std,         double,    0.015)   /* std deviation of noise, <= 0 means uniform*/\
+  XX(  sensor_noise_mag,        double,   0.0)      /* noise magnitude if using uniform distribution (std <= 0) */\
+  XX(  sensor_noise_mu,         double,   0.0)      /* abs range of sensor mean shift */\
+  XX(  sensor_noise_std,        double,   0.015)    /* std deviation of noise, <= 0 means uniform */\
+  XX(  state_noise_mag,         double,   0.0)      /* noise magnitude if using uniform distribution (std <= 0)*/\
+  XX(  state_noise_mu,          double,   0.0)      /* abs range of state sensor mean shift*/\
+  XX(  state_noise_std,         double,   0.015)    /* std deviation of noise, <= 0 means uniform*/\
   /* 
   update_env() settings */\
   XX(  oob_distance,            double,   75e-3)    /* distance to consider object out of bounds */\
@@ -79,7 +79,7 @@
   /* 
 
   2. Sensors
-      name                      used      normalise read-rate (NB read-rate <= 0 means 1 per step */\
+      name                      used      normalise read-rate (NB ignore read rate for state sensors) */\
   SS(  motor_state_sensor,      true,     0,        -1)  /* xyz motor states, normalise is ignored */\
   SS(  base_state_sensor,       true,     0,        -1)  /* base position state, normalise is ignored)*/\
   SS(  bending_gauge,           true,     100.0,    10)  /* strain gauge to measure finger bending */\

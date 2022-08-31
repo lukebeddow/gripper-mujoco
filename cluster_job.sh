@@ -1,8 +1,8 @@
 # These are flags you must include - Two memory and one runtime.
 # Runtime is either seconds or hours:min:sec
 
-#$ -l tmem=2G
-#$ -l h_vmem=2G
+#$ -l tmem=4G
+#$ -l h_vmem=4G
 #$ -l h_rt=72:0:0
 
 #These are optional flags but you probably want them in all jobs

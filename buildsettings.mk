@@ -70,10 +70,10 @@ MJCF_PATH = /home/lbeddow/mymujoco/mjcf
 
 # cluster library locations
 PYTHON_PATH = /share/apps/python-3.6.9/include/python3.6m
-PYBIND_PATH = /home/lbeddow/clusterlibs/pybind11
-ARMA_PATH = /home/lbeddow/clusterlibs/armadillo-code
-MUJOCO_PATH = /home/lbeddow/clusterlibs/mujoco/mujoco-2.1.5
-RENDER_PATH = /home/lbeddow/clusterlibs/glfw
+PYBIND_PATH = ~/clusterlibs/pybind11
+ARMA_PATH = ~/clusterlibs/armadillo-code
+MUJOCO_PATH = ~/clusterlibs/mujoco/mujoco-2.1.5
+RENDER_PATH = ~/clusterlibs/glfw
 CORE_LIBS = -L$(MUJOCO_PATH)/lib/ -lmujoco -lblas -llapack
 RENDER_LIBS = # none, no rendering
 DEFINE_VAR = -DLUKE_CLUSTER -DARMA_DONT_USE_WRAPPER \

@@ -3,6 +3,7 @@
 import math
 import random
 import os
+from struct import calcsize
 import time
 from datetime import datetime
 import numpy as np
@@ -315,6 +316,61 @@ class TrainDQN():
           self.avgS_durations = np.append(self.avgS_durations, avg_d)
           self.avg_time_taken = np.append(self.avg_time_taken, avg_t)
 
+    def calc_best_performance(self, from_episode=None):
+      """
+      Find the best success rate by the model, and what episode number it occured
+      """
+
+      if from_episode is None: from_episode = 0
+
+      if self.success_rate_metric == "stable height":
+        success_rate_vector = self.avg_stable_height
+      elif self.success_rate_metric == "target height":
+        success_rate_vector = self.avg_target_height
+      elif self.success_rate_metric == "lifted":
+        success_rate_vector = self.avg_lifted
+      elif self.success_rate_metric == "stable":
+        success_rate_vector = self.avg_stable
+      else:
+        print(f"{self.success_rate_metric} is not valid, Track used 'stable height' instead")
+        success_rate_vector = self.avg_stable_height
+
+      best_sr = 0
+      best_ep = 0
+
+      # loop through, this is slower than numpy but lets us check for 'from_episode'
+      for i, sr in enumerate(success_rate_vector):
+
+        # get info
+        this_ep = self.test_episodes[i]
+
+        # check if this episode is past our minimum
+        if this_ep < from_episode: continue
+
+        # see if this is best
+        if sr > best_sr:
+          best_sr = sr
+          best_ep = this_ep
+
+      return best_sr, best_ep
+
+    def log_performance_scatter(self, best_ep, best_sr):
+      """
+      Log scatter graph of best model performance
+      """
+
+      X = "Training episode"
+      Y = "Best success rate"
+
+      xdata = [best_ep]
+      ydata = [best_sr]
+      data = [[x, y] for (x, y) in zip(xdata, ydata)]
+
+      table = wandb.Table(data=data, columns = [X, Y])
+
+      wandb.log({"Best success rate scatter" : wandb.plot.scatter(table, X, Y,
+                                                 title="Best success rate and occurance episode")})
+
     def plot_wandb(self, xdata, ydata, xlabel, ylabel, title):
       # plot data to weights and biases
       data = [[x, y] for (x, y) in zip(xdata, ydata)]
@@ -604,7 +660,11 @@ class TrainDQN():
     self.HER_k = None
 
     # curriculum defaults
-    self.curriculum_applied = False
+    self.curriculum_applied = None
+
+    # temporary experimental feature: cluster additional logging
+    if self.machine == "cluster": self.additional_logging = 25
+    else: self.additional_logging = None
 
     # if we are plotting graphs during this training
     if no_plot == True:
@@ -676,17 +736,17 @@ class TrainDQN():
     # print important info about class settings
     if self.log_level > 0:
       print("TrainDQN init settings:")
-      print("\tUsing machine:", self.machine)
-      print("\tUsing device:", self.device.type)
-      print("\tUsing model:", self.policy_net.name)
-      print("\tUsing object set:", self.params.object_set)
-      print("\tNetwork inputs (n_obs):", self.env.n_obs)
-      print("\tNetwork outputs (n_actions):", self.env.n_actions)
-      print("\tUsing HER:", self.params.use_HER)
-      print("\tUsing wandb:", self.use_wandb)
-      print("\tUsing curriculum:", self.params.use_curriculum)
-      print("\tRun name:", self.run_name)
-      print("\tGroup name:", self.group_name)
+      print(" -> Using machine:", self.machine)
+      print(" -> Using device:", self.device.type)
+      print(" -> Using model:", self.policy_net.name)
+      print(" -> Using object set:", self.params.object_set)
+      print(" -> Network inputs (n_obs):", self.env.n_obs)
+      print(" -> Network outputs (n_actions):", self.env.n_actions)
+      print(" -> Using HER:", self.params.use_HER)
+      print(" -> Using wandb:", self.use_wandb)
+      print(" -> Using curriculum:", self.params.use_curriculum)
+      print(" -> Run name:", self.run_name)
+      print(" -> Group name:", self.group_name)
 
   def set_device(self, device):
     """
@@ -738,7 +798,7 @@ class TrainDQN():
       return torch.tensor([[rand_action]], device=self.device,
                           dtype=torch.long)
 
-  def plot(self, force=None, hang=None):
+  def plot(self, force=None, hang=None, end=None):
     """
     Create a plot to track the training data
     """
@@ -750,12 +810,32 @@ class TrainDQN():
 
     self.track.plot(plttitle=self.group_name + " / " + self.run_name, plt_frequency=freq)
 
+    # if we are at the end, log the final best performance
+    if end is True:
+
+      # if using a curriculum, get the best performance only after the end of the curriculum
+      if self.params.use_curriculum:
+        if self.curriculum_applied is not None and self.curriculum_applied > 1:
+          from_episode = self.curriculum_applied
+          print_details = f"(curriculum applied at {self.curriculum_applied})"
+        else:
+          print_details = "(curriculum not applied)"
+      else: 
+        from_episode = None
+        print_details = ""
+
+      # get best success rate and best episode
+      best_sr, best_ep = self.track.calc_best_performance(from_episode=from_episode)
+      self.track.log_performance_scatter(best_ep, best_sr)
+
+      print(f"Run best performance is {best_sr} at episode {best_ep} " + print_details)
+
     if hang == True:
       plt.ioff()
       plt.show() # halts all program execution
       plt.ion()
 
-  def log_wandb(self, force=None):
+  def log_wandb(self, force=None, end=None):
     """
     Log to weights and biases
     """
@@ -773,6 +853,26 @@ class TrainDQN():
     freq = self.params.wandb_freq_s if force is not True else 0
 
     self.track.log_wandb(log_frequency=freq)
+
+    # if we are at the end, log the final best performance
+    if end is True:
+
+      # if using a curriculum, get the best performance only after the end of the curriculum
+      if self.params.use_curriculum:
+        if self.curriculum_applied is not None and self.curriculum_applied > 1:
+          from_episode = self.curriculum_applied
+          print_details = f"curriculum applied at {self.curriculum_applied}"
+        else:
+          print_details = "curriculum not applied"
+      else: 
+        from_episode = None
+        print_details = ""
+
+      # get best success rate and best episode
+      best_sr, best_ep = self.track.calc_best_performance(from_episode=from_episode)
+      self.track.log_performance_scatter(best_ep, best_sr)
+
+      print(f"Run best performance is {best_sr} at episode {best_ep} " + print_details)
 
   def create_test_report(self, test_data, i_episode=None):
     """
@@ -1017,11 +1117,24 @@ class TrainDQN():
     Implement a learning curriculum
     """
 
-    if self.params.use_curriculum:
-      if not self.curriculum_applied:
-        if i_episode > self.params.curriculum_ep_num:
-          self.load_object_set(object_set=self.params.curriculum_object_set)
-          self.curriculum_applied = True
+    if not self.params.use_curriculum: return
+
+    # define threshold for changing curriculum
+    threshold = 0.6
+
+    # extract details of how training is going
+    if len(self.track.avg_stable_height) > 0:
+      success_rate = self.track.avg_stable_height[-1]
+    else: return
+
+    if self.curriculum_applied is None or self.curriculum_applied < 1:
+      if success_rate > threshold:
+        self.load_object_set(object_set=self.params.curriculum_object_set)
+        self.curriculum_applied = i_episode
+        labelstr = f"Hyperparameters after curriculum change which occured at episode {i_episode}\n"
+        labelstr += f"The success rate is {success_rate} and the threshold is {threshold}\n"
+        name = "hyperparameters_from_curriculum_change"
+        self.save_hyperparameters(labelstr, name)
 
   def run_episode(self, i_episode, test=None):
     """
@@ -1049,7 +1162,7 @@ class TrainDQN():
     # count up through actions
     for t in count():
 
-      if self.log_level > 1: print("Episode", i_episode, "action", t)
+      if self.log_level > 2: print("Episode", i_episode, "action", t)
 
       # select and perform an action
       if self.params.use_HER:
@@ -1140,11 +1253,16 @@ class TrainDQN():
       hypername = f"hyperparameters_from_ep_{i_start}"
       self.save_hyperparameters(labelstr=continue_label, name=hypername)
 
+    if self.log_level > 0:
+      print(f"\nBEGIN TRAINING, target is {self.params.num_episodes} episodes\n", flush=True)
+
     # begin training episodes
     for i_episode in range(i_start + 1, self.params.num_episodes + 1):
 
-      if self.log_level > 0: 
-        print("Begin training episode", i_episode)
+      if self.log_level == 1 and i_episode % 50:
+        print("Begin training episode", i_episode, flush=True)
+      elif self.log_level > 1:
+        print("Begin training episode", i_episode, flush=True)
 
       self.run_episode(i_episode)
 
@@ -1161,29 +1279,34 @@ class TrainDQN():
         # save the result
         self.save(txtstring=test_report, txtlabel="test_results", 
                   tupledata=additional_data)
+        # check if time to change curriculum following the test
+        self.curriculum_fcn(i_episode)
 
       # or only save the network
       elif i_episode % self.params.save_freq == 0:
         self.save()
 
-      # if we are using curriculum training, only update after a test
-      if i_episode % self.params.test_freq == 0 and i_episode != 0:
-        self.curriculum_fcn(i_episode)
+      # temporary experimental feature: cluster logging up to first test
+      elif self.additional_logging is not None:
+        if i_episode < self.params.test_freq:
+          if i_episode % self.additional_logging == 0:
+            texttosave = f"Cluster training has reached episode {i_episode}\n"
+            self.modelsaver.save("cluster_episode_tracker", txtstr=texttosave, 
+                                 txtonly=True)
 
     # update the target network at the end
     self.target_net.load_state_dict(self.policy_net.state_dict())
 
     # save, log and plot now we are finished
+    if self.log_level > 0:
+      print("\nTRAINING COMPLETE, finished", i_episode, "episodes\n")
     self.save(txtstring=f"Training finished after {i_episode} episodes",
               txtlabel="training_finished")
-    self.log_wandb()
-    self.plot()
+    self.env.render()
+    self.log_wandb(force=True, end=True)
+    self.plot(force=True, end=True, hang=True) # leave plots on screen if we are plotting
 
     # end of training
-    if self.log_level > 0:
-      print("Training complete, finished", i_episode, "episodes")
-
-    self.env.render()
     self.env.close()
 
   def test(self, pause_each_episode=None):
@@ -1230,6 +1353,11 @@ class TrainDQN():
     Save a text file with the current hyperparameters
     """
 
+    if self.log_level > 0:
+      print_out = True
+    else:
+      print_out = False
+
     param_str = ""
     time_stamp = datetime.now().strftime("%d-%m-%Y-%H:%M")
 
@@ -1239,11 +1367,11 @@ class TrainDQN():
     if name == None:
       name = "hyperparameters"
 
-    if self.wandb_note != "":
-      param_str += "Wandb note\n" + self.wandb_note + "\n"
-
     # capture parameters info
-    param_str += f"""Hyperparameters at training time:\n\n"""
+    param_str += f"""\nHyperparameters at training time:\n\n"""
+
+    if self.wandb_note != "":
+      param_str += "Wandb note:\n" + self.wandb_note + "\n"
 
     # add in some important information
     param_str += "Network name: " + self.policy_net.name + "\n"
@@ -1265,6 +1393,9 @@ class TrainDQN():
 
     # add the c++ settings to the string
     param_str += "\n\n" + self.env._get_cpp_settings()
+
+    # if we are printing, put this info also into the terminal
+    if print_out: print(param_str)
 
     savepath = self.modelsaver.save(name, txtstr=param_str,
                                     txtonly=True)
@@ -1368,7 +1499,7 @@ class TrainDQN():
 
     # or add extra episodes on to what has already been done
     elif extra_episodes != None:
-      self.params.num_episodes = self.track.episodes_done + extra_episodes
+      self.params.num_episodes = self.params.num_episodes + extra_episodes
 
     # or if we have done exactly our target episodes, double the target
     elif self.params.num_episodes == self.track.episodes_done:
@@ -1392,7 +1523,7 @@ if __name__ == "__main__":
   # ----- prepare ----- #
 
   use_wandb = False
-  force_device = None # "cpu"
+  force_device = "cpu"
   no_plot = True
 
   model = TrainDQN(device=force_device, use_wandb=use_wandb, no_plot=no_plot)
@@ -1400,7 +1531,7 @@ if __name__ == "__main__":
   # if we want to adjust parameters
   # model.log_level = 2
   # model.params.num_episodes = 11
-  # model.env.max_episode_steps = 20
+  model.env.max_episode_steps = 20
   # model.params.wandb_freq_s = 5
   # model.env.mj.set.action_motor_steps = 350
   # model.env.disable_rendering = False
@@ -1435,17 +1566,18 @@ if __name__ == "__main__":
   # load
   # net = networks.DQN_3L60
   # model.init(net)
-  folderpath = "/home/luke/cluster/rl/models/dqn/19-07-22/"
-  foldername = "cluster_19:35_A12"
+  folderpath = "/home/luke/cluster/rl/models/dqn/16-08-22/"
+  foldername = "cluster_16:42_A30"
   model.device = torch.device("cpu")
-  model.load(id=None, folderpath=folderpath, foldername=foldername)
+  model.load(id=24, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
   # # train
   # net = networks.DQN_3L60
-  # model.env.disable_rendering = False
+  # model.env.disable_rendering = True
   # model.env.mj.set.debug = False
+  # model.additional_logging = 10
   # model.train(network=net)
 
   # # continue training
@@ -1484,10 +1616,10 @@ if __name__ == "__main__":
   # test
   model.env.mj.set.debug = False
   model.env.disable_rendering = False
-  model.env.test_trials_per_obj = 1
-  model.env.test_objects = 15
-  model.env.test_obj_per_file = 5
-  model.env.max_episode_steps = 20
+  # model.env.test_trials_per_obj = 1
+  model.env.test_objects = 30
+  # model.env.test_obj_per_file = 5
+  # model.env.max_episode_steps = 20
 
   # model.env.mj.set.step_num.set          (0,      70,   1)
   # model.env.mj.set.exceed_limits.set     (-0.005, True,   10)

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import os
-import pickle
 import sys
 
 # get the path to this file and insert it to python path (for mjpy.bind)
@@ -53,7 +52,7 @@ class MjEnv():
     self.test_in_progress = False
     self.test_completed = False
     self.test_trials_per_obj = 1
-    self.test_objects = 60
+    self.test_objects = 100
     
     # define file structure
     self.task_xml_folder = "task"
@@ -104,7 +103,10 @@ class MjEnv():
       r = np.random.randint(self.testing_xmls, self.testing_xmls + self.training_xmls)
       filename = self.task_xml_template.format(r)
 
-    if self.log_level > 1: print("loading xml: ", filename)
+    if self.log_level > 2: 
+      print("Load path: ", self.mj.model_folder_path
+            + self.mj.object_set_name + "/" + self.task_xml_folder)
+    if self.log_level > 1: print("Loading xml: ", filename)
 
     # load the new task xml (old model/data are deleted)
     self.mj.load_relative(self.task_xml_folder + '/' + filename)
@@ -346,22 +348,19 @@ class MjEnv():
     # set the python random seed in numpy
     np.random.seed(seed)
 
-    # set the same cpp random seed (reseeded upon cpp call to reset())
+    # set the same cpp random seed (reseeded upon call to reset())
     self.mj.set.random_seed = seed
 
     # save the seed
     self.myseed = seed
 
+    # tell the simulation to reload a new xml (upon call to reset())
+    self.reload_flag = True
+
   def start_test(self):
     """
     Begin test mode, should be called by class user
     """
-
-    # # temporary repeat of __init__() code for backwards compatibility
-    # self.test_trials_per_obj = 1
-    # self.test_objects = 60
-    # self.test_obj_per_file = 20           # how many test objects per file
-    # self.testing_xmls = int(np.ceil(self.test_objects / float(self.test_obj_per_file)))
 
     self.current_test_trial = MjEnv.Test()
     self.test_trials = []
@@ -414,7 +413,7 @@ class MjEnv():
 
     return to_return
 
-  def reset(self):
+  def reset(self, hard=None):
     """
     Reset the simulation to the start
     """
@@ -428,7 +427,8 @@ class MjEnv():
         self._load_xml()
 
     # reset the simulation and spawn a new random object
-    self.mj.reset()
+    if hard is True: self.mj.hard_reset()
+    else: self.mj.reset()
     self._spawn_object()
 
     return self._next_observation()
