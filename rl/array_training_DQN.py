@@ -225,7 +225,7 @@ def add_sensors(model, num=None, sensor_mode=None, state_mode=None, sensor_steps
   # define defaults that can be overriden by function inputs
   if sensor_mode is None: sensor_mode = 1
   if state_mode is None: state_mode = 0
-  if noise_std is None: noise_std = 0.015
+  if noise_std is None: noise_std = 0.05
   if sensor_steps is None: sensor_steps = 1
   if state_steps is None: state_steps = 2
 
@@ -622,43 +622,43 @@ if __name__ == "__main__":
   baseline_training(model, sensors=this_sensors)
   """
 
+  # sensors_list = [
+  #   0, # bending and z state
+  #   1, # + palm
+  #   2  # + wrist
+  # ]
+
+  # # lists are zero indexed
+  # inputarg -= 1
+
+  # model.params.num_episodes = 40000
+  # baseline_training(model, sensors=sensors_list[inputarg]) 
+
+  # varying 3x3 = possible trainings 1-9
   sensors_list = [
     0, # bending and z state
     1, # + palm
     2  # + wrist
   ]
 
-  # lists are zero indexed
-  inputarg -= 1
-
-  model.params.num_episodes = 40000
-  baseline_training(model, sensors=sensors_list[inputarg]) 
-
-  # varying 6x3 = possible trainings 1-18
-  lr_list = [
-    (1e-5, False),   
-    (1e-5, True),
-    (5e-5, False),   
-    (5e-5, True),
-    (1e-4, False),   
-    (1e-4, True)
-  ]
-
-  eps_decay_list = [
-    2000,
-    4000,
-    6000,
+  num_segments_list = [
+    "set3_fullset_795_N/5_free_seg",
+    "set3_fullset_795_N/7_free_seg",
+    "set3_fullset_795_N/10_free_seg"
   ]
 
   # lists are zero indexed so adjust inputarg
   inputarg -= 1
 
+  # allow looping input indexes
+  while inputarg >= 9: inputarg -= 9
+
   # we vary wrt memory_list every inputarg increment
-  x = len(eps_decay_list)
+  x = len(num_segments_list)
 
   # get the sensors and memory size for this training
-  this_lr = lr_list[inputarg // x]                # vary every x steps
-  this_eps_decay = eps_decay_list[inputarg % x]       # vary every +1 & loop
+  this_sensor = sensors_list[inputarg // x]                 # vary every x steps
+  this_set = num_segments_list[inputarg % x]                # vary every +1 & loop
 
   # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
   #   A1, A2, A3, ...
@@ -666,9 +666,8 @@ if __name__ == "__main__":
   #   C1, C2, C3, ...
 
   # make note
-  param_1 = f"Learning rate is {this_lr[0]}\n"
-  param_2 = f"Eps decay is {this_eps_decay}\n"
-  param_3 = f"Curriculum learning is {this_lr[1]}\n"
+  param_1 = f"Sensors is {this_sensor}\n"
+  param_2 = f"Object set is {this_set}\n"
   model.wandb_note += param_1 + param_2
 
   # if we are just printing help information
@@ -676,22 +675,32 @@ if __name__ == "__main__":
     print("Input arg", inputarg + 1)
     print("\t" + param_1, end="")
     print("\t" + param_2, end="")
-    print("\t" + param_3, end="")
     exit()
 
-  # if we use curriculum learning
-  if this_lr[1]:
-    model.params.object_set = "set3_nocuboid_525"
-    model.params.use_curriculum = True
-    model.params.curriculum_object_set = "set3_fullset_795"
-  else:
-    model.params.object_set = "set3_fullset_795"
+  # # if we use curriculum learning
+  # if this_lr[1]:
+  #   model.params.object_set = "set3_nocuboid_525"
+  #   model.params.use_curriculum = True
+  #   model.params.curriculum_object_set = "set3_fullset_795"
+  # else:
+  #   model.params.object_set = "set3_fullset_795"
 
   # set number of training episodes
-  model.params.num_episodes = 30000
+  model.params.num_episodes = 40000
+
+  # automatically find the highest stable timestep
+  model.env.mj.set.mujoco_timestep = -1
+
+  # apply the number of segments
+  model.params.object_set = this_set
+
+  # reduce the amount of saving/testing/logging
+  model.params.save_freq = 2000
+  model.params.test_freq = 2000
+  model.params.wandb_freq_s = 3600
 
   # perform the training with other parameters standard
-  baseline_training(model, lr=this_lr[0], eps_decay=this_eps_decay) 
+  baseline_training(model) 
 
   # ----- END ----- #
    

@@ -219,7 +219,7 @@ class TrainDQN():
       """
       # parameters to set
       numpy_float = np.float32
-      self.moving_avg_num = 100
+      self.moving_avg_num = 500
       self.static_avg_num = self.moving_avg_num
       self.plot_raw = False
       self.plot_moving_avg = False
@@ -766,7 +766,9 @@ class TrainDQN():
 
     if object_set is None: object_set = self.params.object_set[:]
 
+    # load the object set and the first xml file
     self.env._load_object_set(object_set)
+    self.env._load_xml()
     self.params.object_set = object_set
 
   def to_torch(self, data, dtype=None):

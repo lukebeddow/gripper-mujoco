@@ -130,6 +130,7 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
   std::vector<float>& theory_x_curve, std::vector<float>& theory_y_curve,
   float force, float finger_stiffness);
 int last_action_robot();
+bool is_sim_unstable(mjModel* model, mjData* data);
 
 } // namespace luke
 

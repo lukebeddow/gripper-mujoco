@@ -417,7 +417,7 @@ std::vector<bool*> finger_settled_ {
   &j_.settle.finger1, &j_.settle.finger2, &j_.settle.finger3
 };
 
-constexpr static bool debug = true; // turn on/off debug mode for this file only
+constexpr static bool debug = false; // turn on/off debug mode for this file only
 
 /* ----- initialising, setup, and utilities ----- */
 
@@ -727,7 +727,9 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
       // float c = (j_.dim.stiffness_c * (N - n + 1)) / (float)(n + 1);
       float c = (j_.dim.stiffness_c * (N - n + 1)) / (float) n;
 
-      std::cout << "idx " << idx << " has c_n = " << c << '\n';
+      if (debug) {
+        std::cout << "idx " << idx << " has c_n = " << c << '\n';
+      }
 
       model->jnt_stiffness[idx] = c;
     }
@@ -1777,7 +1779,7 @@ gfloat read_armadillo_gauge(const mjData* data, int finger)
   arma::mat finger_xy(j_.num.per_finger + 1, 2, arma::fill::zeros);
 
   // first segment is locked, so first finger x value is end of this
-  finger_xy(0, 0) = j_.dim.segment_length;
+  finger_xy(0, 0) = 0.0;
 
   for (int i = 0; i < j_.num.per_finger; i++) {
 
@@ -2320,6 +2322,17 @@ int last_action_robot()
   */
 
   return target_.last_robot;
+}
+
+bool is_sim_unstable(mjModel* model, mjData* data)
+{
+  /* detect if the simulation has become unstable */
+
+  if (data->warning[mjWARN_BADQACC].number > 0) {
+    return true;
+  }
+
+  return false;
 }
 
 } // namespace luke

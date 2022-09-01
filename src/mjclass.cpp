@@ -102,6 +102,11 @@ void MjClass::configure_settings()
   calibrate_.offset.g3 = -0.56e6;
   calibrate_.scale.g1 = calibrate_.scale.g2 = calibrate_.scale.g3 = 1.258e-6;
   calibrate_.norm.g1 = calibrate_.norm.g2 = calibrate_.norm.g3 = 2;
+  
+  // if timestep is negative, find highest stable timestep automatically
+  if (s_.mujoco_timestep < 0) {
+    s_.mujoco_timestep = find_highest_stable_timestep();
+  }
 
   // set the simulation timestep
   model->opt.timestep = s_.mujoco_timestep;
@@ -1453,8 +1458,6 @@ std::vector<float> MjClass::get_real_observation()
   return get_observation();
 }
 
-
-
 /* ----- misc ----- */
 
 void MjClass::tick()
@@ -1651,6 +1654,69 @@ void MjClass::default_goal_event_triggering()
   #undef SS 
   #undef BR
   #undef LR
+}
+
+float MjClass::find_highest_stable_timestep()
+{
+  /* find the highest timestep where the simulation is stable after 0.5 seconds */
+
+  constexpr bool debug = true;
+
+  float increment = 50e-6;   // 0.05 milliseconds
+  float start_value = 3e-3;  // 30 millseconds
+  float test_time = 1.0;     // 0.5 seconds
+
+  float next_timestep = start_value;
+  bool unstable = false;
+
+  // find stable timestep
+  while (next_timestep > increment) {
+
+    int num_steps = (test_time / next_timestep) + 1;
+    s_.mujoco_timestep = next_timestep;
+    reset();
+
+    for (int i = 0; i < num_steps; i++) {
+
+      step();
+
+      if (luke::is_sim_unstable(model, data)) {
+        if (debug) {
+          std::printf("Timestep of %.3f milliseconds unstable after %i steps (or %.3f seconds)\n",
+            next_timestep * 1000, i, i * next_timestep);
+        }
+        unstable = true;
+        break;
+      }
+    }
+
+    if (unstable) {
+      next_timestep -= increment;
+      unstable = false;
+      continue;
+    }
+    else {
+      break;
+    }
+  }
+
+  if (debug) {
+    std::printf("Timestep of %.3f milliseconds remained stable for %.2f seconds\n",
+            next_timestep * 1000, test_time);
+  }
+
+  // for safety, reduce timestep by 10 percent
+  float final_timestep = next_timestep * 0.9;
+
+  if (debug) {
+    std::printf("Stable timestep is now set to %.3f milliseconds\n", final_timestep * 1000);
+  }
+
+  // set this timestep
+  s_.mujoco_timestep = final_timestep;
+  reset();
+
+  return final_timestep;
 }
 
 /* ------ utility functions ----- */
