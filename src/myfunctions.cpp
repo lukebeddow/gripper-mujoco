@@ -196,12 +196,14 @@ struct JointSettings {
   // control parameters
   struct {
     bool stepper = true;
-    int num_steps = 10;
-    double pulses_per_s = 2000;
-    Gain kp {100, 100, 1000};
-    Gain kd {1, 1, 1};
-    double base_kp = 2000;
-    double base_kd = 100;
+    int num_steps = 10;                         // number of stepper motors steps in one chunk
+    double pulses_per_s = 2000;                 // stepper motor pulses per second, this sets speed (2000pps = 300rpm)
+    Gain kp {100, 100, 1000};                   // proportional gains for gripper xyz motors {x, y, z}
+    Gain kd {1, 1, 1};                          // derivative gains for gripper xyz motors {x, y, z}
+    double base_kp = 2000;                      // proportional gain for gripper base motions
+    double base_kd = 100;                       // derivative gain for gripper base motions
+
+    double time_per_step = 0.0;                 // runtime depends
   } ctrl;
 
   // simulation details
@@ -460,6 +462,7 @@ void init_J(mjModel* model, mjData* data)
   configure_qpos(model, data);
 
   // calculate constants
+  j_.ctrl.time_per_step = j_.ctrl.num_steps / j_.ctrl.pulses_per_s;
   int N = j_.num.per_finger;
   int Ntotal = j_.num.per_finger + j_.dim.fixed_first_segment;
   j_.dim.segment_length = j_.dim.finger_length / float(Ntotal);
@@ -963,6 +966,136 @@ void set_constraint(mjModel* model, mjData* data, int id, bool set_as)
   model->eq_active[id] = set_as;
 }
 
+void target_constraint(mjModel* model, mjData* data, int id, bool set_as, int type)
+{
+  /* set a constraint to send a motor to a target position */
+
+  /* THIS FUNCTION IS UNFINISHED */
+
+  if (set_as) {
+
+    // int con_id = id * mjNEQDATA; // index where we insert constraint data
+
+    // prepare and get indexes of position/rotation data
+    mjtNum body1_pos[3];
+    mjtNum body2_pos[3];
+    mjtNum body1_rot[9];
+    mjtNum body2_rot[9];
+    int con_id = id * mjNEQDATA; // index where we insert constraint data
+    int b1_pos_id = model->eq_obj1id[id] * 3;
+    int b2_pos_id = model->eq_obj2id[id] * 3;
+    int b1_rot_id = model->eq_obj1id[id] * 9;
+    int b2_rot_id = model->eq_obj2id[id] * 9;
+
+    // get the global rotation of the two bodies
+    for (int i = 0; i < 9; i++) {
+      body1_rot[i] = data->xmat[b1_rot_id + i];
+      body2_rot[i] = data->xmat[b2_rot_id + i];
+    }
+
+    // get the global position of the two bodies
+    for (int i = 0; i < 3; i++) {
+      body1_pos[i] = data->xpos[b1_pos_id + i];
+      body2_pos[i] = data->xpos[b2_pos_id + i];
+    }
+
+    // now find the local rotation, R12 = (R01)^T * R02
+    mjtNum R12[9];
+    mju_mulMatTMat(R12, body1_rot, body2_rot, 3, 3, 3);
+
+    // subract the vectors from each other, then rotate into frame 1 (from 0)
+    mjtNum vdiff[3];
+    mjtNum vec12[3];
+    vdiff[0] = body2_pos[0] - body1_pos[0];
+    vdiff[1] = body2_pos[1] - body1_pos[1];
+    vdiff[2] = body2_pos[2] - body1_pos[2];
+    mju_mulMatVec(vec12, body1_rot, vdiff, 3, 3);
+
+    // convert local rotation into a quaternion
+    mjtNum quat12[4];
+    mju_mat2Quat(quat12, R12);
+
+    // insert this info into the constraint
+    model->eq_data[con_id + 0] = vec12[0];
+    model->eq_data[con_id + 1] = vec12[1];
+    model->eq_data[con_id + 2] = vec12[2];
+    model->eq_data[con_id + 3] = quat12[0];
+    model->eq_data[con_id + 4] = quat12[1];
+    model->eq_data[con_id + 5] = quat12[2];
+    model->eq_data[con_id + 6] = quat12[3];
+
+    // gripper prismatic
+    if (type == 0) {
+      model->eq_data[con_id + 0] = 0;
+      model->eq_data[con_id + 1] = target_.end.x;
+      model->eq_data[con_id + 2] = 0;
+      model->eq_data[con_id + 3] = 0;
+      model->eq_data[con_id + 4] = 0;
+      model->eq_data[con_id + 5] = 0;
+      model->eq_data[con_id + 6] = 1;
+    }
+
+    // // gripper revolute
+    // else if (type == 1) {
+    //   float axis[3] = { 0, 0, -1 };
+    //   float half_angle = 0.5 * target_.end.get_revolute_joint();
+    //   model->eq_data[con_id + 0] = 0;
+    //   model->eq_data[con_id + 1] = 0;
+    //   model->eq_data[con_id + 2] = 0;
+    //   model->eq_data[con_id + 3] = axis[0] * std::sin(half_angle);
+    //   model->eq_data[con_id + 4] = axis[1] * std::sin(half_angle);
+    //   model->eq_data[con_id + 5] = axis[2] * std::sin(half_angle);
+    //   model->eq_data[con_id + 6] = std::cos(half_angle);
+    // }
+
+    // // gripper palm
+    // else if (type == 2) {
+    //   model->eq_data[con_id + 0] = target_.end.z;
+    //   model->eq_data[con_id + 1] = 0;
+    //   model->eq_data[con_id + 2] = 0;
+    //   model->eq_data[con_id + 3] = 0;
+    //   model->eq_data[con_id + 4] = 0;
+    //   model->eq_data[con_id + 5] = 0;
+    //   model->eq_data[con_id + 6] = 1;
+    // }
+
+    /* for testing */
+    std::cout << "Body 1 position is: ";
+    for (int i = 0; i < 3; i++) {
+      std::cout << body1_pos[i] << ", ";
+    }
+    std::cout << '\n';
+    std::cout << "Body 2 position is: ";
+    for (int i = 0; i < 3; i++) {
+      std::cout << body2_pos[i] << ", ";
+    }
+    std::cout << '\n';
+    std::cout << "Body 1 rotation is: ";
+    mjtNum b1Quat[4];
+    mju_mat2Quat(b1Quat, body1_rot);
+    for (int i = 0; i < 4; i++) {
+      std::cout << b1Quat[i] << ", ";
+    }
+    std::cout << '\n';
+    std::cout << "Body 2 rotation is: ";
+    mjtNum b2Quat[4];
+    mju_mat2Quat(b2Quat, body2_rot);
+    for (int i = 0; i < 4; i++) {
+      std::cout << b2Quat[i] << ", ";
+    }
+    std::cout << '\n';
+    std::cout << "Constraint data is: ";
+    for (int i = 0; i < 7; i++) {
+      std::cout << model->eq_data[con_id + i] << ", ";
+    }
+    std::cout << "\n\n";
+    
+  }
+
+  // set the constraint either active or inactive
+  model->eq_active[id] = set_as;
+}
+
 void keyframe(mjModel* model, mjData* data, std::string keyframe_name)
 {
   /* overload with keyframe name */
@@ -1287,7 +1420,7 @@ void control_gripper(const mjModel* model, mjData* data, Gripper& target)
 
   double u = 0;
 
-  double force_lim = 10000;
+  double force_lim = 100;
 
   int n = j_.num.panda + j_.num.base;
 
@@ -1295,33 +1428,33 @@ void control_gripper(const mjModel* model, mjData* data, Gripper& target)
   for (int i : j_.gripper.prismatic) {
     u = ((*j_.to_qpos.gripper[i]) - target.x) * j_.ctrl.kp.x 
       + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.x;
-    // if (abs(u) > force_lim) {
-    //   std::cout << "x frc limited from " << u << " to ";
-    //   u = force_lim * sign(u);
-    //   std::cout << u << '\n';
-    // }
+    if (abs(u) > force_lim) {
+      std::cout << "x frc limited from " << u << " to ";
+      u = force_lim * sign(u);
+      std::cout << u << '\n';
+    }
     data->ctrl[n + i] = -u;
   }
 
   for (int i : j_.gripper.revolute) {
     u = ((*j_.to_qpos.gripper[i]) - target.th) * j_.ctrl.kp.y 
       + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.y;
-    // if (abs(u) > force_lim) {
-    //   std::cout << "y frc limited from " << u << " to ";
-    //   u = force_lim * sign(u);
-    //   std::cout << u << '\n';
-    // }
+    if (abs(u) > force_lim) {
+      std::cout << "y frc limited from " << u << " to ";
+      u = force_lim * sign(u);
+      std::cout << u << '\n';
+    }
     data->ctrl[n + i] = -u;
   }
   
   for (int i : j_.gripper.palm) {
     u = ((*j_.to_qpos.gripper[i]) - target.z) * j_.ctrl.kp.z 
       + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.z;
-    // if (abs(u) > force_lim) {
-    //   std::cout << "z frc limited from " << u << " to ";
-    //   u = force_lim * sign(u);
-    //   std::cout << u << '\n';
-    // }
+    if (abs(u) > force_lim) {
+      std::cout << "z frc limited from " << u << " to ";
+      u = force_lim * sign(u);
+      std::cout << u << '\n';
+    }
     data->ctrl[n + i] = -u;
   }
 }
@@ -1420,11 +1553,25 @@ void update_stepper(mjModel* model, mjData* data)
   /* update the gripper joint positions and determine equilibirum/target_reached 
   assuming a stepper motor style */
 
-  static double time_per_step = j_.ctrl.num_steps / j_.ctrl.pulses_per_s;
+  constexpr static bool log_test_data = true;
 
   bool stepped = false;
 
-  if (data->time > last_step_time_ + time_per_step) {
+  if (data->time > last_step_time_ + j_.ctrl.time_per_step) {
+
+    if (log_test_data) {
+      Gripper temp;
+      temp.set_xyz_m_rad(*j_.to_qpos.gripper[0], *j_.to_qpos.gripper[1], *j_.to_qpos.gripper[6]);
+      target_.timedata.add(data->time);
+      target_.target_stepperx.add(target_.next.x * 1e6);
+      target_.target_steppery.add(target_.next.y * 1e6);
+      target_.target_stepperz.add(target_.next.z * 1e6);
+      target_.target_basez.add(target_.base[0] * 1e6);
+      target_.actual_stepperx.add(temp.x * 1e6);
+      target_.actual_steppery.add(temp.y * 1e6);
+      target_.actual_stepperz.add(temp.z * 1e6);
+      target_.actual_basez.add(*j_.to_qpos.base[0] * 1e6);
+    }
 
     // check if motors are moving, if not, lock them
     update_constraints(model, data);
@@ -1481,6 +1628,19 @@ void update_constraints(mjModel* model, mjData* data)
   bool new_x = target_.x_moving();
   bool new_y = target_.y_moving();
   bool new_z = target_.z_moving();
+
+  // // FOR TESTING - this work was not finished
+  // for (int i : j_.con_idx.prismatic) {
+  //   target_constraint(model, data, i, not new_x, 0);
+  // }
+  // for (int i : j_.con_idx.revolute) {
+  //   target_constraint(model, data, i, not new_y, 1);
+  // }
+  // for (int i : j_.con_idx.palm) {
+  //   target_constraint(model, data, i, not new_z, 2);
+  // }
+
+  // return;
 
   if (new_x != old_x) {
     if (new_x) {

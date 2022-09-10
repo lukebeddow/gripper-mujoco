@@ -65,9 +65,10 @@
   XX(  quit_on_reward_above,    float,    1.01)     /* done=true if reward rises above this value */\
   /* 
   set_action() settings */\
-  XX(  action_motor_steps,      int,      100)      /* stepper motor steps per action */\
+  XX(  action_motor_steps,      int,      100)      /* stepper motor steps per action NB: (X/2000)*(4/1.5) gives mm, so 100 steps -> 0.67mm */\
   XX(  action_base_translation, double,   2e-3)     /* base translation per action */\
   XX(  sim_steps_per_action,    int,      200)      /* sim steps in one action */\
+  XX(  time_for_action,         float,    0.2)      /* time in seconds to give for each action to complete */\
   XX(  paired_motor_X_step,     bool,     true)     /* run both X and Y motors for X step */\
   XX(  use_palm_action,         bool,     true)     /* moving palm is a possible action */\
   XX(  use_height_action,       bool,     true)     /* moving base height is possible action */\
@@ -82,7 +83,7 @@
       name                      used      normalise read-rate (NB ignore read rate for state sensors) */\
   SS(  motor_state_sensor,      true,     0,        -1)  /* xyz motor states, normalise is ignored */\
   SS(  base_state_sensor,       true,     0,        -1)  /* base position state, normalise is ignored)*/\
-  SS(  bending_gauge,           true,     0.5,    10)    /* strain gauge to measure finger bending */\
+  SS(  bending_gauge,           true,     20,       10)  /* strain gauge to measure finger bending */\
   SS(  axial_gauge,             true,     3.0,      10)  /* strain gauge to measure axial finger strain */\
   SS(  palm_sensor,             true,     8.0,      10)  /* palm force sensor */\
   SS(  wrist_sensor_XY,         true,     5.00,     10)  /* force wrist sensor X and Y forces */\

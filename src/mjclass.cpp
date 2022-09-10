@@ -111,6 +111,10 @@ void MjClass::configure_settings()
   // set the simulation timestep
   model->opt.timestep = s_.mujoco_timestep;
 
+  // determine how many steps to take for each action
+  s_.sim_steps_per_action = std::ceil(s_.time_for_action / s_.mujoco_timestep);
+  std::cout << "Sim steps per action is " << s_.sim_steps_per_action << '\n';
+
   /* check what actions are set */
   action_options.clear();
   action_options.resize(MjType::Action::count, -1);
@@ -1707,6 +1711,9 @@ float MjClass::find_highest_stable_timestep()
 
   // for safety, reduce timestep by 10 percent
   float final_timestep = next_timestep * 0.9;
+
+  // round the timestep to a whole number of microseconds
+  final_timestep = (float) ((int)(final_timestep * 1e6) * 1e-6);
 
   if (debug) {
     std::printf("Stable timestep is now set to %.3f milliseconds\n", final_timestep * 1000);

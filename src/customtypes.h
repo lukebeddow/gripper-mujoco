@@ -405,6 +405,18 @@ struct Target {
 
   // static constexpr std::array<double, 6> base_lims_max {0.1, 1, 1, 1, 1, 1};
   // static constexpr std::array<double, 6> base_lims_min {-0.1, -1, -1, -1, -1, -1};
+
+  // for testing, only used if flag 'log_test_data' is true in update_stepper(...) in myfunctions.cpp
+  int datanum = 400;
+  SlidingWindow<float> timedata {datanum};
+  SlidingWindow<float> target_stepperx {datanum};
+  SlidingWindow<float> target_steppery {datanum};
+  SlidingWindow<float> target_stepperz {datanum};
+  SlidingWindow<float> target_basez {datanum};
+  SlidingWindow<float> actual_stepperx {datanum};
+  SlidingWindow<float> actual_steppery {datanum};
+  SlidingWindow<float> actual_stepperz {datanum};
+  SlidingWindow<float> actual_basez {datanum};
   
   void reset() {
     end.reset();

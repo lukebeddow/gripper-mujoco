@@ -59,6 +59,7 @@ void calibrate_reset(mjModel* model, mjData* data);
 void reset_constraints(mjModel* model, mjData* data);
 void toggle_constraint(mjModel* model, mjData* data, int id);
 void set_constraint(mjModel* model, mjData* data, int id, bool set_as);
+void target_constraint(mjModel* model, mjData* data, int id, bool set_as, int type);
 void apply_tip_force(mjModel* model, mjData* data, double force, bool reset = false);
 
 // simulation
