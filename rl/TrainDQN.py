@@ -1566,10 +1566,10 @@ if __name__ == "__main__":
   # load
   # net = networks.DQN_3L60
   # model.init(net)
-  folderpath = "/home/luke/cluster/rl/models/dqn/16-08-22/"
-  foldername = "cluster_16:42_A30"
-  model.device = torch.device("cpu")
-  model.load(id=24, folderpath=folderpath, foldername=foldername)
+  folderpath = "/home/luke/mymujoco/rl/models/dqn/best_august_trainings/"
+  foldername = "luke-PC_14:46_A2"
+  model.device = torch.device("cuda")
+  model.load(id=27, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
