@@ -219,7 +219,7 @@ class TrainDQN():
       """
       # parameters to set
       numpy_float = np.float32
-      self.moving_avg_num = 500
+      self.moving_avg_num = 250
       self.static_avg_num = self.moving_avg_num
       self.plot_raw = False
       self.plot_moving_avg = False
@@ -626,8 +626,8 @@ class TrainDQN():
     self.params = TrainDQN.Parameters()
     self.track = TrainDQN.Tracker()
 
-    # prepare environment
-    self.env = MjEnv()
+    # prepare environment, but don't load a model xml file yet
+    self.env = MjEnv(noload=True)
 
     # what machine are we on
     self.machine = self.env._get_machine()
@@ -767,8 +767,8 @@ class TrainDQN():
     if object_set is None: object_set = self.params.object_set[:]
 
     # load the object set and the first xml file
-    self.env._load_object_set(object_set)
-    self.env._load_xml()
+    self.env.load(object_set_name=object_set)
+
     self.params.object_set = object_set
 
   def to_torch(self, data, dtype=None):
@@ -1261,7 +1261,7 @@ class TrainDQN():
     # begin training episodes
     for i_episode in range(i_start + 1, self.params.num_episodes + 1):
 
-      if self.log_level == 1 and i_episode % 50:
+      if self.log_level == 1 and i_episode % 25 == 1:
         print("Begin training episode", i_episode, flush=True)
       elif self.log_level > 1:
         print("Begin training episode", i_episode, flush=True)

@@ -36,9 +36,10 @@ class MjEnv():
     object_name: str = ""
     cnt = None
 
-  def __init__(self, seed=None):
+  def __init__(self, seed=None, noload=None):
     """
-    A mujoco environment
+    A mujoco environment, optionally set the random seed or prevent loading a
+    model, in which case the user should call load() before using the class
     """
 
     # user defined parameters
@@ -70,15 +71,8 @@ class MjEnv():
     self.myseed = None
     self.seed(seed)
 
-    # load the mujoco models
-    self._load_object_set()
-    self._load_xml()  
-
-    # auto generated parameters
-    self._update_n_actions_obs()
-
-    # reset any lingering goal defaults
-    self.mj.reset_goal()
+    # load the mujoco models, if not then load() must be run by the user
+    if noload is not True: self.load()
 
     # initialise tracking variables
     self.track = MjEnv.Track()
@@ -141,7 +135,9 @@ class MjEnv():
       raise RuntimeError(f"enough training xmls failed to be found in MjEnv at: {self.xml_path}")
 
   def _update_n_actions_obs(self):
-    # get an updated number of actions and observations
+    """
+    Get an updated number of actions and observations
+    """
 
     self.n_actions = self.mj.get_n_actions()
     self.n_obs = self.mj.get_n_obs()
@@ -367,6 +363,20 @@ class MjEnv():
     self.test_in_progress = True
     self.test_completed = False
     self._load_xml(test=0) # load first test set xml, always index 0
+
+  def load(self, object_set_name=None, object_set_path=None, index=None):
+    """
+    Load and prepare the mujoco environment, uses defaults if arguments are not given
+    """
+
+    self._load_object_set(name=object_set_name, mjcf_path=object_set_path)
+    self._load_xml(index=index)  
+
+    # auto generated parameters
+    self._update_n_actions_obs()
+
+    # reset any lingering goal defaults
+    self.mj.reset_goal()
 
   def step(self, action):
     """
