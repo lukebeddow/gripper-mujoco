@@ -274,7 +274,7 @@ def apply_to_all_models(model):
   model.env.max_episode_steps = 250
 
   # key learning hyperparameters
-  model.params.object_set = "set2_nocuboid_525"
+  model.params.object_set = "set3_fullset_795"
   model.params.batch_size = 128
   model.params.learning_rate = 0.0001
   model.params.gamma = 0.999
@@ -300,10 +300,10 @@ def apply_to_all_models(model):
   model.params.curriculum_object_set = "set2_fullset_795"
 
   # data loggings
-  model.params.save_freq = 1_000
-  model.params.test_freq = 1_000
+  model.params.save_freq = 2_000
+  model.params.test_freq = 2_000
   model.params.plot_freq_s = 300
-  model.params.wandb_freq_s = 300
+  model.params.wandb_freq_s = 900
 
   # ensure debug mode is off
   model.env.log_level = 0
@@ -314,17 +314,29 @@ def apply_to_all_models(model):
   model.env.mj.set.use_render_delay = False
   model.env.mj.set.render_on_step = False
 
+  # automatically calibrate
+  model.env.mj.set.auto_set_timestep = True
+  model.env.mj.set.auto_calibrate_gauges = True
+  model.env.mj.set.auto_sim_steps = True
+  model.env.mj.set.bend_gauge_normalise = 5.0
+  model.env.mj.set.time_for_action = 0.2
+
   # define lengths and forces
   model.env.mj.set.finger_stiffness = 5
   model.env.mj.set.oob_distance = 75e-3
   model.env.mj.set.done_height = 35e-3
-  model.env.mj.set.stable_finger_force = 0.4
+  model.env.mj.set.stable_finger_force = 1.0
   model.env.mj.set.stable_palm_force = 1.0
 
   # what actions are we using
   model.env.mj.set.paired_motor_X_step = True
   model.env.mj.set.use_palm_action = True
   model.env.mj.set.use_height_action = True
+  model.env.mj.set.XYZ_action_mm_rad = True
+  model.env.mj.set.X_action_mm = 1.0
+  model.env.mj.set.Y_action_rad = 0.01
+  model.env.mj.set.Z_action_mm = 2.0
+  model.env.mj.set.base_action_mm = 2.0 # not used currently
 
   # what sensing mode (0=raw data, 1=change, 2=average)
   model.env.mj.set.sensor_sample_mode = 1
@@ -672,7 +684,7 @@ if __name__ == "__main__":
 
   # if we are just printing help information
   if args.print:
-    print("Input arg", inputarg + 1)
+    print("Input arg", args.job)
     print("\t" + param_1, end="")
     print("\t" + param_2, end="")
     exit()
@@ -688,19 +700,11 @@ if __name__ == "__main__":
   # set number of training episodes
   model.params.num_episodes = 40000
 
-  # automatically find the highest stable timestep
-  model.env.mj.set.mujoco_timestep = -1
-
   # apply the number of segments
   model.params.object_set = this_set
 
-  # reduce the amount of saving/testing/logging
-  model.params.save_freq = 2000
-  model.params.test_freq = 2000
-  model.params.wandb_freq_s = 3600
-
   # perform the training with other parameters standard
-  baseline_training(model) 
+  baseline_training(model, sensors=this_sensor) 
 
   # ----- END ----- #
    

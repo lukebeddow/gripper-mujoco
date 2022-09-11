@@ -1397,15 +1397,23 @@ void makeActionsUI(int oldstate)
         {mjITEM_BUTTON, "Action 6 (H+)",           2,  NULL,   " #310"},
         {mjITEM_BUTTON, "Action 7 (H-)",           2,  NULL,   " #310"},
         {mjITEM_BUTTON, "Reward",                  2,  NULL,   " #311"},
-        {mjITEM_CHECKINT, "Debug",     2, &myMjClass.s_.debug,   " #312"},
-        {mjITEM_CHECKINT, "Env steps", 2, &settings.env_steps, " #313"},
-        {mjITEM_CHECKINT, "Full step", 2, &settings.complete_action_steps, " #314"},
+        {mjITEM_CHECKINT, "Debug",                 2,  &myMjClass.s_.debug,   " #312"},
+        {mjITEM_CHECKINT, "Env steps",             2,  &settings.env_steps, " #313"},
+        {mjITEM_CHECKINT, "Full step",             2,  &settings.complete_action_steps, " #314"},
+        {mjITEM_CHECKINT, "paired X",              2,  &myMjClass.s_.paired_motor_X_step, " #345"},
+        {mjITEM_CHECKINT, "mm_rad",                2,  &myMjClass.s_.XYZ_action_mm_rad,   " #346"},
         {mjITEM_SLIDERINT, "No. steps",            2, 
             &myMjClass.s_.action_motor_steps,             "0 2000"},
         {mjITEM_SLIDERNUM, "Base trans.",          2, 
-            &myMjClass.s_.action_base_translation,        "0.0 0.05"},
+            &myMjClass.s_.action_base_translation,        "0.0 0.035"},
         {mjITEM_SLIDERINT, "Action steps",          2, 
             &myMjClass.s_.sim_steps_per_action,           "0 2000"},
+        {mjITEM_SLIDERNUM, "X mm",          2, 
+            &myMjClass.s_.X_action_mm,        "0.0 30.0"},
+        {mjITEM_SLIDERNUM, "Y rad",          2, 
+            &myMjClass.s_.Y_action_rad,        "0.0 0.5"},
+        {mjITEM_SLIDERNUM, "Z mm",          2, 
+            &myMjClass.s_.Z_action_mm,        "0.0 30.0"},
         {mjITEM_END}
     };
 
@@ -1477,6 +1485,7 @@ void makeObjectUI(int oldstate)
         {mjITEM_BUTTON,    "all rgb rand",  2, NULL,                    " #309"},
         {mjITEM_BUTTON,    "none rgb rand", 2, NULL,                    " #310"},
         {mjITEM_BUTTON,   "find timestep",     2, NULL,                 " #311"},
+        {mjITEM_BUTTON,   "cal. gauges",     2, NULL,                   " #312"},
 
         // {mjITEM_BUTTON,    "Copy pose",     2, NULL,                    " #304"},
         {mjITEM_SLIDERINT, "Live Object",   3, &settings.object_int,    "0 20"},
@@ -2303,9 +2312,13 @@ void uiEvent(mjuiState* state)
                 luke::default_colours(myMjClass.model);
                 break;
             }
-            case 14: {          // find max timestep which is stable
+            case 14: {          // find timestep which is stable
                 float timestep = myMjClass.find_highest_stable_timestep();
                 std::cout << "The highest stable timestep is " << timestep << '\n';
+                break;
+            }
+            case 15: {          // calibrate gauge readings
+                myMjClass.calibrate_gauges();
                 break;
             }
             }

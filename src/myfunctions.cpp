@@ -1428,33 +1428,33 @@ void control_gripper(const mjModel* model, mjData* data, Gripper& target)
   for (int i : j_.gripper.prismatic) {
     u = ((*j_.to_qpos.gripper[i]) - target.x) * j_.ctrl.kp.x 
       + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.x;
-    if (abs(u) > force_lim) {
-      std::cout << "x frc limited from " << u << " to ";
-      u = force_lim * sign(u);
-      std::cout << u << '\n';
-    }
+    // if (abs(u) > force_lim) {
+    //   std::cout << "x frc limited from " << u << " to ";
+    //   u = force_lim * sign(u);
+    //   std::cout << u << '\n';
+    // }
     data->ctrl[n + i] = -u;
   }
 
   for (int i : j_.gripper.revolute) {
     u = ((*j_.to_qpos.gripper[i]) - target.th) * j_.ctrl.kp.y 
       + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.y;
-    if (abs(u) > force_lim) {
-      std::cout << "y frc limited from " << u << " to ";
-      u = force_lim * sign(u);
-      std::cout << u << '\n';
-    }
+    // if (abs(u) > force_lim) {
+    //   std::cout << "y frc limited from " << u << " to ";
+    //   u = force_lim * sign(u);
+    //   std::cout << u << '\n';
+    // }
     data->ctrl[n + i] = -u;
   }
   
   for (int i : j_.gripper.palm) {
     u = ((*j_.to_qpos.gripper[i]) - target.z) * j_.ctrl.kp.z 
       + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.z;
-    if (abs(u) > force_lim) {
-      std::cout << "z frc limited from " << u << " to ";
-      u = force_lim * sign(u);
-      std::cout << u << '\n';
-    }
+    // if (abs(u) > force_lim) {
+    //   std::cout << "z frc limited from " << u << " to ";
+    //   u = force_lim * sign(u);
+    //   std::cout << u << '\n';
+    // }
     data->ctrl[n + i] = -u;
   }
 }
@@ -1938,8 +1938,11 @@ gfloat read_armadillo_gauge(const mjData* data, int finger)
   arma::vec cumulative(j_.num.per_finger, arma::fill::zeros);
   arma::mat finger_xy(j_.num.per_finger + 1, 2, arma::fill::zeros);
 
-  // first segment is locked, so first finger x value is end of this
-  finger_xy(0, 0) = 0.0;
+  // if first segment is locked
+  if (j_.dim.fixed_first_segment)
+    finger_xy(0, 0) = j_.dim.segment_length;
+  else
+    finger_xy(0, 0) = 0;
 
   for (int i = 0; i < j_.num.per_finger; i++) {
 
