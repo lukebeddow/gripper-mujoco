@@ -3,7 +3,7 @@
 
 #$ -l tmem=4G
 #$ -l h_vmem=4G
-#$ -l h_rt=240:0:0 
+#$ -l h_rt=168:0:0 
 
 # Some important notes
 #dollar -t X-Y   -> submit array job inclusive of both X and Y
@@ -12,8 +12,8 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N Array38_overholiday
-#$ -t 1-36
+#$ -N Array39_afterholiday
+#$ -t 1-18
 
 # The code you want to run now goes here.
 
