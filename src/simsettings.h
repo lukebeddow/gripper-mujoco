@@ -63,7 +63,7 @@
   update_env() settings */\
   XX(  oob_distance,            double,   75e-3)    /* distance to consider object out of bounds */\
   XX(  done_height,             double,   35e-3)    /* grasp done if object lifted to this height */\
-  XX(  stable_finger_force,     double,   0.4)      /* finger force (N) on object to consider stable */\
+  XX(  stable_finger_force,     double,   1.0)      /* finger force (N) on object to consider stable */\
   XX(  stable_palm_force,       double,   1.0)      /* palm force (N) on object to consider stable */\
   /* 
   is_done() settings */\
