@@ -700,7 +700,7 @@ if __name__ == "__main__":
   model.params.wandb_freq_s = 3600
 
   # perform the training with other parameters standard
-  baseline_training(model) 
+  baseline_training(model, sensors=this_sensor) 
 
   # ----- END ----- #
    
