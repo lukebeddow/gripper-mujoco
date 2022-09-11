@@ -914,6 +914,19 @@ public:
   // real gripper parameters
   MjType::RealGaugeCalibrations calibrate_; 
 
+  // these flags are only reset with hard_reset()
+  struct ResetFlags {
+
+    // have we initialised the flags to starting values
+    bool flags_init = false;
+
+    // flag to indicate which auto function are selected
+    bool auto_timestep = false;
+    bool auto_calibrate = false;
+    bool auto_simsteps = false;
+
+  } resetFlags;
+
   /* ----- variables that are reset ----- */
 
   // standard class variables
@@ -1021,6 +1034,7 @@ public:
   MjType::CurveFitData::PoseData validate_curve();
   MjType::CurveFitData::PoseData validate_curve_under_force(int force);
   MjType::CurveFitData curve_validation_regime(bool print = true);
+  void calibrate_gauges();
   void tick();
   float tock();
   MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2);

@@ -22,17 +22,24 @@
 
 #define LUKE_MJSETTINGS \
   /*
-
+  
   1. Regular settings
                                 type      value
   general */\
   XX(  debug,                   bool,     true)     /* print debug info to terminal */\
-  XX(  mujoco_timestep,         double,   0.0005)    /* sim timestep in seconds - default 0.002 */\
+  XX(  mujoco_timestep,         double,   0.001)    /* sim timestep in seconds - default 0.002 */\
   XX(  curve_validation,        int,      false)    /* save finger curve data for testing, -ve number sets tip force */\
   XX(  finger_stiffness,        double,   10)        /* mujoco finger joint spring stiffness, units unknown */\
   XX(  random_seed,             uint,     0)        /* random seed */\
   XX(  randomise_colours,       bool,     true)     /* randomise the colours of the objects */\
   /*
+  automatic settings value detection, and parameters for guiding this */\
+  XX(  auto_set_timestep,       bool,     true)     /* find the highest stable timestep, overrides mujoco_timestep */\
+  XX(  auto_calibrate_gauges,   bool,     true)     /* normalise gauges between +-5N, overrides bending_gauge.normalise */\
+  XX(  auto_sim_steps,          bool,     true)     /* automatically find the sim steps per action, overrides sim_steps_per_action */\
+  XX(  bend_gauge_normalise,    float,    5.0)      /* force to normalise all gauge readings between (CAST TO INT), only used if auto_calibrate_gauges=true */\
+  XX(  time_for_action,         float,    0.2)      /* time in seconds to give for each action to complete, only used if auto_sim_steps=true */\
+  /*    
   HER settings */\
   XX(  use_HER,                 bool,     false)    /* use hindsight experience replay (HER) */\
   XX(  goal_reward,             float,    1.0)      /* reward for achieving a goal */\
@@ -56,7 +63,7 @@
   update_env() settings */\
   XX(  oob_distance,            double,   75e-3)    /* distance to consider object out of bounds */\
   XX(  done_height,             double,   35e-3)    /* grasp done if object lifted to this height */\
-  XX(  stable_finger_force,     double,   0.4)      /* finger force (N) on object to consider stable */\
+  XX(  stable_finger_force,     double,   1.0)      /* finger force (N) on object to consider stable */\
   XX(  stable_palm_force,       double,   1.0)      /* palm force (N) on object to consider stable */\
   /* 
   is_done() settings */\
@@ -65,14 +72,18 @@
   XX(  quit_on_reward_above,    float,    1.01)     /* done=true if reward rises above this value */\
   /* 
   set_action() settings */\
-  XX(  action_motor_steps,      int,      100)      /* stepper motor steps per action NB: (X/2000)*(4/1.5) gives mm, so 100 steps -> 0.67mm */\
+  XX(  action_motor_steps,      int,      100)      /* stepper motor steps per action NB: (X/400)*(4/1.5) gives mm, so 100 steps -> 0.67mm */\
   XX(  action_base_translation, double,   2e-3)     /* base translation per action */\
-  XX(  sim_steps_per_action,    int,      200)      /* sim steps in one action */\
-  XX(  time_for_action,         float,    0.2)      /* time in seconds to give for each action to complete */\
+  XX(  sim_steps_per_action,    int,      200)      /* number of sim steps performed to complete one action */\
   XX(  paired_motor_X_step,     bool,     true)     /* run both X and Y motors for X step */\
   XX(  use_palm_action,         bool,     true)     /* moving palm is a possible action */\
   XX(  use_height_action,       bool,     true)     /* moving base height is possible action */\
-  /* 
+  XX(  XYZ_action_mm_rad,       bool,     false)    /* define gripper motor movements (XYZ) in millimeters and radians, if false use num steps */\
+  XX(  X_action_mm,             double,   1.0)      /* mm of movement for an X action, moves prsimatic joint, 100steps=0.67mm */\
+  XX(  Y_action_rad,            double,   0.01)     /* rad of movement for a Y action, moves revolute joint, 100steps from vertical=0.02rad */\
+  XX(  Z_action_mm,             double,   2.0)      /* mm of movement for a Z action, moves palm joint, 100steps=1.22mm */\
+  XX(  base_action_mm,          double,   2.0)      /* mm of movement for a gripper base cartesian action */\
+  /*
   render() settings */\
   XX(  render_on_step,          bool,     false)    /* render on every single sim step */\
   XX(  use_render_delay,        bool,     false)    /* pause when rendering */\

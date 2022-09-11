@@ -102,18 +102,6 @@ void MjClass::configure_settings()
   calibrate_.offset.g3 = -0.56e6;
   calibrate_.scale.g1 = calibrate_.scale.g2 = calibrate_.scale.g3 = 1.258e-6;
   calibrate_.norm.g1 = calibrate_.norm.g2 = calibrate_.norm.g3 = 2;
-  
-  // if timestep is negative, find highest stable timestep automatically
-  if (s_.mujoco_timestep < 0) {
-    s_.mujoco_timestep = find_highest_stable_timestep();
-  }
-
-  // set the simulation timestep
-  model->opt.timestep = s_.mujoco_timestep;
-
-  // determine how many steps to take for each action
-  s_.sim_steps_per_action = std::ceil(s_.time_for_action / s_.mujoco_timestep);
-  std::cout << "Sim steps per action is " << s_.sim_steps_per_action << '\n';
 
   /* check what actions are set */
   action_options.clear();
@@ -211,6 +199,51 @@ void MjClass::configure_settings()
     MjType::generator.reset(new std::default_random_engine(s_.random_seed));
     old_random_seed = s_.random_seed;
   }
+
+  /* start of automatic settings changes */
+
+  bool echo_auto_changes = true; // s_.debug;
+
+  // if we have not initialised the automatic flags, do it now
+  if (not resetFlags.flags_init) {
+    resetFlags.auto_calibrate = s_.auto_calibrate_gauges;
+    resetFlags.auto_simsteps = s_.auto_sim_steps;
+    resetFlags.auto_timestep = s_.auto_set_timestep;
+    resetFlags.flags_init = true;
+    // resetFlags.some_set = resetFlags.all_done();
+  }
+
+  // find timestep automatically, this change must be done before calibrate_gauges()
+  if (resetFlags.auto_timestep) {
+    resetFlags.auto_timestep = false;                     // disable auto timestep immediately due to recursion
+    resetFlags.auto_calibrate = false;                    // disable calibration before timestep found
+    resetFlags.auto_simsteps = false;                     // disable simsteps before timestep found
+    s_.mujoco_timestep = find_highest_stable_timestep();  // find the timestep, calls configure_settings() recursively
+    resetFlags.auto_calibrate = s_.auto_calibrate_gauges; // re-enable calibration after timestep found
+    resetFlags.auto_simsteps = s_.auto_sim_steps;         // re-enable simsteps after timestep found
+    if (echo_auto_changes) std::cout << "MjClass auto-setting: Mujoco timestep set to: " << s_.mujoco_timestep << '\n';
+  }
+
+  // set the simulation timestep in mujoco
+  model->opt.timestep = s_.mujoco_timestep;
+
+  // calibrate the gauges, requires timestep to be stable
+  if (resetFlags.auto_calibrate) {
+    resetFlags.auto_calibrate = false;
+    calibrate_gauges();
+    if (echo_auto_changes) std::cout << "MjClass auto-setting: Bending gauge normalisation set to: " << s_.bending_gauge.normalise << '\n';
+
+    // one additional reset() as fingers will be wobbling from the calibration
+    reset();
+  }
+
+  // find the sim settings per action automatically, requires timestep to be finalised
+  if (resetFlags.auto_simsteps) {
+    resetFlags.auto_simsteps = false;
+    s_.sim_steps_per_action = std::ceil(s_.time_for_action / s_.mujoco_timestep);
+    if (echo_auto_changes) std::cout << "MjClass auto-setting: Sim steps per action set to: " << s_.sim_steps_per_action << '\n';
+  }
+  
 }
 
 /* ----- core functionality ----- */
@@ -338,6 +371,9 @@ void MjClass::hard_reset()
 
   // reset the tip force
   luke::apply_tip_force(model, data, 0, true);
+
+  // we want to reset the auto setting flags to original values
+  resetFlags.flags_init = false;
 
   // regular reset code
   reset();
@@ -513,10 +549,10 @@ void MjClass::monitor_sensors()
     luke::gfloat palm_reading = forces.all.palm_local[0];
 
     // normalise
-    palm_reading = s_.axial_gauge.apply_normalisation(palm_reading);
+    palm_reading = s_.palm_sensor.apply_normalisation(palm_reading);
 
     // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
-    palm_reading = s_.axial_gauge.apply_noise(palm_reading, uniform_dist);
+    palm_reading = s_.palm_sensor.apply_noise(palm_reading, uniform_dist);
 
     // save
     palm_sensor.add(palm_reading);
@@ -848,38 +884,62 @@ std::vector<float> MjClass::set_action(int action)
 
     case MjType::Action::x_motor_positive:
       if (s_.debug) std::cout << "x_motor_positive";
-      wl = luke::move_gripper_target_step(s_.action_motor_steps, 0, 0);
+      if (s_.XYZ_action_mm_rad) 
+        wl = luke::move_gripper_target_m(-s_.X_action_mm * 1e-3, 0, 0); // -ve since home is 134mm and end is 50mm
+      else
+        wl = luke::move_gripper_target_step(s_.action_motor_steps, 0, 0);
       break;
     case MjType::Action::x_motor_negative:
       if (s_.debug) std::cout << "x_motor_negative";
-      wl = luke::move_gripper_target_step(-s_.action_motor_steps, 0, 0);
+      if (s_.XYZ_action_mm_rad) 
+        wl = luke::move_gripper_target_m(s_.X_action_mm * 1e-3, 0, 0);
+      else
+        wl = luke::move_gripper_target_step(-s_.action_motor_steps, 0, 0);
       break;
 
     case MjType::Action::prismatic_positive:
       if (s_.debug) std::cout << "prismatic_positive";
-      wl = luke::move_gripper_target_step(s_.action_motor_steps, s_.action_motor_steps, 0);
+      if (s_.XYZ_action_mm_rad) 
+        wl = luke::move_gripper_target_m_rad(-s_.X_action_mm * 1e-3, 0, 0);
+      else
+        wl = luke::move_gripper_target_step(s_.action_motor_steps, s_.action_motor_steps, 0);
       break;
     case MjType::Action::prismatic_negative:
       if (s_.debug) std::cout << "prismatic_negative";
-      wl = luke::move_gripper_target_step(-s_.action_motor_steps, -s_.action_motor_steps, 0);
+      if (s_.XYZ_action_mm_rad) 
+        wl = luke::move_gripper_target_m_rad(s_.X_action_mm * 1e-3, 0, 0);
+      else
+        wl = luke::move_gripper_target_step(-s_.action_motor_steps, -s_.action_motor_steps, 0);
       break;
 
     case MjType::Action::y_motor_positive:
       if (s_.debug) std::cout << "y_motor_positive";
-      wl = luke::move_gripper_target_step(0, s_.action_motor_steps, 0);
+      if (s_.XYZ_action_mm_rad) 
+        wl = luke::move_gripper_target_m_rad(0, -s_.Y_action_rad, 0); // -ve as angle convention is swapped
+      else 
+        wl = luke::move_gripper_target_step(0, s_.action_motor_steps, 0);
       break;
     case MjType::Action::y_motor_negative:
       if (s_.debug) std::cout << "y_motor_negative";
-      wl = luke::move_gripper_target_step(0, -s_.action_motor_steps, 0);
+      if (s_.XYZ_action_mm_rad) 
+        wl = luke::move_gripper_target_m_rad(0, s_.Y_action_rad, 0);
+      else
+        wl = luke::move_gripper_target_step(0, -s_.action_motor_steps, 0);
       break;
 
     case MjType::Action::z_motor_positive:
       if (s_.debug) std::cout << "z_motor_positive";
-      wl = luke::move_gripper_target_step(0, 0, s_.action_motor_steps);
+      if (s_.XYZ_action_mm_rad) 
+        wl = luke::move_gripper_target_m_rad(0, 0, s_.Z_action_mm * 1e-3);
+      else
+        wl = luke::move_gripper_target_step(0, 0, s_.action_motor_steps);
       break;
     case MjType::Action::z_motor_negative:
       if (s_.debug) std::cout << "z_motor_negative";
-      wl = luke::move_gripper_target_step(0, 0, -s_.action_motor_steps);
+      if (s_.XYZ_action_mm_rad) 
+        wl = luke::move_gripper_target_m_rad(0, 0, -s_.Z_action_mm * 1e-3);
+      else
+        wl = luke::move_gripper_target_step(0, 0, -s_.action_motor_steps);
       break;
 
     case MjType::Action::height_positive:
@@ -1576,7 +1636,7 @@ MjType::CurveFitData MjClass::curve_validation_regime(bool print)
 {
   /* peform test battery to validate finger bending, print is false by default */
 
-  MjType::CurveFitData data;
+  MjType::CurveFitData curvedata;
 
   bool debug_state = s_.debug;
 
@@ -1584,20 +1644,44 @@ MjType::CurveFitData MjClass::curve_validation_regime(bool print)
 
   int max_force = 5;
 
+  // for testing
+  std::vector<float> readings(max_force);
+  std::vector<float> norms(max_force);
+
   for (int i = 1; i < max_force + 1; i++) {
     
     MjType::CurveFitData::PoseData pose;
     pose = validate_curve_under_force(i);
     if (print) pose.print();
-    data.entries.push_back(pose);
+    curvedata.entries.push_back(pose);
+
+    // for testing
+    readings[i - 1] = luke::read_armadillo_gauge(data, 0);
+    norms[i - 1] = finger1_gauge.read_element();
   }
+
+  // for testing
+  luke::print_vec(readings, "Gauge readings for 1-5N");
+  luke::print_vec(norms, "normalised readings");
 
   s_.debug = debug_state;
 
   // overwrite the internal curve validation data
-  curve_validation_data_ = data;
+  curve_validation_data_ = curvedata;
 
-  return data;
+  return curvedata;
+}
+
+void MjClass::calibrate_gauges()
+{
+  /* run a calibration scheme to normalise gauge outputs for a set force */
+
+  validate_curve_under_force(s_.bend_gauge_normalise);
+  luke::gfloat max_gauge_reading = luke::read_armadillo_gauge(data, 0);
+  s_.bending_gauge.normalise = max_gauge_reading;
+
+  // turn off curve validation mode
+  s_.curve_validation = 0;
 }
 
 MjType::EventTrack MjClass::add_events(MjType::EventTrack& e1, MjType::EventTrack& e2)
