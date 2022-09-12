@@ -840,12 +840,16 @@ namespace MjType
 
   // calibration constants for gauge data
   struct RealGaugeCalibrations {
+
     /* applied as follows: g_out = (g_raw + offset) * scale */
     struct RealSensors { float g1 {}, g2 {}, g3 {}, palm {}; };
 
     RealSensors offset;
     RealSensors scale;
     RealSensors norm;
+
+    // when true, automatically detect the offset
+    bool recalibrate_offset_flag = false;
 
   };
 

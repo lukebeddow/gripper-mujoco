@@ -96,16 +96,34 @@ void MjClass::configure_settings()
 {
   /* apply simulation settings */
 
-  // set gauge calibrations
-  calibrate_.offset.g1 = 0.70e6;
-  calibrate_.offset.g2 = -0.60e6;
-  calibrate_.offset.g3 = 0.56e6;
-  calibrate_.scale.g1 = calibrate_.scale.g2 = calibrate_.scale.g3 = -1.258e-6;
-  calibrate_.norm.g1 = calibrate_.norm.g2 = calibrate_.norm.g3 = 2;
+  // // set gauge calibrations
+  // calibrate_.offset.g1 = 0.70e6;
+  // calibrate_.offset.g2 = -0.60e6;
+  // calibrate_.offset.g3 = 0.56e6;
+  // calibrate_.scale.g1 = calibrate_.scale.g2 = calibrate_.scale.g3 = -1.258e-6;
+  // calibrate_.norm.g1 = calibrate_.norm.g2 = calibrate_.norm.g3 = 2;
 
-  calibrate_.offset.palm = 215000; // runtime depends
-  calibrate_.scale.palm = 1.0;
-  calibrate_.norm.palm = 500000;
+  // calibrate_.offset.palm = 215000; // runtime depends
+  // calibrate_.scale.palm = 1.0;
+  // calibrate_.norm.palm = 500000;
+
+  // recalibrate offsets automatically upon any reset
+  calibrate_.recalibrate_offset_flag = true;
+
+  calibrate_.offset.g1 = 6.75e5;
+  calibrate_.offset.g2 = -3.07e5;
+  calibrate_.offset.g3 = 9.60e5;
+
+  calibrate_.scale.g1 = (-1.0 / 7.52e5);
+  calibrate_.scale.g2 = (-1.0 / 7.61e5);
+  calibrate_.scale.g3 = (-1.0 / 7.18e5);
+
+  // these should be the same as bend_gauge.normalise
+  calibrate_.norm.g1 = calibrate_.norm.g2 = calibrate_.norm.g3 = 5;
+
+  calibrate_.offset.palm = 3.31e5; // overriden at runtime, auto calibrated
+  calibrate_.scale.palm = (1.0 / 1.34e4);
+  calibrate_.norm.palm = 8.0; // should be same as palm_sensor.normalise
 
   // set the simulation timestep
   model->opt.timestep = s_.mujoco_timestep;
@@ -1370,6 +1388,21 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     configured = true;
   }
 
+  constexpr int calibration_samples = 20;
+  static std::vector<float> f1_calibration;
+  static std::vector<float> f2_calibration;
+  static std::vector<float> f3_calibration;
+  static std::vector<float> palm_calibration;
+
+  // check if we should automatically calibrate offsets
+  if (calibrate_.recalibrate_offset_flag) {
+    f1_calibration.clear();
+    f2_calibration.clear();
+    f3_calibration.clear();
+    palm_calibration.clear();
+    calibrate_.recalibrate_offset_flag = false;
+  }
+
   // vector which outputs all the freshly normalised values
   std::vector<float> output;
 
@@ -1416,47 +1449,76 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
 
   if (s_.bending_gauge.in_use) {
 
+    // calibrate the finger 1 sensor
+    if (f1_calibration.size() < calibration_samples) {
+      f1_calibration.push_back(sensor_data[j]);
+      calibrate_.offset.g1 = 0;
+      for (int k = 0; k < f1_calibration.size(); k++) {
+        calibrate_.offset.g1 += f1_calibration[k];
+      }
+      calibrate_.offset.g1 /= (float) f1_calibration.size();
+    }
+
     // scale, normalise, and save gauge data
     sensor_data[j] = (sensor_data[j] - calibrate_.offset.g1) * calibrate_.scale.g1;
     sensor_data[j] = normalise_between(
       sensor_data[j], -calibrate_.norm.g1, calibrate_.norm.g1);
     finger1_gauge.add(sensor_data[j]); 
     output.push_back(sensor_data[j]);
-    ++j; 
+    ++j;
 
-    // TEST CODE: delete later
-    finger2_gauge.add(sensor_data[j - 1]);
-    finger3_gauge.add(sensor_data[j - 1]);
-    output.push_back(sensor_data[j - 1]);
-    output.push_back(sensor_data[j - 1]);
-    j += 2;
+    // calibrate the finger 2 sensor
+    if (f2_calibration.size() < calibration_samples) {
+      f2_calibration.push_back(sensor_data[j]);
+      calibrate_.offset.g2 = 0;
+      for (int k = 0; k < f2_calibration.size(); k++) {
+        calibrate_.offset.g2 += f2_calibration[k];
+      }
+      calibrate_.offset.g2 /= (float) f2_calibration.size();
+    }
 
-    // sensor_data[j] = (sensor_data[j] - calibrate_.offset.g2) * calibrate_.scale.g2;
-    // sensor_data[j] = normalise_between(
-    //   sensor_data[j], -calibrate_.norm.g2, calibrate_.norm.g2);
-    // finger2_gauge.add(sensor_data[j]); 
-    // output.push_back(sensor_data[j]);
-    // ++j; 
+    sensor_data[j] = (sensor_data[j] - calibrate_.offset.g2) * calibrate_.scale.g2;
+    sensor_data[j] = normalise_between(
+      sensor_data[j], -calibrate_.norm.g2, calibrate_.norm.g2);
+    finger2_gauge.add(sensor_data[j]); 
+    output.push_back(sensor_data[j]);
+    ++j;
+
+    // calibrate the finger 3 sensor
+    if (f3_calibration.size() < calibration_samples) {
+      f3_calibration.push_back(sensor_data[j]);
+      calibrate_.offset.g3 = 0;
+      for (int k = 0; k < f3_calibration.size(); k++) {
+        calibrate_.offset.g3 += f3_calibration[k];
+      }
+      calibrate_.offset.g3 /= (float) f3_calibration.size();
+    }
   
-    // sensor_data[j] = (sensor_data[j] - calibrate_.offset.g3) * calibrate_.scale.g3;
-    // sensor_data[j] = normalise_between(
-    //   sensor_data[j], -calibrate_.norm.g3, calibrate_.norm.g3);
-    // finger3_gauge.add(sensor_data[j]); 
-    // output.push_back(sensor_data[j]);
-    // ++j; 
+    sensor_data[j] = (sensor_data[j] - calibrate_.offset.g3) * calibrate_.scale.g3;
+    sensor_data[j] = normalise_between(
+      sensor_data[j], -calibrate_.norm.g3, calibrate_.norm.g3);
+    finger3_gauge.add(sensor_data[j]); 
+    output.push_back(sensor_data[j]);
+    ++j;
+
+    // // TEST CODE FOR MAKING ALL FINGERS HAVE IDENTICAL DATA: delete later
+    // finger2_gauge.add(sensor_data[j - 1]);
+    // finger3_gauge.add(sensor_data[j - 1]);
+    // output.push_back(sensor_data[j - 1]);
+    // output.push_back(sensor_data[j - 1]);
+    // j += 2;
   }
 
   if (s_.palm_sensor.in_use) {
 
-    // special code to calibrate the palm sensor
-    static std::vector<float> calibration;
-    if (calibration.size() < 20) {
-      calibration.push_back(sensor_data[j]);
+    // calibrate the palm sensor
+    if (palm_calibration.size() < calibration_samples) {
+      palm_calibration.push_back(sensor_data[j]);
       calibrate_.offset.palm = 0;
-      for (int k = 0; k < calibration.size(); k++) {
-        calibrate_.offset.palm += calibration[k];
+      for (int k = 0; k < palm_calibration.size(); k++) {
+        calibrate_.offset.palm += palm_calibration[k];
       }
-      calibrate_.offset.palm /= (float) calibration.size();
+      calibrate_.offset.palm /= (float) palm_calibration.size();
     }
 
     // scale, normalise, and save gauge data
