@@ -41,7 +41,7 @@ class TrainDQN():
   class Parameters:
 
     # key learning hyperparameters
-    object_set: str = "set2_fullset_795"
+    object_set: str = "set3_fullset_795"
     batch_size: int = 128  
     learning_rate: float = 0.0001
     gamma: float = 0.999 
@@ -1568,19 +1568,19 @@ if __name__ == "__main__":
   # load
   # net = networks.DQN_3L60
   # model.init(net)
-  folderpath = "/home/luke/cluster/rl/models/dqn/01-09-22/"
-  foldername = "cluster_21:36_A9"
-  model.device = torch.device("cpu")
-  model.load(id=18, folderpath=folderpath, foldername=foldername)
+  # folderpath = "/home/luke/cluster/rl/models/dqn/01-09-22/"
+  # foldername = "cluster_21:36_A9"
+  # model.device = torch.device("cpu")
+  # model.load(id=18, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
   # # train
-  # net = networks.DQN_3L60
-  # model.env.disable_rendering = True
-  # model.env.mj.set.debug = False
-  # model.additional_logging = 10
-  # model.train(network=net)
+  net = networks.DQN_3L60
+  model.env.disable_rendering = True
+  model.env.mj.set.debug = False
+  model.additional_logging = 10
+  model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
