@@ -97,11 +97,15 @@ void MjClass::configure_settings()
   /* apply simulation settings */
 
   // set gauge calibrations
-  calibrate_.offset.g1 = 0.70e6;
-  calibrate_.offset.g2 = -0.60e6;
-  calibrate_.offset.g3 = -0.56e6;
-  calibrate_.scale.g1 = calibrate_.scale.g2 = calibrate_.scale.g3 = 1.258e-6;
-  calibrate_.norm.g1 = calibrate_.norm.g2 = calibrate_.norm.g3 = 2;
+  calibrate_.offset.g1 = 6.75e5;
+  calibrate_.offset.g2 = -3.07e5;
+  calibrate_.offset.g3 = 9.60e5;
+
+  calibrate_.scale.g1 = 7.52e5;
+  calibrate_.scale.g2 = 7.61e5;
+  calibrate_.scale.g3 = 7.18e5;
+
+  calibrate_.norm.g1 = calibrate_.norm.g2 = calibrate_.norm.g3 = 5;
 
   /* check what actions are set */
   action_options.clear();
