@@ -716,6 +716,7 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
 {
   /* set the stiffness of the flexible finger joints */
 
+  /* new code, uncomment once backwards compatibility is not an issue
   int N = j_.num.per_finger;
 
   // loop over all three fingers
@@ -737,11 +738,12 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
       model->jnt_stiffness[idx] = c;
     }
   }
+  */
 
   // old code, set all stiffness to the given function input
-  // for (int i : j_.idx.finger) {
-  //   model->jnt_stiffness[i] = stiffness;
-  // }
+  for (int i : j_.idx.finger) {
+    model->jnt_stiffness[i] = stiffness;
+  }
 }
 
 void configure_qpos(mjModel* model, mjData* data)
