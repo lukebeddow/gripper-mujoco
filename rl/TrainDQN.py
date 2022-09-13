@@ -1568,19 +1568,19 @@ if __name__ == "__main__":
   # load
   # net = networks.DQN_3L60
   # model.init(net)
-  # folderpath = "/home/luke/cluster/rl/models/dqn/01-09-22/"
-  # foldername = "cluster_21:36_A9"
-  # model.device = torch.device("cpu")
-  # model.load(id=18, folderpath=folderpath, foldername=foldername)
+  folderpath = "/home/luke/mymujoco/rl/models/dqn/11-09-22/"
+  foldername = "luke-PC_17:53_A4"
+  model.device = torch.device("cuda")
+  model.load(id=None, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
-  # # train
-  net = networks.DQN_3L60
-  model.env.disable_rendering = True
-  model.env.mj.set.debug = False
-  model.additional_logging = 10
-  model.train(network=net)
+  # # # train
+  # net = networks.DQN_3L60
+  # model.env.disable_rendering = True
+  # model.env.mj.set.debug = False
+  # model.additional_logging = 10
+  # model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
@@ -1634,7 +1634,7 @@ if __name__ == "__main__":
   test_report = model.create_test_report(test_data)
   model.modelsaver.new_folder(label="DQN_testing")
   model.save_hyperparameters(labelstr=f"Loaded model path: {model.modelsaver.last_loadpath}\n")
-  model.save(txtstring=test_report, txtlabel="test_results_demo")
+  # model.save(txtstring=test_report, txtlabel="test_results_demo")
   
 
 
