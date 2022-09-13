@@ -123,6 +123,7 @@ void MjClass::configure_settings()
   action_options.resize(MjType::Action::count, -1);
 
   // what actions are valid - MUST be same order as action enums
+  int i = 0;
   if (not s_.paired_motor_X_step) {
     action_options[i] = MjType::Action::x_motor_positive;
     action_options[i + 1] = MjType::Action::x_motor_negative;
