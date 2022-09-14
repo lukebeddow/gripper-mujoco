@@ -196,3 +196,31 @@ DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
 MAKEFLAGS += -j8 # jN => use N parallel cores
 
 endif
+
+# ----- compiling on the lab zotac PC ----- #
+ifeq ($(filter zotac, $(MAKECMDGOALS)), zotac)
+
+# set this command goal as a phony target (important)
+.PHONY: zotac
+
+# what machine are we compiling for
+MACHINE = zotac-PC
+
+# mjcf files location (model files like gripper/objects)
+MJCF_PATH = /home/luke/luke-gripper-mujoco/mjcf
+
+# local machine library locations
+PYTHON_PATH = /usr/include/python3.6m
+PYBIND_PATH = /home/luke/luke-gripper-mujoco/libs/pybind11
+ARMA_PATH = # none, use system library
+MUJOCO_PATH = /home/luke/luke-gripper-mujoco/libs/mujoco/mujoco-2.1.5
+RENDER_PATH = # none, use system library
+CORE_LIBS = -L$(MUJOCO_PATH)/lib -lmujoco -larmadillo 
+RENDER_LIBS = -lglfw
+DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
+			 -DLUKE_MACHINE='"$(MACHINE)"'
+
+# extras
+MAKEFLAGS += -j8 # jN => use N parallel cores
+
+endif
