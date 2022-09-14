@@ -714,9 +714,9 @@ void get_joint_addresses(mjModel* model)
 
 void set_finger_stiffness(mjModel* model, mjtNum stiffness)
 {
-  /* set the stiffness of the flexible finger joints */
+  /* set the stiffness of the flexible finger joints NOTE INPUT STIFFNESS IS
+  CURRENTLY IGNORED */
 
-  /* new code, uncomment once backwards compatibility is not an issue
   int N = j_.num.per_finger;
 
   // loop over all three fingers
@@ -731,19 +731,78 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
       // float c = (j_.dim.stiffness_c * (N - n + 1)) / (float)(n + 1);
       float c = (j_.dim.stiffness_c * (N - n + 1)) / (float) n;
 
+      // // TESTING: smooth out stiffness - this results in good for 5, okay 10, not that good for 30
+      // float max_reduction = 0.55 - (0.015*N);
+      // float max_increase = 1.0 + (0.03*N);
+      // float this_frac = (float) (n - 1) / (float) (N - 1);
+      // float this_change = this_frac * (max_increase - max_reduction) + max_reduction;
+
+      // TESTING: smooth out stiffess symetrrically, this is not working
+      // // float this_change = this_frac * 1.0 + max_reduction;
+      // int half_way = N / 2.0;
+      // float this_change;
+      // float this_frac;
+      // float max_reduction = 0.50 - (0.01*N);
+      // float max_increase = 1.25 + (0.01*N);
+      // float middle_point = 1.0; //(max_increase + max_reduction) / 2.0;
+      // if (n <= half_way) {
+      //   this_frac = (float) (n - 1) / (half_way - 1);
+      //   this_change = this_frac * (middle_point - max_reduction) + max_reduction;
+      // }
+      // else {
+      //   this_frac = (float) (n - half_way) / (float) (N - half_way);
+      //   this_change = this_frac * (max_increase - middle_point) + middle_point;
+      // }
+
+      // // FOR TESTING: make adjustment to stiffness
+      // c *= this_change;
+
+      // // TESTING FEA CURVE FIT based on cn equation
+      // double factor1 = ((N + 1) * (N + 2)) / (float) (6 * N);
+      // double A = -5.042e-7 * 1e6;
+      // double B = 3.531e-4 * 1e3;
+      // double factor2 = ((n * n) / (float) (N * N)) * (((n * j_.dim.finger_length * A) / (float) N) + B);
+      // double factor3 = (float) (N - n + 1) / (float) n;
+      // c = (factor1 / factor2) * factor3;
+
+      // // TESTING FEA CURVE FIT based on c not cn equation
+      // double factor1 = (1/12.0) * N * (N + 1) * (N + 2) * (N + 3);
+      // double A = -5.042e-7 * 1e6;
+      // double B = 3.531e-4 * 1e3;
+      // double factor2 = ((n * n) / (float) (N * N)) * (((n * j_.dim.finger_length * A) / (float) N) + B);
+      // double factor3 = (N - n + 1) / (float) (n * n + n);
+      // c = (factor1 / factor2) * factor3; 
+
+      // // TESTING FEA CURVE FIT cubic fit constants in angle term
+      // double A = -5.042e-7 * 1e6;
+      // double B = 3.531e-4 * 1e3;
+      // double factor1 = (1/6.0) * N * (N + 1) * (A * (N + 2) + 3 * B);
+      // // double factor2 = ((N * N) / (float) (N * N)) * (((N * j_.dim.finger_length * A) / (float) N) + B);
+      // double factor2 = ((j_.dim.finger_length * j_.dim.EI) / 3.0);
+      // double factor3 = (float) (N - n + 1) / (float) (A * n + B);
+      // c = (factor1 * factor2) * factor3;
+
+      // // test ...
+      // c /= (float) (N / 1.667) * n;
+
       if (debug) {
+
         std::cout << "idx " << idx << " has c_n = " << c << '\n';
+
+        // FOR TESTING: echo stiffnesses
+        // std::cout << "idx " << idx << " has c_n = " << c << ", -> ";
+        // std::cout << "factor 1 " << factor1 << ", factor 2 " << factor2 << ", factor 3 " << factor3 << '\n';
+        // std::cout << "idx " << idx << " has c_n = " << c << " which is now " << c * this_change << " (this change is " << this_change << ")" << '\n';
       }
 
       model->jnt_stiffness[idx] = c;
     }
   }
-  */
 
-  // old code, set all stiffness to the given function input
-  for (int i : j_.idx.finger) {
-    model->jnt_stiffness[i] = stiffness;
-  }
+  // // old code, set all stiffness to the given function input
+  // for (int i : j_.idx.finger) {
+  //   model->jnt_stiffness[i] = stiffness;
+  // }
 }
 
 void configure_qpos(mjModel* model, mjData* data)
