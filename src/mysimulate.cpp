@@ -1429,7 +1429,7 @@ void makeSettingsUI(int oldstate)
         {mjITEM_SLIDERNUM,"mj timestep",       2, &myMjClass.s_.mujoco_timestep,   "0.00001 0.003"},
         {mjITEM_SLIDERINT,"curve_validation",  2, &myMjClass.s_.curve_validation,  "-10 1"},
         {mjITEM_SLIDERNUM,"finger_stiffness",  2, &myMjClass.s_.finger_stiffness,  "1.0 25.0"},
-        {mjITEM_CHECKINT, "randomise_colours", 2, &myMjClass.s_.randomise_colours, " #602"},        
+        {mjITEM_CHECKINT, "randomise_colours", 2, &myMjClass.s_.randomise_colours, " #602"},
         {mjITEM_END}
     };
 
@@ -1486,6 +1486,7 @@ void makeObjectUI(int oldstate)
         {mjITEM_BUTTON,    "none rgb rand", 2, NULL,                    " #310"},
         {mjITEM_BUTTON,   "find timestep",     2, NULL,                 " #311"},
         {mjITEM_BUTTON,   "cal. gauges",     2, NULL,                   " #312"},
+        {mjITEM_BUTTON,   "print stiffness",   2, NULL,                 " #313"},
 
         // {mjITEM_BUTTON,    "Copy pose",     2, NULL,                    " #304"},
         {mjITEM_SLIDERINT, "Live Object",   3, &settings.object_int,    "0 20"},
@@ -2319,6 +2320,10 @@ void uiEvent(mjuiState* state)
             }
             case 15: {          // calibrate gauge readings
                 myMjClass.calibrate_gauges();
+                break;
+            }
+            case 16: {          // print stiffness
+                luke::print_stiffnesses();
                 break;
             }
             }

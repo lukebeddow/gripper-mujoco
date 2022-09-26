@@ -63,6 +63,7 @@ PYBIND11_MODULE(bind, m) {
     .def("reward", static_cast<float (MjClass::*)(std::vector<float>, std::vector<float>)>(&MjClass::reward))
     .def("get_n_actions", &MjClass::get_n_actions)
     .def("get_n_obs", &MjClass::get_n_obs)
+    .def("get_N", &MjClass::get_N)
 
     // real life gripper functions
     .def("get_finger_gauge_data", &MjClass::get_finger_gauge_data)
@@ -82,6 +83,8 @@ PYBIND11_MODULE(bind, m) {
     .def("curve_validation_regime", &MjClass::curve_validation_regime)
     .def("last_action_gripper", &MjClass::last_action_gripper)
     .def("last_action_panda", &MjClass::last_action_panda)
+    .def("profile_error", &MjClass::profile_error)
+    .def("numerical_stiffness_converge", &MjClass::numerical_stiffness_converge)
 
     // exposed variables
     .def_readwrite("set", &MjClass::s_)
@@ -119,6 +122,9 @@ PYBIND11_MODULE(bind, m) {
         if (t.size() >= 4) mjobj.object_set_name = t[3].cast<std::string>();
         // if (t.size() >= 5) mjobj.machine = t[4].cast<std::string>();
         if (t.size() >= 6) mjobj.goal_ = t[5].cast<MjType::Goal>();
+
+        // disable automatic setting calibration as loading implies this is already done
+        mjobj.resetFlags.flags_init = true;
 
         return mjobj;
       }

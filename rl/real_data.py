@@ -6,17 +6,20 @@ import numpy as np
 
 path = "/home/luke/Pictures/finger_bending_pics"
 
-filename = "csv_f3_{0}g.csv"
+filename = "csv_f{0}_{1}g.csv"
 
 masses = [0, 50, 100, 150, 200, 250, 300, 350, 400, 450]
 
+rows = round(len(masses) // 2 + 0.25)
+
 real_data = []
 
-fig, axs = plt.subplots(5, 2)
+fig, axs = plt.subplots(rows, 2)
 
 for j, mass in enumerate(masses):
 
-  fullpath = path + "/" + filename.format(mass)
+  fingernum = 3
+  fullpath = path + "/" + filename.format(fingernum, mass)
 
   data_entry = []
 
@@ -54,13 +57,13 @@ for i, d in enumerate(real_data):
 
   d *= factor
 
-  print(d)
+  # print(d)
 
-  if i < 5:
+  if i < rows:
     row = i
     col = 0
   else:
-    row = i - 5
+    row = i - rows
     col = 1
 
   axs[row][col].plot(d[:,0], d[:,1], label="{0}g".format(masses[i]))
@@ -69,4 +72,4 @@ for i, d in enumerate(real_data):
   axs[row][col].set_ylim([0, maxdef * factor])
   axs[row][col].legend(loc="upper left")
 
-plt.show()
+# plt.show()

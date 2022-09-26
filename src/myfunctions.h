@@ -22,6 +22,11 @@
 #include "customtypes.h"
 #include "objecthandler.h"
 
+// if we have access to boost libraries
+#ifndef LUKE_PREVENT_BOOST
+  #include "boostdep.h"
+#endif
+
 namespace luke
 {
 
@@ -48,6 +53,7 @@ void get_joint_indexes(mjModel* model);
 void get_joint_addresses(mjModel* model);
 void get_geom_indexes(mjModel* model);
 void set_finger_stiffness(mjModel* model, mjtNum stiffness);
+void set_finger_stiffness(mjModel* model, std::vector<luke::gfloat> stiffness);
 void configure_qpos(mjModel* model, mjData* data);
 void configure_constraints(mjModel* model, mjData* data);
 void keyframe(mjModel* model, mjData* data, std::string keyframe_name);
@@ -132,6 +138,9 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
   float force, float finger_stiffness);
 int last_action_robot();
 bool is_sim_unstable(mjModel* model, mjData* data);
+int get_N();
+std::vector<luke::gfloat> get_stiffnesses();
+void print_stiffnesses();
 
 } // namespace luke
 

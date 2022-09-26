@@ -182,6 +182,7 @@ struct JointSettings {
     bool fixed_first_segment;                         // runtime depends
     double stiffness_c = 0;                           // runtime depends
     double segment_length = 0;                        // runtime depends
+    std::vector<luke::gfloat> joint_stiffness;        // runtime depends
   } dim;
 
   // strain gauge parameters
@@ -213,6 +214,40 @@ struct JointSettings {
     static constexpr int n_arr = 3;             // no. of steps saved in arrays
     static constexpr int n_settle = 10;         // no. of steps to be settled
   } sim{};
+
+  // hardcoded stiffnesses based on numerical solving
+  struct {
+
+    // VALID FOR: 235x28x0.9mm fingers, EI=0.34
+    struct {
+
+      std::vector<float> N5 { 12.351, 4.728, 5.877, 5.030, 1.927 };
+      std::vector<float> N6 { 15.230, 5.923, 6.318, 7.202, 6.383, 2.287 };
+      std::vector<float> N7 { 18.861, 7.121, 7.336, 9.602, 8.184, 6.218, 2.000 };
+      std::vector<float> N8 { 20.645, 8.041, 8.389, 9.570, 10.123, 8.606, 6.252, 2.079 };
+      std::vector<float> N9 { 24.818, 9.799, 9.907, 9.872, 12.627, 11.329, 9.560, 7.562, 2.863 };
+      std::vector<float> N10 { 27.302, 11.378, 9.575, 10.845, 14.214, 15.567, 10.791, 9.340, 5.922, 1.816 };
+      std::vector<float> N15 { 37.103, 22.431, 15.466, 12.927, 23.115, 15.260, 22.107, 20.695, 21.631, 14.546, 16.221, 12.876, 10.205, 6.744, 2.480 };
+      std::vector<float> N20 { 75.206, 23.422, 27.987, 21.172, 16.599, 40.647, 28.657, 19.737, 27.249, 28.612, 34.024, 36.741, 25.092, 21.021, 21.680, 18.867, 14.520, 10.797, 6.767, 1.830 };
+      std::vector<float> N25 { 503.022, 16.672, 124.905, 27.550, 24.489, 17.904, 63.461, 34.390, 17.560, 35.540, 69.003, 91.560, 70.231, 63.729, 62.175, 22.117, 6.076, 44.070, 40.950, 65.208, 51.254, 44.330, 25.115, 14.184, 0.500 };
+      std::vector<float> N30 { 685.194, 18.996, 206.246, 38.443, 27.892, 34.549, 17.070, 57.971, 96.573, 58.083, 11.051, 35.880, 81.274, 140.579, 146.179, 184.276, 219.552, 260.973, 277.488, 303.149, 328.203, 356.418, 351.385, 345.677, 327.709, 298.091, 256.786, 205.697, 144.913, 74.690 };
+
+      float t5 = 3.105e-3;
+      float t6 = 2.430e-3;
+      float t7 = 1.935e-3;
+      float t8 = 1.710e-3;
+      float t9 = 1.395e-3;
+      float t10 = 1.215e-3;
+      float t15 = 0.720e-3;
+      float t20 = 0.405e-3;
+
+      // not finalised with below 1% error
+      float t25 = 0.180e-3;
+      float t30 = 0.045e-3;
+
+    } finger_235x28x0p9;
+
+  } hardcoded_c;
 
   /* ----- automatically generated settings ----- */
 
@@ -712,12 +747,17 @@ void get_joint_addresses(mjModel* model)
   }
 }
 
-void set_finger_stiffness(mjModel* model, mjtNum stiffness)
+void set_finger_stiffness(mjModel* model, std::vector<luke::gfloat> stiffness)
 {
-  /* set the stiffness of the flexible finger joints NOTE INPUT STIFFNESS IS
-  CURRENTLY IGNORED */
+  /* set the finger stiffness to a vector sequence of values */
 
+  constexpr bool local_debug = false; // debug
+  
   int N = j_.num.per_finger;
+
+  if (stiffness.size() != N) {
+    throw std::runtime_error("wrong number of joint stiffnesses passed to set_finger_stiffness(...)");
+  }
 
   // loop over all three fingers
   for (int i = 0; i < 3; i++) {
@@ -727,82 +767,334 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
 
       int idx = j_.idx.finger[i * N + (n - 1)];
 
-      // determine the joint stiffness
-      // float c = (j_.dim.stiffness_c * (N - n + 1)) / (float)(n + 1);
-      float c = (j_.dim.stiffness_c * (N - n + 1)) / (float) n;
+      if (local_debug and i == 0) 
+        std::cout << "Finger joint stiffness joint " << i << " is " << stiffness[n - 1] << '\n';
 
-      // // TESTING: smooth out stiffness - this results in good for 5, okay 10, not that good for 30
-      // float max_reduction = 0.55 - (0.015*N);
-      // float max_increase = 1.0 + (0.03*N);
-      // float this_frac = (float) (n - 1) / (float) (N - 1);
-      // float this_change = this_frac * (max_increase - max_reduction) + max_reduction;
-
-      // TESTING: smooth out stiffess symetrrically, this is not working
-      // // float this_change = this_frac * 1.0 + max_reduction;
-      // int half_way = N / 2.0;
-      // float this_change;
-      // float this_frac;
-      // float max_reduction = 0.50 - (0.01*N);
-      // float max_increase = 1.25 + (0.01*N);
-      // float middle_point = 1.0; //(max_increase + max_reduction) / 2.0;
-      // if (n <= half_way) {
-      //   this_frac = (float) (n - 1) / (half_way - 1);
-      //   this_change = this_frac * (middle_point - max_reduction) + max_reduction;
-      // }
-      // else {
-      //   this_frac = (float) (n - half_way) / (float) (N - half_way);
-      //   this_change = this_frac * (max_increase - middle_point) + middle_point;
-      // }
-
-      // // FOR TESTING: make adjustment to stiffness
-      // c *= this_change;
-
-      // // TESTING FEA CURVE FIT based on cn equation
-      // double factor1 = ((N + 1) * (N + 2)) / (float) (6 * N);
-      // double A = -5.042e-7 * 1e6;
-      // double B = 3.531e-4 * 1e3;
-      // double factor2 = ((n * n) / (float) (N * N)) * (((n * j_.dim.finger_length * A) / (float) N) + B);
-      // double factor3 = (float) (N - n + 1) / (float) n;
-      // c = (factor1 / factor2) * factor3;
-
-      // // TESTING FEA CURVE FIT based on c not cn equation
-      // double factor1 = (1/12.0) * N * (N + 1) * (N + 2) * (N + 3);
-      // double A = -5.042e-7 * 1e6;
-      // double B = 3.531e-4 * 1e3;
-      // double factor2 = ((n * n) / (float) (N * N)) * (((n * j_.dim.finger_length * A) / (float) N) + B);
-      // double factor3 = (N - n + 1) / (float) (n * n + n);
-      // c = (factor1 / factor2) * factor3; 
-
-      // // TESTING FEA CURVE FIT cubic fit constants in angle term
-      // double A = -5.042e-7 * 1e6;
-      // double B = 3.531e-4 * 1e3;
-      // double factor1 = (1/6.0) * N * (N + 1) * (A * (N + 2) + 3 * B);
-      // // double factor2 = ((N * N) / (float) (N * N)) * (((N * j_.dim.finger_length * A) / (float) N) + B);
-      // double factor2 = ((j_.dim.finger_length * j_.dim.EI) / 3.0);
-      // double factor3 = (float) (N - n + 1) / (float) (A * n + B);
-      // c = (factor1 * factor2) * factor3;
-
-      // // test ...
-      // c /= (float) (N / 1.667) * n;
-
-      if (debug) {
-
-        std::cout << "idx " << idx << " has c_n = " << c << '\n';
-
-        // FOR TESTING: echo stiffnesses
-        // std::cout << "idx " << idx << " has c_n = " << c << ", -> ";
-        // std::cout << "factor 1 " << factor1 << ", factor 2 " << factor2 << ", factor 3 " << factor3 << '\n';
-        // std::cout << "idx " << idx << " has c_n = " << c << " which is now " << c * this_change << " (this change is " << this_change << ")" << '\n';
+      if (i == 0) {
+        j_.dim.joint_stiffness[n - 1] = stiffness[n - 1];
       }
 
-      model->jnt_stiffness[idx] = c;
+      model->jnt_stiffness[idx] = stiffness[n - 1];
+
+    }
+  }
+}
+
+void set_finger_stiffness(mjModel* model, mjtNum stiffness)
+{
+  /* set the stiffness of the flexible finger joints. The input value for stiffness
+  determines the behaviour of this function.
+  
+  stiffness > 0       -> all joints are set equally to this stiffness value
+  stiffness -1 to 0   -> stiffness is calculated using the model and EI
+  stiffness -2 to -1  -> stiffness is calculated using model and EI but adjusted with tuned params
+  stiffness -3 to -2  -> stiffness is calculated based on FEA curve fit derivation
+  
+  */
+
+  constexpr bool local_debug = false;
+
+  if (stiffness > 0) {
+    if (local_debug) std::cout << "Finger joint stiffness ALL set to " << stiffness << '\n';
+    for (int i : j_.idx.finger) {
+      model->jnt_stiffness[i] = stiffness;
+    }
+  }
+  else {
+
+    int N = j_.num.per_finger;
+
+    j_.dim.joint_stiffness.clear();
+    j_.dim.joint_stiffness.resize(N);
+
+    // use the derived model from EI and euler bending
+    if (stiffness > -1 and stiffness < 0) {
+
+      if (local_debug) std::cout << "Finger joint stiffness set using EI derivation\n";
+
+      // loop over all three fingers
+      for (int i = 0; i < 3; i++) {
+
+        // loop from n=1 to N
+        for (int n = 1; n < N + 1; n++) {
+
+          int idx = j_.idx.finger[i * N + (n - 1)];
+
+          // determine the joint stiffness using the model
+          float c = (j_.dim.stiffness_c * (N - n + 1)) / (float) n;
+
+          if (i == 0) {
+            j_.dim.joint_stiffness[n - 1] = c;
+          }
+
+          if (local_debug and i == 0) {
+            std::cout << "finger joint " << n << " has c_n = " << c << '\n';
+          }
+
+          model->jnt_stiffness[idx] = c;
+        }
+      }
+    }
+
+    // use the euler model but adjust values
+    else if (stiffness > -2 and stiffness < -1) {
+
+      if (local_debug) std::cout << "Finger joint stiffness set using EI derivation and THEN adjusted\n";
+
+      // loop over all three fingers
+      for (int i = 0; i < 3; i++) {
+
+        // loop from n=1 to N
+        for (int n = 1; n < N + 1; n++) {
+
+          int idx = j_.idx.finger[i * N + (n - 1)];
+
+          float c = (j_.dim.stiffness_c * (N - n + 1)) / (float) n;
+
+          // // TESTING: smooth out stiffness - this results in good for 5, okay 10, not that good for 30
+          // float max_reduction = 0.55 - (0.015*N);
+          // float max_increase = 1.0 + (0.03*N);
+          // float this_frac = (float) (n - 1) / (float) (N - 1);
+          // float this_change = this_frac * (max_increase - max_reduction) + max_reduction;
+
+          // TESTING: smooth out stiffess symetrrically, this is not working
+          int half_way = N / 2.0;
+          float this_change;
+          float this_frac;
+          float max_reduction = 0.40 - (0.015*N); // only non-zero N < 20
+          float max_increase = 0.80 + (0.2*N);
+          float middle_point = 1.0; //(max_increase + max_reduction) / 2.0;
+          if (n <= half_way) {
+            this_frac = (float) (n - 1) / (half_way - 1);
+            this_change = this_frac * (middle_point - max_reduction) + max_reduction;
+          }
+          else {
+            this_frac = (float) (n - half_way) / (float) (N - half_way);
+            this_change = this_frac * (max_increase - middle_point) + middle_point;
+          }
+
+          // make adjustment to stiffness
+          c *= this_change;
+
+          if (i == 0) {
+            j_.dim.joint_stiffness[n - 1] = c;
+          }
+
+          if (local_debug and i == 0) {
+
+            // FOR TESTING: echo stiffnesses
+            // std::cout << "idx " << idx << " has c_n = " << c << ", -> ";
+            // std::cout << "factor 1 " << factor1 << ", factor 2 " << factor2 << ", factor 3 " << factor3 << '\n';
+            std::cout << "finger joint " << n << " has c_n = " << c << " which is now " << c * this_change << " (this change is " << this_change << ")" << '\n';
+          }
+
+          model->jnt_stiffness[idx] = c;
+        }
+      }
+    }
+  
+    // use new model based on FEA curve fit
+    else if (stiffness > -3 and stiffness < -2) {
+
+      if (local_debug) std::cout << "Finger joint stiffness set using FEA curve fit constants\n";
+
+      // loop over all three fingers
+      for (int i = 0; i < 3; i++) {
+
+        // loop from n=1 to N
+        for (int n = 1; n < N + 1; n++) {
+
+          int idx = j_.idx.finger[i * N + (n - 1)];
+
+          // TESTING FEA CURVE FIT based on cn equation
+          double factor1 = ((N + 1) * (N + 2)) / (float) (6 * N);
+          double A = -5.042e-7 * 1e6;
+          double B = 3.531e-4 * 1e3;
+          double factor2 = ((n * n) / (float) (N * N)) * (((n * j_.dim.finger_length * A) / (float) N) + B);
+          double factor3 = (float) (N - n + 1) / (float) n;
+          double c = (factor1 / factor2) * factor3;
+
+          // // TESTING FEA CURVE FIT based on c not cn equation
+          // double factor1 = (1/12.0) * N * (N + 1) * (N + 2) * (N + 3);
+          // double A = -5.042e-7 * 1e6;
+          // double B = 3.531e-4 * 1e3;
+          // double factor2 = ((n * n) / (float) (N * N)) * (((n * j_.dim.finger_length * A) / (float) N) + B);
+          // double factor3 = (N - n + 1) / (float) (n * n + n);
+          // double c = (factor1 / factor2) * factor3; 
+
+          // // TESTING FEA CURVE FIT cubic fit constants in angle term
+          // double A = -5.042e-7 * 1e6;
+          // double B = 3.531e-4 * 1e3;
+          // double factor1 = (1/6.0) * N * (N + 1) * (A * (N + 2) + 3 * B);
+          // // double factor2 = ((N * N) / (float) (N * N)) * (((N * j_.dim.finger_length * A) / (float) N) + B);
+          // double factor2 = ((j_.dim.finger_length * j_.dim.EI) / 3.0);
+          // double factor3 = (float) (N - n + 1) / (float) (A * n + B);
+          // double c = (factor1 * factor2) * factor3;
+
+          // // test ...
+          // c /= (float) (N / 1.667) * n;
+
+          if (i == 0) {
+            j_.dim.joint_stiffness[n - 1] = c;
+          }
+
+          if (local_debug and i == 0) {
+
+            // FOR TESTING: echo stiffnesses
+            std::cout << "finger joint " << n << " has c_n = " << c << ", -> ";
+            std::cout << "factor 1 " << factor1 << ", factor 2 " << factor2 << ", factor 3 " << factor3 << '\n';
+          }
+
+          model->jnt_stiffness[idx] = c;
+        }
+      }
+    }
+
+    // use the euler model but adjust values
+    else if (stiffness > -4 and stiffness < -3) {
+
+      if (local_debug) std::cout << "Finger joint stiffness set using Bisshopp equation - attempt 1 FAILED\n";
+
+      // loop over all three fingers
+      for (int i = 0; i < 3; i++) {
+
+        float sum_cinv = 0;
+
+        // loop from n=1 to N
+        for (int n = 1; n < N + 1; n++) {
+
+          int idx = j_.idx.finger[i * N + (n - 1)];
+
+          float ratio = (float) n / (float) N;
+          float fsq = 10;
+          float term1 = (std::pow(ratio, 2)) / (2 * j_.dim.EI);
+          float term2 = (std::pow(ratio, 6) * fsq * std::pow(j_.dim.finger_length, 4)) / (24 * std::pow(j_.dim.EI, 3));
+ 
+          float cinv = (term1 - term2);
+          float cdiff = cinv;// - sum_cinv;
+          float c = 1.0 / cdiff;
+          // float c = 1.0 / (term1 - term2);
+
+          // // invert, minus, and then invert again
+          // float invert_cn = 1.0 / cn; //std::cout << "invert cn is " << invert_cn << '\n';
+          // float invert_c = invert_cn - sum_invert_ci;
+          // float c = 1.0 / invert_c;; //(1.0 / invert_c); //1.0 / cn;
+
+          if (i == 0) {
+            j_.dim.joint_stiffness[n - 1] = c;
+          }
+
+          if (local_debug and i == 0) {
+            // FOR TESTING: echo stiffnesses
+            // std::cout << "idx " << idx << " has c_n = " << c << ", -> ";
+            // std::cout << "factor 1 " << factor1 << ", factor 2 " << factor2 << ", factor 3 " << factor3 << '\n';
+            std::cout << "finger joint " << n << " has c_n = " << c << ", term1 is " << term1 << " and term2 is " 
+              << term2 << ", sum_cinv is " << sum_cinv << '\n';
+          }
+
+          // increment the sum
+          sum_cinv += cinv;
+
+          model->jnt_stiffness[idx] = c;
+        }
+      }
+    }
+
+    // use the euler model but adjust values
+    else if (stiffness > -5 and stiffness < -4) {
+
+      if (local_debug) std::cout << "Finger joint stiffness set using Bisshopp equation - attempt 2\n";
+
+      // loop over all three fingers
+      for (int i = 0; i < 3; i++) {
+
+        // loop from n=1 to N
+        for (int n = 1; n < N + 1; n++) {
+
+          int idx = j_.idx.finger[i * N + (n - 1)];
+
+          float m = n;
+          float m1 = n - 1;
+
+          if (m1 < 0) m1 = 0;
+
+          float fsq = 25;
+
+          float diff2 = std::pow(m, 2) - std::pow(m1, 2);
+          float diff6 = std::pow(m, 6) - std::pow(m1, 6);
+
+          float frac1 = 1.0 / (2 * N * N * j_.dim.EI);
+          float frac2 = (fsq * std::pow(j_.dim.finger_length, 4)) / (24 * std::pow(N, 6) * std::pow(j_.dim.EI, 3));
+
+          float term1 = frac1 * diff2;
+          float term2 = frac2 * diff6;
+
+          float c = (1.0) / (term1 - term2);
+
+          // // do we convert the values to the virtual work expression?
+          // float convert = (float)(N - n + 1) / (N * j_.dim.finger_length);
+          // c *= convert;
+
+          // float n5 = std::pow(n, 5);
+          // float n4 = std::pow(n, 4);
+          // float n3 = std::pow(n, 3);
+          // float n2 = std::pow(n, 2);
+          // float poly = 6*n5 - 15*n4 + 20*n3 - 15*n2 + 6*m - 1;
+          // float denom1 = N * N * j_.dim.EI;
+          // float denom2 = 12 * std::pow(N, 6) * std::pow(j_.dim.EI, 3);
+
+          // float term1 = (2*m - 1) / denom1;
+          // float term2 = (poly * fsq * std::pow(j_.dim.finger_length, 4)) / denom2;
+
+          // float c_inv = term1 - term2;
+          // float c = 2.0 / c_inv;
+
+          if (i == 0) {
+            j_.dim.joint_stiffness[n - 1] = c;
+          }
+
+          if (local_debug and i == 0) {
+            // FOR TESTING: echo stiffnesses
+            // std::cout << "idx " << idx << " has c_n = " << c << ", -> ";
+            // std::cout << "factor 1 " << factor1 << ", factor 2 " << factor2 << ", factor 3 " << factor3 << '\n';
+            std::cout << "finger joint " << n << " has c_n = " << c << ", term1 is " << term1 << " and term2 is " 
+              << term2 << "(" << (term2 / term1) * 100 << " %)" << '\n';
+
+            // std::cout << "convert is " << convert << '\n';
+          }
+
+          model->jnt_stiffness[idx] = c;
+        }
+      }
+    }
+
+    else if (stiffness > -100.5 and stiffness < -99.5) {
+
+      if (local_debug) std::cout << "Finger joint stiffness set using hardcoding for 235x28x0.9mm fingers\n";
+
+      switch (N) {
+
+        case 5: set_finger_stiffness(model, j_.hardcoded_c.finger_235x28x0p9.N5); break;
+        case 6: set_finger_stiffness(model, j_.hardcoded_c.finger_235x28x0p9.N6); break;
+        case 7: set_finger_stiffness(model, j_.hardcoded_c.finger_235x28x0p9.N7); break;
+        case 8: set_finger_stiffness(model, j_.hardcoded_c.finger_235x28x0p9.N8); break;
+        case 9: set_finger_stiffness(model, j_.hardcoded_c.finger_235x28x0p9.N9); break;
+        case 10: set_finger_stiffness(model, j_.hardcoded_c.finger_235x28x0p9.N10); break;
+        case 15: set_finger_stiffness(model, j_.hardcoded_c.finger_235x28x0p9.N15); break;
+        case 20: set_finger_stiffness(model, j_.hardcoded_c.finger_235x28x0p9.N20); break;
+        case 25: set_finger_stiffness(model, j_.hardcoded_c.finger_235x28x0p9.N25); break;
+        case 30: set_finger_stiffness(model, j_.hardcoded_c.finger_235x28x0p9.N30); break;
+
+        default:
+          std::cout << "N is " << N << '\n';
+          throw std::runtime_error("no hardcoded stiffness values for this N");
+      }
+
     }
   }
 
-  // // old code, set all stiffness to the given function input
-  // for (int i : j_.idx.finger) {
-  //   model->jnt_stiffness[i] = stiffness;
-  // }
+  if (local_debug)
+    print_vec(j_.dim.joint_stiffness, "joint stiffness vector");
 }
 
 void configure_qpos(mjModel* model, mjData* data)
@@ -2221,6 +2513,9 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
   /* evaluate the difference in joint angle between the actual and model
   predicted values */
 
+  // CONVERT FORCE TO GRAM FORCE
+  force *= 0.981;
+
   int ffs =  j_.dim.fixed_first_segment;
 
   int N = j_.num.per_finger;
@@ -2262,15 +2557,19 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
     // determine the joint stiffness of this joint
     int n = i + 1;
     // float c = (j_.dim.stiffness_c * (N - n + 1)) / (float)(n + 1);
-    float c = (j_.dim.stiffness_c * (N - n + 1)) / (float) n;
+    // float c = (j_.dim.stiffness_c * (N - n + 1)) / (float) n;
+    float c = j_.dim.joint_stiffness[i];
 
     // actual joint values
     joint_angles[i] = *j_.to_qpos.finger[i + finger * N];
 
     // predicted joint values
-    joint_pred[i] = ((float)(N - n + 1) / (float)(N + 1)) 
-                        * ((force * j_.dim.finger_length) / (c));
-    // joint_pred[i] = ((N - n + 1) * force * j_.dim.finger_length) / ((N * c);
+    // joint_pred[i] = ((force * std::pow(j_.dim.finger_length, 2)) / (c));
+    // joint_pred[i] = ((float)(N - n + 1) / (float)(N + 1)) 
+    //                     * ((force * j_.dim.finger_length) / (c));
+
+    joint_pred[i] = ((N - n + 1) * force * j_.dim.finger_length) / (N * c);
+    // joint_pred[i] = ((N - n + 1) * force * j_.dim.finger_length) / ((N + 1) * c);
 
     // joint angle error
     joint_errors[i] = joint_angles[i] - joint_pred[i];
@@ -2284,12 +2583,33 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
     // theory y position
     theory_x[i + 1 + ffs] = theory_x[i + ffs] + j_.dim.segment_length;
     theory_y[i + 1 + ffs] = (force * std::pow(theory_x[i + 1 + ffs], 3)) / (3 * j_.dim.EI); 
+    
   }
+
+  // approximate free end tangent angle
+  double B = (force * std::pow(j_.dim.finger_length, 2)) / (j_.dim.EI);
+  double phi_0 = 0.5 * B * (1.0 - (1.0/12.0) * std::pow(B, 2));
+  double gamma = M_PI_2;
 
   // create theory curve
   for (int i = 0; i < theory_N - 1; i++) {
+
+    // proportional to L cubed, basic
     theory_x_curve[i + 1] = theory_x_curve[i] + theory_step;
     theory_y_curve[i + 1] = (force * std::pow(theory_x_curve[i + 1], 3)) / (3 * j_.dim.EI); 
+
+    // following Bisshopp end angle approximation ... how to get cartesian?
+
+    // // Batista paper, analytical solution
+    #ifndef LUKE_PREVENT_BOOST
+      double s = 1.0 - (i / (float) (theory_N - 1));
+      double M0 = 0.0;
+      double alpha = phi_0 + gamma;
+      luke_boost::ArcPoint p = luke_boost::get_point(s, force, M0, j_.dim.finger_length,
+        j_.dim.EI, alpha);
+      theory_x_curve[i + 1] = p.x * j_.dim.finger_length;
+      theory_y_curve[i + 1] = p.y * j_.dim.finger_length;
+    #endif
   }
 
   // return average error
@@ -2376,6 +2696,16 @@ std::vector<gfloat> get_target_state()
   // std::vector<gfloat> target_joint_values = { x, y, z };
 
   // return target_joint_values;
+}
+
+int get_N() 
+{
+  return j_.num.per_finger + j_.dim.fixed_first_segment;
+}
+
+std::vector<luke::gfloat> get_stiffnesses()
+{
+  return j_.dim.joint_stiffness;
 }
 
 /* ----- environment ----- */
@@ -2557,6 +2887,11 @@ bool is_sim_unstable(mjModel* model, mjData* data)
   }
 
   return false;
+}
+
+void print_stiffnesses()
+{
+  print_vec(get_stiffnesses(), "Joint stiffnesses");
 }
 
 } // namespace luke

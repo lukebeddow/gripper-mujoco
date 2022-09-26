@@ -53,7 +53,8 @@ CORE_LIBS = -L$(MUJOCO_PATH)/bin -lmujoco210 -lblas -llapack
 RENDER_LIBS = -lGL -lglew $(MUJOCO_PATH)/bin/libglfw.so.3
 DEFINE_VAR = -DLUKE_CLUSTER -DARMA_DONT_USE_WRAPPER \
 						 -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
-						 -DLUKE_MACHINE='"$(MACHINE)"'
+						 -DLUKE_MACHINE='"$(MACHINE)"' \
+						 -DLUKE_PREVENT_BOOST
 
 endif
 
@@ -78,10 +79,14 @@ CORE_LIBS = -L$(MUJOCO_PATH)/lib -lmujoco -lblas -llapack
 RENDER_LIBS = # none, no rendering
 DEFINE_VAR = -DLUKE_CLUSTER -DARMA_DONT_USE_WRAPPER \
 						 -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
-						 -DLUKE_MACHINE='"$(MACHINE)"'
+						 -DLUKE_MACHINE='"$(MACHINE)"' \
+						 -DLUKE_PREVENT_BOOST
 
 # we do not want to compile any rendering files
 PREVENT_RENDERING := 1
+
+# we do not want to compile files with boost dependencies
+PREVENT_BOOST := 1
 
 endif
 

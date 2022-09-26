@@ -1024,6 +1024,7 @@ public:
   float reward(std::vector<float> goal_vec, std::vector<float> event_vec);
   int get_n_actions();
   int get_n_obs();
+  int get_N();
 
   // real world gripper functions
   std::vector<float> input_real_data(std::vector<float> state_data, 
@@ -1038,6 +1039,9 @@ public:
   MjType::CurveFitData::PoseData validate_curve();
   MjType::CurveFitData::PoseData validate_curve_under_force(int force);
   MjType::CurveFitData curve_validation_regime(bool print = true);
+  void numerical_stiffness_converge(std::vector<float> X, std::vector<float> Y);
+  std::vector<float> profile_error(std::vector<float> profile_X, std::vector<float> profile_Y,
+  std::vector<float> truth_X, std::vector<float> truth_Y);
   void calibrate_gauges();
   void tick();
   float tock();

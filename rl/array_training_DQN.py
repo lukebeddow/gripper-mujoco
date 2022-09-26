@@ -276,11 +276,11 @@ def apply_to_all_models(model):
   # key learning hyperparameters
   model.params.object_set = "set3_fullset_795"
   model.params.batch_size = 128
-  model.params.learning_rate = 0.0001
+  model.params.learning_rate = 5e-5
   model.params.gamma = 0.999
   model.params.eps_start = 0.9
   model.params.eps_end = 0.05
-  model.params.eps_decay = 2000
+  model.params.eps_decay = 4000
   model.params.target_update = 100
   model.params.num_episodes = 10_000
   model.params.optimiser = "adam"
@@ -417,6 +417,11 @@ def logging_job(model, run_name, group_name):
 
   print("Logging training in group:", group_name)
   print("Logging training of run:", run_name)
+
+  # turn off any and all auto-calibrations
+  model.env.mj.set.auto_set_timestep = False
+  model.env.mj.set.auto_calibrate_gauges = False
+  model.env.mj.set.auto_sim_steps = False
 
   model.load(folderpath=model.savedir + group_name + "/", foldername=run_name)
   
@@ -634,43 +639,49 @@ if __name__ == "__main__":
   baseline_training(model, sensors=this_sensors)
   """
 
+  # WHICH FINGER STIFFNESS MODEL ARE WE USING
+  finger_stiffness = -100 # -100 means hardcoded stiffnesses which converge onto real finger data
+
+  # HOW MANY SEGMENTS ARE WE USING
+  model.params.object_set = "set3_fullset_795_N/6_free_seg" # 6 segments focuses on speed
+
+  # # varying 3x3 = possible trainings 1-9
   # sensors_list = [
   #   0, # bending and z state
   #   1, # + palm
   #   2  # + wrist
   # ]
 
-  # # lists are zero indexed
-  # inputarg -= 1
-
-  # model.params.num_episodes = 40000
-  # baseline_training(model, sensors=sensors_list[inputarg]) 
-
-  # varying 3x3 = possible trainings 1-9
-  sensors_list = [
-    0, # bending and z state
-    1, # + palm
-    2  # + wrist
+  networks_list = [
+    networks.DQN_3L60,
+    networks.DQN_4L60,
+    networks.DQN_5L60,
+    networks.DQN_3L100,
+    networks.DQN_4L100,
+    networks.DQN_5L100
   ]
 
-  num_segments_list = [
-    "set3_fullset_795_N/5_free_seg",
-    "set3_fullset_795_N/7_free_seg",
-    "set3_fullset_795_N/10_free_seg"
+  lr_list = [
+    10e-6,
+    25e-6,
+    50e-6,    # current = 5e-5
+    100e-6,
+    200e-6,
   ]
+
+  # allow repeats
+  trainings = 30
+  while inputarg > trainings: inputarg -= trainings
 
   # lists are zero indexed so adjust inputarg
   inputarg -= 1
 
-  # allow looping input indexes
-  while inputarg >= 9: inputarg -= 9
-
   # we vary wrt memory_list every inputarg increment
-  x = len(num_segments_list)
+  x = len(lr_list)
 
   # get the sensors and memory size for this training
-  this_sensor = sensors_list[inputarg // x]                 # vary every x steps
-  this_set = num_segments_list[inputarg % x]                # vary every +1 & loop
+  this_network = networks_list[inputarg // x]                 # vary every x steps
+  this_lr = lr_list[inputarg % x]                             # vary every +1 & loop
 
   # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
   #   A1, A2, A3, ...
@@ -678,8 +689,8 @@ if __name__ == "__main__":
   #   C1, C2, C3, ...
 
   # make note
-  param_1 = f"Sensors is {this_sensor}\n"
-  param_2 = f"Object set is {this_set}\n"
+  param_1 = f"Network is {this_network.name}\n"
+  param_2 = f"Object set is {this_lr}\n"
   model.wandb_note += param_1 + param_2
 
   # if we are just printing help information
@@ -700,11 +711,8 @@ if __name__ == "__main__":
   # set number of training episodes
   model.params.num_episodes = 40000
 
-  # apply the number of segments
-  model.params.object_set = this_set
-
   # perform the training with other parameters standard
-  baseline_training(model, sensors=this_sensor) 
+  baseline_training(model, network=this_network, lr=this_lr, finger_stiffness=finger_stiffness) 
 
   # ----- END ----- #
    

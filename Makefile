@@ -77,6 +77,11 @@ else
 UITOOLS = $(BUILDDIR)/uitools.o
 endif
 
+# are we going to prevent any boost libraries compiling
+ifeq ($(PREVENT_BOOST), 1)
+SOURCES := $(filter-out $(SOURCEDIR)/boostdep.cpp, $(SOURCES))
+endif
+
 # get the dependencies of each source file
 DEPENDS := $(patsubst $(SOURCEDIR)/%.cpp, $(BUILDDEP)/%.d, $(SOURCES))
 

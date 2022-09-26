@@ -216,7 +216,7 @@ void MjClass::configure_settings()
   }
 
   /* start of automatic settings changes */
-
+  
   bool echo_auto_changes = true; // s_.debug;
 
   // if we have not initialised the automatic flags, do it now
@@ -404,7 +404,11 @@ void MjClass::step()
 
   // if doing curve validation, can apply a set tip force
   if (s_.curve_validation < 0) {
-    luke::apply_tip_force(model, data, -1 * s_.curve_validation);
+
+    /* IMPORTANT: forces are applied in GRAMS so instead of 1N it is 100g, this
+    is because the real world experiments use grams to load the fingertips*/
+    constexpr float N_to_hundred_grams = 0.981;
+    luke::apply_tip_force(model, data, -1 * s_.curve_validation * N_to_hundred_grams);
   }
 
   luke::step(model, data);
@@ -1043,7 +1047,7 @@ std::vector<luke::gfloat> MjClass::get_observation()
   /* get an observation with n samples from the gauges */
 
   // use for printing detailed observation debug information
-  constexpr bool debug_obs = true;
+  constexpr bool debug_obs = false;
 
   std::vector<luke::gfloat> observation;
 
@@ -1423,6 +1427,13 @@ int MjClass::get_n_obs()
   return obs_size;
 }
 
+int MjClass::get_N()
+{
+  /* return the number of free segments, N */
+
+  return luke::get_N();
+}
+
 /* ----- real gripper functions ----- */
 
 std::vector<float> MjClass::get_finger_gauge_data()
@@ -1737,11 +1748,11 @@ MjType::CurveFitData MjClass::curve_validation_regime(bool print)
 
   s_.debug = false;
 
-  int max_force = 5;
+  int max_force = 4; // NOTE: not forces in newtons, these are 100/200/300/400g (ie 0.981*1/2/3/4)
 
-  // for testing
-  std::vector<float> readings(max_force);
-  std::vector<float> norms(max_force);
+  // // for testing
+  // std::vector<float> readings(max_force);
+  // std::vector<float> norms(max_force);
 
   for (int i = 1; i < max_force + 1; i++) {
     
@@ -1750,14 +1761,14 @@ MjType::CurveFitData MjClass::curve_validation_regime(bool print)
     if (print) pose.print();
     curvedata.entries.push_back(pose);
 
-    // for testing
-    readings[i - 1] = luke::read_armadillo_gauge(data, 0);
-    norms[i - 1] = finger1_gauge.read_element();
+    // // for testing
+    // readings[i - 1] = luke::read_armadillo_gauge(data, 0);
+    // norms[i - 1] = finger1_gauge.read_element();
   }
 
-  // for testing
-  luke::print_vec(readings, "Gauge readings for 1-5N");
-  luke::print_vec(norms, "normalised readings");
+  // // for testing
+  // luke::print_vec(readings, "Gauge readings for 1-5N");
+  // luke::print_vec(norms, "normalised readings");
 
   s_.debug = debug_state;
 
@@ -1765,6 +1776,169 @@ MjType::CurveFitData MjClass::curve_validation_regime(bool print)
   curve_validation_data_ = curvedata;
 
   return curvedata;
+}
+
+void MjClass::numerical_stiffness_converge(std::vector<float> X, std::vector<float> Y)
+{
+  /* converge on a given X,Y profile with repeated numerical solving of the mujoco
+  finger profile in the case of point end loading */
+
+  bool print = true;
+  bool print_detailed = true;
+
+  // use default stiffnesses as initial guess
+  std::vector<luke::gfloat> stiffnesses = luke::get_stiffnesses();
+  int N = stiffnesses.size();
+
+  int loops = 0;
+  int max_loops = 500;
+  float max_stiffness = 800;
+  float min_stiffness = 0.5;
+  float momentum = 2;
+
+  float avg_error = 0;
+  int good_error_count = 0;
+  int required_good_error = 3;
+  float error_threshold = 0.5e-3; // 0.5e-3 gives excellent agreement, 2e-3 gives decent
+
+  while (loops < max_loops) {
+
+    if (print_detailed) {
+      std::cout << "Loop " << loops << '\n';
+      luke::print_vec(stiffnesses, "stiffnesses");
+    }
+
+    // begin by preparing
+    reset();
+    loops++;
+    float sum_error_ratio = 0;
+
+    // set the stiffness
+    luke::set_finger_stiffness(model, stiffnesses);
+
+    // now evaluate the profile and error
+    int validation_force = 3;
+    MjType::CurveFitData::PoseData curvedata = validate_curve_under_force(validation_force);
+    std::vector<float> error = profile_error(curvedata.f1.x, curvedata.f1.y, X, Y);
+
+    // update to new stiffnesses (i==0 is fixed end, always zero error)
+    for (int i = 1; i < N + 1; i++) {
+
+      float alpha = momentum * (N + 1 - i);
+      float max_error = 1.0;            // ie 100% error, cap this to prevent huge jumps
+      float error_ratio = error[i] / curvedata.f1.x[i];
+
+      if (error_ratio > max_error) error_ratio = max_error;
+      if (error_ratio < -max_error) error_ratio = -max_error;
+
+      sum_error_ratio += abs(error_ratio);
+
+      float new_stiffness = stiffnesses[i - 1] + error_ratio * alpha;
+
+      if (new_stiffness < min_stiffness) new_stiffness = min_stiffness;
+      if (new_stiffness > max_stiffness) new_stiffness = max_stiffness;
+
+      if (new_stiffness != new_stiffness) {
+        std::cout << "found nan in index " << i << ", setting to 8\n";
+        new_stiffness = 8;
+      }
+
+      stiffnesses[i - 1] = new_stiffness;
+    }
+
+    avg_error = sum_error_ratio / (float) N;
+
+    if (print_detailed) {
+      luke::print_vec(error, "error");
+      std::cout << "avg sum error ratio is " << avg_error * 100 << "%\n";
+    }
+
+    // does this error fall below our required value
+    if (avg_error < error_threshold) {
+      good_error_count += 1;
+    }
+    else good_error_count = 0;
+
+    // have we had enough good errors in a row
+    if (good_error_count >= required_good_error) break;
+  }
+
+  if (print) {
+    std::cout << "Stiffness for N=" << N << " are: "; luke::print_vec(stiffnesses, "c");
+    std::cout << "There were " << loops << " loops and final avg error is "
+      << avg_error * 100 << " %\n";
+  }
+  
+}
+
+std::vector<float> MjClass::profile_error(std::vector<float> profile_X, std::vector<float> profile_Y,
+  std::vector<float> truth_X, std::vector<float> truth_Y)
+{
+  /* get a vector of errors on a discrete profile vs a (more) continous truth */
+
+  if (profile_X.size() != profile_Y.size())
+    throw std::runtime_error("profile X and Y lengths are different in profile_error(...)");
+
+  if (truth_X.size() != truth_Y.size())
+    throw std::runtime_error("ground truth X and Y lengths are different in profile_error(...)");
+
+  int n_profile = profile_X.size();
+  int n_truth = truth_X.size();
+
+  // if (profile_X.size() > truth_X.size()) {
+  //   std::cout << "Profile has " << profile_X.size() << " points\n";
+  //   std::cout << "Ground truth has " << truth_X.size() << " points\n";
+  //   throw std::runtime_error("profile has more points than ground truth in profile_error(...)");
+  // }
+
+  std::vector<float> errors;
+  float error_X = 0;
+  float error_Y = 0;
+
+  int last = 0;
+  bool found = false;
+
+  for (int i = 0; i < n_profile; i++) {
+
+    // find the closest X point in the 'truth'
+    for (int j = last; j < n_truth; j++) {
+
+      if (truth_X[j] > profile_X[i]) {
+        last = j - 1;
+        found = true;
+        break;
+      }
+    }
+
+    float truth_X_val;
+    float truth_Y_val;
+
+    if (not found) {
+      truth_X_val = truth_X[n_truth - 1];
+      truth_Y_val = truth_Y[n_truth - 1];
+    }
+    else if (last < 0) {
+      truth_X_val = truth_X[0];
+      truth_Y_val = truth_Y[0];
+    }
+    else {
+      // interpolate
+      float interval = truth_X[last + 1] - truth_X[last];
+      float a = (truth_X[last + 1] - profile_X[i]) / interval;
+      float b = 1 - a;
+      truth_X_val = (a * truth_X[last] + b * truth_X[last + 1]);
+      truth_Y_val = (a * truth_Y[last] + b * truth_Y[last + 1]);
+    }
+
+    // calculate the Y error and ignore the X error
+    error_X = profile_X[i] - truth_X_val;
+    error_Y = profile_Y[i] - truth_Y_val;
+    errors.push_back(error_Y);
+
+    found = false;
+  }
+
+  return errors;
 }
 
 void MjClass::calibrate_gauges()
@@ -1841,13 +2015,13 @@ void MjClass::default_goal_event_triggering()
 
 float MjClass::find_highest_stable_timestep()
 {
-  /* find the highest timestep where the simulation is stable after 0.5 seconds */
+  /* find the highest timestep where the simulation is stable after a set amount of seconds */
 
   constexpr bool debug = true;
 
-  float increment = 50e-6;   // 0.05 milliseconds
-  float start_value = 3e-3;  // 30 millseconds
-  float test_time = 1.0;     // 0.5 seconds
+  float increment = 50e-6;     // 0.05 milliseconds
+  float start_value = 3.5e-3;  // 3.5 millseconds
+  float test_time = 1.0;       // 0.5 seconds
 
   float next_timestep = start_value;
   bool unstable = false;

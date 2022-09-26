@@ -1,3 +1,86 @@
+#!/usr/bin/env python3
+
+import csv
+from matplotlib import pyplot as plt
+import numpy as np
+
+path = "/home/luke/Documents/finger_data/beam_235x28x0.9_190GPa"
+
+filename = "fea_{0}g_fine.csv"
+
+masses = [0, 100, 200, 300, 400, 500]
+
+rows = round(len(masses) // 2 + 0.25)
+
+fea_data = []
+
+fig, axs = plt.subplots(rows, 2)
+
+for j, mass in enumerate(masses):
+
+  fullpath = path + "/" + filename.format(mass)
+
+  data_entry = []
+
+  with open(fullpath, newline='') as csvfile:
+    
+    reader = csv.reader(csvfile, delimiter=',', quotechar='|')
+
+    for i, row in enumerate(reader):
+
+      if i == 0: continue # this row is simply commas (eg ,,,,,,)
+
+      columns = ', '.join(row).split(',')
+
+      try:
+        float(columns[0])
+      except ValueError: continue
+
+      # print(columns)
+
+      datapoint = [0, 0]
+      datapoint[0] = float(columns[2]) # X (mm)
+      datapoint[1] = float(columns[1]) # Value (mm) - this is deflection
+      
+      data_entry.append(datapoint)
+
+  data_entry = np.array(data_entry)
+
+  # flip the data so last entry is now first etc
+  data_entry = data_entry[::-1]
+
+  # zero the data
+  offset = data_entry[0]
+  data_entry[:, 0] -= offset[0]
+  data_entry[:, 1] -= offset[1]
+
+  fea_data.append(data_entry)
+
+length = fea_data[0][-1][0]
+maxdef = fea_data[-1][-1][1]
+
+# plot only
+for i, d in enumerate(fea_data):
+
+  if i < rows:
+    row = i
+    col = 0
+  else:
+    row = i - rows
+    col = 1
+
+  axs[row][col].plot(d[:,0], d[:,1], label="{0}g".format(masses[i]))
+  axs[row][col].axis("equal")
+  axs[row][col].set_xlim([0, length])
+  axs[row][col].set_ylim([0, maxdef])
+  axs[row][col].legend(loc="upper left")
+
+# plt.show()
+
+
+
+# ----- hardcoded data, old ----- #
+
 # FEA values computed with beam 0.9x28x235
 
 FEA_1N = [

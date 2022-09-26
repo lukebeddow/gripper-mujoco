@@ -219,7 +219,7 @@ class TrainDQN():
       """
       # parameters to set
       numpy_float = np.float32
-      self.moving_avg_num = 250
+      self.moving_avg_num = 100
       self.static_avg_num = self.moving_avg_num
       self.plot_raw = False
       self.plot_moving_avg = False
@@ -268,7 +268,9 @@ class TrainDQN():
       self.axs = None
       
     def log_episode(self, reward, duration):
-      """Log data from the last episode"""
+      """
+      Log data from the last episode
+      """
 
       self.train_episodes = np.append(self.train_episodes, self.episodes_done)
       self.train_durations = np.append(self.train_durations, duration)
@@ -280,7 +282,9 @@ class TrainDQN():
       self.calc_static_average()
 
     def calc_moving_average(self):
-      """Save the rewards and durations moving averages"""
+      """
+      Save the rewards and durations moving averages
+      """
       if len(self.train_episodes) > self.moving_avg_num:
         self.avgR_durations = np.convolve(self.train_durations, np.ones(self.moving_avg_num), 'valid') / self.moving_avg_num
         self.avgR_rewards = np.convolve(self.train_rewards, np.ones(self.moving_avg_num), 'valid') / self.moving_avg_num
@@ -1288,13 +1292,13 @@ class TrainDQN():
       elif i_episode % self.params.save_freq == 0:
         self.save()
 
-      # temporary experimental feature: cluster logging up to first test
-      elif self.additional_logging is not None:
-        if i_episode < self.params.test_freq:
-          if i_episode % self.additional_logging == 0:
-            texttosave = f"Cluster training has reached episode {i_episode}\n"
-            self.modelsaver.save("cluster_episode_tracker", txtstr=texttosave, 
-                                 txtonly=True)
+      # # temporary experimental feature: cluster logging up to first test
+      # elif self.additional_logging is not None:
+      #   if i_episode < self.params.test_freq:
+      #     if i_episode % self.additional_logging == 0:
+      #       texttosave = f"Cluster training has reached episode {i_episode}\n"
+      #       self.modelsaver.save("cluster_episode_tracker", txtstr=texttosave, 
+      #                            txtonly=True)
 
     # update the target network at the end
     self.target_net.load_state_dict(self.policy_net.state_dict())
@@ -1533,7 +1537,7 @@ if __name__ == "__main__":
   # if we want to adjust parameters
   # model.log_level = 2
   # model.params.num_episodes = 11
-  model.env.max_episode_steps = 20
+  # model.env.max_episode_steps = 20
   # model.params.wandb_freq_s = 5
   # model.env.mj.set.action_motor_steps = 350
   # model.env.disable_rendering = False
@@ -1568,8 +1572,8 @@ if __name__ == "__main__":
   # load
   # net = networks.DQN_3L60
   # model.init(net)
-  folderpath = "/home/luke/mymujoco/rl/models/dqn/11-09-22/"
-  foldername = "luke-PC_17:53_A4"
+  folderpath = "/home/luke/cluster/rl/models/dqn/11-09-22/"
+  foldername = "cluster_18:19_A1"
   model.device = torch.device("cuda")
   model.load(id=None, folderpath=folderpath, foldername=foldername)
 
