@@ -377,7 +377,7 @@ def apply_to_all_models(model):
   model.env.mj.set.state_noise_std = 0
 
   # logging/plotting options
-  model.track.moving_avg_num = 100
+  model.track.moving_avg_num = 250
   model.track.static_avg_num = model.track.moving_avg_num
   model.track.plot_raw = False
   model.track.plot_moving_avg = False
