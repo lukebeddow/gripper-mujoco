@@ -2020,7 +2020,7 @@ float MjClass::find_highest_stable_timestep()
   constexpr bool debug = true;
 
   float increment = 50e-6;     // 0.05 milliseconds
-  float start_value = 3.5e-3;  // 3.5 millseconds
+  float start_value = 4.0e-3;  // 3.5 millseconds
   float test_time = 1.0;       // 0.5 seconds
 
   float next_timestep = start_value;
@@ -2062,8 +2062,16 @@ float MjClass::find_highest_stable_timestep()
             next_timestep * 1000, test_time);
   }
 
+  float factor;
+  if (next_timestep > 3.0e-3) {
+    factor = 0.75;
+  }
+  else {
+    factor = 0.85; // used to be 0.9
+  }
+
   // for safety, reduce timestep by 10 percent
-  float final_timestep = next_timestep * 0.9;
+  float final_timestep = next_timestep * factor;
 
   // round the timestep to a whole number of microseconds
   final_timestep = (float) ((int)(final_timestep * 1e6) * 1e-6);

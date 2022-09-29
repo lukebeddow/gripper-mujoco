@@ -29,7 +29,7 @@
   XX(  debug,                   bool,     true)     /* print debug info to terminal */\
   XX(  mujoco_timestep,         double,   0.001)    /* sim timestep in seconds - default 0.002 */\
   XX(  curve_validation,        int,      false)    /* save finger curve data for testing, -ve number sets tip force */\
-  XX(  finger_stiffness,        double,   -100)     /* <0 means set all joints to this stiffness, -1<x<0 means use model, -2<x<-1 means adjusted model */\
+  XX(  finger_stiffness,        double,   -5.5)     /* <0 means set all joints to this stiffness, -1<x<0 means use model, -2<x<-1 means adjusted model */\
   XX(  random_seed,             uint,     0)        /* random seed */\
   XX(  randomise_colours,       bool,     true)     /* randomise the colours of the objects */\
   /*
@@ -58,7 +58,7 @@
   XX(  sensor_noise_std,        double,   0.015)    /* std deviation of noise, <= 0 means uniform */\
   XX(  state_noise_mag,         double,   0.0)      /* noise magnitude if using uniform distribution (std <= 0)*/\
   XX(  state_noise_mu,          double,   0.0)      /* abs range of state sensor mean shift*/\
-  XX(  state_noise_std,         double,   0.015)    /* std deviation of noise, <= 0 means uniform*/\
+  XX(  state_noise_std,         double,   0.05)     /* std deviation of noise, <= 0 means uniform*/\
   /* 
   update_env() settings */\
   XX(  oob_distance,            double,   75e-3)    /* distance to consider object out of bounds */\

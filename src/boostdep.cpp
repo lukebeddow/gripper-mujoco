@@ -66,12 +66,17 @@ ArcPoint get_point(double s, double P, double M0, double L, double EI, double al
   }
 
   double gamma = 2 * asin(k * boost::math::jacobi_sn(k, omega + C));
-  gamma = -M_PI_2;
 
-  // // adjust alpha to stay independent of gamma
-  // alpha += gamma;
+  // // for testing
+  // std::cout << "gamma is " << gamma << " (" << gamma * (180.0 / M_PI) << " deg)\n";
 
-  return get_point(s, omega, C, k, gamma);
+  ArcPoint point = get_point(s, omega, C, k, gamma);
+
+  // scale x/y into regular units
+  point.x *= L;
+  point.y *= L;
+
+  return point;
 }
 
 ArcPoint get_point(double s, double omega, double C, double k, double gamma)
@@ -87,12 +92,14 @@ ArcPoint get_point(double s, double omega, double C, double k, double gamma)
   point.y = -point.xi * sin(gamma) + point.eta * cos(gamma);
 
   // calculate angle (phi) and curvature (kappa)
-  double sn = boost::math::jacobi_sn(omega * s + C, k);
-  double cn = boost::math::jacobi_cn(omega * s + C, k);
+  double sn = boost::math::jacobi_sn(k, omega * s + C);
+  double cn = boost::math::jacobi_cn(k, omega * s + C);
   point.phi = 2 * asin(k * sn);
   point.kappa = - 2 * omega * k * cn;
 
   return point;
 }
+
+// ArcPoint solve_chen()
 
 }; // namespace

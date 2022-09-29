@@ -62,7 +62,7 @@ void reset(mjModel* model, mjData* data);
 void reset_J();
 void wipe_settled();
 void calibrate_reset(mjModel* model, mjData* data);
-void reset_constraints(mjModel* model, mjData* data);
+void set_all_constraints(mjModel* model, mjData* data, bool set_to);
 void toggle_constraint(mjModel* model, mjData* data, int id);
 void set_constraint(mjModel* model, mjData* data, int id, bool set_as);
 void target_constraint(mjModel* model, mjData* data, int id, bool set_as, int type);

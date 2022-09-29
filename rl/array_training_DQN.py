@@ -645,6 +645,9 @@ if __name__ == "__main__":
   # HOW MANY SEGMENTS ARE WE USING
   model.params.object_set = "set3_fullset_795_N/6_free_seg" # 6 segments focuses on speed
 
+  # ARE WE USING SI ACTIONS OR MOTOR STEP ACTIONS
+  model.env.mj.set.XYZ_action_mm_rad = False
+
   # # varying 3x3 = possible trainings 1-9
   # sensors_list = [
   #   0, # bending and z state

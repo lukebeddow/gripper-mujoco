@@ -199,7 +199,7 @@ struct JointSettings {
     bool stepper = true;
     int num_steps = 10;                         // number of stepper motors steps in one chunk
     double pulses_per_s = 2000;                 // stepper motor pulses per second, this sets speed (2000pps = 300rpm)
-    Gain kp {100, 100, 1000};                   // proportional gains for gripper xyz motors {x, y, z}
+    Gain kp {100, 40, 1000};                   // proportional gains for gripper xyz motors {x, y, z}
     Gain kd {1, 1, 1};                          // derivative gains for gripper xyz motors {x, y, z}
     double base_kp = 2000;                      // proportional gain for gripper base motions
     double base_kd = 100;                       // derivative gain for gripper base motions
@@ -230,6 +230,8 @@ struct JointSettings {
       std::vector<float> N15 { 37.103, 22.431, 15.466, 12.927, 23.115, 15.260, 22.107, 20.695, 21.631, 14.546, 16.221, 12.876, 10.205, 6.744, 2.480 };
       std::vector<float> N20 { 75.206, 23.422, 27.987, 21.172, 16.599, 40.647, 28.657, 19.737, 27.249, 28.612, 34.024, 36.741, 25.092, 21.021, 21.680, 18.867, 14.520, 10.797, 6.767, 1.830 };
       std::vector<float> N25 { 503.022, 16.672, 124.905, 27.550, 24.489, 17.904, 63.461, 34.390, 17.560, 35.540, 69.003, 91.560, 70.231, 63.729, 62.175, 22.117, 6.076, 44.070, 40.950, 65.208, 51.254, 44.330, 25.115, 14.184, 0.500 };
+      
+      // N30 did not converge to a low error value
       std::vector<float> N30 { 685.194, 18.996, 206.246, 38.443, 27.892, 34.549, 17.070, 57.971, 96.573, 58.083, 11.051, 35.880, 81.274, 140.579, 146.179, 184.276, 219.552, 260.973, 277.488, 303.149, 328.203, 356.418, 351.385, 345.677, 327.709, 298.091, 256.786, 205.697, 144.913, 74.690 };
 
       float t5 = 3.105e-3;
@@ -517,25 +519,15 @@ void init_J(mjModel* model, mjData* data)
   }
 
   configure_constraints(model, data);
-
-  // // initialise the settling arrays to our default finger values
-  // for (int i = 0; i < fingers_.size(); i++) {
-  //   for (int j = 0; j < j_.sim.n_arr; j++) {
-  //     (*finger_arrays_[i])[j][0] = fingers_[i]->step.x;
-  //     (*finger_arrays_[i])[j][1] = fingers_[i]->step.y;
-  //   }
-  // }
 }
 
 void reset(mjModel* model, mjData* data)
 {
   /* reset the simulation */
 
-  // reset the targets
+  // reset the targets and disable any constraints
   target_.reset();
-
-  // disable any constraints
-  reset_constraints(model, data);
+  set_all_constraints(model, data, false);
 
   // wipe object positions and reset
   mj_resetData(model, data);
@@ -550,8 +542,11 @@ void reset(mjModel* model, mjData* data)
   j_.settle.settled = true;
   j_.settle.target_reached = true;
 
-  // set the joints to the eqilibrium position
+  // set the joints to the equilibrium position
   calibrate_reset(model, data);
+
+  // now enable all constraints at equilibrium position
+  set_all_constraints(model, data, true);
 }
 
 void print_joint_names(mjModel* model)
@@ -789,10 +784,15 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
   stiffness -1 to 0   -> stiffness is calculated using the model and EI
   stiffness -2 to -1  -> stiffness is calculated using model and EI but adjusted with tuned params
   stiffness -3 to -2  -> stiffness is calculated based on FEA curve fit derivation
-  
+  stiffness -4 to -3  -> stiffness is calculated from Bisshopp equation for end tip angle, attempt 1
+  stiffness -5 to -4  -> stiffness is calculated from Bisshopp equation for end tip angle, attempt 2
+  stiffness -6 to -5  -> stiffness is calculated from new attempt at theory, equating angles
+
+  stiffness is -100   -> use hardcoded stiffness values, convergence on real 0.9mm bending @ 300g
+
   */
 
-  constexpr bool local_debug = false;
+  constexpr bool local_debug = true;
 
   if (stiffness > 0) {
     if (local_debug) std::cout << "Finger joint stiffness ALL set to " << stiffness << '\n';
@@ -950,7 +950,7 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
       }
     }
 
-    // use the euler model but adjust values
+    // use the Bisshopp equation, attempt one
     else if (stiffness > -4 and stiffness < -3) {
 
       if (local_debug) std::cout << "Finger joint stiffness set using Bisshopp equation - attempt 1 FAILED\n";
@@ -1000,7 +1000,7 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
       }
     }
 
-    // use the euler model but adjust values
+    // use the Bisshopp equation, attempt two
     else if (stiffness > -5 and stiffness < -4) {
 
       if (local_debug) std::cout << "Finger joint stiffness set using Bisshopp equation - attempt 2\n";
@@ -1061,6 +1061,47 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
               << term2 << "(" << (term2 / term1) * 100 << " %)" << '\n';
 
             // std::cout << "convert is " << convert << '\n';
+          }
+
+          model->jnt_stiffness[idx] = c;
+        }
+      }
+    }
+
+    else if (stiffness > -6 and stiffness < -5) {
+
+      if (local_debug) std::cout << "Finger joint stiffness set using new basic theory attempt equating angles\n";
+
+      // loop over all three fingers
+      for (int i = 0; i < 3; i++) {
+
+        // loop from n=1 to N
+        for (int n = 1; n < N + 1; n++) {
+
+          int idx = j_.idx.finger[i * N + (n - 1)];
+
+          // determine the joint stiffness using the model
+          float m = n - 0.5;
+          float mm1 = m - 1;
+          if (mm1 < 0) mm1 = 0;
+          float sq_diff = (m * m) - (mm1 * mm1);
+          float diff = m - mm1;
+
+          float factor1 = (2 * j_.dim.EI) / j_.dim.finger_length;
+          float factor2 = (N - n + 1) / (float) N;
+
+          float factor3 = ((sq_diff) / (float) (N * N)) - ((2 * diff) / (float) N);
+          
+
+          float c = (factor1 * factor2) / -factor3;
+
+          if (i == 0) {
+            j_.dim.joint_stiffness[n - 1] = c;
+          }
+
+          if (local_debug and i == 0) {
+            std::cout << "finger joint " << n << " has c_n = " << c 
+              << ",f1 = " << factor1 << ", f2 = " << factor2 << ", f3 = " << factor3 << '\n';
           }
 
           model->jnt_stiffness[idx] = c;
@@ -1193,7 +1234,7 @@ void configure_constraints(mjModel* model, mjData* data)
       j_.con_idx.palm.push_back(i);
     }
 
-    // default, turn constraint off
+    // set constraint to default value of false
     model->eq_active[i] = false;
   }
 
@@ -1204,18 +1245,18 @@ void configure_constraints(mjModel* model, mjData* data)
   }
 }
 
-void reset_constraints(mjModel* model, mjData* data)
+void set_all_constraints(mjModel* model, mjData* data, bool set_to)
 {
   /* reset all constraints to false */
 
   for (int i : j_.con_idx.prismatic) {
-    set_constraint(model, data, i, false);
+    set_constraint(model, data, i, set_to);
   }
   for (int i : j_.con_idx.revolute) {
-    set_constraint(model, data, i, false);
+    set_constraint(model, data, i, set_to);
   }
   for (int i : j_.con_idx.palm) {
-    set_constraint(model, data, i, false);
+    set_constraint(model, data, i, set_to);
   }
 }
 
@@ -1323,7 +1364,7 @@ void target_constraint(mjModel* model, mjData* data, int id, bool set_as, int ty
 {
   /* set a constraint to send a motor to a target position */
 
-  /* THIS FUNCTION IS UNFINISHED */
+  /* THIS FUNCTION IS UNFINISHED AND NOT CURRENTLY IN USE */
 
   if (set_as) {
 
@@ -1912,6 +1953,7 @@ void update_stepper(mjModel* model, mjData* data)
 
   if (data->time > last_step_time_ + j_.ctrl.time_per_step) {
 
+    // we can optionally log position data to see motor response to steps
     if (log_test_data) {
       Gripper temp;
       temp.set_xyz_m_rad(*j_.to_qpos.gripper[0], *j_.to_qpos.gripper[1], *j_.to_qpos.gripper[6]);
@@ -1940,16 +1982,6 @@ void update_stepper(mjModel* model, mjData* data)
   else {
     // std::cout << "wait-";
   }
-
-  // // extract the state of each finger - this is only used for check_settling(), NOT NEEDED
-  // finger1_.set_xyz_m_rad(*j_.to_qpos.gripper[0], *j_.to_qpos.gripper[1], *j_.to_qpos.gripper[6]);
-  // finger2_.set_xy_m_rad(*j_.to_qpos.gripper[2], *j_.to_qpos.gripper[3]);
-  // finger3_.set_xy_m_rad(*j_.to_qpos.gripper[4], *j_.to_qpos.gripper[5]);
-
-  // // next we will check for settling, only worth checking after steps made
-  // if (stepped) {
-  //   check_settling();
-  // }
 }
 
 void update_objects(const mjModel* model, mjData* data)
@@ -1974,9 +2006,9 @@ void update_constraints(mjModel* model, mjData* data)
   /* control toggling of constraints which log motor positions once they finish
   moving */
 
-  static bool old_x = false;
-  static bool old_y = false;
-  static bool old_z = false;
+  static bool old_x = true;
+  static bool old_y = true;
+  static bool old_z = true;
 
   bool new_x = target_.x_moving();
   bool new_y = target_.y_moving();
@@ -2042,6 +2074,13 @@ void update_constraints(mjModel* model, mjData* data)
     }
     old_z = new_z;
   }
+
+  // // for testing
+  // std::cout << "Prismatic constraints: ";
+  // for (int i : j_.con_idx.prismatic) {
+  //   std::cout << (int) model->eq_active[i] << ", ";
+  // }
+  // std::cout << "\n";
 }
 
 /* ----- monitor simulation ----- */
@@ -2580,9 +2619,15 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
     pred_x[i + 1] = pred_x[i] + j_.dim.segment_length * std::cos(cum_pred_angle);
     pred_y[i + 1] = pred_y[i] + j_.dim.segment_length * std::sin(cum_pred_angle);
 
-    // theory y position
-    theory_x[i + 1 + ffs] = theory_x[i + ffs] + j_.dim.segment_length;
-    theory_y[i + 1 + ffs] = (force * std::pow(theory_x[i + 1 + ffs], 3)) / (3 * j_.dim.EI); 
+    // // theory y position
+    // theory_x[i + 1 + ffs] = theory_x[i + ffs] + j_.dim.segment_length;
+    // theory_y[i + 1 + ffs] = (force * std::pow(theory_x[i + 1 + ffs], 3)) / (3 * j_.dim.EI); 
+
+    // basic theory attempt 2
+    double theory_factor = (force * 1) / (6.0 * j_.dim.EI);
+    double x = (i + 1) * j_.dim.segment_length;
+    theory_x[i + 1 + ffs] = x;
+    theory_y[i + 1 + ffs] = theory_factor * (-std::pow(x, 3) + 3 * j_.dim.finger_length * std::pow(x, 2));  
     
   }
 
@@ -2591,25 +2636,40 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
   double phi_0 = 0.5 * B * (1.0 - (1.0/12.0) * std::pow(B, 2));
   double gamma = M_PI_2;
 
+  // factors for basic theory
+  double f1 = -force / 6.0;
+  double f2 = (force * std::pow(j_.dim.finger_length, 2)) / 2.0;
+  double f3 = -(force * std::pow(j_.dim.finger_length, 3)) / 3.0;
+
   // create theory curve
   for (int i = 0; i < theory_N - 1; i++) {
 
-    // proportional to L cubed, basic
-    theory_x_curve[i + 1] = theory_x_curve[i] + theory_step;
-    theory_y_curve[i + 1] = (force * std::pow(theory_x_curve[i + 1], 3)) / (3 * j_.dim.EI); 
+    // // proportional to L cubed, basic
+    // theory_x_curve[i + 1] = theory_x_curve[i] + theory_step;
+    // theory_y_curve[i + 1] = (force * std::pow(theory_x_curve[i + 1], 3)) / (3 * j_.dim.EI); 
+
+    // basic theory attempt 2
+    // double x = j_.dim.finger_length * (1.0 - (i / (float) (theory_N - 2)));
+    // theory_x_curve[i + 1] = theory_x_curve[i] + theory_step;
+    // theory_y_curve[i + 1] = (-1.0 / j_.dim.EI) * ((f1 * std::pow(x, 3)) + (f2 * x) + f3); 
+
+    double theory_factor = (force / (6.0 * j_.dim.EI));
+    double x = j_.dim.finger_length * ((i / (float) (theory_N - 2)));
+    theory_x_curve[i + 1] = x;
+    theory_y_curve[i + 1] = theory_factor * (-std::pow(x, 3) + 3 * j_.dim.finger_length * std::pow(x, 2));  
 
     // following Bisshopp end angle approximation ... how to get cartesian?
 
-    // // Batista paper, analytical solution
-    #ifndef LUKE_PREVENT_BOOST
-      double s = 1.0 - (i / (float) (theory_N - 1));
-      double M0 = 0.0;
-      double alpha = phi_0 + gamma;
-      luke_boost::ArcPoint p = luke_boost::get_point(s, force, M0, j_.dim.finger_length,
-        j_.dim.EI, alpha);
-      theory_x_curve[i + 1] = p.x * j_.dim.finger_length;
-      theory_y_curve[i + 1] = p.y * j_.dim.finger_length;
-    #endif
+    // // // Batista paper, analytical solution
+    // #ifndef LUKE_PREVENT_BOOST
+    //   double s = 1.0 - (i / (float) (theory_N - 2));
+    //   double M0 = 0.0;
+    //   double alpha = 1.8785;
+    //   luke_boost::ArcPoint p = luke_boost::get_point(s, force, M0, j_.dim.finger_length,
+    //     j_.dim.EI, alpha);
+    //   theory_x_curve[i + 1] = p.x;
+    //   theory_y_curve[i + 1] = p.y;
+    // #endif
   }
 
   // return average error
