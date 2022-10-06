@@ -2954,22 +2954,24 @@ int main(int argc, const char** argv)
         else if (not strcmp(argv[1], "both")) {
             filepath = default_path + object_set + both_file;
         }
-        else if (not strcmp(argv[1], "task")) {
+        else {//(not strcmp(argv[1], "task")) {
+
+            std::string task_folder = argv[1];
 
             filepath = default_path + object_set + task_file;
 
             if (argc > 2) {
-                filepath = default_path + object_set + "/task/gripper_task_" + argv[2] + ".xml";
+                filepath = default_path + object_set + "/" + task_folder + "/gripper_task_" + argv[2] + ".xml";
             }
 
             if (argc > 3) {
-                filepath = default_path + argv[3] + "/task/gripper_task_" + argv[2] + ".xml";
+                filepath = default_path + argv[3] + "/" + task_folder + "/gripper_task_" + argv[2] + ".xml";
             }
 
         }
-        else {
-            printf("Command line argument not valid, ignored\n");
-        }
+        // else {
+        //     printf("Command line argument not valid, ignored\n");
+        // }
     }
     else {
         printf("No command line arguments detected, using default model\n");

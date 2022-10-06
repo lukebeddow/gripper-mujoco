@@ -5,8 +5,8 @@
 LOADFROM=~/cluster/rl/models/dqn/
 MACHINE=cluster
 STAGGER=8
-TIMESTAMP=16-09-22-18:05
-JOBS="25:27"
+TIMESTAMP=30-09-22-16:29
+JOBS="1:30"
 
 cd ~/mymujoco
 
