@@ -1778,20 +1778,35 @@ MjType::CurveFitData MjClass::curve_validation_regime(bool print)
   return curvedata;
 }
 
+void MjClass::numerical_stiffness_converge(float force)
+{
+  /* converge on basic theory */
+
+  std::vector<float> theory_X;
+  std::vector<float> theory_Y;
+  int theory_N = 50;
+
+  // create theoretical curve at this force
+  luke::fill_theory_curve(theory_X, theory_Y, force, theory_N);
+
+  numerical_stiffness_converge(theory_X, theory_Y);
+}
+
 void MjClass::numerical_stiffness_converge(std::vector<float> X, std::vector<float> Y)
 {
   /* converge on a given X,Y profile with repeated numerical solving of the mujoco
   finger profile in the case of point end loading */
 
-  bool print = true;
-  bool print_detailed = true;
+  bool print = true;            // print out only the final result
+  bool print_minimal = true;    // also print out error every 50 loops
+  bool print_detailed = false;  // also print out all possible information every loop
 
   // use default stiffnesses as initial guess
   std::vector<luke::gfloat> stiffnesses = luke::get_stiffnesses();
   int N = stiffnesses.size();
 
   int loops = 0;
-  int max_loops = 500;
+  int max_loops = 10000;
   float max_stiffness = 800;
   float min_stiffness = 0.5;
   float momentum = 2;
@@ -1806,6 +1821,9 @@ void MjClass::numerical_stiffness_converge(std::vector<float> X, std::vector<flo
     if (print_detailed) {
       std::cout << "Loop " << loops << '\n';
       luke::print_vec(stiffnesses, "stiffnesses");
+    }
+    else if (print_minimal and loops == 0) {
+      std::cout << "Starting convergence, loop 1\n";
     }
 
     // begin by preparing
@@ -1851,6 +1869,12 @@ void MjClass::numerical_stiffness_converge(std::vector<float> X, std::vector<flo
     if (print_detailed) {
       luke::print_vec(error, "error");
       std::cout << "avg sum error ratio is " << avg_error * 100 << "%\n";
+    }
+    else if (print_minimal) {
+      if (loops % 50 == 0) {
+        std::cout << "Loop " << loops << ", ";
+        std::cout << "avg sum error ratio is " << avg_error * 100 << "%\n";
+      }
     }
 
     // does this error fall below our required value

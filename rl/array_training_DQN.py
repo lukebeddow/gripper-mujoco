@@ -404,7 +404,7 @@ def continue_training(model, run_name, group_name, object_set=None):
   # new_endpoint = 20_000
   # model.wandb_note += f"Continuing training until new endpoint of {new_endpoint} episodes\n"
 
-  extra_episodes = 10_000
+  extra_episodes = 40_000
   model.wandb_note += f"Continuing training with an extra {extra_episodes} episodes\n"
   
   model.continue_training(run_name, model.savedir + group_name + "/",

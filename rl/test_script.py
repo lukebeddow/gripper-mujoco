@@ -12,15 +12,15 @@ mj.testing_xmls = 0
 object_set_folder = "free_first_joint"
 object_sets = [
   "set_test_seg5",
-  # "set_test_seg6",
-  # "set_test_seg7",
-  # "set_test_seg8",
-  # "set_test_seg9",
-  # "set_test_seg10",
-  # "set_test_seg15",
-  # "set_test_seg20",
-  # "set_test_seg25" # NO MJ TIMESTEP
-  # "set_test_seg30"
+  "set_test_seg6",
+  "set_test_seg7",
+  "set_test_seg8",
+  "set_test_seg9",
+  "set_test_seg10",
+  "set_test_seg15",
+  "set_test_seg20",
+  "set_test_seg25", # NO MJ TIMESTEP
+  "set_test_seg30"
 ]
 
 mj.mj.set.auto_set_timestep = False
@@ -30,6 +30,7 @@ mj.mj.set.auto_sim_steps = False
 # set finger stiffness algorithm
 mj.mj.set.finger_stiffness = -100 # hardcoded real data convergence
 mj.mj.set.finger_stiffness = -0.5 # original model based on linear bending
+mj.mj.set.finger_stiffness = -6.5 # new attempt at theory, equating angles 
 
 # list of stable timesteps for each object set
 # mujoco_timesteps = [
@@ -94,13 +95,14 @@ for i in range(0, num_sets):
   set_name = object_set_folder + "/" + object_sets[i]
   mj._load_object_set(name=set_name)
   mj._load_xml()
-  mj.mj.set.mujoco_timestep = mujoco_timesteps[i] * 0.9
+  mj.mj.set.mujoco_timestep = mujoco_timesteps[i] * 0.5
   mj.task_reload_chance = -1
   mj.mj.hard_reset()
   mj.reset()
 
   # testing
-  mj.mj.numerical_stiffness_converge(REAL_xy[2][:,0], REAL_xy[2][:,1])
+  # mj.mj.numerical_stiffness_converge(REAL_xy[2][:,0], REAL_xy[2][:,1]) # converge on real data
+  mj.mj.numerical_stiffness_converge(3 * 0.981) # converge to 300g
 
   # run the validation regime
   print("Curve validation running for object set:", object_sets[i])

@@ -84,7 +84,8 @@ PYBIND11_MODULE(bind, m) {
     .def("last_action_gripper", &MjClass::last_action_gripper)
     .def("last_action_panda", &MjClass::last_action_panda)
     .def("profile_error", &MjClass::profile_error)
-    .def("numerical_stiffness_converge", &MjClass::numerical_stiffness_converge)
+    .def("numerical_stiffness_converge", static_cast<void (MjClass::*)(float)>(&MjClass::numerical_stiffness_converge))
+    .def("numerical_stiffness_converge", static_cast<void (MjClass::*)(std::vector<float>, std::vector<float>)>(&MjClass::numerical_stiffness_converge))
 
     // exposed variables
     .def_readwrite("set", &MjClass::s_)

@@ -136,6 +136,8 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
   std::vector<float>& pred_x, std::vector<float>& pred_y, std::vector<float>& theory_y,
   std::vector<float>& theory_x_curve, std::vector<float>& theory_y_curve,
   float force, float finger_stiffness);
+void fill_theory_curve(std::vector<float>& theory_X, std::vector<float>& theory_Y, 
+  float force, int num);
 int last_action_robot();
 bool is_sim_unstable(mjModel* model, mjData* data);
 int get_N();

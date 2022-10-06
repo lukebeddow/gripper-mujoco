@@ -1039,6 +1039,7 @@ public:
   MjType::CurveFitData::PoseData validate_curve();
   MjType::CurveFitData::PoseData validate_curve_under_force(int force);
   MjType::CurveFitData curve_validation_regime(bool print = true);
+  void numerical_stiffness_converge(float force);
   void numerical_stiffness_converge(std::vector<float> X, std::vector<float> Y);
   std::vector<float> profile_error(std::vector<float> profile_X, std::vector<float> profile_Y,
   std::vector<float> truth_X, std::vector<float> truth_Y);
