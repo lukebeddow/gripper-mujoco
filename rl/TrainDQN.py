@@ -624,14 +624,16 @@ class TrainDQN():
       return
 
   def __init__(self, run_name=None, group_name=None, device=None, use_wandb=None, 
-               no_plot=None, log_level=None, object_set=None, use_curriculum=None):
+               no_plot=None, log_level=None, object_set=None, use_curriculum=None,
+               num_segments=None):
 
     # define key training parameters
     self.params = TrainDQN.Parameters()
     self.track = TrainDQN.Tracker()
 
     # prepare environment, but don't load a model xml file yet
-    self.env = MjEnv(noload=True)
+    self.env = MjEnv(noload=True, set_N=num_segments)
+    self.num_segments = num_segments
 
     # what machine are we on
     self.machine = self.env._get_machine()
@@ -688,7 +690,7 @@ class TrainDQN():
     self.env.mj.set.use_HER = self.params.use_HER
 
     # load the object set from params
-    self.load_object_set()
+    self.load_object_set(num_segments=self.num_segments)
 
     # now update the environment with correct numbers of actions and observations
     self.env._update_n_actions_obs()
@@ -763,7 +765,7 @@ class TrainDQN():
     else:
       raise RuntimeError("device should be 'cuda' or 'cpu'")
 
-  def load_object_set(self, object_set=None):
+  def load_object_set(self, object_set=None, num_segments=None):
     """
     Load an object set into the simulation
     """
@@ -771,9 +773,11 @@ class TrainDQN():
     if object_set is None: object_set = self.params.object_set[:]
 
     # load the object set and the first xml file
-    self.env.load(object_set_name=object_set)
+    self.env.load(object_set_name=object_set, num_segments=num_segments)
 
+    # save the changes
     self.params.object_set = object_set
+    self.num_segments = num_segments
 
   def to_torch(self, data, dtype=None):
     """
@@ -851,8 +855,11 @@ class TrainDQN():
 
     if not self.wandb_init_flag:
       if self.use_wandb:
+
+        params_dict = self.get_params_dictionary()
+
         wandb.init(project=self.wandb_project, entity=self.wandb_entity, 
-                  name=self.run_name, config=asdict(self.params),
+                  name=self.run_name, config=params_dict,
                   notes=self.wandb_note, group=self.group_name)
         self.wandb_init_flag = True
 
@@ -1125,22 +1132,53 @@ class TrainDQN():
 
     if not self.params.use_curriculum: return
 
+    # if the curriculum has been applied, return (this disallows multi-stage curriculums)
+    if self.curriculum_applied is not None and self.curriculum_applied > 0: return
+
     # define threshold for changing curriculum
-    threshold = 0.6
+    threshold = 25000
 
-    # extract details of how training is going
-    if len(self.track.avg_stable_height) > 0:
-      success_rate = self.track.avg_stable_height[-1]
+    # define curriculum style (currently either "learning rate" or "object set")
+    style = "learning rate"
+
+    # define the curriculum metric
+    metric = "episode number"
+
+    # extract the metric to use for comparison
+    if metric == "episode number":
+      metric_value = i_episode
+
+    elif metric == "success rate":
+      # if we have no success rate data, return
+      if len(self.track.avg_stable_height) > 0:
+        metric_value = self.track.avg_stable_height[-1]
+      else: return
+
+    # see if our threshold is EXCEEDED, if so apply the curriculum
+    if metric_value > threshold:
+
+      if style == "object set":
+        self.load_object_set(object_set=self.params.curriculum_object_set, num_segments=self.num_segments)
+
+      elif style == "learning rate":
+        # reduce the learning rate by 75%, eg 50e-6 goes to 12.5e-6
+        new_learning_rate = self.params.learning_rate * 0.25
+        for param_group in self.optimiser.param_groups:
+          param_group['lr'] = new_learning_rate
+        self.params.learning_rate = new_learning_rate
+
+      # we have now applied the curriculum change
+      self.curriculum_applied = i_episode
+
+      # now save a text file to reflect the changes
+      labelstr = f"Hyperparameters after curriculum change which occured at episode {i_episode}\n"
+      labelstr += f"The curriculum style is {style} and the metric is {metric}\n"
+      labelstr += f"The metric value is {metric_value} and the threshold is {threshold}\n"
+      name = "hyperparameters_from_curriculum_change"
+      self.save_hyperparameters(labelstr, name)
+
+    # if the threshold is not exceeded
     else: return
-
-    if self.curriculum_applied is None or self.curriculum_applied < 1:
-      if success_rate > threshold:
-        self.load_object_set(object_set=self.params.curriculum_object_set)
-        self.curriculum_applied = i_episode
-        labelstr = f"Hyperparameters after curriculum change which occured at episode {i_episode}\n"
-        labelstr += f"The success rate is {success_rate} and the threshold is {threshold}\n"
-        name = "hyperparameters_from_curriculum_change"
-        self.save_hyperparameters(labelstr, name)
 
   def run_episode(self, i_episode, test=None):
     """
@@ -1272,6 +1310,9 @@ class TrainDQN():
 
       self.run_episode(i_episode)
 
+      # check if time to change curriculum
+      self.curriculum_fcn(i_episode)
+
       # update the target network every target_update episodes
       if i_episode % self.params.target_update == 0:
         self.target_net.load_state_dict(self.policy_net.state_dict())
@@ -1285,8 +1326,6 @@ class TrainDQN():
         # save the result
         self.save(txtstring=test_report, txtlabel="test_results", 
                   tupledata=additional_data)
-        # check if time to change curriculum following the test
-        self.curriculum_fcn(i_episode)
 
       # or only save the network
       elif i_episode % self.params.save_freq == 0:
@@ -1354,6 +1393,34 @@ class TrainDQN():
 
     return test_data
 
+  def get_params_dictionary(self):
+    """
+    Return a dictionary of parameters, this function is partly incompatible with old
+    code as MjEnv() did not used to have a parameter dictionary
+    """
+
+    params_dict = {}
+    params_dict.update(asdict(self.params))
+
+    # OLD CODE COMPATIBLE: try to get mjenv parameters
+    try:
+      params_dict.update(self.env.get_parameters())
+    except AttributeError as e:
+      print("TrainDQN.get_params_dictionary() error with env params:", e)
+
+    manual_params = {
+      "Network name" : self.policy_net.name,
+      "Number of segments" : self.num_segments,
+      "Finger stiffness setting" : self.env.mj.set.finger_stiffness,
+      "Mujoco timestep" : self.env.mj.set.mujoco_timestep,
+      "Sim steps per action" : self.env.mj.set.sim_steps_per_action,
+      "Bend gauge normalise" : self.env.mj.set.bending_gauge.normalise
+    }
+
+    params_dict.update(manual_params)
+
+    return params_dict
+
   def save_hyperparameters(self, labelstr=None, name=None):
     """
     Save a text file with the current hyperparameters
@@ -1385,14 +1452,11 @@ class TrainDQN():
     param_str += "Running on machine: " + self.machine + "\n"
     param_str += "Running with device: " + self.device.type + "\n"
     param_str += "Object set in use: " + self.env.mj.object_set_name + "\n"
-    param_str += "Max episode steps: " + str(self.env.max_episode_steps) + "\n"
-    param_str += "Object position noise: " + str(self.env.object_position_noise_mm) + "\n"
-    param_str += "Task reload chance: " + str(self.env.task_reload_chance) + "\n"
     param_str += "Random seed: " + str(self.env.myseed) + "\n"
 
     # convert parameters to a string
-    param_str += "\nParameters dataclass:\n"
-    param_str += str(asdict(self.params))
+    param_str += "\nParameters dictionaries:\n"
+    param_str += str(self.get_params_dictionary())
 
     # swap commas for newlines for prettier printing
     param_str = param_str.replace(',', '\n')
@@ -1519,7 +1583,7 @@ class TrainDQN():
 
     # load a new object set if we are told to
     if object_set is not None:
-      self.env._load_object_set(name=object_set)
+      self.env._load_object_set(name=object_set, num_segments=self.num_segments)
 
     # begin the training at the given starting point (always uses most recent pickle)
     self.train(i_start=self.track.episodes_done)

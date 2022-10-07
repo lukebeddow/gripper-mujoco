@@ -639,52 +639,40 @@ if __name__ == "__main__":
   baseline_training(model, sensors=this_sensors)
   """
 
-  # WHICH FINGER STIFFNESS MODEL ARE WE USING
+  # CONFIGURE SETTINGS
+  model.params.object_set = "set4_fullset_795"
+  model.num_segments = 6
+  model.params.use_curriculum = True
   finger_stiffness = -100 # -100 means hardcoded stiffnesses which converge onto real finger data
+  model.params.num_episodes = 40000
+  model.env.mj.set.XYZ_action_mm_rad = False # are we using step actions of SI actions
 
-  # HOW MANY SEGMENTS ARE WE USING
-  model.params.object_set = "set3_fullset_795_N/6_free_seg" # 6 segments focuses on speed
-
-  # ARE WE USING SI ACTIONS OR MOTOR STEP ACTIONS
-  model.env.mj.set.XYZ_action_mm_rad = False
-
-  # # varying 3x3 = possible trainings 1-9
-  # sensors_list = [
-  #   0, # bending and z state
-  #   1, # + palm
-  #   2  # + wrist
-  # ]
-
-  networks_list = [
-    networks.DQN_3L60,
-    networks.DQN_4L60,
-    networks.DQN_5L60,
-    networks.DQN_3L100,
-    networks.DQN_4L100,
-    networks.DQN_5L100
+  # varying 3x3 = possible trainings 1-9
+  sensors_list = [
+    0, # bending and z state
+    1, # + palm
+    2  # + wrist
   ]
 
-  lr_list = [
-    10e-6,
-    25e-6,
-    50e-6,    # current = 5e-5
-    100e-6,
-    200e-6,
+  networks_list = [
+    networks.DQN_5L60,
+    networks.DQN_6L60,
+    networks.DQN_7L60
   ]
 
   # allow repeats
-  trainings = 30
+  trainings = 9
   while inputarg > trainings: inputarg -= trainings
 
   # lists are zero indexed so adjust inputarg
   inputarg -= 1
 
   # we vary wrt memory_list every inputarg increment
-  x = len(lr_list)
+  x = len(sensors_list)
 
   # get the sensors and memory size for this training
   this_network = networks_list[inputarg // x]                 # vary every x steps
-  this_lr = lr_list[inputarg % x]                             # vary every +1 & loop
+  this_sensor = sensors_list[inputarg % x]                    # vary every +1 & loop
 
   # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
   #   A1, A2, A3, ...
@@ -693,7 +681,7 @@ if __name__ == "__main__":
 
   # make note
   param_1 = f"Network is {this_network.name}\n"
-  param_2 = f"Object set is {this_lr}\n"
+  param_2 = f"Sensors is {this_sensor}\n"
   model.wandb_note += param_1 + param_2
 
   # if we are just printing help information
@@ -715,7 +703,7 @@ if __name__ == "__main__":
   model.params.num_episodes = 40000
 
   # perform the training with other parameters standard
-  baseline_training(model, network=this_network, lr=this_lr, finger_stiffness=finger_stiffness) 
+  baseline_training(model, network=this_network, finger_stiffness=finger_stiffness) 
 
   # ----- END ----- #
    

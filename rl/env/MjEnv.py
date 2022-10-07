@@ -12,7 +12,7 @@ from mjpy.bind import MjClass, EventTrack
 
 import time
 import numpy as np
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 
 class MjEnv():
 
@@ -36,29 +36,46 @@ class MjEnv():
     object_name: str = ""
     cnt = None
 
-  def __init__(self, seed=None, noload=None):
+  @dataclass
+  class Parameters:
+    # class to be used in future
+    max_episode_steps: int = 100
+    object_position_noise_mm: int = 10
+    test_obj_per_file: int = 20
+    task_reload_chance: float = 1.0 / float(test_obj_per_file)
+    test_trials_per_object: int = 1
+    test_objects: int = 100
+
+  def __init__(self, seed=None, noload=None, set_N=None):
     """
     A mujoco environment, optionally set the random seed or prevent loading a
     model, in which case the user should call load() before using the class
     """
 
-    # user defined parameters
-    self.max_episode_steps = 100
-    self.object_position_noise_mm = 10
-    self.disable_rendering = True
-    self.task_reload_chance = 1 / 40.
-    self.log_level = 0
+    self.params = MjEnv.Parameters()
 
-    # user defined testing parameters
-    self.test_in_progress = False
-    self.test_completed = False
-    self.test_trials_per_obj = 1
-    self.test_objects = 100
-    
     # define file structure
     self.task_xml_folder = "task"
+    self.task_folder_template = "gripper_N{}"
     self.task_xml_template = "gripper_task_{}.xml"
-    self.test_obj_per_file = 20           # how many test objects per file
+
+    # TEMPORARY FIX for old code compatibility, retain these class variables
+    self.test_obj_per_file = self.params.test_obj_per_file
+    self.max_episode_steps = self.params.max_episode_steps
+    self.object_position_noise_mm = self.params.object_position_noise_mm
+    self.task_reload_chance = self.params.task_reload_chance
+    self.test_trials_per_obj = self.params.test_trials_per_object
+    self.test_objects = self.params.test_objects
+
+    # general class settings
+    self.log_level = 0
+    self.disable_rendering = True
+
+    # initialise class variables
+    self.test_in_progress = False
+    self.test_completed = False
+    self.N = set_N                        # this specifies how to choose segments in the object set
+    self.num_segments = None              # this is the current number of segments in use
 
     # calculate how many files we need to reserve for testing
     self.testing_xmls = int(np.ceil(self.test_objects / float(self.test_obj_per_file)))
@@ -72,7 +89,7 @@ class MjEnv():
     self.seed(seed)
 
     # load the mujoco models, if not then load() must be run by the user
-    if noload is not True: self.load()
+    if noload is not True: self.load(num_segments=set_N)
 
     # initialise tracking variables
     self.track = MjEnv.Track()
@@ -82,6 +99,21 @@ class MjEnv():
     return
 
   # ----- semi-private functions, advanced use ----- #
+
+  def _set_N(self, N):
+    """
+    Set the number of segments in use, typically should be from 5-30 but depends on object set.
+    None means we are using an old object set where we cannot choose the number of segments.
+    This functionality can be removed once backwards compatibility is not needed.
+    """
+
+    if N is None:
+      self.task_xml_folder = "task"
+      self.N = None
+      return
+
+    self.task_xml_folder = self.task_folder_template.format(N)
+    self.N = N
 
   def _load_xml(self, test=None, index=None):
     """
@@ -108,7 +140,10 @@ class MjEnv():
 
     self.reload_flag = False
 
-  def _load_object_set(self, name=None, mjcf_path=None):
+    # get the number of segments currently in use
+    self.num_segments = self.mj.get_N()
+
+  def _load_object_set(self, name=None, mjcf_path=None, num_segments=None):
     """
     Load and determine how many model xml files are in the object set
     """
@@ -119,6 +154,9 @@ class MjEnv():
     # if a object set name is given, override, otherwise we use default
     if name != None: self.mj.object_set_name = name
 
+    # set the number of segments (None means use the 'task' folder)
+    self._set_N(num_segments)
+
     # check the mjcf_path is correctly formatted
     if self.mj.model_folder_path[-1] != '/':
       self.mj.model_folder_path += '/'
@@ -128,7 +166,7 @@ class MjEnv():
                       + '/' + self.task_xml_folder + '/')
 
     # find out how many xmls are available for training/testing
-    xml_files = [x for x in os.listdir(self.xml_path)]
+    xml_files = [x for x in os.listdir(self.xml_path) if os.path.isdir(self.xml_path + "/" + x) is False]
     self.training_xmls = len(xml_files) - self.testing_xmls
 
     if self.training_xmls < 1:
@@ -364,12 +402,43 @@ class MjEnv():
     self.test_completed = False
     self._load_xml(test=0) # load first test set xml, always index 0
 
-  def load(self, object_set_name=None, object_set_path=None, index=None):
+  def get_parameters(self):
+    """
+    Return a dictionary of the class parameters. This code is needed for backwards
+    compatibility since the class does not currently use the parameter variables.
+    """
+
+    # TEMPORARY FIX manually copy class variables across, later have them be used directly
+    self.params.test_obj_per_file = self.test_obj_per_file
+    self.params.max_episode_steps = self.max_episode_steps
+    self.params.object_position_noise_mm = self.object_position_noise_mm
+    self.params.task_reload_chance = self.task_reload_chance
+    self.params.test_trials_per_object = self.test_trials_per_obj
+    self.params.test_objects = self.test_objects
+
+    return asdict(self.params)
+
+  def load(self, object_set_name=None, object_set_path=None, index=None, num_segments=None):
     """
     Load and prepare the mujoco environment, uses defaults if arguments are not given
     """
 
-    self._load_object_set(name=object_set_name, mjcf_path=object_set_path)
+    # temporary logic protect old code, if N is never set we never set it
+    try:
+      if num_segments is None and self.N is None:
+        set_N = None
+      elif num_segments is None:
+        # if N is not specified, use the current class value
+        set_N = self.N
+      else:
+        set_N = num_segments
+    except AttributeError as e:
+      # this occurs when we load old code where __init__ did not set self.N
+      self.N = None
+      set_N = None
+
+    self._load_object_set(name=object_set_name, mjcf_path=object_set_path,
+                          num_segments=set_N)
     self._load_xml(index=index)  
 
     # auto generated parameters

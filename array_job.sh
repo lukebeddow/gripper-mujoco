@@ -12,8 +12,8 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N Array42_training
-#$ -t 1-30
+#$ -N Array43_training
+#$ -t 1-27
 
 # The code you want to run now goes here.
 

@@ -810,7 +810,7 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
 
   */
 
-  constexpr bool local_debug = true;
+  constexpr bool local_debug = false;
 
   if (stiffness > 0) {
     if (local_debug) std::cout << "Finger joint stiffness ALL set to " << stiffness << '\n';
