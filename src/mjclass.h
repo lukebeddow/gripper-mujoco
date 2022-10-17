@@ -1044,6 +1044,7 @@ public:
   std::vector<float> profile_error(std::vector<float> profile_X, std::vector<float> profile_Y,
   std::vector<float> truth_X, std::vector<float> truth_Y);
   void calibrate_gauges();
+  void set_finger_thickness(float thickness);
   void tick();
   float tock();
   MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2);

@@ -1806,7 +1806,7 @@ void MjClass::numerical_stiffness_converge(std::vector<float> X, std::vector<flo
   int N = stiffnesses.size();
 
   int loops = 0;
-  int max_loops = 10000;
+  int max_loops = 5000;
   float max_stiffness = 800;
   float min_stiffness = 0.5;
   float momentum = 2;
@@ -1977,6 +1977,20 @@ void MjClass::calibrate_gauges()
   s_.curve_validation = 0;
 }
 
+void MjClass::set_finger_thickness(float thickness)
+{
+  /* set a new finger thickness for the gripper. This does not affect the URDF model,
+  but updates the finger stiffness behaviour. It will also throw off the gauge
+  calibration so if auto-calibration is on then it recalibrates */
+
+  bool changed = luke::change_finger_thickness(thickness);
+
+  if (changed) {
+    luke::set_finger_stiffness(model, s_.finger_stiffness);
+    hard_reset(); // recalibrates gauges and timestep
+  }
+}
+
 MjType::EventTrack MjClass::add_events(MjType::EventTrack& e1, MjType::EventTrack& e2)
 {
   /* add the absolute count and last value of two events, all else is ignored */
@@ -2047,6 +2061,8 @@ float MjClass::find_highest_stable_timestep()
   float start_value = 4.0e-3;  // 3.5 millseconds
   float test_time = 1.0;       // 0.5 seconds
 
+  float tune_param = 1.0;       // should be 1.0, reduce to make timestep shorter
+
   float next_timestep = start_value;
   bool unstable = false;
 
@@ -2088,10 +2104,10 @@ float MjClass::find_highest_stable_timestep()
 
   float factor;
   if (next_timestep > 3.0e-3) {
-    factor = 0.75;
+    factor = tune_param * 0.75;
   }
   else {
-    factor = 0.85; // used to be 0.9
+    factor = tune_param * 0.85; // used to be 0.9
   }
 
   // for safety, reduce timestep by 10 percent

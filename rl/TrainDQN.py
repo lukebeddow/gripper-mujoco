@@ -870,16 +870,19 @@ class TrainDQN():
     # if we are at the end, log the final best performance
     if end is True:
 
-      # if using a curriculum, get the best performance only after the end of the curriculum
-      if self.params.use_curriculum:
-        if self.curriculum_applied is not None and self.curriculum_applied > 1:
-          from_episode = self.curriculum_applied
-          print_details = f"curriculum applied at {self.curriculum_applied}"
-        else:
-          print_details = "curriculum not applied"
-      else: 
-        from_episode = None
-        print_details = ""
+      # # if using a curriculum, get the best performance only after the end of the curriculum
+      # if self.params.use_curriculum:
+      #   if self.curriculum_applied is not None and self.curriculum_applied > 1:
+      #     from_episode = self.curriculum_applied
+      #     print_details = f"curriculum applied at {self.curriculum_applied}"
+      #   else:
+      #     print_details = "curriculum not applied"
+      # else: 
+      #   from_episode = None
+      #   print_details = ""
+
+      from_episode = None
+      print_details = ""
 
       # get best success rate and best episode
       best_sr, best_ep = self.track.calc_best_performance(from_episode=from_episode)

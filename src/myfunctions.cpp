@@ -759,6 +759,36 @@ void get_joint_addresses(mjModel* model)
   }
 }
 
+bool change_finger_thickness(float thickness)
+{
+  /* set a new finger width, and correspondingly change EI, requires reset after */
+
+  bool local_debug = true;
+
+  if (local_debug) {
+    std::cout << "About to change finger thickness, current is " << j_.dim.finger_thickness
+      << ", EI is " << j_.dim.EI << '\n';
+  }
+
+  constexpr float tol = 1e-5;
+
+  if (abs(thickness - j_.dim.finger_thickness) < tol) {
+    if (local_debug) std::cout << "Finger thickness is the same as current, not changing\n";
+    return false;
+  }
+
+  j_.dim.finger_thickness = thickness;
+  j_.dim.I = (j_.dim.finger_width * std::pow(j_.dim.finger_thickness, 3)) / 12.0;
+  j_.dim.EI = j_.dim.E * j_.dim.I;
+
+  if (local_debug) {
+    std::cout << "Finger thickness changed, now is " << j_.dim.finger_thickness
+      << ", EI is " << j_.dim.EI << '\n';
+  }
+
+  return true;
+}
+
 void set_finger_stiffness(mjModel* model, std::vector<luke::gfloat> stiffness)
 {
   /* set the finger stiffness to a vector sequence of values */
@@ -810,7 +840,7 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
 
   */
 
-  constexpr bool local_debug = false;
+  constexpr bool local_debug = true;
 
   if (stiffness > 0) {
     if (local_debug) std::cout << "Finger joint stiffness ALL set to " << stiffness << '\n';
@@ -1139,21 +1169,12 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
 
           int idx = j_.idx.finger[i * N + (n - 1)];
 
-          // determine the correction factor a
-          // float L = j_.dim.finger_length;
-          // float h = (L / (float) N);
-          // float x = h * (n - 1);
-          // float A = 3;
-          // float B = 6 * (x - L);
-          // float C = 6*x*x - 8*L*x + h*x - 3*L*h*h + h*h*h;
-
           // determine the correction factor b (where b=1-a, so a = 1-b
           float L = j_.dim.finger_length;
           float h = (L / (float) N);
           float x = h * (n - 1);
           float A = 3;
           float B = 6 * (x - L);
-          // float C = 6*x*x - 12*L*x + 3*h*x - 3*L*h + h*h;
           float C = 3*h*(L - x) - h*h;
 
           float Bsq = B * B;
@@ -1163,10 +1184,8 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
 
           float b = (1 / (2*A)) * (-B + sqrt(Bsq - fAC));
 
-          // invert
+          // find a from b
           float a = 1 - b;
-
-          // a = 0.5;
 
           // determine the joint stiffness using the model
           float m = n - a;
@@ -1177,7 +1196,6 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
 
           float factor1 = (2 * j_.dim.EI) / j_.dim.finger_length;
           float factor2 = (N - n + 1) / (float) N;
-
           float factor3 = ((sq_diff) / (float) (N * N)) - ((2 * diff) / (float) N);
           
           float c = (factor1 * factor2) / -factor3;
@@ -1190,6 +1208,9 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
             std::cout << "finger joint " << n << " has c_n = " << c 
               << ",f1 = " << factor1 << ", f2 = " << factor2 << ", f3 = " << factor3 
               << '\n';
+            
+            std::cout << "b is " << b << '\n';
+            std::cout << "b/h is " << b/h << '\n';
           }
 
           model->jnt_stiffness[idx] = c;
@@ -1203,6 +1224,8 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
 
       // loop over all three fingers
       for (int i = 0; i < 3; i++) {
+
+        float angle_sum = 0;
 
         // loop from n=1 to N
         for (int n = 1; n < N + 1; n++) {
@@ -1231,24 +1254,65 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
           // float phi_over_c = (3.0 / j_.dim.finger_length) * ( ((2*(n-1))/(float)N) - (((n-1)*(n-1))/(float)(N*N)) );
           // float theta_m_over_c = (N / j_.dim.finger_length) * (yn_over_c - ynm1_over_c) - phi_over_c;
 
-          float L = j_.dim.finger_length;
-          float x1 = ((n - 1) / (float) N) * L;
-          float x2 = ((n) / (float) N) * L;
-          float yn_over_c = (3*L*std::pow(x2, 2) - std::pow(x2, 3));
-          float ynm1_over_c = (3*L*std::pow(x1, 2) - std::pow(x1, 3));
-          float phi_over_c = (3.0) * (2*L*x1 - std::pow(x1, 2));
-          float theta_m_over_c = (N / L) * (yn_over_c - ynm1_over_c) - phi_over_c;
+          // float L = j_.dim.finger_length;
+          // float x1 = ((n - 1) / (float) N) * L;
+          // float x2 = ((n) / (float) N) * L;
+          // float yn_over_c = (3*L*std::pow(x2, 2) - std::pow(x2, 3));
+          // float ynm1_over_c = (3*L*std::pow(x1, 2) - std::pow(x1, 3));
+          // float phi_over_c = (3.0) * (2*L*x1 - std::pow(x1, 2));
+          // float theta_m_over_c = (N / L) * (yn_over_c - ynm1_over_c) - phi_over_c;
 
           // float theta_m = 
 
           // float X1 = (N / 3.0) * ( ((6*n - 3)/(float)(N*N)) - ((3*n*n - 3*n + 1)/(float)(N*N*N)) );
           // float X2 = ((2*(n-1))/(float)N) - (((n-1)*(n-1))/(float)(N*N));
 
-          float factor1 = (6 * j_.dim.EI) / std::pow(j_.dim.finger_length, 2);
-          float factor2 = (N - n + 1) / (float) N;
-          // float factor3 = ((sq_diff) / (float) (N * N)) - ((2 * diff) / (float) N);
-          float factor3 = theta_m_over_c;
-          float c = (factor1 * factor2) / factor3;
+          // determine the correction factor b (where b=1-a, so a = 1-b
+          double L = j_.dim.finger_length;
+          double h = (L / (double) N);
+          double x = h * (n - 1);
+          double A = 3;
+          double B = 6 * (x - L);
+          double C = 3*h*(L - x) - h*h;
+          double Bsq = B * B;
+          double fAC = 4 * A * C;
+          if (fAC > Bsq) throw std::runtime_error("set_finger_stiffness() has math error on quadratic formula");
+          double b = (1 / (2*A)) * (-B + sqrt(Bsq - fAC));
+
+          // // direct approach avoiding theta and using only phi
+          // // double phi_xplusb_over_c = -3*x*x + 3*(2*L-h)*x + 3*L*h - h*h;
+          // double phi_xplusb_over_c = ((3*L*L) / (float)(N*N)) * (-(n-1)*(n-1) + (2*N-1)*(n-1) + (N - (1.0/3.0)));
+          // double theta_m_over_c = phi_xplusb_over_c - angle_sum;
+          // angle_sum = phi_xplusb_over_c;
+
+          // // derivation from gradient and phi
+          // double theta_m_over_C = 3 * (2*(L - x)*b - (b*b)); 
+
+          // // old method but with new math equations
+          // double m = n - (1 - (b/h));
+          // double theta_m_over_C = 3 * std::pow(j_.dim.finger_length, 2) * ((2*N - 2*m + 1) / (double)(N*N));
+
+          double theta_m_over_c;
+          if (n == 1) {
+            theta_m_over_c = ((3*L*L) / (float)(N*N)) * (N - (1.0/3.0));
+            // theta_m_over_c = (2 * L * j_.dim.EI) / (float) N;
+          }
+          else {
+            // theta_m_over_c = ((6*L*L) / (float)(N*N)) * (N - n + 1);
+            
+          }
+
+          double factor1 = (6 * j_.dim.EI * j_.dim.finger_length);// / std::pow(j_.dim.finger_length, 2);
+          double factor2 = (N - n + 1) / (double) N;
+          double factor3 = 1.0 / theta_m_over_c;
+          double c = factor1 * factor2 * factor3;
+
+          if (n == 1) {
+            c = ((2 * j_.dim.EI) / L) * ((N*N) / (double)(N - (1.0/3.0)));
+          }
+          else {
+            c = (N * j_.dim.EI) / L;
+          }
 
           if (i == 0) {
             j_.dim.joint_stiffness[n - 1] = c;
@@ -2758,7 +2822,7 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
   if (j_.dim.fixed_first_segment) {
     pred_x[0] = j_.dim.segment_length;
     theory_x[1] = j_.dim.segment_length;
-    theory_y[1] = (force * std::pow(theory_x[1], 3)) / (3 * j_.dim.EI); 
+    theory_y[1] = (force * std::pow(theory_x[1], 3)) / (3 * j_.dim.EI); // WRONG EQUATION!
   }
   else {
     pred_x[0] = 0; 
@@ -2775,20 +2839,13 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
 
     // determine the joint stiffness of this joint
     int n = i + 1;
-    // float c = (j_.dim.stiffness_c * (N - n + 1)) / (float)(n + 1);
-    // float c = (j_.dim.stiffness_c * (N - n + 1)) / (float) n;
     float c = j_.dim.joint_stiffness[i];
 
     // actual joint values
     joint_angles[i] = *j_.to_qpos.finger[i + finger * N];
 
     // predicted joint values
-    // joint_pred[i] = ((force * std::pow(j_.dim.finger_length, 2)) / (c));
-    // joint_pred[i] = ((float)(N - n + 1) / (float)(N + 1)) 
-    //                     * ((force * j_.dim.finger_length) / (c));
-
     joint_pred[i] = ((N - n + 1) * force * j_.dim.finger_length) / (N * c);
-    // joint_pred[i] = ((N - n + 1) * force * j_.dim.finger_length) / ((N + 1) * c);
 
     // joint angle error
     joint_errors[i] = joint_angles[i] - joint_pred[i];
@@ -2804,7 +2861,7 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
     // theory_y[i + 1 + ffs] = (force * std::pow(theory_x[i + 1 + ffs], 3)) / (3 * j_.dim.EI); 
 
     // basic theory attempt 2
-    double theory_factor = (force * 1) / (6.0 * j_.dim.EI);
+    double theory_factor = (force) / (6.0 * j_.dim.EI);
     double x = (i + 1) * j_.dim.segment_length;
     theory_x[i + 1 + ffs] = x;
     theory_y[i + 1 + ffs] = theory_factor * (-std::pow(x, 3) + 3 * j_.dim.finger_length * std::pow(x, 2));  
@@ -2882,7 +2939,6 @@ void fill_theory_curve(std::vector<float>& theory_X, std::vector<float>& theory_
     double x = j_.dim.finger_length * ((i / (float) (num - 2)));
     theory_X[i] = x;
     theory_Y[i] = theory_factor * (-std::pow(x, 3) + 3 * j_.dim.finger_length * std::pow(x, 2)); 
-    // theory_Y[i] = theory_factor * (-std::pow(x, 3) + 3 * std::pow(j_.dim.finger_length, 2) * std::pow(x, 1));  
   }
 }
 

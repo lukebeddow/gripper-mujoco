@@ -52,6 +52,7 @@ void print_joint_names(mjModel* model);
 void get_joint_indexes(mjModel* model);
 void get_joint_addresses(mjModel* model);
 void get_geom_indexes(mjModel* model);
+bool change_finger_thickness(float thickness);
 void set_finger_stiffness(mjModel* model, mjtNum stiffness);
 void set_finger_stiffness(mjModel* model, std::vector<luke::gfloat> stiffness);
 void configure_qpos(mjModel* model, mjData* data);

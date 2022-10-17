@@ -102,7 +102,7 @@ for i in range(0, num_sets):
 
   # testing
   # mj.mj.numerical_stiffness_converge(REAL_xy[2][:,0], REAL_xy[2][:,1]) # converge on real data
-  mj.mj.numerical_stiffness_converge(3 * 0.981) # converge to 300g
+  mj.mj.numerical_stiffness_converge(3 * 0.981) # converge to 300g, basic theory curve
 
   # run the validation regime
   print("Curve validation running for object set:", object_sets[i])
