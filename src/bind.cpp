@@ -64,6 +64,9 @@ PYBIND11_MODULE(bind, m) {
     .def("get_n_actions", &MjClass::get_n_actions)
     .def("get_n_obs", &MjClass::get_n_obs)
     .def("get_N", &MjClass::get_N)
+    .def("set_finger_thickness", &MjClass::set_finger_thickness)
+    .def("get_finger_thickness", &MjClass::get_finger_thickness)
+    .def("get_finger_stiffnesses", &MjClass::get_finger_stiffnesses)
 
     // real life gripper functions
     .def("get_finger_gauge_data", &MjClass::get_finger_gauge_data)
@@ -71,6 +74,8 @@ PYBIND11_MODULE(bind, m) {
     .def("get_real_observation", &MjClass::get_real_observation)
 
     // misc
+    .def("tick", &MjClass::tick)
+    .def("tock", &MjClass::tock)
     .def("forward", &MjClass::forward)
     .def("get_number_of_objects", &MjClass::get_number_of_objects)
     .def("get_current_object_name", &MjClass::get_current_object_name)
@@ -84,8 +89,8 @@ PYBIND11_MODULE(bind, m) {
     .def("last_action_gripper", &MjClass::last_action_gripper)
     .def("last_action_panda", &MjClass::last_action_panda)
     .def("profile_error", &MjClass::profile_error)
-    .def("numerical_stiffness_converge", static_cast<void (MjClass::*)(float)>(&MjClass::numerical_stiffness_converge))
-    .def("numerical_stiffness_converge", static_cast<void (MjClass::*)(std::vector<float>, std::vector<float>)>(&MjClass::numerical_stiffness_converge))
+    .def("numerical_stiffness_converge", static_cast<std::string (MjClass::*)(float, float)>(&MjClass::numerical_stiffness_converge))
+    .def("numerical_stiffness_converge", static_cast<std::string (MjClass::*)(std::vector<float>, std::vector<float>, float)>(&MjClass::numerical_stiffness_converge))
 
     // exposed variables
     .def_readwrite("set", &MjClass::s_)

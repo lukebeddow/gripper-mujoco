@@ -12,8 +12,8 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N Array43_training_continued
-#$ -t 1-27
+#$ -N Array44_thickness
+#$ -t 1-9
 
 # The code you want to run now goes here.
 

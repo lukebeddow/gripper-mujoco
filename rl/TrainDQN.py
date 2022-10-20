@@ -41,36 +41,38 @@ class TrainDQN():
   class Parameters:
 
     # key learning hyperparameters
-    object_set: str = "set3_fullset_795"
+    object_set: str = "set4_fullset_795"
     batch_size: int = 128  
-    learning_rate: float = 0.0001
+    learning_rate: float = 5e-5
     gamma: float = 0.999 
     eps_start: float = 0.9
     eps_end: float = 0.05
-    eps_decay: int = 1000
+    eps_decay: int = 4000
     target_update: int = 100
-    num_episodes: int = 10000
+    num_episodes: int = 60000
     optimiser: str = "adam" # or "rmsprop"
     adam_beta1: float = 0.9
     adam_beta2: float = 0.999
 
-    # memory replay and HER settings
+    # memory replay
     memory_replay: int = 50_000
     min_memory_replay: int = 5000
+
+    # HER settings
     use_HER: bool = False
-    HER_mode: str = "final" # or 'future' or 'episode'
+    HER_mode: str = "final" # 'final' or 'future' or 'episode'
     HER_k: int = 4
 
     # curriculum learning
     use_curriculum: bool = False
     curriculum_ep_num: int = 8000
-    curriculum_object_set: str = "set2_fullset_795"
+    curriculum_object_set: str = "set4_fullset_795"
 
     # data logging settings
-    save_freq: int = 1000
-    test_freq: int = 1000
-    plot_freq_s: int = 30
-    wandb_freq_s: int = 30
+    save_freq: int = 2000
+    test_freq: int = 2000
+    plot_freq_s: int = 900
+    wandb_freq_s: int = 900
 
   Transition = namedtuple('Transition',
                           ('state', 'action', 'next_state', 'reward'))
@@ -625,15 +627,16 @@ class TrainDQN():
 
   def __init__(self, run_name=None, group_name=None, device=None, use_wandb=None, 
                no_plot=None, log_level=None, object_set=None, use_curriculum=None,
-               num_segments=None):
+               num_segments=None, finger_thickness=None):
 
     # define key training parameters
     self.params = TrainDQN.Parameters()
     self.track = TrainDQN.Tracker()
 
     # prepare environment, but don't load a model xml file yet
-    self.env = MjEnv(noload=True, set_N=num_segments)
+    self.env = MjEnv(noload=True, num_segments=num_segments)
     self.num_segments = num_segments
+    self.finger_thickness = finger_thickness
 
     # what machine are we on
     self.machine = self.env._get_machine()
@@ -668,10 +671,6 @@ class TrainDQN():
     # curriculum defaults
     self.curriculum_applied = None
 
-    # temporary experimental feature: cluster additional logging
-    if self.machine == "cluster": self.additional_logging = 25
-    else: self.additional_logging = None
-
     # if we are plotting graphs during this training
     if no_plot == True:
       self.no_plot = True
@@ -689,7 +688,9 @@ class TrainDQN():
     # are we using HER (python OVERRIDES cpp)
     self.env.mj.set.use_HER = self.params.use_HER
 
-    # load the object set from params
+    # apply any thickness changes and then load the object set from params
+    if self.finger_thickness is not None: 
+      self.env.params.finger_thickness = self.finger_thickness
     self.load_object_set(num_segments=self.num_segments)
 
     # now update the environment with correct numbers of actions and observations
@@ -899,7 +900,7 @@ class TrainDQN():
     print_out = True
 
     len_data = len(test_data)
-    num_trials = self.env.test_trials_per_obj
+    num_trials = self.env.params.test_trials_per_object
     num_obj = int(len_data / num_trials)
 
     # safety check
@@ -1334,14 +1335,6 @@ class TrainDQN():
       elif i_episode % self.params.save_freq == 0:
         self.save()
 
-      # # temporary experimental feature: cluster logging up to first test
-      # elif self.additional_logging is not None:
-      #   if i_episode < self.params.test_freq:
-      #     if i_episode % self.additional_logging == 0:
-      #       texttosave = f"Cluster training has reached episode {i_episode}\n"
-      #       self.modelsaver.save("cluster_episode_tracker", txtstr=texttosave, 
-      #                            txtonly=True)
-
     # update the target network at the end
     self.target_net.load_state_dict(self.policy_net.state_dict())
 
@@ -1413,7 +1406,6 @@ class TrainDQN():
 
     manual_params = {
       "Network name" : self.policy_net.name,
-      "Number of segments" : self.num_segments,
       "Finger stiffness setting" : self.env.mj.set.finger_stiffness,
       "Mujoco timestep" : self.env.mj.set.mujoco_timestep,
       "Sim steps per action" : self.env.mj.set.sim_steps_per_action,
@@ -1609,7 +1601,7 @@ if __name__ == "__main__":
   # model.env.mj.set.action_motor_steps = 350
   # model.env.disable_rendering = False
   # model.params.test_freq = 10
-  # model.env.test_trials_per_obj = 1
+  # model.env.params.test_trials_per_object = 1
   # model.env.test_obj_limit = 10
 
   # # plotting options
@@ -1639,19 +1631,20 @@ if __name__ == "__main__":
   # load
   # net = networks.DQN_3L60
   # model.init(net)
-  folderpath = "/home/luke/cluster/rl/models/dqn/11-09-22/"
-  foldername = "cluster_18:19_A1"
-  model.device = torch.device("cuda")
-  model.load(id=None, folderpath=folderpath, foldername=foldername)
+  # folderpath = "/home/luke/cluster/rl/models/dqn/07-10-22/"
+  # foldername = "cluster_17:55_A12"
+  # model.device = torch.device("cpu")
+  # model.load(id=None, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
-  # # # train
-  # net = networks.DQN_3L60
-  # model.env.disable_rendering = True
-  # model.env.mj.set.debug = False
-  # model.additional_logging = 10
-  # model.train(network=net)
+  # # train
+  net = networks.DQN_3L60
+  model.env.disable_rendering = True
+  model.env.mj.set.debug = False
+  model.num_segments = 8
+  model.finger_thickness = 0.8e-3
+  model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
@@ -1689,7 +1682,7 @@ if __name__ == "__main__":
   # test
   model.env.mj.set.debug = False
   model.env.disable_rendering = False
-  # model.env.test_trials_per_obj = 1
+  # model.env.params.test_trials_per_object = 1
   model.env.test_objects = 30
   # model.env.test_obj_per_file = 5
   # model.env.max_episode_steps = 20
