@@ -340,7 +340,7 @@ class MjEnv():
     trial_data.cnt = test_report.cnt
 
     # insert information into stored data list
-    self.test_trials.append(trial_data)
+    self.test_trial_data.append(trial_data)
 
     # increment object trial
     self.current_test_trial.obj_trial += 1
@@ -396,7 +396,7 @@ class MjEnv():
     """
 
     self.current_test_trial = MjEnv.Test()
-    self.test_trials = []
+    self.test_trial_data = []
     self.test_in_progress = True
     self.test_completed = False
     self._load_xml(test=0) # load first test set xml, always index 0
@@ -411,7 +411,8 @@ class MjEnv():
 
   def load(self, object_set_name=None, object_set_path=None, index=None, num_segments=None):
     """
-    Load and prepare the mujoco environment, uses defaults if arguments are not given
+    Load and prepare the mujoco environment, uses defaults if arguments are not given.
+    This function sets the 'params' for the class as well.
     """
 
     # if not given an input, use class value

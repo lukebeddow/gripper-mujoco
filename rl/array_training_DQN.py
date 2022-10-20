@@ -125,7 +125,7 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
     model = set_penalties(model, -0.002,
                           done=5 if "terminate_early" in options else False)
     # scale based on steps allowed per episode
-    model.env.mj.set.scale_rewards(100 / model.env.max_episode_steps)
+    model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
     # end criteria                         reward   done   trigger
     model.env.mj.set.stable_height.set     (0.0,    True,    1)
     model.env.mj.set.oob.set               (-1.0,   True,    1)
@@ -139,7 +139,7 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
     model = set_penalties(model, -0.005,  
                           done=5 if "terminate_early" in options else False)
     # scale based on steps allowed per episode
-    model.env.mj.set.scale_rewards(100 / model.env.max_episode_steps)
+    model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
     # end criteria                         reward   done   trigger
     model.env.mj.set.stable_height.set     (1.0,    True,    1)
     model.env.mj.set.oob.set               (-1.0,   True,    1)
@@ -154,7 +154,7 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
                           done=5 if "terminate_early" in options else False,
                           make_binary=True if "make_binary" in options else None)
     # scale based on steps allowed per episode
-    model.env.mj.set.scale_rewards(100 / model.env.max_episode_steps)
+    model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
     # end criteria                         reward   done   trigger
     model.env.mj.set.stable_height.set     (1.0,    True,    1)
     model.env.mj.set.oob.set               (-1.0,   True,    1)
@@ -169,7 +169,7 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
                           done=penalty_termination,
                           make_binary=True if "make_binary" in options else None)
     # scale based on steps allowed per episode
-    model.env.mj.set.scale_rewards(100 / model.env.max_episode_steps)
+    model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
     # end criteria                         reward   done   trigger
     model.env.mj.set.stable_height.set     (1.0,    True,    1)
     model.env.mj.set.oob.set               (-1.0,   True,    1)
@@ -182,7 +182,7 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
     model = set_penalties(model, 0.0,  
                           done=5 if "terminate_early" in options else False)
     # scale based on steps allowed per episode
-    model.env.mj.set.scale_rewards(100 / model.env.max_episode_steps)
+    model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
     # end criteria                         reward   done   trigger
     model.env.mj.set.object_stable.set     (1.0,    True,    1)
     model.env.mj.set.oob.set               (0.0,    True,    1)
@@ -195,7 +195,7 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
     model = set_penalties(model, 0.0,  
                           done=5 if "terminate_early" in options else False)
     # scale based on steps allowed per episode
-    model.env.mj.set.scale_rewards(100 / model.env.max_episode_steps)
+    model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
     # end criteria                         reward   done   trigger
     model.env.mj.set.object_stable.set     (0.0,    True,    1)
     model.env.mj.set.oob.set               (0.0,    True,    1)
@@ -271,7 +271,7 @@ def apply_to_all_models(model):
   """
 
   # number of steps in an episode
-  model.env.max_episode_steps = 250
+  model.env.params.max_episode_steps = 250
 
   # key learning hyperparameters
   model.params.object_set = "set4_fullset_795"
@@ -343,7 +343,7 @@ def apply_to_all_models(model):
   model.env.mj.set.state_sample_mode = 0
 
   # turn off all HER by default
-  # model.env.mj.set.use_HER = False
+  # model.env.mj.set.use_HER = False # this setting is OVERRIDEN by model.params.use_HER
   model.env.mj.set.goal_reward = 1.0
   model.env.mj.set.divide_goal_reward = True
   model.env.mj.set.reward_on_end_only = True
@@ -448,7 +448,7 @@ def baseline_training(model, lr=5e-5, eps_decay=4000, sensors=2, network=network
   """
 
   # set parameters
-  model.env.max_episode_steps = 250 # note the hardcoded override
+  model.env.params.max_episode_steps = 250 # note the hardcoded override
   model.params.learning_rate = lr
   model.params.eps_decay = eps_decay
   model.params.memory_replay = memory
@@ -670,7 +670,7 @@ if __name__ == "__main__":
   ]
 
   # allow repeats
-  trainings = 15
+  trainings = 9
   while inputarg > trainings: inputarg -= trainings
 
   # lists are zero indexed so adjust inputarg

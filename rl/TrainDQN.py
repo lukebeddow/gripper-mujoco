@@ -736,7 +736,7 @@ class TrainDQN():
     # save weights and biases
     if self.use_wandb:
       wandb.init(project=self.wandb_project, entity=self.wandb_entity, 
-                 name=self.run_name, config=asdict(self.params),
+                 name=self.run_name, config=self.get_params_dictionary(),
                  notes=self.wandb_note, group=self.group_name)
       self.wandb_init_flag = True
 
@@ -857,10 +857,8 @@ class TrainDQN():
     if not self.wandb_init_flag:
       if self.use_wandb:
 
-        params_dict = self.get_params_dictionary()
-
         wandb.init(project=self.wandb_project, entity=self.wandb_entity, 
-                  name=self.run_name, config=params_dict,
+                  name=self.run_name, config=self.get_params_dictionary(),
                   notes=self.wandb_note, group=self.group_name)
         self.wandb_init_flag = True
 
@@ -1375,7 +1373,7 @@ class TrainDQN():
       self.run_episode(i_episode, test=True)
 
     # get the test data out
-    test_data = self.env.test_trials
+    test_data = self.env.test_trial_data
 
     # plot to the screen
     if self.no_plot == False:
@@ -1409,7 +1407,9 @@ class TrainDQN():
       "Finger stiffness setting" : self.env.mj.set.finger_stiffness,
       "Mujoco timestep" : self.env.mj.set.mujoco_timestep,
       "Sim steps per action" : self.env.mj.set.sim_steps_per_action,
-      "Bend gauge normalise" : self.env.mj.set.bending_gauge.normalise
+      "Bend gauge normalise" : self.env.mj.set.bending_gauge.normalise,
+      "n_obs" : self.env.n_obs,
+      "n_actions" : self.env.n_actions
     }
 
     params_dict.update(manual_params)

@@ -12,7 +12,7 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N Array44_thickness
+#$ -N Array45_thickness
 #$ -t 1-9
 
 # The code you want to run now goes here.
