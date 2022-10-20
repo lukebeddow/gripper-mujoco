@@ -135,7 +135,7 @@ bool strcmp_w_sub(std::string ref_str, std::string sub_str, int num) {
   return false;
 }
 
-/* ----- Global variables and settings ----- */
+/* ----- global variables and settings ----- */
 
 // global settings for joints in the model
 struct JointSettings {
@@ -214,7 +214,6 @@ struct JointSettings {
     Gain kd {1, 1, 1};                          // derivative gains for gripper xyz motors {x, y, z}
     double base_kp = 2000;                      // proportional gain for gripper base motions
     double base_kd = 100;                       // derivative gain for gripper base motions
-
     double time_per_step = 0.0;                 // runtime depends
   } ctrl;
 
@@ -488,18 +487,14 @@ JointSettings j_;
 // create object handler to control graspable objects in simulation
 ObjectHandler oh_;
 
-Target target_;     // global state target
-
-// gripper finger state 
-// these are not currently used at all!
-Gripper finger1_;
-Gripper finger2_;
-Gripper finger3_;
+// global state target for gripper joints
+Target target_;
 
 // time of last stepper step
 static double last_step_time_ = 0.0;
 
-constexpr static bool debug = false; // turn on/off debug mode for this file only
+// turn on/off debug mode for this file only
+constexpr static bool debug_ = false; 
 
 /* ----- initialising, setup, and utilities ----- */
 
@@ -535,7 +530,7 @@ void init_J(mjModel* model, mjData* data)
   get_joint_addresses(model);
   get_geom_indexes(model);
 
-  if (debug) {
+  if (debug_) {
     print_joint_names(model);
   }
 
@@ -557,7 +552,7 @@ void init_J(mjModel* model, mjData* data)
        * ( (float)((N + 1)*(N + 2)) / N);
   }
 
-  if (debug) {
+  if (debug_) {
     std::cout << "Number of finger joints N is " << j_.num.per_finger << '\n';
     std::cout << "Joint stiffness c is " << j_.dim.stiffness_c << '\n';
   }
@@ -679,7 +674,7 @@ void get_joint_indexes(mjModel* model)
     }
   }
 
-  if (debug) {
+  if (debug_) {
     j_.print_in_use();
     j_.print_num();
     j_.print_idx();
@@ -737,7 +732,7 @@ void get_geom_indexes(mjModel* model)
     j_.geom_idx.palm.push_back(mj_name2id(model, mjOBJ_GEOM, palm_geom_name.c_str()));
   }
 
-  if (debug) {
+  if (debug_) {
     j_.print_geom_idx();
   }
 }
@@ -776,7 +771,7 @@ void get_joint_addresses(mjModel* model)
     }
   }
 
-  if (debug) {
+  if (debug_) {
     j_.print_qposadr();
     j_.print_qveladr();
   }
@@ -786,7 +781,7 @@ bool change_finger_thickness(float thickness)
 {
   /* set a new finger width, and correspondingly change EI, requires reset after */
 
-  constexpr bool local_debug = debug;
+  constexpr bool local_debug = debug_;
 
   if (local_debug) {
     std::cout << "About to change finger thickness from " << j_.dim.finger_thickness
@@ -822,7 +817,7 @@ void set_finger_stiffness(mjModel* model, std::vector<luke::gfloat> stiffness)
 {
   /* set the finger stiffness to a vector sequence of values */
 
-  constexpr bool local_debug = false; // debug
+  constexpr bool local_debug = debug_;
   
   int N = j_.num.per_finger;
 
@@ -900,7 +895,7 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
                 }
 
   // start of function proper
-  constexpr bool local_debug = debug;
+  constexpr bool local_debug = debug_;
 
   int N = j_.num.per_finger;
 
@@ -1091,7 +1086,7 @@ void configure_constraints(mjModel* model, mjData* data)
     std::string name2 = mj_id2name(model, mjOBJ_BODY, model->eq_obj2id[i]);
 
 
-    if (debug) {
+    if (debug_) {
       std::printf("Constraint %d has ids %d and %d, which are bodies %s and %s\n", 
         i, model->eq_obj1id[i], model->eq_obj2id[i], name1.c_str(), name2.c_str());
     }
@@ -1118,7 +1113,7 @@ void configure_constraints(mjModel* model, mjData* data)
     model->eq_active[i] = false;
   }
 
-  if (debug) {
+  if (debug_) {
     print_vec(j_.con_idx.prismatic, "prismatic joint constraints");
     print_vec(j_.con_idx.revolute, "revolute joint constraints");
     print_vec(j_.con_idx.palm, "palm joint constraints");
@@ -1482,7 +1477,7 @@ void apply_tip_force(mjModel* model, mjData* data, double force, bool reset)
       }
     }
 
-    if (debug) {
+    if (debug_) {
       print_vec(tip_idx, "finger body tip_idx");
     }
     
