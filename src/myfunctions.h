@@ -22,8 +22,29 @@
 #include "customtypes.h"
 #include "objecthandler.h"
 
+// if we have access to boost libraries
+#ifndef LUKE_PREVENT_BOOST
+  #include "boostdep.h"
+#endif
+
 namespace luke
 {
+
+template <class T>
+struct VectorStruct {
+  std::vector<T> panda;
+  std::vector<T> gripper;
+  std::vector<T> finger;
+  std::vector<T> base;
+
+  void reset() {
+    // wipe and reallocate
+    std::vector<T>().swap(panda);
+    std::vector<T>().swap(gripper);
+    std::vector<T>().swap(finger);
+    std::vector<T>().swap(base);
+  }
+};
 
 /* ----- global variables ----- */
 
@@ -47,18 +68,19 @@ void print_joint_names(mjModel* model);
 void get_joint_indexes(mjModel* model);
 void get_joint_addresses(mjModel* model);
 void get_geom_indexes(mjModel* model);
+bool change_finger_thickness(float thickness);
 void set_finger_stiffness(mjModel* model, mjtNum stiffness);
+void set_finger_stiffness(mjModel* model, std::vector<luke::gfloat> stiffness);
 void configure_qpos(mjModel* model, mjData* data);
 void configure_constraints(mjModel* model, mjData* data);
 void keyframe(mjModel* model, mjData* data, std::string keyframe_name);
 void keyframe(mjModel* model, mjData* data, int keyframe_index);
 void reset(mjModel* model, mjData* data);
-void reset_J();
-void wipe_settled();
 void calibrate_reset(mjModel* model, mjData* data);
-void reset_constraints(mjModel* model, mjData* data);
+void set_all_constraints(mjModel* model, mjData* data, bool set_to);
 void toggle_constraint(mjModel* model, mjData* data, int id);
 void set_constraint(mjModel* model, mjData* data, int id, bool set_as);
+void target_constraint(mjModel* model, mjData* data, int id, bool set_as, int type);
 void apply_tip_force(mjModel* model, mjData* data, double force, bool reset = false);
 
 // simulation
@@ -77,13 +99,6 @@ void update_stepper(mjModel* model, mjData* data);
 void update_objects(const mjModel* model, mjData* data);
 void update_all(mjModel* model, mjData* data);
 void update_constraints(mjModel* model, mjData* data);
-
-// monitor
-void check_settling();
-bool is_settled();
-bool is_target_reached();
-bool is_target_step();
-bool within_limits();
 
 // gripper target position
 bool set_gripper_target_m(double x, double y, double z);
@@ -129,7 +144,14 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
   std::vector<float>& pred_x, std::vector<float>& pred_y, std::vector<float>& theory_y,
   std::vector<float>& theory_x_curve, std::vector<float>& theory_y_curve,
   float force, float finger_stiffness);
+void fill_theory_curve(std::vector<float>& theory_X, std::vector<float>& theory_Y, 
+  float force, int num);
 int last_action_robot();
+bool is_sim_unstable(mjModel* model, mjData* data);
+int get_N();
+float get_finger_thickness();
+std::vector<luke::gfloat> get_stiffnesses();
+void print_stiffnesses();
 
 } // namespace luke
 

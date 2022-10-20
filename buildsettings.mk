@@ -53,7 +53,8 @@ CORE_LIBS = -L$(MUJOCO_PATH)/bin -lmujoco210 -lblas -llapack
 RENDER_LIBS = -lGL -lglew $(MUJOCO_PATH)/bin/libglfw.so.3
 DEFINE_VAR = -DLUKE_CLUSTER -DARMA_DONT_USE_WRAPPER \
 						 -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
-						 -DLUKE_MACHINE='"$(MACHINE)"'
+						 -DLUKE_MACHINE='"$(MACHINE)"' \
+						 -DLUKE_PREVENT_BOOST
 
 endif
 
@@ -70,18 +71,22 @@ MJCF_PATH = /home/lbeddow/mymujoco/mjcf
 
 # cluster library locations
 PYTHON_PATH = /share/apps/python-3.6.9/include/python3.6m
-PYBIND_PATH = ~/clusterlibs/pybind11
-ARMA_PATH = ~/clusterlibs/armadillo-code
-MUJOCO_PATH = ~/clusterlibs/mujoco/mujoco-2.1.5
-RENDER_PATH = ~/clusterlibs/glfw
-CORE_LIBS = -L$(MUJOCO_PATH)/lib/ -lmujoco -lblas -llapack
+PYBIND_PATH = /home/lbeddow/clusterlibs/pybind11
+ARMA_PATH = /home/lbeddow/clusterlibs/armadillo-code
+MUJOCO_PATH = /home/lbeddow/clusterlibs/mujoco/mujoco-2.1.5
+RENDER_PATH = /home/lbeddow/clusterlibs/glfw
+CORE_LIBS = -L$(MUJOCO_PATH)/lib -lmujoco -lblas -llapack
 RENDER_LIBS = # none, no rendering
 DEFINE_VAR = -DLUKE_CLUSTER -DARMA_DONT_USE_WRAPPER \
 						 -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
-						 -DLUKE_MACHINE='"$(MACHINE)"'
+						 -DLUKE_MACHINE='"$(MACHINE)"' \
+						 -DLUKE_PREVENT_BOOST
 
 # we do not want to compile any rendering files
 PREVENT_RENDERING := 1
+
+# we do not want to compile files with boost dependencies
+PREVENT_BOOST := 1
 
 endif
 
@@ -191,6 +196,34 @@ CORE_LIBS = -L$(MUJOCO_PATH)/bin -lmujoco210 -larmadillo
 RENDER_LIBS = -lGL -lglew $(MUJOCO_PATH)/bin/libglfw.so.3
 DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
 						 -DLUKE_MACHINE='"$(MACHINE)"'
+
+# extras
+MAKEFLAGS += -j8 # jN => use N parallel cores
+
+endif
+
+# ----- compiling on the lab zotac PC ----- #
+ifeq ($(filter zotac, $(MAKECMDGOALS)), zotac)
+
+# set this command goal as a phony target (important)
+.PHONY: zotac
+
+# what machine are we compiling for
+MACHINE = zotac-PC
+
+# mjcf files location (model files like gripper/objects)
+MJCF_PATH = /home/luke/luke-gripper-mujoco/mjcf
+
+# local machine library locations
+PYTHON_PATH = /usr/include/python3.6m
+PYBIND_PATH = /home/luke/luke-gripper-mujoco/libs/pybind11
+ARMA_PATH = # none, use system library
+MUJOCO_PATH = /home/luke/luke-gripper-mujoco/libs/mujoco/mujoco-2.1.5
+RENDER_PATH = # none, use system library
+CORE_LIBS = -L$(MUJOCO_PATH)/lib -lmujoco -larmadillo 
+RENDER_LIBS = -lglfw
+DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
+			 -DLUKE_MACHINE='"$(MACHINE)"'
 
 # extras
 MAKEFLAGS += -j8 # jN => use N parallel cores

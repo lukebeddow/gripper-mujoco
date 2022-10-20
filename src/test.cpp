@@ -117,28 +117,29 @@ void run_test(int num_episodes, int step_cap, int reload_rate)
 
 int main(int argc, char** argv)
 {
-  // MjType::Sensor mysensor(true, 1, 1);
-  // mysensor.use_noise = false;
-  // mysensor.use_normalisation = false;
-  // mysensor.prev_steps = 3;
-  // mysensor.readings_per_step = 1;
-  // mysensor.update_n_readings();
+  MjClass testmj;
 
-  // luke::SlidingWindow<float> vec(10);
+  std::vector<float> profile_X { 0, 1, 2, 3 };
+  std::vector<float> profile_Y { 0, 1.25, 3.5, 9.5 };
 
-  // vec.add(1);
-  // vec.add(2);
-  // vec.add(3);
-  // vec.add(4);
-  // vec.add(5);
-  // vec.add(6);
+  std::vector<float> truth_X;
+  std::vector<float> truth_Y;
 
-  // std::vector<float> sample = mysensor.change_sample(vec);
+  for (int i = 0; i < 35; i++) {
 
-  // luke::print_vec(sample, "Sample is");
-  // vec.print();
+    float X = i * 0.1 + 0.01;
+    float Y = X * X;
 
-  // return 0;
+    truth_X.push_back(X);
+    truth_Y.push_back(Y);
+
+  }
+
+  std::vector<float> errors = testmj.profile_error(profile_X, profile_Y, truth_X, truth_Y);
+
+  luke::print_vec(errors, "errors");
+
+  return 0;
 
   /* ----- run a test of 10 learning steps ----- */
 

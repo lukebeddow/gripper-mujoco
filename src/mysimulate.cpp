@@ -32,6 +32,7 @@ char filename[1000] = "";
 
 // added by luke
 MjClass myMjClass;
+int manual_steps = 0; // added for recording number or arrow key press steps, for testing
 
 // sim thread synchronization
 std::mutex mtx;
@@ -54,6 +55,10 @@ mjvFigure figaxialgauge;
 mjvFigure figpalm;
 mjvFigure figwrist;
 mjvFigure figmotors;
+mjvFigure figstepperx;
+mjvFigure figsteppery;
+mjvFigure figstepperz;
+mjvFigure figbasez;
 
 // OpenGL rendering and UI
 GLFWvidmode vmode;
@@ -84,17 +89,27 @@ struct
     int fullscreen = 0;
     int vsync = 1;
     int busywait = 0;
-    int bendgauge = 0;          // added by luke
-    int axialgauge = 0;         // added by luke
-    int palmsensor = 0;         // added by luke
-    int wristsensor = 0;        // added by luke
-    int statesensor = 0;        // added by luke
-    int allsensors = 0;         // added by luke
-    int object_int = 0;         // added by luke
-    int env_steps = 1;          // added by luke
-    int object_x_noise_mm = 0;  // added by luke
-    int object_y_noise_mm = 0;  // added by luke
-    int object_z_rot_deg = 0;   // added by luke
+
+    int object_int = 0;            // added by luke
+    int env_steps = 1;             // added by luke
+    int object_x_noise_mm = 0;     // added by luke
+    int object_y_noise_mm = 0;     // added by luke
+    int object_z_rot_deg = 0;      // added by luke
+    int complete_action_steps = 1; // added by luke
+    double finger_thickness = 0.9;  // added by luke
+
+    // figure show flags
+    int bendgauge = 0;             // added by luke
+    int axialgauge = 0;            // added by luke
+    int palmsensor = 0;            // added by luke
+    int wristsensor = 0;           // added by luke
+    int statesensor = 0;           // added by luke
+    int allsensors = 0;            // added by luke
+    int xstepfig = 0;              // added by luke
+    int ystepfig = 0;              // added by luke
+    int zstepfig = 0;              // added by luke
+    int zbasefig = 0;              // added by luke
+    int allactuators = 0;          // added by luke
 
     float sensor_mag = 0;
     float sensor_mu = 0;
@@ -185,6 +200,11 @@ const mjuiDef defOption[] =
     {mjITEM_SLIDERNUM, "Noise mag",     2, &myMjClass.s_.sensor_noise_mag,   "0.0 1.0"},   // added by luke
     {mjITEM_SLIDERNUM, "Noise mean",    2, &myMjClass.s_.sensor_noise_mu,    "-1.0 1.0"},  // added by luke
     {mjITEM_SLIDERNUM, "Noise std",     2, &myMjClass.s_.sensor_noise_std,   "-0.1 1.0"},  // added by luke
+    {mjITEM_CHECKINT,  "x stepper",     2, &settings.xstepfig,      " #408"}, // added by luke
+    {mjITEM_CHECKINT,  "y stepper",     2, &settings.ystepfig,      " #409"}, // added by luke
+    {mjITEM_CHECKINT,  "z stepper",     2, &settings.zstepfig,      " #410"}, // added by luke
+    {mjITEM_CHECKINT,  "z base",        2, &settings.zbasefig,      " #411"}, // added by luke
+    {mjITEM_CHECKINT,  "all actuators", 2, &settings.allactuators,  " #412"}, // added by luke
     {mjITEM_END}
 };
 
@@ -577,6 +597,7 @@ void sensorupdate(void)
 }
 
 
+
 // show sensor figure
 void sensorshow(mjrRect rect)
 {
@@ -801,6 +822,209 @@ void lukesensorfigshow(mjrRect rect)
 
         // is this figure set to display
         if (flags[i] != 0 or settings.allsensors) {
+
+            // another figure is showing
+            show += 1;
+
+            // render figure on the right
+            mjrRect viewport = {
+                rect.left + rect.width - width * show,
+                rect.bottom,
+                width,
+                rect.height/3
+            };
+
+            mjr_figure(viewport, myfigs[i], &con);
+        }
+    }
+}
+
+
+void lukestepperfigsinit(void)
+{
+    mjv_defaultFigure(&figstepperx);
+    mjv_defaultFigure(&figsteppery);
+    mjv_defaultFigure(&figstepperz);
+    mjv_defaultFigure(&figbasez);
+
+    // what figures are we initialising
+    std::vector<mjvFigure*> myfigs {
+        &figstepperx, &figsteppery, &figstepperz, &figbasez
+    };
+    
+    // what are the figure titles
+    std::vector<std::string> titles {
+        "Stepper x / um", "Stepper y / um", "Stepper z / um", "Base z / um"
+    };
+
+    // // figure limits
+    // std::vector<float> mins {
+    //     luke::Gripper::xy_min,
+    //     luke::Gripper::xy_min,
+    //     luke::Gripper::z_min,
+    //     luke::Target::base_z_min
+    // };
+    // std::vector<float> maxs {
+    //     luke::Gripper::xy_max,
+    //     luke::Gripper::xy_max,
+    //     luke::Gripper::z_max,
+    //     luke::Target::base_z_max
+    // };
+
+    // initialise all figures the same
+    for (int i = 0; i < myfigs.size(); i++) {
+
+        // create a default figure
+        mjv_defaultFigure(myfigs[i]);
+
+        // set flags
+        myfigs[i]->flg_legend = 1;
+        myfigs[i]->flg_extend = 1;
+        myfigs[i]->flg_symmetric = 0;
+
+        // y-tick number format
+        strcpy(myfigs[i]->yformat, "%.0f");
+
+        // grid size
+        myfigs[i]->gridsize[0] = 2;
+        myfigs[i]->gridsize[1] = 3;
+
+        // minimum range
+        myfigs[i]->range[0][0] = 0;
+        myfigs[i]->range[0][1] = 0;
+        myfigs[i]->range[1][0] = 0;
+        myfigs[i]->range[1][1] = 0;
+
+        // all figs have same two lines, add them
+        strcpy(myfigs[i]->linename[0], "Target");
+        strcpy(myfigs[i]->linename[1], "Actual");
+
+        // add figure title
+        strcpy(myfigs[i]->title, titles[i].c_str());
+    }
+}
+
+void lukestepperfigsupdate(void)
+{
+    // amount of data we extract for each sensor
+    int gnum = luke::target_.datanum;
+
+    // check we can plot this amount of data
+    if (gnum > mjMAXLINEPNT) {
+        std::cout << "gnum exceeds mjMAXLINEPNT in stepperfigupdate()\n";
+        gnum = mjMAXLINEPNT;
+    }
+
+    // read the data    
+    std::vector<luke::gfloat> txsdata = luke::target_.target_stepperx.read(gnum);
+    std::vector<luke::gfloat> tysdata = luke::target_.target_steppery.read(gnum);
+    std::vector<luke::gfloat> tzsdata = luke::target_.target_stepperz.read(gnum);
+    std::vector<luke::gfloat> tzbdata = luke::target_.target_basez.read(gnum);
+    std::vector<luke::gfloat> axsdata = luke::target_.actual_stepperx.read(gnum);
+    std::vector<luke::gfloat> aysdata = luke::target_.actual_steppery.read(gnum);
+    std::vector<luke::gfloat> azsdata = luke::target_.actual_stepperz.read(gnum);
+    std::vector<luke::gfloat> azbdata = luke::target_.actual_basez.read(gnum);
+    std::vector<luke::gfloat> timedata = luke::target_.timedata.read(gnum);
+
+    // package sensor data pointers in iterable vectors
+    std::vector<std::vector<luke::gfloat>*> sxdata {
+        &txsdata, &axsdata
+    };
+    std::vector<std::vector<luke::gfloat>*> sydata {
+        &tysdata, &aysdata
+    };
+    std::vector<std::vector<luke::gfloat>*> szdata {
+        &tzsdata, &azsdata
+    };
+    std::vector<std::vector<luke::gfloat>*> bzdata {
+        &tzbdata, &azbdata
+    };
+
+    // package figures into iterable vector
+    std::vector<mjvFigure*> myfigs {
+        &figstepperx, &figsteppery, &figstepperz, &figbasez
+    };
+
+    // package sensor data in same order as figures
+    std::vector< std::vector<std::vector<luke::gfloat>*>* > sensordata {
+        &sxdata, &sydata, &szdata, &bzdata
+    };
+
+    // maximum number of lines on a figure
+    static const int maxline = 10;
+
+    // loop through each figure/sensor type
+    for (int i = 0; i < sensordata.size(); i++) {
+
+        // start with line 0
+        int lineid = 0;
+
+        // loop over each set of sensor data (eg finger gauges 1, 2, then 3)
+        for (int n = 0; n < sensordata[i]->size(); n++)
+        {
+            lineid = n;
+
+            if (lineid >= maxline) 
+                throw std::runtime_error("max number of figure lines exceeded");
+        
+            // data pointer in line (don't need this as sliding window does it for us)
+            int p = myfigs[i]->linepnt[lineid];
+
+            // loop over the data itself and save it in the figure
+            for (int g = 0; g < gnum; g++) {
+                // figgauges.linedata[lineid][2 * g] = tdata[g];
+                // figgauges.linedata[lineid][2 * g + 1] = (*fdata[n])[g];
+
+                myfigs[i]->linedata[lineid][2 * g] = (timedata)[g];
+                myfigs[i]->linedata[lineid][2 * g + 1] = (*(*sensordata[i])[n])[g];
+            }
+
+            // update linepnt (index of last data point)
+            myfigs[i]->linepnt[lineid] = gnum;
+        }
+    }
+}
+
+void lukestepperfigshow(mjrRect rect)
+{
+    // what figures are showing
+    std::vector<mjvFigure*> myfigs {
+        &figstepperx, &figsteppery, &figstepperz, &figbasez
+    };
+    // what settings determine if these are showing
+    std::vector<int> flags {
+        settings.xstepfig, 
+        settings.ystepfig,
+        settings.zstepfig,
+        settings.zbasefig
+    };
+
+    // how many graphs do we need to fit
+    int num = myfigs.size();
+    int to_show = 0;
+
+    if (settings.allactuators) {
+        to_show = num;
+    }
+    else {
+        for (int i = 0; i < myfigs.size(); i++) {
+            if (flags[i] != 0) {
+                to_show += 1;
+            }
+        }
+    }
+
+    // maximum size
+    if (to_show < 3) to_show = 3;
+
+    // constant width with and without profiler
+    int width = settings.profiler ? rect.width / 3 : rect.width / to_show;
+    int show = 0;
+
+    for (int i = 0; i < myfigs.size(); i++) {
+
+        // is this figure set to display
+        if (flags[i] != 0 or settings.allactuators) {
 
             // another figure is showing
             show += 1;
@@ -1174,14 +1398,23 @@ void makeActionsUI(int oldstate)
         {mjITEM_BUTTON, "Action 6 (H+)",           2,  NULL,   " #310"},
         {mjITEM_BUTTON, "Action 7 (H-)",           2,  NULL,   " #310"},
         {mjITEM_BUTTON, "Reward",                  2,  NULL,   " #311"},
-        {mjITEM_CHECKINT, "Debug",     2, &myMjClass.s_.debug,   " #312"},
-        {mjITEM_CHECKINT, "Env steps", 2, &settings.env_steps, " #313"},
+        {mjITEM_CHECKINT, "Debug",                 2,  &myMjClass.s_.debug,   " #312"},
+        {mjITEM_CHECKINT, "Env steps",             2,  &settings.env_steps, " #313"},
+        {mjITEM_CHECKINT, "Full step",             2,  &settings.complete_action_steps, " #314"},
+        {mjITEM_CHECKINT, "paired X",              2,  &myMjClass.s_.paired_motor_X_step, " #345"},
+        {mjITEM_CHECKINT, "mm_rad",                2,  &myMjClass.s_.XYZ_action_mm_rad,   " #346"},
         {mjITEM_SLIDERINT, "No. steps",            2, 
             &myMjClass.s_.action_motor_steps,             "0 2000"},
         {mjITEM_SLIDERNUM, "Base trans.",          2, 
-            &myMjClass.s_.action_base_translation,        "0.0 0.05"},
+            &myMjClass.s_.action_base_translation,        "0.0 0.035"},
         {mjITEM_SLIDERINT, "Action steps",          2, 
             &myMjClass.s_.sim_steps_per_action,           "0 2000"},
+        {mjITEM_SLIDERNUM, "X mm",          2, 
+            &myMjClass.s_.X_action_mm,        "0.0 30.0"},
+        {mjITEM_SLIDERNUM, "Y rad",          2, 
+            &myMjClass.s_.Y_action_rad,        "0.0 0.5"},
+        {mjITEM_SLIDERNUM, "Z mm",          2, 
+            &myMjClass.s_.Z_action_mm,        "0.0 30.0"},
         {mjITEM_END}
     };
 
@@ -1195,10 +1428,12 @@ void makeSettingsUI(int oldstate)
         {mjITEM_SECTION,  "Sim Settings",      oldstate,  NULL,   " #500"},
         {mjITEM_CHECKINT, "Debug",             2, &myMjClass.s_.debug,             " #600"},
         {mjITEM_SLIDERNUM,"mj timestep",       2, &myMjClass.s_.mujoco_timestep,   "0.00001 0.003"},
-        {mjITEM_SLIDERINT,"curve_validation",  2, &myMjClass.s_.curve_validation,  "-10 1"},
+        {mjITEM_CHECKINT, "curve_validation",  2, &myMjClass.s_.curve_validation,  " #601"},
+        {mjITEM_SLIDERNUM,"tip_force",         2, &myMjClass.s_.tip_force_applied, "-10 10"},
         {mjITEM_SLIDERNUM,"finger_stiffness",  2, &myMjClass.s_.finger_stiffness,  "1.0 25.0"},
         {mjITEM_CHECKINT, "randomise_colours", 2, &myMjClass.s_.randomise_colours, " #602"},
-        
+        {mjITEM_SLIDERNUM,"finger_thickness",  2, &settings.finger_thickness,  "0.5 1.5"},
+        {mjITEM_BUTTON,   "apply thickness",   2, NULL,                            " #602"},
         {mjITEM_END}
     };
 
@@ -1253,6 +1488,9 @@ void makeObjectUI(int oldstate)
         {mjITEM_BUTTON,    "fing. rgb rand", 2, NULL,                   " #308"},
         {mjITEM_BUTTON,    "all rgb rand",  2, NULL,                    " #309"},
         {mjITEM_BUTTON,    "none rgb rand", 2, NULL,                    " #310"},
+        {mjITEM_BUTTON,   "find timestep",     2, NULL,                 " #311"},
+        {mjITEM_BUTTON,   "cal. gauges",     2, NULL,                   " #312"},
+        {mjITEM_BUTTON,   "print stiffness",   2, NULL,                 " #313"},
 
         // {mjITEM_BUTTON,    "Copy pose",     2, NULL,                    " #304"},
         {mjITEM_SLIDERINT, "Live Object",   3, &settings.object_int,    "0 20"},
@@ -1953,12 +2191,16 @@ void uiEvent(mjuiState* state)
 
         else if (it and it->sectionid == SECT_SETTINGS)
         {
-            // switch (it->itemid)
-            // {
-            //     case 0: case 1: case 2: case 3: case 4: case 5: case 6:
-            //         luke::toggle_constraint(myMjClass.model, myMjClass.data, it->itemid);
-            //         break;
-            // }
+            // std::cout << "it->itemid is " << it->itemid << '\n';
+
+            switch (it->itemid)
+            {
+                case 7:
+                    std::cout << "Applying finger thickness of " << settings.finger_thickness << " mm\n";
+                    myMjClass.set_finger_thickness(settings.finger_thickness * 1e-3);
+                    myMjClass.reset();
+                    break;
+            }
         }
 
         else if (it and it->sectionid == SECT_ACTION)
@@ -1969,7 +2211,9 @@ void uiEvent(mjuiState* state)
             {
                 case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7: {
                     myMjClass.set_action(it->itemid);
-                    myMjClass.action_step();
+                    if (settings.complete_action_steps) {
+                        myMjClass.action_step();
+                    }
                     break;
                 }
 
@@ -2077,6 +2321,19 @@ void uiEvent(mjuiState* state)
                 luke::default_colours(myMjClass.model);
                 break;
             }
+            case 14: {          // find timestep which is stable
+                float timestep = myMjClass.find_highest_stable_timestep();
+                std::cout << "The highest stable timestep is " << timestep << '\n';
+                break;
+            }
+            case 15: {          // calibrate gauge readings
+                myMjClass.calibrate_gauges();
+                break;
+            }
+            case 16: {          // print stiffness
+                luke::print_stiffnesses();
+                break;
+            }
             }
         }
 
@@ -2108,6 +2365,9 @@ void uiEvent(mjuiState* state)
                 profilerupdate();
                 sensorupdate();
                 updatesettings();
+
+                manual_steps += 1;
+                std::cout << "Manual step count: " << manual_steps << '\n';
             }
             break;
 
@@ -2123,6 +2383,9 @@ void uiEvent(mjuiState* state)
                 // profilerupdate();
                 // sensorupdate();
                 // updatesettings();
+
+                std::cout << "Wiped the counter of manual key press steps\n";
+                manual_steps = 0;
             }
             break;
 
@@ -2136,6 +2399,9 @@ void uiEvent(mjuiState* state)
                 profilerupdate();
                 sensorupdate();
                 updatesettings();
+
+                manual_steps += 100;
+                std::cout << "Manual step count: " << manual_steps << '\n';
             }
             break;
 
@@ -2360,6 +2626,7 @@ void prepare(void)
 
     // added by luke
     lukesensorfigsupdate();
+    lukestepperfigsupdate();
 
     // clear timers once profiler info has been copied
     cleartimers();
@@ -2437,6 +2704,7 @@ void render_MS(GLFWwindow* window)
 
     // added by luke
     lukesensorfigshow(smallrect);
+    lukestepperfigshow(smallrect);
 
     // finalize
     glfwSwapBuffers(window);
@@ -2609,6 +2877,7 @@ void init(void)
     profilerinit();
     sensorinit();
     lukesensorfigsinit();   // added by luke
+    lukestepperfigsinit();  // added by luke
 
     // make empty scene
     mjv_defaultScene(&scn);
@@ -2693,22 +2962,24 @@ int main(int argc, const char** argv)
         else if (not strcmp(argv[1], "both")) {
             filepath = default_path + object_set + both_file;
         }
-        else if (not strcmp(argv[1], "task")) {
+        else {//(not strcmp(argv[1], "task")) {
+
+            std::string task_folder = argv[1];
 
             filepath = default_path + object_set + task_file;
 
             if (argc > 2) {
-                filepath = default_path + object_set + "/task/gripper_task_" + argv[2] + ".xml";
+                filepath = default_path + object_set + "/" + task_folder + "/gripper_task_" + argv[2] + ".xml";
             }
 
             if (argc > 3) {
-                filepath = default_path + argv[3] + "/task/gripper_task_" + argv[2] + ".xml";
+                filepath = default_path + argv[3] + "/" + task_folder + "/gripper_task_" + argv[2] + ".xml";
             }
 
         }
-        else {
-            printf("Command line argument not valid, ignored\n");
-        }
+        // else {
+        //     printf("Command line argument not valid, ignored\n");
+        // }
     }
     else {
         printf("No command line arguments detected, using default model\n");

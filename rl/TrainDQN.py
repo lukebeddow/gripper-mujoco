@@ -41,36 +41,38 @@ class TrainDQN():
   class Parameters:
 
     # key learning hyperparameters
-    object_set: str = "set2_fullset_795"
+    object_set: str = "set4_fullset_795"
     batch_size: int = 128  
-    learning_rate: float = 0.0001
+    learning_rate: float = 5e-5
     gamma: float = 0.999 
     eps_start: float = 0.9
     eps_end: float = 0.05
-    eps_decay: int = 1000
+    eps_decay: int = 4000
     target_update: int = 100
-    num_episodes: int = 10000
+    num_episodes: int = 60000
     optimiser: str = "adam" # or "rmsprop"
     adam_beta1: float = 0.9
     adam_beta2: float = 0.999
 
-    # memory replay and HER settings
+    # memory replay
     memory_replay: int = 50_000
     min_memory_replay: int = 5000
+
+    # HER settings
     use_HER: bool = False
-    HER_mode: str = "final" # or 'future' or 'episode'
+    HER_mode: str = "final" # 'final' or 'future' or 'episode'
     HER_k: int = 4
 
     # curriculum learning
     use_curriculum: bool = False
     curriculum_ep_num: int = 8000
-    curriculum_object_set: str = "set2_fullset_795"
+    curriculum_object_set: str = "set4_fullset_795"
 
     # data logging settings
-    save_freq: int = 1000
-    test_freq: int = 1000
-    plot_freq_s: int = 30
-    wandb_freq_s: int = 30
+    save_freq: int = 2000
+    test_freq: int = 2000
+    plot_freq_s: int = 900
+    wandb_freq_s: int = 900
 
   Transition = namedtuple('Transition',
                           ('state', 'action', 'next_state', 'reward'))
@@ -268,7 +270,9 @@ class TrainDQN():
       self.axs = None
       
     def log_episode(self, reward, duration):
-      """Log data from the last episode"""
+      """
+      Log data from the last episode
+      """
 
       self.train_episodes = np.append(self.train_episodes, self.episodes_done)
       self.train_durations = np.append(self.train_durations, duration)
@@ -280,7 +284,9 @@ class TrainDQN():
       self.calc_static_average()
 
     def calc_moving_average(self):
-      """Save the rewards and durations moving averages"""
+      """
+      Save the rewards and durations moving averages
+      """
       if len(self.train_episodes) > self.moving_avg_num:
         self.avgR_durations = np.convolve(self.train_durations, np.ones(self.moving_avg_num), 'valid') / self.moving_avg_num
         self.avgR_rewards = np.convolve(self.train_rewards, np.ones(self.moving_avg_num), 'valid') / self.moving_avg_num
@@ -620,14 +626,17 @@ class TrainDQN():
       return
 
   def __init__(self, run_name=None, group_name=None, device=None, use_wandb=None, 
-               no_plot=None, log_level=None, object_set=None, use_curriculum=None):
+               no_plot=None, log_level=None, object_set=None, use_curriculum=None,
+               num_segments=None, finger_thickness=None):
 
     # define key training parameters
     self.params = TrainDQN.Parameters()
     self.track = TrainDQN.Tracker()
 
-    # prepare environment
-    self.env = MjEnv()
+    # prepare environment, but don't load a model xml file yet
+    self.env = MjEnv(noload=True, num_segments=num_segments)
+    self.num_segments = num_segments
+    self.finger_thickness = finger_thickness
 
     # what machine are we on
     self.machine = self.env._get_machine()
@@ -662,10 +671,6 @@ class TrainDQN():
     # curriculum defaults
     self.curriculum_applied = None
 
-    # temporary experimental feature: cluster additional logging
-    if self.machine == "cluster": self.additional_logging = 25
-    else: self.additional_logging = None
-
     # if we are plotting graphs during this training
     if no_plot == True:
       self.no_plot = True
@@ -683,8 +688,10 @@ class TrainDQN():
     # are we using HER (python OVERRIDES cpp)
     self.env.mj.set.use_HER = self.params.use_HER
 
-    # load the object set from params
-    self.load_object_set()
+    # apply any thickness changes and then load the object set from params
+    if self.finger_thickness is not None: 
+      self.env.params.finger_thickness = self.finger_thickness
+    self.load_object_set(num_segments=self.num_segments)
 
     # now update the environment with correct numbers of actions and observations
     self.env._update_n_actions_obs()
@@ -759,15 +766,19 @@ class TrainDQN():
     else:
       raise RuntimeError("device should be 'cuda' or 'cpu'")
 
-  def load_object_set(self, object_set=None):
+  def load_object_set(self, object_set=None, num_segments=None):
     """
     Load an object set into the simulation
     """
 
     if object_set is None: object_set = self.params.object_set[:]
 
-    self.env._load_object_set(object_set)
+    # load the object set and the first xml file
+    self.env.load(object_set_name=object_set, num_segments=num_segments)
+
+    # save the changes
     self.params.object_set = object_set
+    self.num_segments = num_segments
 
   def to_torch(self, data, dtype=None):
     """
@@ -845,8 +856,11 @@ class TrainDQN():
 
     if not self.wandb_init_flag:
       if self.use_wandb:
+
+        params_dict = self.get_params_dictionary()
+
         wandb.init(project=self.wandb_project, entity=self.wandb_entity, 
-                  name=self.run_name, config=asdict(self.params),
+                  name=self.run_name, config=params_dict,
                   notes=self.wandb_note, group=self.group_name)
         self.wandb_init_flag = True
 
@@ -857,16 +871,19 @@ class TrainDQN():
     # if we are at the end, log the final best performance
     if end is True:
 
-      # if using a curriculum, get the best performance only after the end of the curriculum
-      if self.params.use_curriculum:
-        if self.curriculum_applied is not None and self.curriculum_applied > 1:
-          from_episode = self.curriculum_applied
-          print_details = f"curriculum applied at {self.curriculum_applied}"
-        else:
-          print_details = "curriculum not applied"
-      else: 
-        from_episode = None
-        print_details = ""
+      # # if using a curriculum, get the best performance only after the end of the curriculum
+      # if self.params.use_curriculum:
+      #   if self.curriculum_applied is not None and self.curriculum_applied > 1:
+      #     from_episode = self.curriculum_applied
+      #     print_details = f"curriculum applied at {self.curriculum_applied}"
+      #   else:
+      #     print_details = "curriculum not applied"
+      # else: 
+      #   from_episode = None
+      #   print_details = ""
+
+      from_episode = None
+      print_details = ""
 
       # get best success rate and best episode
       best_sr, best_ep = self.track.calc_best_performance(from_episode=from_episode)
@@ -883,7 +900,7 @@ class TrainDQN():
     print_out = True
 
     len_data = len(test_data)
-    num_trials = self.env.test_trials_per_obj
+    num_trials = self.env.params.test_trials_per_object
     num_obj = int(len_data / num_trials)
 
     # safety check
@@ -1119,22 +1136,53 @@ class TrainDQN():
 
     if not self.params.use_curriculum: return
 
+    # if the curriculum has been applied, return (this disallows multi-stage curriculums)
+    if self.curriculum_applied is not None and self.curriculum_applied > 0: return
+
     # define threshold for changing curriculum
-    threshold = 0.6
+    threshold = 25000
 
-    # extract details of how training is going
-    if len(self.track.avg_stable_height) > 0:
-      success_rate = self.track.avg_stable_height[-1]
+    # define curriculum style (currently either "learning rate" or "object set")
+    style = "learning rate"
+
+    # define the curriculum metric
+    metric = "episode number"
+
+    # extract the metric to use for comparison
+    if metric == "episode number":
+      metric_value = i_episode
+
+    elif metric == "success rate":
+      # if we have no success rate data, return
+      if len(self.track.avg_stable_height) > 0:
+        metric_value = self.track.avg_stable_height[-1]
+      else: return
+
+    # see if our threshold is EXCEEDED, if so apply the curriculum
+    if metric_value > threshold:
+
+      if style == "object set":
+        self.load_object_set(object_set=self.params.curriculum_object_set, num_segments=self.num_segments)
+
+      elif style == "learning rate":
+        # reduce the learning rate by 75%, eg 50e-6 goes to 12.5e-6
+        new_learning_rate = self.params.learning_rate * 0.25
+        for param_group in self.optimiser.param_groups:
+          param_group['lr'] = new_learning_rate
+        self.params.learning_rate = new_learning_rate
+
+      # we have now applied the curriculum change
+      self.curriculum_applied = i_episode
+
+      # now save a text file to reflect the changes
+      labelstr = f"Hyperparameters after curriculum change which occured at episode {i_episode}\n"
+      labelstr += f"The curriculum style is {style} and the metric is {metric}\n"
+      labelstr += f"The metric value is {metric_value} and the threshold is {threshold}\n"
+      name = "hyperparameters_from_curriculum_change"
+      self.save_hyperparameters(labelstr, name)
+
+    # if the threshold is not exceeded
     else: return
-
-    if self.curriculum_applied is None or self.curriculum_applied < 1:
-      if success_rate > threshold:
-        self.load_object_set(object_set=self.params.curriculum_object_set)
-        self.curriculum_applied = i_episode
-        labelstr = f"Hyperparameters after curriculum change which occured at episode {i_episode}\n"
-        labelstr += f"The success rate is {success_rate} and the threshold is {threshold}\n"
-        name = "hyperparameters_from_curriculum_change"
-        self.save_hyperparameters(labelstr, name)
 
   def run_episode(self, i_episode, test=None):
     """
@@ -1259,12 +1307,15 @@ class TrainDQN():
     # begin training episodes
     for i_episode in range(i_start + 1, self.params.num_episodes + 1):
 
-      if self.log_level == 1 and i_episode % 50:
+      if self.log_level == 1 and i_episode % 25 == 1:
         print("Begin training episode", i_episode, flush=True)
       elif self.log_level > 1:
         print("Begin training episode", i_episode, flush=True)
 
       self.run_episode(i_episode)
+
+      # check if time to change curriculum
+      self.curriculum_fcn(i_episode)
 
       # update the target network every target_update episodes
       if i_episode % self.params.target_update == 0:
@@ -1279,20 +1330,10 @@ class TrainDQN():
         # save the result
         self.save(txtstring=test_report, txtlabel="test_results", 
                   tupledata=additional_data)
-        # check if time to change curriculum following the test
-        self.curriculum_fcn(i_episode)
 
       # or only save the network
       elif i_episode % self.params.save_freq == 0:
         self.save()
-
-      # temporary experimental feature: cluster logging up to first test
-      elif self.additional_logging is not None:
-        if i_episode < self.params.test_freq:
-          if i_episode % self.additional_logging == 0:
-            texttosave = f"Cluster training has reached episode {i_episode}\n"
-            self.modelsaver.save("cluster_episode_tracker", txtstr=texttosave, 
-                                 txtonly=True)
 
     # update the target network at the end
     self.target_net.load_state_dict(self.policy_net.state_dict())
@@ -1348,6 +1389,33 @@ class TrainDQN():
 
     return test_data
 
+  def get_params_dictionary(self):
+    """
+    Return a dictionary of parameters, this function is partly incompatible with old
+    code as MjEnv() did not used to have a parameter dictionary
+    """
+
+    params_dict = {}
+    params_dict.update(asdict(self.params))
+
+    # OLD CODE COMPATIBLE: try to get mjenv parameters
+    try:
+      params_dict.update(self.env.get_parameters())
+    except AttributeError as e:
+      print("TrainDQN.get_params_dictionary() error with env params:", e)
+
+    manual_params = {
+      "Network name" : self.policy_net.name,
+      "Finger stiffness setting" : self.env.mj.set.finger_stiffness,
+      "Mujoco timestep" : self.env.mj.set.mujoco_timestep,
+      "Sim steps per action" : self.env.mj.set.sim_steps_per_action,
+      "Bend gauge normalise" : self.env.mj.set.bending_gauge.normalise
+    }
+
+    params_dict.update(manual_params)
+
+    return params_dict
+
   def save_hyperparameters(self, labelstr=None, name=None):
     """
     Save a text file with the current hyperparameters
@@ -1379,14 +1447,11 @@ class TrainDQN():
     param_str += "Running on machine: " + self.machine + "\n"
     param_str += "Running with device: " + self.device.type + "\n"
     param_str += "Object set in use: " + self.env.mj.object_set_name + "\n"
-    param_str += "Max episode steps: " + str(self.env.max_episode_steps) + "\n"
-    param_str += "Object position noise: " + str(self.env.object_position_noise_mm) + "\n"
-    param_str += "Task reload chance: " + str(self.env.task_reload_chance) + "\n"
     param_str += "Random seed: " + str(self.env.myseed) + "\n"
 
     # convert parameters to a string
-    param_str += "\nParameters dataclass:\n"
-    param_str += str(asdict(self.params))
+    param_str += "\nParameters dictionaries:\n"
+    param_str += str(self.get_params_dictionary())
 
     # swap commas for newlines for prettier printing
     param_str = param_str.replace(',', '\n')
@@ -1513,7 +1578,7 @@ class TrainDQN():
 
     # load a new object set if we are told to
     if object_set is not None:
-      self.env._load_object_set(name=object_set)
+      self.env._load_object_set(name=object_set, num_segments=self.num_segments)
 
     # begin the training at the given starting point (always uses most recent pickle)
     self.train(i_start=self.track.episodes_done)
@@ -1531,12 +1596,12 @@ if __name__ == "__main__":
   # if we want to adjust parameters
   # model.log_level = 2
   # model.params.num_episodes = 11
-  model.env.max_episode_steps = 20
+  # model.env.max_episode_steps = 20
   # model.params.wandb_freq_s = 5
   # model.env.mj.set.action_motor_steps = 350
   # model.env.disable_rendering = False
   # model.params.test_freq = 10
-  # model.env.test_trials_per_obj = 1
+  # model.env.params.test_trials_per_object = 1
   # model.env.test_obj_limit = 10
 
   # # plotting options
@@ -1566,19 +1631,20 @@ if __name__ == "__main__":
   # load
   # net = networks.DQN_3L60
   # model.init(net)
-  folderpath = "/home/luke/mymujoco/rl/models/dqn/best_august_trainings/"
-  foldername = "luke-PC_14:46_A2"
-  model.device = torch.device("cuda")
-  model.load(id=27, folderpath=folderpath, foldername=foldername)
+  # folderpath = "/home/luke/cluster/rl/models/dqn/07-10-22/"
+  # foldername = "cluster_17:55_A12"
+  # model.device = torch.device("cpu")
+  # model.load(id=None, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
   # # train
-  # net = networks.DQN_3L60
-  # model.env.disable_rendering = True
-  # model.env.mj.set.debug = False
-  # model.additional_logging = 10
-  # model.train(network=net)
+  net = networks.DQN_3L60
+  model.env.disable_rendering = True
+  model.env.mj.set.debug = False
+  model.num_segments = 8
+  model.finger_thickness = 0.8e-3
+  model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
@@ -1616,7 +1682,7 @@ if __name__ == "__main__":
   # test
   model.env.mj.set.debug = False
   model.env.disable_rendering = False
-  # model.env.test_trials_per_obj = 1
+  # model.env.params.test_trials_per_object = 1
   model.env.test_objects = 30
   # model.env.test_obj_per_file = 5
   # model.env.max_episode_steps = 20
@@ -1632,7 +1698,7 @@ if __name__ == "__main__":
   test_report = model.create_test_report(test_data)
   model.modelsaver.new_folder(label="DQN_testing")
   model.save_hyperparameters(labelstr=f"Loaded model path: {model.modelsaver.last_loadpath}\n")
-  model.save(txtstring=test_report, txtlabel="test_results_demo")
+  # model.save(txtstring=test_report, txtlabel="test_results_demo")
   
 
 

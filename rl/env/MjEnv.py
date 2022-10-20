@@ -12,7 +12,7 @@ from mjpy.bind import MjClass, EventTrack
 
 import time
 import numpy as np
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 
 class MjEnv():
 
@@ -36,31 +36,45 @@ class MjEnv():
     object_name: str = ""
     cnt = None
 
-  def __init__(self, seed=None):
+  @dataclass
+  class Parameters:
+    # key class parameters with default values
+    max_episode_steps: int = 100
+    object_position_noise_mm: int = 10
+    test_obj_per_file: int = 20
+    task_reload_chance: float = 1.0 / float(test_obj_per_file)
+    test_trials_per_object: int = 1
+    test_objects: int = 100
+    num_segments: int = 6
+    finger_thickness: float = 0.9e-3
+
+  def __init__(self, seed=None, noload=None, num_segments=None):
     """
-    A mujoco environment
+    A mujoco environment, optionally set the random seed or prevent loading a
+    model, in which case the user should call load() before using the class
     """
 
-    # user defined parameters
-    self.max_episode_steps = 100
-    self.object_position_noise_mm = 10
-    self.disable_rendering = True
-    self.task_reload_chance = 1 / 40.
-    self.log_level = 0
+    self.params = MjEnv.Parameters()
 
-    # user defined testing parameters
-    self.test_in_progress = False
-    self.test_completed = False
-    self.test_trials_per_obj = 1
-    self.test_objects = 100
-    
     # define file structure
     self.task_xml_folder = "task"
+    self.task_folder_template = "gripper_N{}"
     self.task_xml_template = "gripper_task_{}.xml"
-    self.test_obj_per_file = 20           # how many test objects per file
+
+    # general class settings
+    self.log_level = 0
+    self.disable_rendering = True
+
+    # initialise class variables
+    self.test_in_progress = False
+    self.test_completed = False
+
+    # how many segments to load next time, default is params.num_segments
+    if num_segments == None: self.load_num_segments = self.params.num_segments
+    else: self.load_num_segments = num_segments
 
     # calculate how many files we need to reserve for testing
-    self.testing_xmls = int(np.ceil(self.test_objects / float(self.test_obj_per_file)))
+    self.testing_xmls = int(np.ceil(self.params.test_objects / float(self.params.test_obj_per_file)))
     
     # create mujoco instance
     self.mj = MjClass()
@@ -70,15 +84,8 @@ class MjEnv():
     self.myseed = None
     self.seed(seed)
 
-    # load the mujoco models
-    self._load_object_set()
-    self._load_xml()  
-
-    # auto generated parameters
-    self._update_n_actions_obs()
-
-    # reset any lingering goal defaults
-    self.mj.reset_goal()
+    # load the mujoco models, if not then load() must be run by the user
+    if noload is not True: self.load(num_segments=self.load_num_segments)
 
     # initialise tracking variables
     self.track = MjEnv.Track()
@@ -88,6 +95,21 @@ class MjEnv():
     return
 
   # ----- semi-private functions, advanced use ----- #
+
+  def _set_num_segments(self, N):
+    """
+    Set the number of segments in use, typically should be from 5-30 but depends on object set.
+    None means we are using an old object set where we cannot choose the number of segments.
+    This functionality can be removed once backwards compatibility is not needed.
+    """
+
+    if N is None:
+      self.task_xml_folder = "task" # old default folder for gripper files
+      self.load_num_segments = None
+      return
+
+    self.task_xml_folder = self.task_folder_template.format(N)
+    self.load_num_segments = N
 
   def _load_xml(self, test=None, index=None):
     """
@@ -114,7 +136,10 @@ class MjEnv():
 
     self.reload_flag = False
 
-  def _load_object_set(self, name=None, mjcf_path=None):
+    # get the number of segments currently in use
+    self.params.num_segments = self.mj.get_N()
+
+  def _load_object_set(self, name=None, mjcf_path=None, num_segments=-1):
     """
     Load and determine how many model xml files are in the object set
     """
@@ -125,6 +150,11 @@ class MjEnv():
     # if a object set name is given, override, otherwise we use default
     if name != None: self.mj.object_set_name = name
 
+    # how many segments will we use (None means use 'task' folder)
+    if num_segments == -1: load_num_segments = self.load_num_segments
+    else: load_num_segments = num_segments
+    self._set_num_segments(load_num_segments)
+
     # check the mjcf_path is correctly formatted
     if self.mj.model_folder_path[-1] != '/':
       self.mj.model_folder_path += '/'
@@ -134,14 +164,16 @@ class MjEnv():
                       + '/' + self.task_xml_folder + '/')
 
     # find out how many xmls are available for training/testing
-    xml_files = [x for x in os.listdir(self.xml_path)]
+    xml_files = [x for x in os.listdir(self.xml_path) if os.path.isdir(self.xml_path + "/" + x) is False]
     self.training_xmls = len(xml_files) - self.testing_xmls
 
     if self.training_xmls < 1:
       raise RuntimeError(f"enough training xmls failed to be found in MjEnv at: {self.xml_path}")
 
   def _update_n_actions_obs(self):
-    # get an updated number of actions and observations
+    """
+    Get an updated number of actions and observations
+    """
 
     self.n_actions = self.mj.get_n_actions()
     self.n_obs = self.mj.get_n_obs()
@@ -202,7 +234,7 @@ class MjEnv():
     """
 
     # if we have exceeded our time limit
-    if self.track.current_step >= self.max_episode_steps:
+    if self.track.current_step >= self.params.max_episode_steps:
       if self.log_level > 1 or self.mj.set.debug: 
         print("is_done() = true (in python) as max step number exceeded")
       return True
@@ -257,9 +289,10 @@ class MjEnv():
     """
 
     # randomly generate the object index and (x, y) position
+    noise = self.params.object_position_noise_mm
     obj_idx = np.random.randint(0, self.num_objects)
-    x_pos_mm = np.random.randint(-self.object_position_noise_mm, self.object_position_noise_mm + 1)
-    y_pos_mm = np.random.randint(-self.object_position_noise_mm, self.object_position_noise_mm + 1)
+    x_pos_mm = np.random.randint(-noise, noise + 1)
+    y_pos_mm = np.random.randint(-noise, noise + 1)
 
     # randomly choose a z rotation
     z_rot_rad = np.random.choice([0, 60, 120]) * (np.pi / 180.0)
@@ -313,18 +346,18 @@ class MjEnv():
     self.current_test_trial.obj_trial += 1
 
     # if trials done, move to the next object, reset trial counter
-    if self.current_test_trial.obj_trial >= self.test_trials_per_obj:
+    if self.current_test_trial.obj_trial >= self.params.test_trials_per_object:
 
       self.current_test_trial.obj_idx += 1
       self.current_test_trial.obj_trial = 0
       self.current_test_trial.obj_counter += 1
 
       # check if we have finished
-      if self.current_test_trial.obj_counter >= self.test_objects:
+      if self.current_test_trial.obj_counter >= self.params.test_objects:
         self._end_test()
 
       # check if we need to load the next test object set
-      elif self.current_test_trial.obj_idx >= self.test_obj_per_file:
+      elif self.current_test_trial.obj_idx >= self.params.test_obj_per_file:
         self.current_test_trial.xml_file += 1
         self._load_xml(test=self.current_test_trial.xml_file)
         self.current_test_trial.obj_idx = 0
@@ -367,6 +400,37 @@ class MjEnv():
     self.test_in_progress = True
     self.test_completed = False
     self._load_xml(test=0) # load first test set xml, always index 0
+
+  def get_parameters(self):
+    """
+    Return a dictionary of the class parameters. This code is needed for backwards
+    compatibility since the class does not currently use the parameter variables.
+    """
+
+    return asdict(self.params)
+
+  def load(self, object_set_name=None, object_set_path=None, index=None, num_segments=None):
+    """
+    Load and prepare the mujoco environment, uses defaults if arguments are not given
+    """
+
+    # if not given an input, use class value
+    if num_segments is None: set_N = self.load_num_segments
+    else: set_N = num_segments
+
+    # set the finger thickness (changes only applied upon reset(), causes hard_reset() if changed)
+    self.mj.set_finger_thickness(self.params.finger_thickness)
+    self.params.finger_thickness = self.mj.get_finger_thickness()
+
+    self._load_object_set(name=object_set_name, mjcf_path=object_set_path,
+                          num_segments=set_N)
+    self._load_xml(index=index)  
+
+    # auto generated parameters
+    self._update_n_actions_obs()
+
+    # reset any lingering goal defaults
+    self.mj.reset_goal()
 
   def step(self, action):
     """
@@ -422,7 +486,7 @@ class MjEnv():
     self.track = MjEnv.Track()
 
     # there is a small chance we reload a new random task
-    if ((np.random.random() < self.task_reload_chance or
+    if ((np.random.random() < self.params.task_reload_chance or
         self.reload_flag) and not self.test_in_progress):
         self._load_xml()
 
@@ -474,6 +538,13 @@ if __name__ == "__main__":
 
   for i in range(20):
     mj.step(np.random.randint(0,8))
+
+  print("\n\n\n\n\n\n\n\n\n about to set finger thickness in python")
+  mj.params.finger_thickness = 0.8e-3
+  mj._load_xml()
+  print("SET IN PYTHON, about to run reset()")
+  mj.reset()
+  print("reset is finished")
 
   print("\n\n\nSTART")
 

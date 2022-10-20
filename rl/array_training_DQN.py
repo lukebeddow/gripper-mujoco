@@ -225,7 +225,7 @@ def add_sensors(model, num=None, sensor_mode=None, state_mode=None, sensor_steps
   # define defaults that can be overriden by function inputs
   if sensor_mode is None: sensor_mode = 1
   if state_mode is None: state_mode = 0
-  if noise_std is None: noise_std = 0.015
+  if noise_std is None: noise_std = 0.05
   if sensor_steps is None: sensor_steps = 1
   if state_steps is None: state_steps = 2
 
@@ -274,15 +274,15 @@ def apply_to_all_models(model):
   model.env.max_episode_steps = 250
 
   # key learning hyperparameters
-  model.params.object_set = "set2_nocuboid_525"
+  model.params.object_set = "set4_fullset_795"
   model.params.batch_size = 128
-  model.params.learning_rate = 0.0001
+  model.params.learning_rate = 5e-5
   model.params.gamma = 0.999
   model.params.eps_start = 0.9
   model.params.eps_end = 0.05
-  model.params.eps_decay = 2000
+  model.params.eps_decay = 4000
   model.params.target_update = 100
-  model.params.num_episodes = 10_000
+  model.params.num_episodes = 60_000
   model.params.optimiser = "adam"
   model.params.adam_beta1 = 0.9
   model.params.adam_beta2 = 0.999
@@ -300,10 +300,10 @@ def apply_to_all_models(model):
   model.params.curriculum_object_set = "set2_fullset_795"
 
   # data loggings
-  model.params.save_freq = 1_000
-  model.params.test_freq = 1_000
+  model.params.save_freq = 2_000
+  model.params.test_freq = 2_000
   model.params.plot_freq_s = 300
-  model.params.wandb_freq_s = 300
+  model.params.wandb_freq_s = 900
 
   # ensure debug mode is off
   model.env.log_level = 0
@@ -314,17 +314,29 @@ def apply_to_all_models(model):
   model.env.mj.set.use_render_delay = False
   model.env.mj.set.render_on_step = False
 
+  # automatically calibrate
+  model.env.mj.set.auto_set_timestep = True
+  model.env.mj.set.auto_calibrate_gauges = True
+  model.env.mj.set.auto_sim_steps = True
+  model.env.mj.set.bend_gauge_normalise = 5.0
+  model.env.mj.set.time_for_action = 0.2
+
   # define lengths and forces
   model.env.mj.set.finger_stiffness = 5
   model.env.mj.set.oob_distance = 75e-3
   model.env.mj.set.done_height = 35e-3
-  model.env.mj.set.stable_finger_force = 0.4
+  model.env.mj.set.stable_finger_force = 1.0
   model.env.mj.set.stable_palm_force = 1.0
 
   # what actions are we using
   model.env.mj.set.paired_motor_X_step = True
   model.env.mj.set.use_palm_action = True
   model.env.mj.set.use_height_action = True
+  model.env.mj.set.XYZ_action_mm_rad = True
+  model.env.mj.set.X_action_mm = 1.0
+  model.env.mj.set.Y_action_rad = 0.01
+  model.env.mj.set.Z_action_mm = 2.0
+  model.env.mj.set.base_action_mm = 2.0 # not used currently
 
   # what sensing mode (0=raw data, 1=change, 2=average)
   model.env.mj.set.sensor_sample_mode = 1
@@ -365,7 +377,7 @@ def apply_to_all_models(model):
   model.env.mj.set.state_noise_std = 0
 
   # logging/plotting options
-  model.track.moving_avg_num = 100
+  model.track.moving_avg_num = 250
   model.track.static_avg_num = model.track.moving_avg_num
   model.track.plot_raw = False
   model.track.plot_moving_avg = False
@@ -392,7 +404,7 @@ def continue_training(model, run_name, group_name, object_set=None):
   # new_endpoint = 20_000
   # model.wandb_note += f"Continuing training until new endpoint of {new_endpoint} episodes\n"
 
-  extra_episodes = 10_000
+  extra_episodes = 40_000
   model.wandb_note += f"Continuing training with an extra {extra_episodes} episodes\n"
   
   model.continue_training(run_name, model.savedir + group_name + "/",
@@ -405,6 +417,11 @@ def logging_job(model, run_name, group_name):
 
   print("Logging training in group:", group_name)
   print("Logging training of run:", run_name)
+
+  # turn off any and all auto-calibrations
+  model.env.mj.set.auto_set_timestep = False
+  model.env.mj.set.auto_calibrate_gauges = False
+  model.env.mj.set.auto_sim_steps = False
 
   model.load(folderpath=model.savedir + group_name + "/", foldername=run_name)
   
@@ -421,25 +438,30 @@ def logging_job(model, run_name, group_name):
   model.log_wandb(force=True, end=True)
   model.plot(force=True, end=True, hang=True)
 
-def baseline_training(model, lr=5e-5, eps_decay=2000, sensors=None, network=networks.DQN_4L100, 
+def baseline_training(model, lr=5e-5, eps_decay=4000, sensors=2, network=networks.DQN_5L100, 
                       memory=50_000, state_steps=1, sensor_steps=1, z_state=True, sensor_mode=2,
                       state_mode=1, reward_style="mixed_v3", reward_options=[], scale_rewards=2.5,
-                      scale_penalties=1.0, penalty_termination=False, finger_stiffness=8):
+                      scale_penalties=1.0, penalty_termination=False, finger_stiffness=-101,
+                      num_segments=6, finger_thickness=0.9e-3):
   """
   Runs a baseline training on the model
   """
 
   # set parameters
-  model.env.max_episode_steps = 250
+  model.env.max_episode_steps = 250 # note the hardcoded override
   model.params.learning_rate = lr
   model.params.eps_decay = eps_decay
   model.params.memory_replay = memory
-  model.env.mj.set.finger_stiffness = finger_stiffness
+  model.env.mj.set.finger_stiffness = finger_stiffness # -7.5 is final derivation
+  model.num_segments = num_segments                    # 6 gives fast training primarily
+  model.env.params.finger_thickness = finger_thickness # options are 0.8e-3, 0.9e-3, 1.0e-3
 
   # wandb notes
   model.wandb_note += f"Network: {network.name}\n"
   model.wandb_note += f"Learning rate {lr}\n"
   model.wandb_note += f"eps_decay = {eps_decay}\n"
+  model.wandb_note += f"finger_stiffness = {finger_stiffness}\n"
+  model.wandb_note += f"num_segments = {num_segments}\n"
   
   # configure rewards and sensors
   model = create_reward_function(model, style=reward_style, options=reward_options,
@@ -622,50 +644,44 @@ if __name__ == "__main__":
   baseline_training(model, sensors=this_sensors)
   """
 
-  # scaling_list = [
-  #   (2.5, 1.0),
-  #   (2.5, 2.5),
-  #   (2.5, 7.5),
-  #   (7.5, 7.5),
+  # CONFIGURE SETTINGS
+  model.params.use_curriculum = False
+  model.env.mj.set.XYZ_action_mm_rad = False # are we using step actions of SI actions
+  model.params.num_episodes = 60000
+
+  # # varying 3x5 = possible trainings 1-15
+  # sensors_list = [
+  #   0, # bending and z state
+  #   1, # + palm
+  #   2  # + wrist
   # ]
+  this_sensor = 2
 
-  # # lists are zero indexed
-  # inputarg -= 1
+  # varying 3x3 = possible trainings 1-9
+  thickness_list = [
+    0.8e-3,
+    0.9e-3,
+    1.0e-3
+  ]
+  # this_thickness = 0.9e-3
 
-  # model.params.num_episodes = 30000
-  # baseline_training(model, sensors=2, scale_rewards=scaling_list[inputarg][0],
-  #                   scale_penalties=scaling_list[inputarg][1]) 
-
-  # varying 5x3x2 = possible trainings 1-30
-  lr_list = [
-    1e-5,   1e-5,
-    2.5e-5, 2.5e-5,
-    5e-5,   5e-5,
-    7.5e-5, 7.5e-5,
-    1e-4,   1e-4
+  repeats = [
+    1, 2, 3
   ]
 
-  eps_decay_list = [
-    2000,
-    4000,
-    6000,
-  ]
-
-  curriculum_list = [False, True]
+  # allow repeats
+  trainings = 15
+  while inputarg > trainings: inputarg -= trainings
 
   # lists are zero indexed so adjust inputarg
   inputarg -= 1
 
   # we vary wrt memory_list every inputarg increment
-  x = len(eps_decay_list)
+  x = len(thickness_list)
 
   # get the sensors and memory size for this training
-  this_lr = lr_list[inputarg // x]                # vary every x steps
-  this_eps_decay = eps_decay_list[inputarg % x]   # vary every +1 & loop
-
-  this_curriculum = curriculum_list[
-    (inputarg // x) % 2
-  ] # vary for each pair of lr values
+  repeat_num = repeats[inputarg // x]                 # vary every x steps
+  this_thickness = thickness_list[inputarg % x]       # vary every +1 & loop
 
   # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
   #   A1, A2, A3, ...
@@ -673,35 +689,21 @@ if __name__ == "__main__":
   #   C1, C2, C3, ...
 
   # make note
-  param_1 = f"Learning rate is {this_lr}\n"
-  param_2 = f"Eps decay is {this_eps_decay}\n"
-  param_3 = f"Curriculum learning is {this_curriculum}\n"
+  param_1 = f"Repeat num is {repeat_num}\n"
+  param_2 = f"Sensors is {this_sensor}\n"
+  param_3 = f"Thickness is {this_thickness}\n"
   model.wandb_note += param_1 + param_2
 
   # if we are just printing help information
   if args.print:
-    print("Input arg", inputarg + 1)
+    print("Input arg", args.job)
     print("\t" + param_1, end="")
     print("\t" + param_2, end="")
     print("\t" + param_3, end="")
     exit()
 
-  # if we use curriculum learning
-  if this_curriculum:
-    model.params.object_set = "set3_nocuboid_525"
-    model.params.use_curriculum = True
-    model.params.curriculum_object_set = "set3_fullset_795"
-  else:
-    model.params.object_set = "set3_fullset_795"
-
-  # set number of training episodes
-  model.params.num_episodes = 30000
-
-  # only use realistic sensors
-  sensor_setup = 2
-
   # perform the training with other parameters standard
-  baseline_training(model, lr=this_lr, eps_decay=this_eps_decay, sensors=sensor_setup) 
+  baseline_training(model, sensors=this_sensor, finger_thickness=this_thickness) 
 
   # ----- END ----- #
-   
+  

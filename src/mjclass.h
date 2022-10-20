@@ -679,16 +679,17 @@ namespace MjType
 
           // loop and calculate abs and percentage errors sums
           for (uint i = skip; i < Np1; i++) {
+
             error.x_wrt_pred_x += abs(x[i] - pred_x[i]);
-            error.x_wrt_pred_x_percent += abs(x[i] - pred_x[i]) / pred_x[i];
+            error.x_wrt_pred_x_percent += -1 * (x[i] - pred_x[i]) / pred_x[i];
             error.y_wrt_pred_y += abs(y[i] - pred_y[i]);
-            error.y_wrt_pred_y_percent += abs(y[i] - pred_y[i]) / pred_y[i];
+            error.y_wrt_pred_y_percent += -1 * (y[i] - pred_y[i]) / pred_y[i];
             error.y_wrt_theory_y += abs(y[i] - theory_y[i]);
-            error.y_wrt_theory_y_percent += abs(y[i] - theory_y[i]) / theory_y[i];
+            error.y_wrt_theory_y_percent += -1 * (y[i] - theory_y[i]) / theory_y[i];
             error.y_pred_wrt_theory_y += abs(pred_y[i] - theory_y[i]);
-            error.y_pred_wrt_theory_y_percent += abs(pred_y[i] - theory_y[i]) / theory_y[i];
+            error.y_pred_wrt_theory_y_percent += -1 * (pred_y[i] - theory_y[i]) / theory_y[i];
             error.j_wrt_pred_j += abs(joints[i - 1] - pred_j[i - 1]);
-            error.j_wrt_pred_j_percent += abs(joints[i - 1] - pred_j[i - 1]) / pred_j[i - 1];
+            error.j_wrt_pred_j_percent += -1 * (joints[i - 1] - pred_j[i - 1]) / pred_j[i - 1];
 
             // calculate the total deflection values (for average tipratio)
             x_cum += x[i]; 
@@ -723,10 +724,10 @@ namespace MjType
           error.y_pred_tip_wrt_theory_y = pred_y[Np1 - 1] - theory_y[Np1 - 1];
 
           // get tip difference percentages
-          error.x_tip_wrt_pred_x_percent = abs(error.x_tip_wrt_pred_x) / pred_x[Np1 - 1];
-          error.y_tip_wrt_pred_y_percent = abs(error.y_tip_wrt_pred_y) / pred_y[Np1 - 1];
-          error.y_tip_wrt_theory_y_percent = abs(error.y_tip_wrt_theory_y) / theory_y[Np1 - 1];
-          error.y_pred_tip_wrt_theory_y_percent = abs(error.y_pred_tip_wrt_theory_y) / theory_y[Np1 - 1];
+          error.x_tip_wrt_pred_x_percent = (error.x_tip_wrt_pred_x) / pred_x[Np1 - 1];
+          error.y_tip_wrt_pred_y_percent = (error.y_tip_wrt_pred_y) / pred_y[Np1 - 1];
+          error.y_tip_wrt_theory_y_percent = (error.y_tip_wrt_theory_y) / theory_y[Np1 - 1];
+          error.y_pred_tip_wrt_theory_y_percent = (error.y_pred_tip_wrt_theory_y) / theory_y[Np1 - 1];
 
           // loop through to get standard deviation
           for (uint i = skip; i < N; i++) {
@@ -918,6 +919,21 @@ public:
   // real gripper parameters
   MjType::RealGaugeCalibrations calibrate_; 
 
+  // these flags are only reset with hard_reset()
+  struct ResetFlags {
+
+    // have we initialised the flags to starting values
+    bool flags_init = false;
+
+    // flag to indicate which auto function are selected
+    bool auto_timestep = false;
+    bool auto_calibrate = false;
+    bool auto_simsteps = false;
+
+    bool finger_thickness_changed = false;
+
+  } resetFlags;
+
   /* ----- variables that are reset ----- */
 
   // standard class variables
@@ -1011,6 +1027,9 @@ public:
   float reward(std::vector<float> goal_vec, std::vector<float> event_vec);
   int get_n_actions();
   int get_n_obs();
+  int get_N();
+  float get_finger_thickness();
+  std::vector<luke::gfloat> get_finger_stiffnesses();
 
   // real world gripper functions
   std::vector<float> input_real_data(std::vector<float> state_data, 
@@ -1023,8 +1042,14 @@ public:
   std::string get_current_object_name() { return env_.obj.name; }
   MjType::TestReport get_test_report();
   MjType::CurveFitData::PoseData validate_curve();
-  MjType::CurveFitData::PoseData validate_curve_under_force(int force);
+  MjType::CurveFitData::PoseData validate_curve_under_force(float force);
   MjType::CurveFitData curve_validation_regime(bool print = true);
+  std::string numerical_stiffness_converge(float force, float target_accuracy);
+  std::string numerical_stiffness_converge(std::vector<float> X, std::vector<float> Y, float target_accuracy);
+  std::vector<float> profile_error(std::vector<float> profile_X, std::vector<float> profile_Y,
+  std::vector<float> truth_X, std::vector<float> truth_Y);
+  void calibrate_gauges();
+  void set_finger_thickness(float thickness);
   void tick();
   float tock();
   MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2);
@@ -1033,6 +1058,7 @@ public:
   void default_goal_event_triggering();
   bool last_action_gripper();
   bool last_action_panda();
+  float find_highest_stable_timestep();
 
 }; // class MjClass
 

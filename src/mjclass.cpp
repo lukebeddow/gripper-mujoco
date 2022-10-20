@@ -96,12 +96,12 @@ void MjClass::configure_settings()
 {
   /* apply simulation settings */
 
-  // // set gauge calibrations
-  // calibrate_.offset.g1 = 0.70e6;
-  // calibrate_.offset.g2 = -0.60e6;
-  // calibrate_.offset.g3 = 0.56e6;
-  // calibrate_.scale.g1 = calibrate_.scale.g2 = calibrate_.scale.g3 = -1.258e-6;
-  // calibrate_.norm.g1 = calibrate_.norm.g2 = calibrate_.norm.g3 = 2;
+  // if thickness has changed, we should recalibrate timestep/sim steps/gauges etc
+  if (resetFlags.finger_thickness_changed) {
+    resetFlags.finger_thickness_changed = false;
+    hard_reset(); // this calls reset()->configure_settings()
+    return;
+  }
 
   // calibrate_.offset.palm = 215000; // runtime depends
   // calibrate_.scale.palm = 1.0;
@@ -124,9 +124,6 @@ void MjClass::configure_settings()
   calibrate_.offset.palm = 3.31e5; // overriden at runtime, auto calibrated
   calibrate_.scale.palm = (1.0 / 1.34e4);
   calibrate_.norm.palm = 8.0; // should be same as palm_sensor.normalise
-
-  // set the simulation timestep
-  model->opt.timestep = s_.mujoco_timestep;
 
   /* check what actions are set */
   action_options.clear();
@@ -211,10 +208,6 @@ void MjClass::configure_settings()
   // enforce HER goals to trigger at 1 always
   default_goal_event_triggering();
 
-  // update the sensor number of readings based on time per step
-  double time_per_step = model->opt.timestep * s_.sim_steps_per_action;
-  s_.update_sensor_settings(time_per_step);
-
   // update the finger spring stiffness
   luke::set_finger_stiffness(model, s_.finger_stiffness);
 
@@ -224,6 +217,54 @@ void MjClass::configure_settings()
     MjType::generator.reset(new std::default_random_engine(s_.random_seed));
     old_random_seed = s_.random_seed;
   }
+
+  /* start of automatic settings changes */
+  
+  bool echo_auto_changes = true; // s_.debug;
+
+  // if we have not initialised the automatic flags, do it now
+  if (not resetFlags.flags_init) {
+    resetFlags.auto_calibrate = s_.auto_calibrate_gauges;
+    resetFlags.auto_simsteps = s_.auto_sim_steps;
+    resetFlags.auto_timestep = s_.auto_set_timestep;
+    resetFlags.flags_init = true;
+    // resetFlags.some_set = resetFlags.all_done();
+  }
+
+  // find timestep automatically, this change must be done before calibrate_gauges()
+  if (resetFlags.auto_timestep) {
+    resetFlags.auto_timestep = false;                     // disable auto timestep immediately due to recursion
+    resetFlags.auto_calibrate = false;                    // disable calibration before timestep found
+    resetFlags.auto_simsteps = false;                     // disable simsteps before timestep found
+    s_.mujoco_timestep = find_highest_stable_timestep();  // find the timestep, calls configure_settings() recursively
+    resetFlags.auto_calibrate = s_.auto_calibrate_gauges; // re-enable calibration after timestep found
+    resetFlags.auto_simsteps = s_.auto_sim_steps;         // re-enable simsteps after timestep found
+    if (echo_auto_changes) std::cout << "MjClass auto-setting: Mujoco timestep set to: " << s_.mujoco_timestep << '\n';
+  }
+
+  // set the simulation timestep in mujoco
+  model->opt.timestep = s_.mujoco_timestep;
+
+  // calibrate the gauges, requires timestep to be stable
+  if (resetFlags.auto_calibrate) {
+    resetFlags.auto_calibrate = false;
+    calibrate_gauges();
+    if (echo_auto_changes) std::cout << "MjClass auto-setting: Bending gauge normalisation set to: " << s_.bending_gauge.normalise << '\n';
+
+    // one additional reset() as fingers will be wobbling from the calibration
+    reset();
+  }
+
+  // find the sim settings per action automatically, requires timestep to be finalised
+  if (resetFlags.auto_simsteps) {
+    resetFlags.auto_simsteps = false;
+    s_.sim_steps_per_action = std::ceil(s_.time_for_action / s_.mujoco_timestep);
+    if (echo_auto_changes) std::cout << "MjClass auto-setting: Sim steps per action set to: " << s_.sim_steps_per_action << '\n';
+  }
+
+  // update the sensor number of readings based on time per step
+  double time_per_step = model->opt.timestep * s_.sim_steps_per_action;
+  s_.update_sensor_settings(time_per_step);
 }
 
 /* ----- core functionality ----- */
@@ -349,8 +390,11 @@ void MjClass::hard_reset()
   // reinitialise the joint settings structure
   luke::init_J(model, data);
 
-  // reset the tip force
+  // reset the tip force function
   luke::apply_tip_force(model, data, 0, true);
+
+  // we want to reset the auto setting flags to original values
+  resetFlags.flags_init = false;
 
   // regular reset code
   reset();
@@ -364,9 +408,9 @@ void MjClass::step()
 
   luke::before_step(model, data);
 
-  // if doing curve validation, can apply a set tip force
-  if (s_.curve_validation < 0) {
-    luke::apply_tip_force(model, data, -1 * s_.curve_validation);
+  if (s_.curve_validation) {
+    // if doing curve validation, can apply a set tip force
+    luke::apply_tip_force(model, data, s_.tip_force_applied);
   }
 
   luke::step(model, data);
@@ -526,10 +570,10 @@ void MjClass::monitor_sensors()
     luke::gfloat palm_reading = forces.all.palm_local[0];
 
     // normalise
-    palm_reading = s_.axial_gauge.apply_normalisation(palm_reading);
+    palm_reading = s_.palm_sensor.apply_normalisation(palm_reading);
 
     // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
-    palm_reading = s_.axial_gauge.apply_noise(palm_reading, uniform_dist);
+    palm_reading = s_.palm_sensor.apply_noise(palm_reading, uniform_dist);
 
     // save
     palm_sensor.add(palm_reading);
@@ -814,15 +858,8 @@ void MjClass::action_step()
 
   if (s_.debug) tick();
 
-  bool target_reached = false;
-  bool target_step = false;
-
   for (int i = 0; i < s_.sim_steps_per_action; i++) {
-    
     step();
-
-    target_step = luke::is_target_step();
-    target_reached = luke::is_target_reached();
   }
 
   if (s_.debug)
@@ -861,38 +898,62 @@ std::vector<float> MjClass::set_action(int action)
 
     case MjType::Action::x_motor_positive:
       if (s_.debug) std::cout << "x_motor_positive";
-      wl = luke::move_gripper_target_step(s_.action_motor_steps, 0, 0);
+      if (s_.XYZ_action_mm_rad) 
+        wl = luke::move_gripper_target_m(-s_.X_action_mm * 1e-3, 0, 0); // -ve since home is 134mm and end is 50mm
+      else
+        wl = luke::move_gripper_target_step(s_.action_motor_steps, 0, 0);
       break;
     case MjType::Action::x_motor_negative:
       if (s_.debug) std::cout << "x_motor_negative";
-      wl = luke::move_gripper_target_step(-s_.action_motor_steps, 0, 0);
+      if (s_.XYZ_action_mm_rad) 
+        wl = luke::move_gripper_target_m(s_.X_action_mm * 1e-3, 0, 0);
+      else
+        wl = luke::move_gripper_target_step(-s_.action_motor_steps, 0, 0);
       break;
 
     case MjType::Action::prismatic_positive:
       if (s_.debug) std::cout << "prismatic_positive";
-      wl = luke::move_gripper_target_step(s_.action_motor_steps, s_.action_motor_steps, 0);
+      if (s_.XYZ_action_mm_rad) 
+        wl = luke::move_gripper_target_m_rad(-s_.X_action_mm * 1e-3, 0, 0);
+      else
+        wl = luke::move_gripper_target_step(s_.action_motor_steps, s_.action_motor_steps, 0);
       break;
     case MjType::Action::prismatic_negative:
       if (s_.debug) std::cout << "prismatic_negative";
-      wl = luke::move_gripper_target_step(-s_.action_motor_steps, -s_.action_motor_steps, 0);
+      if (s_.XYZ_action_mm_rad) 
+        wl = luke::move_gripper_target_m_rad(s_.X_action_mm * 1e-3, 0, 0);
+      else
+        wl = luke::move_gripper_target_step(-s_.action_motor_steps, -s_.action_motor_steps, 0);
       break;
 
     case MjType::Action::y_motor_positive:
       if (s_.debug) std::cout << "y_motor_positive";
-      wl = luke::move_gripper_target_step(0, s_.action_motor_steps, 0);
+      if (s_.XYZ_action_mm_rad) 
+        wl = luke::move_gripper_target_m_rad(0, -s_.Y_action_rad, 0); // -ve as angle convention is swapped
+      else 
+        wl = luke::move_gripper_target_step(0, s_.action_motor_steps, 0);
       break;
     case MjType::Action::y_motor_negative:
       if (s_.debug) std::cout << "y_motor_negative";
-      wl = luke::move_gripper_target_step(0, -s_.action_motor_steps, 0);
+      if (s_.XYZ_action_mm_rad) 
+        wl = luke::move_gripper_target_m_rad(0, s_.Y_action_rad, 0);
+      else
+        wl = luke::move_gripper_target_step(0, -s_.action_motor_steps, 0);
       break;
 
     case MjType::Action::z_motor_positive:
       if (s_.debug) std::cout << "z_motor_positive";
-      wl = luke::move_gripper_target_step(0, 0, s_.action_motor_steps);
+      if (s_.XYZ_action_mm_rad) 
+        wl = luke::move_gripper_target_m_rad(0, 0, s_.Z_action_mm * 1e-3);
+      else
+        wl = luke::move_gripper_target_step(0, 0, s_.action_motor_steps);
       break;
     case MjType::Action::z_motor_negative:
       if (s_.debug) std::cout << "z_motor_negative";
-      wl = luke::move_gripper_target_step(0, 0, -s_.action_motor_steps);
+      if (s_.XYZ_action_mm_rad) 
+        wl = luke::move_gripper_target_m_rad(0, 0, -s_.Z_action_mm * 1e-3);
+      else
+        wl = luke::move_gripper_target_step(0, 0, -s_.action_motor_steps);
       break;
 
     case MjType::Action::height_positive:
@@ -981,7 +1042,7 @@ std::vector<luke::gfloat> MjClass::get_observation()
   /* get an observation with n samples from the gauges */
 
   // use for printing detailed observation debug information
-  constexpr bool debug_obs = true;
+  constexpr bool debug_obs = false;
 
   std::vector<luke::gfloat> observation;
 
@@ -1361,6 +1422,27 @@ int MjClass::get_n_obs()
   return obs_size;
 }
 
+int MjClass::get_N()
+{
+  /* return the number of free segments, N */
+
+  return luke::get_N();
+}
+
+float MjClass::get_finger_thickness()
+{
+  /* get the current saved finger thickness */
+
+  return luke::get_finger_thickness();
+}
+
+std::vector<luke::gfloat> MjClass::get_finger_stiffnesses()
+{
+  /* return a vector of the joint stiffnesses */
+
+  return luke::get_stiffnesses();
+}
+
 /* ----- real gripper functions ----- */
 
 std::vector<float> MjClass::get_finger_gauge_data()
@@ -1555,8 +1637,6 @@ std::vector<float> MjClass::get_real_observation()
   return get_observation();
 }
 
-
-
 /* ----- misc ----- */
 
 void MjClass::tick()
@@ -1624,15 +1704,15 @@ MjType::CurveFitData::PoseData MjClass::validate_curve()
   luke::verify_small_angle_model(data, 0, pose.f1.joints, 
     pose.f1.pred_j, pose.f1.pred_x, pose.f1.pred_y, pose.f1.theory_y,
     pose.f1.theory_x_curve, pose.f1.theory_y_curve,
-    -1 * s_.curve_validation, s_.finger_stiffness);
+    s_.tip_force_applied, s_.finger_stiffness);
   luke::verify_small_angle_model(data, 1, pose.f2.joints, 
     pose.f2.pred_j, pose.f2.pred_x, pose.f2.pred_y, pose.f2.theory_y,
     pose.f2.theory_x_curve, pose.f2.theory_y_curve,
-    -1 * s_.curve_validation, s_.finger_stiffness);
+    s_.tip_force_applied, s_.finger_stiffness);
   luke::verify_small_angle_model(data, 2, pose.f3.joints, 
     pose.f3.pred_j, pose.f3.pred_x, pose.f3.pred_y, pose.f3.theory_y,
     pose.f3.theory_x_curve, pose.f3.theory_y_curve,
-    -1 * s_.curve_validation, s_.finger_stiffness);
+    s_.tip_force_applied, s_.finger_stiffness);
 
   // calculate errors
   pose.calc_error();
@@ -1643,26 +1723,52 @@ MjType::CurveFitData::PoseData MjClass::validate_curve()
   return pose;
 }
 
-MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(int force)
+MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force)
 {
   /* determine the cubic fit error and displacement of the fingers under
   a given force */
 
-  // set the force
-  s_.curve_validation = -1 * force;
+  bool dynamic_timestep_adjustment = true;
+  int dynamic_repeats_allowed = 5;
+  int dynamic_repeats_done = 1;
+
+  // turn on curve validation mode and set the tip force to apply
+  s_.curve_validation = true;
+  s_.tip_force_applied = force;
 
   // step the simulation to allow the forces to settle
   float time_to_settle = 2;
   int steps_to_make = time_to_settle / s_.mujoco_timestep;
   // std::cout << "Stepping for " << steps_to_make << " steps to allow settling\n";
-  for (int i = 0; i < steps_to_make; i++) {
-    step();
+
+  while (dynamic_repeats_done <= dynamic_repeats_allowed) {
+
+    for (int i = 0; i < steps_to_make; i++) {
+
+      step();
+
+      if (dynamic_timestep_adjustment) {
+        if (luke::is_sim_unstable(model, data)) {
+          s_.mujoco_timestep *= 0.9;
+          reset();
+          dynamic_repeats_done += 1;
+          std::cout << "Curve validation unstable, trying again with timestep "
+            << s_.mujoco_timestep * 1000 << " milliseconds (retry number " << dynamic_repeats_done << ")\n";
+          continue; // try again
+        }
+      }
+    }
+
+    break;
   }
 
   // evaluate the finger pose
   MjType::CurveFitData::PoseData pose;
   pose = validate_curve();
   pose.tag_string = "Force is " + std::to_string(force) + " N";
+
+  // turn off curve validation mode
+  s_.curve_validation = false;
   
   return pose;
 }
@@ -1671,28 +1777,271 @@ MjType::CurveFitData MjClass::curve_validation_regime(bool print)
 {
   /* peform test battery to validate finger bending, print is false by default */
 
-  MjType::CurveFitData data;
+  MjType::CurveFitData curvedata;
 
   bool debug_state = s_.debug;
 
   s_.debug = false;
 
-  int max_force = 5;
+  // NOTE: not forces in newtons, these are 100/200/300/400g (ie 0.981*1/2/3/4)
+  std::vector<float> forces { 1 * 0.981, 2 * 0.981, 3 * 0.981, 4 * 0.981 };
 
-  for (int i = 1; i < max_force + 1; i++) {
+  for (float f : forces) {
     
     MjType::CurveFitData::PoseData pose;
-    pose = validate_curve_under_force(i);
+    pose = validate_curve_under_force(f);
     if (print) pose.print();
-    data.entries.push_back(pose);
+    curvedata.entries.push_back(pose);
+
+    // // for testing
+    // readings[i - 1] = luke::read_armadillo_gauge(data, 0);
+    // norms[i - 1] = finger1_gauge.read_element();
   }
+
+  // // for testing
+  // luke::print_vec(readings, "Gauge readings for 1-5N");
+  // luke::print_vec(norms, "normalised readings");
 
   s_.debug = debug_state;
 
   // overwrite the internal curve validation data
-  curve_validation_data_ = data;
+  curve_validation_data_ = curvedata;
 
-  return data;
+  return curvedata;
+}
+
+std::string MjClass::numerical_stiffness_converge(float force, float target_accuracy)
+{
+  /* converge on basic theory */
+
+  std::vector<float> theory_X;
+  std::vector<float> theory_Y;
+  int theory_N = 100;
+
+  // create theoretical curve at this force
+  luke::fill_theory_curve(theory_X, theory_Y, force, theory_N);
+
+  return numerical_stiffness_converge(theory_X, theory_Y, target_accuracy);
+}
+
+std::string MjClass::numerical_stiffness_converge(std::vector<float> X, std::vector<float> Y, float target_accuracy)
+{
+  /* converge on a given X,Y profile with repeated numerical solving of the mujoco
+  finger profile in the case of point end loading 
+  
+  target_accuracy -> 0.5e-3 gives good agreement, 2e-3 gives decent
+  */
+
+  bool print = true;            // print out only the final result
+  bool print_minimal = true;    // also print out error every 50 loops
+  bool print_detailed = false;  // also print out all possible information every loop
+
+  // use default stiffnesses as initial guess
+  std::vector<luke::gfloat> stiffnesses = luke::get_stiffnesses();
+  int N = stiffnesses.size();
+
+  int loops = 0;
+  int max_loops = 500;
+  float max_stiffness = 800;
+  float min_stiffness = 0.5;
+
+  float avg_error = 0;
+  int good_error_count = 0;
+  int required_good_error = 3;
+  float partial_threshold = 2e-3;
+  float initial_momentum = 4;
+  float final_momentum = 2;
+
+  // float error_threshold = 0.5e-3; // 0.5e-3 gives excellent agreement, 2e-3 gives decent
+
+  // how large are the step changes allowed to be (default 4)
+  float momentum = initial_momentum;
+
+  while (loops < max_loops) {
+
+    if (print_detailed) {
+      std::cout << "Loop " << loops << '\n';
+      luke::print_vec(stiffnesses, "stiffnesses");
+    }
+    else if (print_minimal and loops == 0) {
+      std::cout << "Starting convergence, loop 1, target error is " << target_accuracy * 100 << "%\n";
+    }
+
+    // begin by preparing
+    reset();
+    loops++;
+    float sum_error_ratio = 0;
+
+    // set the stiffness
+    luke::set_finger_stiffness(model, stiffnesses);
+
+    // now evaluate the profile and error
+    int validation_force = 3;
+    MjType::CurveFitData::PoseData curvedata = validate_curve_under_force(validation_force);
+    std::vector<float> error = profile_error(curvedata.f1.x, curvedata.f1.y, X, Y);
+
+    // update to new stiffnesses (i==0 is fixed end, always zero error)
+    for (int i = 1; i < N + 1; i++) {
+
+      float alpha = momentum * (N + 1 - i);
+      float max_error = 1.0;            // ie 100% error, cap this to prevent huge jumps
+      float error_ratio = error[i] / curvedata.f1.x[i];
+
+      if (error_ratio > max_error) error_ratio = max_error;
+      if (error_ratio < -max_error) error_ratio = -max_error;
+
+      sum_error_ratio += abs(error_ratio);
+
+      float new_stiffness = stiffnesses[i - 1] + error_ratio * alpha;
+
+      if (new_stiffness < min_stiffness) new_stiffness = min_stiffness;
+      if (new_stiffness > max_stiffness) new_stiffness = max_stiffness;
+
+      if (new_stiffness != new_stiffness) {
+        std::cout << "found nan in index " << i << ", setting to 8\n";
+        new_stiffness = 8;
+      }
+
+      stiffnesses[i - 1] = new_stiffness;
+    }
+
+    avg_error = sum_error_ratio / (float) N;
+
+    if (print_detailed) {
+      // move errors up to millimeters
+      for (int x = 0; x < error.size(); x++) error[x] *= 1000;
+      luke::print_vec(error, "error (mm)");
+      std::cout << "avg sum error ratio is " << avg_error * 100 << "%\n";
+    }
+    else if (print_minimal) {
+      if (loops % 50 == 0) {
+        std::cout << "Loop " << loops << ", ";
+        std::cout << "avg sum error ratio is " << avg_error * 100 << "%, ";
+        luke::print_vec(stiffnesses, "c");
+      }
+    }
+
+    // do we adjust momentum
+    if (avg_error > partial_threshold) 
+      momentum = initial_momentum;
+    else
+      momentum = final_momentum;
+
+    // does this error fall below our required value
+    if (avg_error < target_accuracy) {
+      good_error_count += 1;
+    }
+    else good_error_count = 0;
+
+    // have we had enough good errors in a row
+    if (good_error_count >= required_good_error) break;
+  }
+
+  if (print) {
+    std::cout << "Stiffness for N=" << N << " are: "; luke::print_vec(stiffnesses, "c");
+    std::cout << "There were " << loops << " loops and final avg error is "
+      << avg_error * 100 << " %\n";
+  }
+
+  // return key information as a string
+  std::string output;
+  output = "Loops = " + std::to_string(loops) + ", %error = " + std::to_string(avg_error * 100);
+  return output;
+}
+
+std::vector<float> MjClass::profile_error(std::vector<float> profile_X, std::vector<float> profile_Y,
+  std::vector<float> truth_X, std::vector<float> truth_Y)
+{
+  /* get a vector of errors on a discrete profile vs a (more) continous truth */
+
+  if (profile_X.size() != profile_Y.size())
+    throw std::runtime_error("profile X and Y lengths are different in profile_error(...)");
+
+  if (truth_X.size() != truth_Y.size())
+    throw std::runtime_error("ground truth X and Y lengths are different in profile_error(...)");
+
+  int n_profile = profile_X.size();
+  int n_truth = truth_X.size();
+
+  // if (profile_X.size() > truth_X.size()) {
+  //   std::cout << "Profile has " << profile_X.size() << " points\n";
+  //   std::cout << "Ground truth has " << truth_X.size() << " points\n";
+  //   throw std::runtime_error("profile has more points than ground truth in profile_error(...)");
+  // }
+
+  std::vector<float> errors;
+  float error_X = 0;
+  float error_Y = 0;
+
+  int last = 0;
+  bool found = false;
+
+  for (int i = 0; i < n_profile; i++) {
+
+    // find the closest X point in the 'truth'
+    for (int j = last; j < n_truth; j++) {
+
+      if (truth_X[j] > profile_X[i]) {
+        last = j - 1;
+        found = true;
+        break;
+      }
+    }
+
+    float truth_X_val;
+    float truth_Y_val;
+
+    if (not found) {
+      truth_X_val = truth_X[n_truth - 1];
+      truth_Y_val = truth_Y[n_truth - 1];
+    }
+    else if (last < 0) {
+      truth_X_val = truth_X[0];
+      truth_Y_val = truth_Y[0];
+    }
+    else {
+      // interpolate
+      float interval = truth_X[last + 1] - truth_X[last];
+      float a = (truth_X[last + 1] - profile_X[i]) / interval;
+      float b = 1 - a;
+      truth_X_val = (a * truth_X[last] + b * truth_X[last + 1]);
+      truth_Y_val = (a * truth_Y[last] + b * truth_Y[last + 1]);
+    }
+
+    // calculate the Y error and ignore the X error
+    error_X = profile_X[i] - truth_X_val;
+    error_Y = profile_Y[i] - truth_Y_val;
+    errors.push_back(error_Y);
+
+    found = false;
+  }
+
+  return errors;
+}
+
+void MjClass::calibrate_gauges()
+{
+  /* run a calibration scheme to normalise gauge outputs for a set force */
+
+  validate_curve_under_force(s_.bend_gauge_normalise);
+  luke::gfloat max_gauge_reading = luke::read_armadillo_gauge(data, 0);
+  s_.bending_gauge.normalise = max_gauge_reading;
+
+  // turn off curve validation mode
+  s_.curve_validation = false;
+}
+
+void MjClass::set_finger_thickness(float thickness)
+{
+  /* set a new finger thickness for the gripper. This does not affect the URDF model,
+  but updates the finger stiffness behaviour. It will also throw off the gauge
+  calibration so if auto-calibration is on then it recalibrates */
+
+  // change the finger thickness, but full changes occur on call to reset()
+  bool changed = luke::change_finger_thickness(thickness);
+
+  // changes are finished upon next call to reset()
+  resetFlags.finger_thickness_changed = changed;
 }
 
 MjType::EventTrack MjClass::add_events(MjType::EventTrack& e1, MjType::EventTrack& e2)
@@ -1753,6 +2102,82 @@ void MjClass::default_goal_event_triggering()
   #undef SS 
   #undef BR
   #undef LR
+}
+
+float MjClass::find_highest_stable_timestep()
+{
+  /* find the highest timestep where the simulation is stable after a set amount of seconds */
+
+  constexpr bool debug = true;
+
+  float increment = 50e-6;     // 0.05 milliseconds
+  float start_value = 4.0e-3;  // 3.5 millseconds
+  float test_time = 1.0;       // 0.5 seconds
+
+  float tune_param = 1.0;       // should be 1.0, reduce to make timestep shorter
+
+  float next_timestep = start_value;
+  bool unstable = false;
+
+  // find stable timestep
+  while (next_timestep > increment) {
+
+    int num_steps = (test_time / next_timestep) + 1;
+    s_.mujoco_timestep = next_timestep;
+    reset();
+
+    for (int i = 0; i < num_steps; i++) {
+
+      step();
+
+      if (luke::is_sim_unstable(model, data)) {
+        if (debug) {
+          std::printf("Timestep of %.3f milliseconds unstable after %i steps (or %.3f seconds)\n",
+            next_timestep * 1000, i, i * next_timestep);
+        }
+        unstable = true;
+        break;
+      }
+    }
+
+    if (unstable) {
+      next_timestep -= increment;
+      unstable = false;
+      continue;
+    }
+    else {
+      break;
+    }
+  }
+
+  if (debug) {
+    std::printf("Timestep of %.3f milliseconds remained stable for %.2f seconds\n",
+            next_timestep * 1000, test_time);
+  }
+
+  float factor;
+  if (next_timestep > 3.0e-3) {
+    factor = tune_param * 0.75;
+  }
+  else {
+    factor = tune_param * 0.85; // used to be 0.9
+  }
+
+  // for safety, reduce timestep by 10 percent
+  float final_timestep = next_timestep * factor;
+
+  // round the timestep to a whole number of microseconds
+  final_timestep = (float) ((int)(final_timestep * 1e6) * 1e-6);
+
+  if (debug) {
+    std::printf("Stable timestep is now set to %.3f milliseconds\n", final_timestep * 1000);
+  }
+
+  // set this timestep
+  s_.mujoco_timestep = final_timestep;
+  reset();
+
+  return final_timestep;
 }
 
 /* ------ utility functions ----- */

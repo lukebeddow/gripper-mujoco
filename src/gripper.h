@@ -21,7 +21,7 @@ public:
   constexpr static int sign = 1;
 
   // are we in debug mode
-  constexpr static bool debug = true;
+  constexpr static bool debug = false;
 
   // handy constants
   constexpr static double to_rad = M_PI / 180.0;
@@ -82,7 +82,7 @@ public:
 
   // convert y position to and from angle, take note of chosen sign convention
   double calc_y(double th_rad) { return x + sign * leadscrew_dist * sin(th_rad); }
-  double calc_th(double x, double y) { return atan((y - x) / leadscrew_dist) * sign; }
+  double calc_th(double x, double y) { return asin((y - x) / leadscrew_dist) * sign; }
 
   // checking fingertip radius
   double calc_fingertip_radius() { 
