@@ -96,6 +96,7 @@ struct
     int object_y_noise_mm = 0;     // added by luke
     int object_z_rot_deg = 0;      // added by luke
     int complete_action_steps = 1; // added by luke
+    double finger_thickness = 0.9;  // added by luke
 
     // figure show flags
     int bendgauge = 0;             // added by luke
@@ -1427,9 +1428,12 @@ void makeSettingsUI(int oldstate)
         {mjITEM_SECTION,  "Sim Settings",      oldstate,  NULL,   " #500"},
         {mjITEM_CHECKINT, "Debug",             2, &myMjClass.s_.debug,             " #600"},
         {mjITEM_SLIDERNUM,"mj timestep",       2, &myMjClass.s_.mujoco_timestep,   "0.00001 0.003"},
-        {mjITEM_SLIDERINT,"curve_validation",  2, &myMjClass.s_.curve_validation,  "-10 1"},
+        {mjITEM_CHECKINT, "curve_validation",  2, &myMjClass.s_.curve_validation,  " #601"},
+        {mjITEM_SLIDERNUM,"tip_force",         2, &myMjClass.s_.tip_force_applied, "-10 10"},
         {mjITEM_SLIDERNUM,"finger_stiffness",  2, &myMjClass.s_.finger_stiffness,  "1.0 25.0"},
         {mjITEM_CHECKINT, "randomise_colours", 2, &myMjClass.s_.randomise_colours, " #602"},
+        {mjITEM_SLIDERNUM,"finger_thickness",  2, &settings.finger_thickness,  "0.5 1.5"},
+        {mjITEM_BUTTON,   "apply thickness",   2, NULL,                            " #602"},
         {mjITEM_END}
     };
 
@@ -2187,12 +2191,16 @@ void uiEvent(mjuiState* state)
 
         else if (it and it->sectionid == SECT_SETTINGS)
         {
-            // switch (it->itemid)
-            // {
-            //     case 0: case 1: case 2: case 3: case 4: case 5: case 6:
-            //         luke::toggle_constraint(myMjClass.model, myMjClass.data, it->itemid);
-            //         break;
-            // }
+            // std::cout << "it->itemid is " << it->itemid << '\n';
+
+            switch (it->itemid)
+            {
+                case 7:
+                    std::cout << "Applying finger thickness of " << settings.finger_thickness << " mm\n";
+                    myMjClass.set_finger_thickness(settings.finger_thickness * 1e-3);
+                    myMjClass.reset();
+                    break;
+            }
         }
 
         else if (it and it->sectionid == SECT_ACTION)

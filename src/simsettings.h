@@ -28,7 +28,8 @@
   general */\
   XX(  debug,                   bool,     true)     /* print debug info to terminal */\
   XX(  mujoco_timestep,         double,   0.001)    /* sim timestep in seconds - default 0.002 */\
-  XX(  curve_validation,        int,      false)    /* save finger curve data for testing, -ve number sets tip force */\
+  XX(  curve_validation,        bool,     false)    /* are we in curve validation mode, if yes collect curve data */\
+  XX(  tip_force_applied,       double,    0.0)     /* apply a tip force, only possible in curve validation mode */\
   XX(  finger_stiffness,        double,   -7.5)     /* <0 means set all joints to this stiffness, -1<x<0 means use model, -2<x<-1 means adjusted model */\
   XX(  random_seed,             uint,     0)        /* random seed */\
   XX(  randomise_colours,       bool,     true)     /* randomise the colours of the objects */\
@@ -37,7 +38,7 @@
   XX(  auto_set_timestep,       bool,     true)     /* find the highest stable timestep, overrides mujoco_timestep */\
   XX(  auto_calibrate_gauges,   bool,     true)     /* normalise gauges between +-5N, overrides bending_gauge.normalise */\
   XX(  auto_sim_steps,          bool,     true)     /* automatically find the sim steps per action, overrides sim_steps_per_action */\
-  XX(  bend_gauge_normalise,    float,    5.0)      /* force to normalise all gauge readings between (CAST TO INT), only used if auto_calibrate_gauges=true */\
+  XX(  bend_gauge_normalise,    float,    5.0)      /* force in newtons to normalise all gauge readings between, only used if auto_calibrate_gauges=true */\
   XX(  time_for_action,         float,    0.2)      /* time in seconds to give for each action to complete, only used if auto_sim_steps=true */\
   /*    
   HER settings */\

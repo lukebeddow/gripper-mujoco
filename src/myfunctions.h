@@ -30,6 +30,22 @@
 namespace luke
 {
 
+template <class T>
+struct VectorStruct {
+  std::vector<T> panda;
+  std::vector<T> gripper;
+  std::vector<T> finger;
+  std::vector<T> base;
+
+  void reset() {
+    // wipe and reallocate
+    std::vector<T>().swap(panda);
+    std::vector<T>().swap(gripper);
+    std::vector<T>().swap(finger);
+    std::vector<T>().swap(base);
+  }
+};
+
 /* ----- global variables ----- */
 
 extern Target target_;      // accessed by mysimulate.cpp for gripper sliders
@@ -142,6 +158,7 @@ void fill_theory_curve(std::vector<float>& theory_X, std::vector<float>& theory_
 int last_action_robot();
 bool is_sim_unstable(mjModel* model, mjData* data);
 int get_N();
+float get_finger_thickness();
 std::vector<luke::gfloat> get_stiffnesses();
 void print_stiffnesses();
 
