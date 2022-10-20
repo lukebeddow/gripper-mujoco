@@ -76,8 +76,6 @@ void configure_constraints(mjModel* model, mjData* data);
 void keyframe(mjModel* model, mjData* data, std::string keyframe_name);
 void keyframe(mjModel* model, mjData* data, int keyframe_index);
 void reset(mjModel* model, mjData* data);
-void reset_J();
-void wipe_settled();
 void calibrate_reset(mjModel* model, mjData* data);
 void set_all_constraints(mjModel* model, mjData* data, bool set_to);
 void toggle_constraint(mjModel* model, mjData* data, int id);
@@ -101,13 +99,6 @@ void update_stepper(mjModel* model, mjData* data);
 void update_objects(const mjModel* model, mjData* data);
 void update_all(mjModel* model, mjData* data);
 void update_constraints(mjModel* model, mjData* data);
-
-// monitor
-void check_settling();
-bool is_settled();
-bool is_target_reached();
-bool is_target_step();
-bool within_limits();
 
 // gripper target position
 bool set_gripper_target_m(double x, double y, double z);

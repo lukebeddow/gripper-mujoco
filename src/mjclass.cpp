@@ -858,15 +858,8 @@ void MjClass::action_step()
 
   if (s_.debug) tick();
 
-  bool target_reached = false;
-  bool target_step = false;
-
   for (int i = 0; i < s_.sim_steps_per_action; i++) {
-    
     step();
-
-    target_step = luke::is_target_step();
-    target_reached = luke::is_target_reached();
   }
 
   if (s_.debug)

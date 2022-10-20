@@ -218,14 +218,6 @@ struct JointSettings {
     double time_per_step = 0.0;                 // runtime depends
   } ctrl;
 
-  // simulation details
-  static constexpr struct Sim {
-    static constexpr int step_tolerance = 3;    // for detecting equilibrium
-    static constexpr int target_tolerance = 10; // for target_reached
-    static constexpr int n_arr = 3;             // no. of steps saved in arrays
-    static constexpr int n_settle = 10;         // no. of steps to be settled
-  } sim{};
-
   // hardcoded stiffnesses based on numerical solving
   struct {
 
@@ -395,23 +387,6 @@ struct JointSettings {
     std::vector<int> palm;
   } geom_idx;
 
-  // have the joints settled into equilibrium
-  struct Settle {
-    std::array<std::array<int, 2>, sim.n_arr> finger1_arr {};
-    std::array<std::array<int, 2>, sim.n_arr> finger2_arr {};
-    std::array<std::array<int, 2>, sim.n_arr> finger3_arr {};
-    std::array<int, sim.n_arr> palm_arr {};
-    int counter {};
-    bool finger1 {};
-    bool finger2 {};
-    bool finger3 {};
-    bool palm {};
-    bool all {};
-    bool settled {};
-    bool target_reached {};
-    bool target_step {};
-  } settle;
-
   /* ----- Member functions ----- */
 
   // only resets the automatically generated settings
@@ -444,10 +419,6 @@ struct JointSettings {
 
     JointNum joint_num_reset;
     num = joint_num_reset;
-
-    Settle settle_reset;
-    settle = settle_reset;
-
   }
 
   // printing functions
@@ -508,14 +479,6 @@ struct JointSettings {
     print_vec(geom_idx.finger3, "finger3 geom idx");
     print_vec(geom_idx.palm, "palm geom idx");
   }
-  void print_settled() {
-    std::cout << "Settled: " << settle.finger1 << " " << settle.finger2
-      << " " << settle.finger3 << " " << settle.palm << " " 
-      << settle.all << " " << settle.settled 
-      << ", reached: " << settle.target_reached
-      << ", step: " << settle.target_step
-      << "\n";
-  }
   
 };
 
@@ -535,16 +498,6 @@ Gripper finger3_;
 
 // time of last stepper step
 static double last_step_time_ = 0.0;
-
-// make vectors of pointers for properties we will want to loop over
-// these are not currently used at all!
-std::vector<Gripper*> fingers_ {&finger1_, &finger2_, &finger3_};
-std::vector<std::array<std::array<int, 2>, j_.sim.n_arr>*> finger_arrays_ {
-  &j_.settle.finger1_arr, &j_.settle.finger2_arr, &j_.settle.finger3_arr
-};
-std::vector<bool*> finger_settled_ {
-  &j_.settle.finger1, &j_.settle.finger2, &j_.settle.finger3
-};
 
 constexpr static bool debug = false; // turn on/off debug mode for this file only
 
@@ -628,10 +581,6 @@ void reset(mjModel* model, mjData* data)
   // recalculate all object positions/forces
   mj_forward(model, data);
   update_all(model, data);
-
-  // briefly override
-  j_.settle.settled = true;
-  j_.settle.target_reached = true;
 
   // set the joints to the equilibrium position
   calibrate_reset(model, data);
@@ -2011,17 +1960,6 @@ void apply_tip_force(mjModel* model, mjData* data, double force, bool reset)
   }
 }
 
-void wipe_settled()
-{
-  /* wipes the settled and target reached states, to give an action time to
-  affect the simulation state */
-
-  j_.settle.settled = false;
-  j_.settle.target_reached = false;
-  j_.settle.target_step = false;
-  j_.settle.counter = 0;
-}
-
 /* ----- simulation ----- */
 
 void before_step(mjModel* model, mjData* data)
@@ -2447,133 +2385,6 @@ void update_constraints(mjModel* model, mjData* data)
   //   std::cout << (int) model->eq_active[i] << ", ";
   // }
   // std::cout << "\n";
-}
-
-/* ----- monitor simulation ----- */
-
-void check_settling()
-{
-  /* check if the simulation has settled to steady state */
-
-  /* THIS FUNCTION IS CURRENTLY NOT CALLED AND WILL NOT WORK IF IT IS
-  AS finger1_, finger2_, and finger3_ ARE NOT UPDATED EVER */
-  throw std::runtime_error("check_settling() function is not expecting to be called");
-
-  static constexpr int n = j_.sim.n_arr;
-
-  // loop through each finger
-  for (int i = 0; i < fingers_.size(); i++) {
-
-    (*finger_settled_[i]) = true;
-
-    // first shift the window
-    for (int j = 0; j < n - 1; j++) {
-      for (int k = 0; k < 2; k++) {
-        (*finger_arrays_[i])[j][k] = (*finger_arrays_[i])[j + 1][k];
-      }
-    }
-
-    // now update with the most recent results
-    (*finger_arrays_[i])[n - 1][0] = fingers_[i]->step.x;
-    (*finger_arrays_[i])[n - 1][1] = fingers_[i]->step.y;
-
-    // now check if all the values are settled
-    for (int j = 0; j < n - 1; j++) {
-      for (int k = 0; k < 2; k++) {
-        if (abs((*finger_arrays_[i])[j][k] - (*finger_arrays_[i])[n - 1][k])
-              > j_.sim.step_tolerance) {
-          (*finger_settled_[i]) = false;
-        }
-      }
-    }
-  }
-  
-  // determine if the palm has settled
-  j_.settle.palm = true;
-  for (int j = 0; j < n - 1; j++) {
-    j_.settle.palm_arr[j] = j_.settle.palm_arr[j + 1];
-  }
-  j_.settle.palm_arr[n - 1] = finger1_.step.z;
-  for (int j = 0; j < n - 1; j++) {
-    if (abs(j_.settle.palm_arr[j] - j_.settle.palm_arr[n - 1])
-        > j_.sim.step_tolerance) {
-      j_.settle.palm = false;
-    }
-  }
-
-  // determine if everything is settled for n_arr steps
-  j_.settle.all = j_.settle.finger1 * j_.settle.finger2 * j_.settle.finger3
-    * j_.settle.palm;
-
-  // determine if it has been settled for n_settle steps
-  j_.settle.counter = (j_.settle.counter + 1) * j_.settle.all;
-  if (j_.settle.counter >= j_.sim.n_settle) {
-    j_.settle.settled = true;
-    j_.settle.counter = j_.sim.n_settle;
-  }
-  else {
-    j_.settle.settled = false;
-  }
-
-  // determine if we have reached our target
-  if (j_.settle.settled) {
-    if (finger1_.is_at(target_.end, j_.sim.target_tolerance) and
-        finger2_.is_at(target_.end, j_.sim.target_tolerance) and 
-        finger3_.is_at(target_.end, j_.sim.target_tolerance)) {
-      j_.settle.target_reached = true;
-    }
-  }
-  else j_.settle.target_reached = false;
-
-  // determine if we have reached the correct step target
-  if (target_.next.is_at(target_.end)) {
-    j_.settle.target_step = true;
-  }
-  else j_.settle.target_step = false;
-
-  /* FOR TESTING
-  // print the arrays
-  for (int i = 0; i < 3; i++) {
-    std::cout << "finger " << i << " array: {";
-    for (int j = 0; j < n; j++) {
-      std::cout << "{ ";
-      for (int k = 0; k < 2; k++) {
-        std::cout << (*finger_arrays_[i])[j][k] << " ";
-      }
-      std::cout << "}";
-    }
-    std::cout << "}\n";
-  }
-  std::cout << "palm array: { ";
-  for (int j = 0; j < n; j++) {
-    std::cout << j_.settle.palm_arr[j] << " ";
-  }
-  std::cout << "}\n";
-  */
-
-  // j_.print_settled();
-}
-
-bool is_settled()
-{
-  /* has the gripper fingers and palm stopped moving */
-
-  return j_.settle.settled;
-}
-
-bool is_target_reached()
-{
-  /* have we reached our target - note this currently has steady state error
-  issues */
-
-  return j_.settle.target_reached;
-}
-
-bool is_target_step()
-{
-  /* has the gripper target become the actual step target */
-
-  return j_.settle.target_step;
 }
 
 /* ----- set gripper target ----- */
