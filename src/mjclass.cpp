@@ -1443,6 +1443,85 @@ std::vector<luke::gfloat> MjClass::get_finger_stiffnesses()
   return luke::get_stiffnesses();
 }
 
+/* ----- sensor functions ----- */
+
+std::vector<luke::gfloat> MjClass::get_bend_gauge_readings(bool unnormalise)
+{
+  /* return a vector [g1, g2, g3] of the three bend gauges last reading */
+
+  std::vector<luke::gfloat> readings(3);
+
+  readings[0] = finger1_gauge.read_element();
+  readings[1] = finger2_gauge.read_element();
+  readings[2] = finger3_gauge.read_element();
+
+  if (unnormalise) {
+    readings[0] *= s_.bending_gauge.normalise;
+    readings[1] *= s_.bending_gauge.normalise;
+    readings[2] *= s_.bending_gauge.normalise;
+  }
+
+  return readings;
+}
+
+luke::gfloat MjClass::get_palm_reading(bool unnormalise)
+{
+  /* get the last palm reading */
+
+  luke::gfloat reading = palm_sensor.read_element();
+
+  if (unnormalise) {
+    reading *= s_.palm_sensor.normalise;
+  }
+
+  return reading;
+}
+
+luke::gfloat MjClass::get_wrist_reading(bool unnormalise)
+{
+  /* get the last wrist Z reading */
+
+  luke::gfloat reading = wrist_Z_sensor.read_element();
+
+  if (unnormalise) {
+    reading *= s_.wrist_sensor_Z.normalise;
+  }
+
+  return reading;
+}
+
+std::vector<luke::gfloat> MjClass::get_state_readings(bool unnormalise)
+{
+  /* get a vector [gripperx, grippery, gripperz, basez] */
+
+  std::vector<luke::gfloat> readings(4);
+
+  readings[0] = x_motor_position.read_element();
+  readings[1] = y_motor_position.read_element();
+  readings[2] = z_motor_position.read_element();
+  readings[3] = z_base_position.read_element();
+
+  if (unnormalise) {
+    readings[0] = unnormalise_from(
+      readings[0], luke::Gripper::xy_min, luke::Gripper::xy_max); 
+    readings[1] = unnormalise_from(
+      readings[1], luke::Gripper::xy_min, luke::Gripper::xy_max);
+    readings[2] = unnormalise_from(
+      readings[2], luke::Gripper::z_min, luke::Gripper::z_max);
+    readings[3] = unnormalise_from(
+      readings[3], luke::Target::base_z_min, luke::Target::base_z_max);
+  }
+
+  return readings;
+}
+
+luke::gfloat MjClass::get_finger_angle()
+{
+  /* return in radians the finger angle */
+
+  return luke::get_target_finger_angle();
+}
+
 /* ----- real gripper functions ----- */
 
 std::vector<float> MjClass::get_finger_gauge_data()
@@ -1714,6 +1793,14 @@ MjType::CurveFitData::PoseData MjClass::validate_curve()
     pose.f3.theory_x_curve, pose.f3.theory_y_curve,
     s_.tip_force_applied, s_.finger_stiffness);
 
+  // TESTING: replace theory with new points
+  pose.f1.theory_y = luke::discretise_curve(pose.f1.x, pose.f1.theory_x_curve,
+    pose.f1.theory_y_curve);
+  pose.f2.theory_y = luke::discretise_curve(pose.f1.x, pose.f2.theory_x_curve,
+    pose.f2.theory_y_curve);
+  pose.f3.theory_y = luke::discretise_curve(pose.f1.x, pose.f3.theory_x_curve,
+    pose.f3.theory_y_curve);
+
   // calculate errors
   pose.calc_error();
 
@@ -1741,7 +1828,7 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force)
   int steps_to_make = time_to_settle / s_.mujoco_timestep;
   // std::cout << "Stepping for " << steps_to_make << " steps to allow settling\n";
 
-  while (dynamic_repeats_done <= dynamic_repeats_allowed) {
+  while (true) {
 
     for (int i = 0; i < steps_to_make; i++) {
 
@@ -1752,6 +1839,8 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force)
           s_.mujoco_timestep *= 0.9;
           reset();
           dynamic_repeats_done += 1;
+          if (dynamic_repeats_done > dynamic_repeats_allowed)
+            throw std::runtime_error("curve validation unstable");
           std::cout << "Curve validation unstable, trying again with timestep "
             << s_.mujoco_timestep * 1000 << " milliseconds (retry number " << dynamic_repeats_done << ")\n";
           continue; // try again
@@ -1821,10 +1910,11 @@ std::string MjClass::numerical_stiffness_converge(float force, float target_accu
   // create theoretical curve at this force
   luke::fill_theory_curve(theory_X, theory_Y, force, theory_N);
 
-  return numerical_stiffness_converge(theory_X, theory_Y, target_accuracy);
+  return numerical_stiffness_converge(force, target_accuracy, theory_X, theory_Y);
 }
 
-std::string MjClass::numerical_stiffness_converge(std::vector<float> X, std::vector<float> Y, float target_accuracy)
+std::string MjClass::numerical_stiffness_converge(float force, float target_accuracy,
+  std::vector<float> X, std::vector<float> Y)
 {
   /* converge on a given X,Y profile with repeated numerical solving of the mujoco
   finger profile in the case of point end loading 
@@ -1834,7 +1924,7 @@ std::string MjClass::numerical_stiffness_converge(std::vector<float> X, std::vec
 
   bool print = true;            // print out only the final result
   bool print_minimal = true;    // also print out error every 50 loops
-  bool print_detailed = false;  // also print out all possible information every loop
+  bool print_detailed = true;  // also print out all possible information every loop
 
   // use default stiffnesses as initial guess
   std::vector<luke::gfloat> stiffnesses = luke::get_stiffnesses();
@@ -1876,9 +1966,9 @@ std::string MjClass::numerical_stiffness_converge(std::vector<float> X, std::vec
     luke::set_finger_stiffness(model, stiffnesses);
 
     // now evaluate the profile and error
-    int validation_force = 3;
-    MjType::CurveFitData::PoseData curvedata = validate_curve_under_force(validation_force);
-    std::vector<float> error = profile_error(curvedata.f1.x, curvedata.f1.y, X, Y);
+    MjType::CurveFitData::PoseData curvedata = validate_curve_under_force(force);
+    bool relative_error = false;
+    std::vector<float> error = profile_error(curvedata.f1.x, curvedata.f1.y, X, Y, relative_error);
 
     // update to new stiffnesses (i==0 is fixed end, always zero error)
     for (int i = 1; i < N + 1; i++) {
@@ -1949,8 +2039,233 @@ std::string MjClass::numerical_stiffness_converge(std::vector<float> X, std::vec
   return output;
 }
 
+std::string MjClass::numerical_stiffness_converge_2(float target_accuracy)
+{
+  /* converge on a given X,Y profile with repeated numerical solving of the mujoco
+  finger profile in the case of point end loading 
+  
+  target_accuracy -> 0.5e-3 gives good agreement, 2e-3 gives decent
+  */
+
+  constexpr int theory_N = 100;
+
+  std::vector<float> forces { 1 * 0.981, 2 * 0.981, 3 * 0.981, 4 * 0.981 };
+
+  std::vector<float> theory_X_1;
+  std::vector<float> theory_Y_1;
+  std::vector<float> theory_X_2;
+  std::vector<float> theory_Y_2;
+  std::vector<float> theory_X_3;
+  std::vector<float> theory_Y_3;
+  std::vector<float> theory_X_4;
+  std::vector<float> theory_Y_4;
+
+  std::vector<std::vector<float>*> theory_X { &theory_X_1, &theory_X_2, &theory_X_3, &theory_X_4 };
+  std::vector<std::vector<float>*> theory_Y { &theory_Y_1, &theory_Y_2, &theory_Y_3, &theory_Y_4 };
+
+  std::vector<float> force_errors(4);
+
+  std::vector<std::vector<int>> k_regieme {
+    { 0 },
+    { 0, 1 },
+       { 1 },
+       { 1, 2 },
+          { 2 },
+          { 2, 3 },
+             { 3 },
+             { 3, 0 },
+  };
+
+  // std::vector<std::vector<int>> k_regieme {
+  //   { 0, 1, 2 },
+  //   { 1, 2, 3 },
+  //   { 2, 3, 0 },
+  //   { 3, 0, 1 }
+  // };
+  
+  // create theoretical curve at each force
+  for (int i = 0; i < forces.size(); i++) {
+    
+    std::vector<float> theory_X_vec;
+    std::vector<float> theory_Y_vec;
+    luke::fill_theory_curve(*theory_X[i], *theory_Y[i], forces[i], theory_N);
+  }
+
+  bool print = true;            // print out only the final result
+  bool print_minimal = true;    // also print out error every 50 loops
+  bool print_detailed = false;  // also print out all possible information every loop
+
+  // use default stiffnesses as initial guess
+  std::vector<luke::gfloat> stiffnesses = luke::get_stiffnesses();
+  int N = stiffnesses.size();
+
+  // for uniform random numbers from 0-1
+  std::uniform_real_distribution<double> distribution(0.0, 1.0);
+
+  int loops = 0;
+  int max_loops = 250;
+  float max_error = 1.0; // ie 100%, caps biggest jump
+  float max_stiffness = 800;
+  float min_stiffness = 0.5;
+  bool stochastic_alpha = true; // does stiffness step have a +0 to +100% random value
+
+  float avg_error = 0;
+  float cumulative_error = 0;
+  float overall_avg = 0;
+  float best_overall_avg = 1e3;
+  int best_loop = 0;
+  std::vector<float> error(N + 1);
+  std::vector<float> error_sum_vec(N + 1);
+  std::vector<luke::gfloat> best_stiffnesses(N);
+  int good_error_count = 0;
+  int required_good_error = 4; // one per force
+  float partial_threshold = 20e-3; // 10e-3; // 1%
+  // float initial_momentum = 0.25;
+  // float final_momentum = 0.15;
+
+  float initial_momentum = 0.5;
+  float final_momentum = 0.1;
+
+  // float error_threshold = 0.5e-3; // 0.5e-3 gives excellent agreement, 2e-3 gives decent
+
+  // how large are the step changes allowed to be (default 4)
+  float momentum = initial_momentum;
+  
+  // int k = 3;
+  int j = 0;
+  // int wait_num = 5;
+  // required_good_error *= wait_num - 1;
+
+  while (loops < max_loops) {
+
+    j++;
+    if (j >= k_regieme.size()) j = 0;
+
+    if (print_detailed) {
+      std::cout << "Loop " << loops << '\n';
+      luke::print_vec(stiffnesses, "stiffnesses");
+    }
+    else if (print_minimal and loops == 0) {
+      std::cout << "Starting convergence, loop 1, target error is " << target_accuracy * 100 << "%\n";
+    }
+
+    // begin by preparing
+    loops++;
+    // std::fill(error_sum_vec.begin(), error_sum_vec.end(), 0.0); // zero initialisation
+    for (int b = 0; b < error_sum_vec.size(); b++) error_sum_vec[b] = 0;
+    reset();
+    luke::set_finger_stiffness(model, stiffnesses); // set from previous loop
+
+    // select k based on k_regieme
+    for (int k : k_regieme[j]) {
+
+    /* set k and now errors are found for that force */
+
+    // now evaluate the profile and error
+    MjType::CurveFitData::PoseData curvedata = validate_curve_under_force(forces[k]);
+    bool relative_error = true;
+    error = profile_error(curvedata.f1.x, curvedata.f1.y, *theory_X[k], *theory_Y[k], relative_error);
+
+    // tally the errors
+    avg_error = 0;
+    cumulative_error = 0;
+    for (int m = 0; m < error_sum_vec.size(); m++) {
+      // error[m] /= curvedata.f1.x[m]; // old, profile error already gives relative
+      if (error[m] > max_error) error[m] = max_error;
+      if (error[m] < -max_error) error[m] = -max_error;
+      error_sum_vec[m] += error[m];
+      cumulative_error += abs(error[m]);
+    }
+    avg_error = cumulative_error / (float) N;
+    force_errors[k] = avg_error;
+
+    }
+
+    /* stiffnesses are updated based on the error vector magnitudes */
+
+    // update to new stiffnesses (i==0 is fixed end, always zero error)
+    for (int i = 1; i < N + 1; i++) {
+
+      // add stochastic value to momentum and weight stronger towards fixed end
+      float alpha = momentum * (N + 1 - i);
+      if (stochastic_alpha) alpha *= (1 + distribution(*MjType::generator));
+
+      // calculate and apply the new stiffness, capping min/max
+      float new_stiffness = stiffnesses[i - 1] + error[i] * alpha;
+      if (new_stiffness < min_stiffness) new_stiffness = min_stiffness;
+      if (new_stiffness > max_stiffness) new_stiffness = max_stiffness;
+      stiffnesses[i - 1] = new_stiffness;
+    }
+
+    /* finished update, now check termination and print information */
+
+    // not enough data to calculate overall average
+    if (loops < k_regieme.size()) continue;
+
+    // get average error per force
+    overall_avg = 0;
+    for (int g = 0; g < 4; g++) {
+      overall_avg += force_errors[g];
+    }
+    overall_avg /= 4.0;
+
+    // check if this is the best
+    if (overall_avg < best_overall_avg) {
+      for (int d = 0; d < stiffnesses.size(); d++) {
+        best_stiffnesses[d] = stiffnesses[d];
+      }
+      best_overall_avg = overall_avg;
+      best_loop = loops;
+    }
+
+    if (print_detailed) {
+      // move errors up to millimeters
+      for (int x = 0; x < error_sum_vec.size(); x++) error_sum_vec[x] *= 1000;
+      luke::print_vec(error_sum_vec, "error sum vec (mm)");
+      luke::print_vec(force_errors, "force errors overall");
+      std::cout << "overall_avg error ratio is " << overall_avg * 100 << "%\n";
+    }
+    else if (print_minimal) {
+      if (loops % 50 == 0) {
+        std::cout << "Loop " << loops << ", ";
+        std::cout << "overall_avg error ratio is " << overall_avg * 100 << "%, ";
+        luke::print_vec(stiffnesses, "c");
+      }
+    }
+
+    // does this error fall below our required value
+    if (overall_avg < target_accuracy) {
+      good_error_count += 1;
+    }
+    else good_error_count = 0;
+
+    // have we had enough good errors in a row
+    if (good_error_count >= required_good_error) break;
+  }
+
+  // if (print) {
+  //   std::cout << "Stiffness for N=" << N << " are: "; luke::print_vec(stiffnesses, "c");
+  //   std::cout << "There were " << loops << " loops and final overall_avg error is "
+  //     << overall_avg * 100 << " %\n";
+  // }
+
+  if (print) {
+    std::cout << "Best stiffness for N=" << N << " are: "; luke::print_vec(best_stiffnesses, "c");
+    std::cout << "There were " << loops << " loops and best overall_avg error is "
+      << best_overall_avg * 100 << " which occurred at loop " << best_loop << " %\n";
+  }
+
+  // set the best stiffnesess
+  luke::set_finger_stiffness(model, best_stiffnesses);
+
+  // return best information as a string
+  std::string output;
+  output = "Loops = " + std::to_string(best_loop) + ", %error = " + std::to_string(best_overall_avg * 100);
+  return output;
+}
+
 std::vector<float> MjClass::profile_error(std::vector<float> profile_X, std::vector<float> profile_Y,
-  std::vector<float> truth_X, std::vector<float> truth_Y)
+  std::vector<float> truth_X, std::vector<float> truth_Y, bool relative)
 {
   /* get a vector of errors on a discrete profile vs a (more) continous truth */
 
@@ -2011,6 +2326,18 @@ std::vector<float> MjClass::profile_error(std::vector<float> profile_X, std::vec
     // calculate the Y error and ignore the X error
     error_X = profile_X[i] - truth_X_val;
     error_Y = profile_Y[i] - truth_Y_val;
+
+    // if we are calculating relative error (ie percentage but not *100)
+    if (relative) {
+      if (truth_Y_val < 1e-5) truth_Y_val = 1e-5;
+      error_Y /= truth_Y_val;
+    }
+
+    // std::cout << "(Y, truth) is (" << profile_Y[i] << ", " << truth_Y_val << ")\t error is "
+    //   <<  profile_Y[i] - truth_Y_val << "\t relative error is " << error_Y << '\n';
+
+    // std::cout << "error_Y is " << error_Y * truth_Y_val << ", relative: " << error_Y << ", Y is " << profile_Y[i] << '\n';
+
     errors.push_back(error_Y);
 
     found = false;
@@ -2220,6 +2547,16 @@ float normalise_between(float val, float min, float max)
   else if (val < min) return -1.0;
   
   return 2 * (val - min) / (max - min) - 1;
+}
+
+float unnormalise_from(float val, float min, float max)
+{
+  /* undo a normalisation into interval -1 +1 */
+
+  if (val > 1.0) return max;
+  else if (val < -1.0) return min;
+
+  return (0.5 * (val + 1) * (max - min)) + min;
 }
 
 std::string MjType::Settings::get_settings()

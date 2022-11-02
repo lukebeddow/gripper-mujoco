@@ -1182,7 +1182,7 @@ class TrainDQN():
     # if the threshold is not exceeded
     else: return
 
-  def run_episode(self, i_episode, test=None):
+  def run_episode(self, i_episode, test=None, heuristic=None):
     """
     Perform one episode of training or testing
     """
@@ -1211,7 +1211,12 @@ class TrainDQN():
       if self.log_level > 2: print("Episode", i_episode, "action", t)
 
       # select and perform an action
-      if self.params.use_HER:
+      if heuristic:
+        # human written action selection function
+        action = self.env.get_heuristic_action()
+        action = torch.tensor([action]) # to fit with select_action(...)
+      # else we are using RL q-networks
+      elif self.params.use_HER:
         HER_obs = torch.cat((obs, goal), dim=1)
         action = self.select_action(HER_obs, decay_num=i_episode, test=test)
       else:
@@ -1281,8 +1286,7 @@ class TrainDQN():
     """
 
     # if we have been given a network to train
-    if network != None:
-      self.init(network)
+    if network != None: self.init(network)
 
     # if this is a fresh, new training
     if i_start == None or i_start == 0:
@@ -1348,9 +1352,10 @@ class TrainDQN():
     # end of training
     self.env.close()
 
-  def test(self, pause_each_episode=None):
+  def test(self, pause_each_episode=None, heuristic=None):
     """
-    Test the target net performance, return a test report
+    Test the target net performance, return a test report. Set heuristic to True
+    in order to use a human written function for selecting actions.
     """
 
     # begin test mode
@@ -1368,9 +1373,11 @@ class TrainDQN():
         print("Begin test episode", i_episode)
         # self.env.mj.print(f"Begin test episode {i_episode}")
 
-      if pause_each_episode == True: input("Press enter to continue")
+      if heuristic: self.env.start_heuristic_grasping()
 
-      self.run_episode(i_episode, test=True)
+      if pause_each_episode: input("Press enter to continue")
+
+      self.run_episode(i_episode, test=True, heuristic=heuristic)
 
     # get the test data out
     test_data = self.env.test_trial_data
@@ -1386,6 +1393,30 @@ class TrainDQN():
     if self.log_level > 0: print("Testing complete, finished", i_episode, "episodes")
 
     return test_data
+
+  def test_heuristic_baseline(self, pause_each_episode=None, label=None):
+    """
+    Test the grasping performance of a heurisitc baseline
+    """
+
+    print_out = True
+
+    if label is not None: label = "heuristic_test_" + label
+    else: label = "heuristic_test"
+
+    if self.log_level > 0: print("Testing heuristic baseline")
+
+    # run the test chooseing heuristic actions
+    self.env.start_heuristic_grasping()
+    test_data = self.test(heuristic=True, pause_each_episode=pause_each_episode)
+
+    # save results
+    test_report = self.create_test_report(test_data)
+    self.modelsaver.save(label, txtstr=test_report, txtonly=True)
+
+    if self.log_level > 0:
+      print("Finished testing heuristic baseline")
+      if print_out: print(test_report)
 
   def get_params_dictionary(self):
     """
@@ -1678,6 +1709,8 @@ if __name__ == "__main__":
   # model.env.mj.set.axial_gauge.in_use = True
   # model.env.mj.set.wrist_sensor_Z.in_use = True
   # model = array_training_DQN.new_rewards(model)
+
+  # ----- test ----- #
 
   # test
   model.env.mj.set.debug = False
