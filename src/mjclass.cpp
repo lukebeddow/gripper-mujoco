@@ -2103,7 +2103,7 @@ std::string MjClass::numerical_stiffness_converge_2(float target_accuracy)
   std::uniform_real_distribution<double> distribution(0.0, 1.0);
 
   int loops = 0;
-  int max_loops = 250;
+  int max_loops = 750;
   float max_error = 1.0; // ie 100%, caps biggest jump
   float max_stiffness = 800;
   float min_stiffness = 0.5;
@@ -2123,8 +2123,8 @@ std::string MjClass::numerical_stiffness_converge_2(float target_accuracy)
   // float initial_momentum = 0.25;
   // float final_momentum = 0.15;
 
-  float initial_momentum = 0.5;
-  float final_momentum = 0.1;
+  float initial_momentum = 2; // was 0.5
+  float final_momentum = 1; // was 0.1
 
   // float error_threshold = 0.5e-3; // 0.5e-3 gives excellent agreement, 2e-3 gives decent
 
@@ -2187,7 +2187,7 @@ std::string MjClass::numerical_stiffness_converge_2(float target_accuracy)
     for (int i = 1; i < N + 1; i++) {
 
       // add stochastic value to momentum and weight stronger towards fixed end
-      float alpha = momentum * (N + 1 - i);
+      float alpha = momentum * ((N + 1 - i) / (float) N);
       if (stochastic_alpha) alpha *= (1 + distribution(*MjType::generator));
 
       // calculate and apply the new stiffness, capping min/max
@@ -2252,7 +2252,7 @@ std::string MjClass::numerical_stiffness_converge_2(float target_accuracy)
   if (print) {
     std::cout << "Best stiffness for N=" << N << " are: "; luke::print_vec(best_stiffnesses, "c");
     std::cout << "There were " << loops << " loops and best overall_avg error is "
-      << best_overall_avg * 100 << " which occurred at loop " << best_loop << " %\n";
+      << best_overall_avg * 100 << "% which occurred at loop " << best_loop << "\n";
   }
 
   // set the best stiffnesess

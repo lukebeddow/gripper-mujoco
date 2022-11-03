@@ -134,7 +134,7 @@ def run_curve_data(mjenv, segments, converge_to=None, converge_target_accuracy=5
 # set finger stiffness algorithm
 finger_stiffness = -7.5 # finalised theory result
 # finger_stiffness = -101 # last convergence as initial guess
-# finger_stiffness = -102 # testing new convergence
+finger_stiffness = -102 # testing new convergence
 
 auto_timestep = True
 converge = None
