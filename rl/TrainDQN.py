@@ -1660,22 +1660,20 @@ if __name__ == "__main__":
   # ----- load ----- #
 
   # load
-  # net = networks.DQN_3L60
-  # model.init(net)
-  # folderpath = "/home/luke/cluster/rl/models/dqn/07-10-22/"
-  # foldername = "cluster_17:55_A12"
-  # model.device = torch.device("cpu")
-  # model.load(id=None, folderpath=folderpath, foldername=foldername)
+  folderpath = "/home/luke/mymujoco/rl/models/dqn/baselines-oct/"
+  foldername = "sensor_2_thickness_0.9"
+  model.set_device("cpu")
+  model.load(id=None, folderpath=folderpath, foldername=foldername)
 
   # ----- train ----- #
 
-  # # train
-  net = networks.DQN_3L60
-  model.env.disable_rendering = True
-  model.env.mj.set.debug = False
-  model.num_segments = 8
-  model.finger_thickness = 0.8e-3
-  model.train(network=net)
+  # train
+  # net = networks.DQN_3L60
+  # model.env.disable_rendering = True
+  # model.env.mj.set.debug = False
+  # model.num_segments = 8
+  # model.finger_thickness = 0.8e-3
+  # model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"

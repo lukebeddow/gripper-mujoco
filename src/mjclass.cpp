@@ -103,6 +103,8 @@ void MjClass::configure_settings()
     return;
   }
 
+  /* --- start of real calibration hardcoding --- */
+
   // calibrate_.offset.palm = 215000; // runtime depends
   // calibrate_.scale.palm = 1.0;
   // calibrate_.norm.palm = 500000;
@@ -114,6 +116,8 @@ void MjClass::configure_settings()
   calibrate_.offset.g2 = -3.07e5;
   calibrate_.offset.g3 = 9.60e5;
 
+  // WRIST: -0.832 -> -23.3
+
   calibrate_.scale.g1 = (-1.0 / 7.52e5);
   calibrate_.scale.g2 = (-1.0 / 7.61e5);
   calibrate_.scale.g3 = (-1.0 / 7.18e5);
@@ -121,9 +125,15 @@ void MjClass::configure_settings()
   // these should be the same as bend_gauge.normalise
   calibrate_.norm.g1 = calibrate_.norm.g2 = calibrate_.norm.g3 = 5;
 
-  calibrate_.offset.palm = 3.31e5; // overriden at runtime, auto calibrated
+  // calibrate_.offset.palm = 3.31e5; // overriden at runtime, auto calibrated
   calibrate_.scale.palm = (1.0 / 1.34e4);
   calibrate_.norm.palm = 8.0; // should be same as palm_sensor.normalise
+
+  // calibrate_.offset.wrist_Z = 0; // overriden at runtime, auto calibrated
+  calibrate_.scale.wrist_Z = -1;  // already SI units (voltage x2??)
+  calibrate_.norm.wrist_Z = 28.0; // should be same as wrist_Z_sensor.normalise
+
+  /* --- end of real calibration hardcoding --- */
 
   /* check what actions are set */
   action_options.clear();
@@ -1554,6 +1564,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
   static std::vector<float> f2_calibration;
   static std::vector<float> f3_calibration;
   static std::vector<float> palm_calibration;
+  static std::vector<float> wrist_Z_calibration;
 
   // check if we should automatically calibrate offsets
   if (calibrate_.recalibrate_offset_flag) {
@@ -1597,11 +1608,17 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
   
   if (s_.base_state_sensor.in_use) {
 
+    // for testing
+    float start = state_data[i];
+
     state_data[i] = normalise_between(
       state_data[i], luke::Target::base_z_min, luke::Target::base_z_max);
     z_base_position.add(state_data[i]);
     output.push_back(state_data[i]);
     ++i; 
+
+    std::cout << "Base height unnormalised " << start << ", normalised "
+      << state_data[i-1] << '\n';
 
   }
 
@@ -1690,6 +1707,38 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     output.push_back(sensor_data[j]);
     ++j;
     
+  }
+
+  if (s_.wrist_sensor_Z.in_use) {
+
+    float pre_cal = sensor_data[j];
+
+    // hardcoded from mujoco: wrist sensor starts at -0.832, *28=23.3
+    float target_wrist_value = 23.3;
+
+    // calibrate the wrist sensor
+    if (wrist_Z_calibration.size() < calibration_samples) {
+      wrist_Z_calibration.push_back(sensor_data[j]);
+      calibrate_.offset.wrist_Z = 0;
+      for (int k = 0; k < wrist_Z_calibration.size(); k++) {
+        calibrate_.offset.wrist_Z += wrist_Z_calibration[k]  - target_wrist_value;
+      }
+      calibrate_.offset.wrist_Z /= (float) wrist_Z_calibration.size();
+    }
+
+    // scale, normalise, and save wrist data
+    sensor_data[j] = (sensor_data[j] - calibrate_.offset.wrist_Z) * calibrate_.scale.wrist_Z;
+    
+    float post_cal = sensor_data[j];
+    
+    sensor_data[j] = normalise_between(
+      sensor_data[j], -calibrate_.norm.wrist_Z, calibrate_.norm.wrist_Z);
+    wrist_Z_sensor.add(sensor_data[j]);  
+    output.push_back(sensor_data[j]);
+    ++j;
+
+    std::cout << "Wrist sensor data raw " << pre_cal << ", after scaling "
+      << post_cal << ", normalised " << sensor_data[j-1] << '\n';
   }
 
   // add timestamp data - not used currently

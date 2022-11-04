@@ -843,7 +843,7 @@ namespace MjType
   struct RealGaugeCalibrations {
 
     /* applied as follows: g_out = (g_raw + offset) * scale */
-    struct RealSensors { float g1 {}, g2 {}, g3 {}, palm {}; };
+    struct RealSensors { float g1 {}, g2 {}, g3 {}, palm {}, wrist_Z {}; };
 
     RealSensors offset;
     RealSensors scale;
