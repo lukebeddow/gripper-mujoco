@@ -365,13 +365,13 @@ class ModelSaver:
     savename = name + '_' + self.file_num.format(save_id) + self.file_ext
 
     # save
-    print(f"Saving file {savepath + savename} with pickle ... ", end="")
+    print(f"Saving file {savepath + savename} with pickle ... ", end="", flush=True)
     if use_compression:
       compressed_pickle(savepath + savename, pyobj)
     else:
       with open(savepath + savename, 'wb') as openfile:
         pickle.dump(pyobj, openfile)
-    print("finished")
+    print("finished", flush=True)
 
     # if we are asked to save a .txt file too
     if txtstr != None:
@@ -438,13 +438,13 @@ class ModelSaver:
       else:
         loadpath = new_loadpath
 
-    print(f"Loading file {loadpath} with pickle ... ", end="")
+    print(f"Loading file {loadpath} with pickle ... ", end="", flush=True)
     if use_compression:
       loaded_obj = decompress_pickle(loadpath)
     else:
       with open(loadpath, 'rb') as f:
         loaded_obj = pickle.load(f)
-    print("finished")
+    print("finished", flush=True)
 
     self.last_loadpath = loadpath
 

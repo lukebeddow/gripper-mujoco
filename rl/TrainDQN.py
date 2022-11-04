@@ -22,8 +22,8 @@ import networks
 from env.MjEnv import MjEnv
 from ModelSaver import ModelSaver
 
-from guppy import hpy; guph = hpy()
-from pympler import asizeof
+# from guppy import hpy; guph = hpy()
+# from pympler import asizeof
 
 try:
   import matplotlib.pyplot as plt
