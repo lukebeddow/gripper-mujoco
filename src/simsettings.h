@@ -29,7 +29,7 @@
   XX(  debug,                   bool,     true)     /* print debug info to terminal */\
   XX(  mujoco_timestep,         double,   0.001)    /* sim timestep in seconds - default 0.002 */\
   XX(  curve_validation,        bool,     false)    /* are we in curve validation mode, if yes collect curve data */\
-  XX(  tip_force_applied,       double,    0.0)     /* apply a tip force, only possible in curve validation mode */\
+  XX(  tip_force_applied,       double,   0.0)      /* apply a tip force, only possible in curve validation mode */\
   XX(  finger_stiffness,        double,   -7.5)     /* <0 means set all joints to this stiffness, -1<x<0 means use model, -2<x<-1 means adjusted model */\
   XX(  random_seed,             uint,     0)        /* random seed */\
   XX(  randomise_colours,       bool,     true)     /* randomise the colours of the objects */\
@@ -63,7 +63,7 @@
   /* 
   update_env() settings */\
   XX(  oob_distance,            double,   75e-3)    /* distance to consider object out of bounds */\
-  XX(  done_height,             double,   35e-3)    /* grasp done if object lifted to this height */\
+  XX(  done_height,             double,   15e-3)    /* grasp done if the gripper reaches this height with the object */\
   XX(  stable_finger_force,     double,   1.0)      /* finger force (N) on object to consider stable */\
   XX(  stable_palm_force,       double,   1.0)      /* palm force (N) on object to consider stable */\
   /* 
@@ -98,8 +98,8 @@
   SS(  bending_gauge,           true,     20,       10)  /* strain gauge to measure finger bending */\
   SS(  axial_gauge,             true,     3.0,      10)  /* strain gauge to measure axial finger strain */\
   SS(  palm_sensor,             true,     8.0,      10)  /* palm force sensor */\
-  SS(  wrist_sensor_XY,         true,     5.00,     10)  /* force wrist sensor X and Y forces */\
-  SS(  wrist_sensor_Z,          true,     28.0,     10)  /* force wrist sensor Z force */\
+  SS(  wrist_sensor_XY,         true,     5.0,      10)  /* force wrist sensor X and Y forces */\
+  SS(  wrist_sensor_Z,          true,     10.0,     10)  /* force wrist sensor Z force */\
   /* 
 
   3. Binary rewards

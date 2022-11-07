@@ -179,6 +179,8 @@ struct JointSettings {
     double E = 200e9;
     double I = (finger_width * std::pow(finger_thickness, 3)) / 12.0;
     double EI = E * I;
+    double yield_stress = 215e6;
+    double gripper_distance_above_ground = 10e-3;
     bool fixed_first_segment;                         // runtime depends
     double stiffness_c = 0;                           // runtime depends
     double segment_length = 0;                        // runtime depends
@@ -2856,6 +2858,28 @@ gfloat get_target_finger_angle()
   /* return the target finger angle in radians */
 
   return target_.end.get_th_rad();
+}
+
+float calc_yield_point_load()
+{
+  /* return the vertical point load to yield the cantilever */
+
+  float M_max = (j_.dim.yield_stress * j_.dim.I) / (0.5 * j_.dim.finger_thickness);
+  float F_max = M_max / j_.dim.finger_length;
+
+  return F_max;
+}
+
+float get_fingertip_distance_above_ground()
+{
+  /* return the distance from the fingertip to the ground in mm. A negative value
+  means the fingertips hit the ground */
+
+  float straight_finger_distance = -Target::base_z_min - target_.base[0];
+  float tip_lift = j_.dim.finger_length * (1 - std::cos(target_.end.get_th_rad()));
+  float height_above_min = straight_finger_distance + tip_lift;
+
+  return height_above_min + (Target::base_z_min + j_.dim.gripper_distance_above_ground);
 }
 
 /* ----- environment ----- */

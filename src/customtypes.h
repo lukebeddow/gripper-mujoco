@@ -397,8 +397,10 @@ struct Target {
   // what was the last robot motion achieved with
   int last_robot = Robot::none;
 
-  static constexpr double base_z_min = -0.1;
-  static constexpr double base_z_max = 0.1;
+  /* ground is at -10mm, max finger tilt from start before tips touch lifts them another
+  10mm, then we add 10mm of padding to get +-30mm */
+  static constexpr double base_z_min = -30e-3;
+  static constexpr double base_z_max = 30e-3;
 
   // calibration value since z height will not be perfect from controller stiffness
   double z_offset = 0;

@@ -322,9 +322,9 @@ def apply_to_all_models(model):
   model.env.mj.set.time_for_action = 0.2
 
   # define lengths and forces
-  model.env.mj.set.finger_stiffness = 5
+  model.env.mj.set.finger_stiffness = -7.5 # finalised theory (101? 102?)
   model.env.mj.set.oob_distance = 75e-3
-  model.env.mj.set.done_height = 35e-3
+  model.env.mj.set.done_height = 15e-3
   model.env.mj.set.stable_finger_force = 1.0
   model.env.mj.set.stable_palm_force = 1.0
 

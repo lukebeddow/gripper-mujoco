@@ -68,7 +68,8 @@ namespace MjType
 
     // user options that can be overriden
     bool use_normalisation = true;      // are we using normalisation
-    bool use_noise = true;              // are we adding synthetic nois
+    bool use_noise = true;              // are we adding synthetic noise
+    float raw_value_offset = 0.0;       // value to subract from the sensor raw value (only used for wrist Z sensor)
     float noise_mag = 0;                // magnitude of added noise
     float noise_mu = 0;                 // mean of noise (ie zero error)
     float noise_std = -1;               // std deviation of noise (< 0 means flat)
@@ -1057,7 +1058,7 @@ public:
   std::string numerical_stiffness_converge_2(float target_accuracy);
   std::vector<float> profile_error(std::vector<float> profile_X, std::vector<float> profile_Y,
   std::vector<float> truth_X, std::vector<float> truth_Y, bool relative);
-  void calibrate_gauges();
+  void calibrate_simulated_sensors();
   void set_finger_thickness(float thickness);
   void tick();
   float tock();

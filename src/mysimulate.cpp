@@ -2327,7 +2327,7 @@ void uiEvent(mjuiState* state)
                 break;
             }
             case 15: {          // calibrate gauge readings
-                myMjClass.calibrate_gauges();
+                myMjClass.calibrate_simulated_sensors();
                 break;
             }
             case 16: {          // print stiffness

@@ -241,7 +241,7 @@ void MjClass::configure_settings()
     // resetFlags.some_set = resetFlags.all_done();
   }
 
-  // find timestep automatically, this change must be done before calibrate_gauges()
+  // find timestep automatically, this change must be done before calibrate_simulated_sensors()
   if (resetFlags.auto_timestep) {
     resetFlags.auto_timestep = false;                     // disable auto timestep immediately due to recursion
     resetFlags.auto_calibrate = false;                    // disable calibration before timestep found
@@ -255,11 +255,14 @@ void MjClass::configure_settings()
   // set the simulation timestep in mujoco
   model->opt.timestep = s_.mujoco_timestep;
 
-  // calibrate the gauges, requires timestep to be stable
+  // calibrate the gauges and wrist Z sensor, requires timestep to be stable
   if (resetFlags.auto_calibrate) {
     resetFlags.auto_calibrate = false;
-    calibrate_gauges();
-    if (echo_auto_changes) std::cout << "MjClass auto-setting: Bending gauge normalisation set to: " << s_.bending_gauge.normalise << '\n';
+    calibrate_simulated_sensors();
+    if (echo_auto_changes) {
+      std::cout << "MjClass auto-setting: Bending gauge normalisation set to: " << s_.bending_gauge.normalise << '\n';
+      std::cout << "MjClass auto-setting: Wrist Z sensor offset set to: " << s_.wrist_sensor_Z.raw_value_offset << '\n';
+    }
 
     // one additional reset() as fingers will be wobbling from the calibration
     reset();
@@ -621,6 +624,9 @@ void MjClass::monitor_sensors()
     // read
     luke::gfloat z = data->userdata[2];
 
+    // zero the reading (this step is unique to wrist Z sensor)
+    z -= s_.wrist_sensor_Z.raw_value_offset;
+
     // normalise
     z = s_.wrist_sensor_Z.apply_normalisation(z);
 
@@ -693,6 +699,14 @@ void MjClass::update_env()
   env_.obj.qpos = luke::get_object_qpos(model, data);
   env_.grp.target = luke::get_gripper_target();
   luke::Forces_faster forces = luke::get_object_forces_faster(model, data);
+
+  // extract the gripper height (don't use object height for lifting as fingers tilt)
+  std::vector<float> state_vec = luke::get_target_state();
+  float gripper_z_height = -1 * state_vec[state_vec.size() - 1]; // last entry
+
+  std::cout << "GRIPPER Z HEIGHT IS: " << gripper_z_height << '\n';
+  std::cout << "fingertip above ground is "
+    << luke::get_fingertip_distance_above_ground() << "\n";
   
   // // for testing
   // forces.print();
@@ -757,8 +771,9 @@ void MjClass::update_env()
     // else if lastdropped==true +=1 to it, otherwise -> set dropped=0
     : (env_.cnt.dropped.row ? env_.cnt.dropped.row + 1 : 0)));
 
-  // lifted above the target height and not oob (env_.cnt.oob must be set)
-  if (env_.obj.qpos.z > env_.start_qpos.z + s_.done_height
+  // lifted above the target height and not oob (env_.cnt.lifted and env_.cnt.oob must be set)
+  // if (env_.obj.qpos.z > env_.start_qpos.z + s_.done_height // old
+  if (gripper_z_height > s_.done_height and env_.cnt.lifted.value // new
       and not env_.cnt.oob.value)
     env_.cnt.target_height.value = true;
 
@@ -1455,9 +1470,11 @@ std::vector<luke::gfloat> MjClass::get_finger_stiffnesses()
 
 /* ----- sensor functions ----- */
 
-std::vector<luke::gfloat> MjClass::get_bend_gauge_readings(bool unnormalise)
+std::vector<luke::gfloat> MjClass::get_bend_gauge_readings(bool unnormalise = false)
 {
   /* return a vector [g1, g2, g3] of the three bend gauges last reading */
+
+  /* WARNING: in simulation bend gauge readings are NOT SI */
 
   std::vector<luke::gfloat> readings(3);
 
@@ -1466,6 +1483,7 @@ std::vector<luke::gfloat> MjClass::get_bend_gauge_readings(bool unnormalise)
   readings[2] = finger3_gauge.read_element();
 
   if (unnormalise) {
+    // map back from [-1, +1] to [min, max] in SI units
     readings[0] *= s_.bending_gauge.normalise;
     readings[1] *= s_.bending_gauge.normalise;
     readings[2] *= s_.bending_gauge.normalise;
@@ -1474,33 +1492,35 @@ std::vector<luke::gfloat> MjClass::get_bend_gauge_readings(bool unnormalise)
   return readings;
 }
 
-luke::gfloat MjClass::get_palm_reading(bool unnormalise)
+luke::gfloat MjClass::get_palm_reading(bool unnormalise = false)
 {
   /* get the last palm reading */
 
   luke::gfloat reading = palm_sensor.read_element();
 
   if (unnormalise) {
+    // map back from [-1, +1] to [min, max] in SI units
     reading *= s_.palm_sensor.normalise;
   }
 
   return reading;
 }
 
-luke::gfloat MjClass::get_wrist_reading(bool unnormalise)
+luke::gfloat MjClass::get_wrist_reading(bool unnormalise = false)
 {
   /* get the last wrist Z reading */
 
   luke::gfloat reading = wrist_Z_sensor.read_element();
 
   if (unnormalise) {
+    // map back from [-1, +1] to [min, max] in SI units
     reading *= s_.wrist_sensor_Z.normalise;
   }
 
   return reading;
 }
 
-std::vector<luke::gfloat> MjClass::get_state_readings(bool unnormalise)
+std::vector<luke::gfloat> MjClass::get_state_readings(bool unnormalise = false)
 {
   /* get a vector [gripperx, grippery, gripperz, basez] */
 
@@ -1512,6 +1532,7 @@ std::vector<luke::gfloat> MjClass::get_state_readings(bool unnormalise)
   readings[3] = z_base_position.read_element();
 
   if (unnormalise) {
+    // map back from [-1, +1] to [min, max] in SI units
     readings[0] = unnormalise_from(
       readings[0], luke::Gripper::xy_min, luke::Gripper::xy_max); 
     readings[1] = unnormalise_from(
@@ -2398,10 +2419,27 @@ std::vector<float> MjClass::profile_error(std::vector<float> profile_X, std::vec
   return errors;
 }
 
-void MjClass::calibrate_gauges()
+void MjClass::calibrate_simulated_sensors()
 {
-  /* run a calibration scheme to normalise gauge outputs for a set force */
+  /* run a calibration scheme to normalise gauge outputs for a set force and
+  to zero the wrist Z sensor */
 
+  // disable noise and normalisation for wrist Z sensor
+  bool original_norm = s_.wrist_sensor_Z.use_normalisation;
+  bool original_noise = s_.wrist_sensor_Z.use_noise;
+  s_.wrist_sensor_Z.use_normalisation = false;
+  s_.wrist_sensor_Z.use_noise = false;
+  s_.wrist_sensor_Z.raw_value_offset = 0;
+
+  // let the simulation settle and calibrate wrist Z sensor, restore settings
+  float settle_time = 0.3; // must exceed read rate (0.1s) to ensure a sensor reading
+  int steps_for_settle = settle_time / s_.mujoco_timestep;
+  for (int i = 0; i < steps_for_settle; i++) step();
+  s_.wrist_sensor_Z.raw_value_offset = wrist_Z_sensor.read_element();
+  s_.wrist_sensor_Z.use_normalisation = original_norm;
+  s_.wrist_sensor_Z.use_noise = original_noise;
+
+  // now calibrate the finger bending gauges
   validate_curve_under_force(s_.bend_gauge_normalise);
   luke::gfloat max_gauge_reading = luke::read_armadillo_gauge(data, 0);
   s_.bending_gauge.normalise = max_gauge_reading;
@@ -2539,7 +2577,7 @@ float MjClass::find_highest_stable_timestep()
     factor = tune_param * 0.75;
   }
   else {
-    factor = tune_param * 0.85; // used to be 0.9
+    factor = tune_param * 0.8; // used to be 0.9
   }
 
   // for safety, reduce timestep by 10 percent

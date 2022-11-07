@@ -117,30 +117,30 @@ void run_test(int num_episodes, int step_cap, int reload_rate)
 
 int main(int argc, char** argv)
 {
-  MjClass testmj;
+  // MjClass testmj;
 
-  std::vector<float> profile_X { 0, 1, 2, 3 };
-  std::vector<float> profile_Y { 0, 1.25, 3.5, 9.5 };
+  // std::vector<float> profile_X { 0, 1, 2, 3 };
+  // std::vector<float> profile_Y { 0, 1.25, 3.5, 9.5 };
 
-  std::vector<float> truth_X;
-  std::vector<float> truth_Y;
+  // std::vector<float> truth_X;
+  // std::vector<float> truth_Y;
 
-  for (int i = 0; i < 35; i++) {
+  // for (int i = 0; i < 35; i++) {
 
-    float X = i * 0.1 + 0.01;
-    float Y = X * X;
+  //   float X = i * 0.1 + 0.01;
+  //   float Y = X * X;
 
-    truth_X.push_back(X);
-    truth_Y.push_back(Y);
+  //   truth_X.push_back(X);
+  //   truth_Y.push_back(Y);
 
-  }
+  // }
 
-  bool relative_error = false;
-  std::vector<float> errors = testmj.profile_error(profile_X, profile_Y, truth_X, truth_Y, relative_error);
+  // bool relative_error = false;
+  // std::vector<float> errors = testmj.profile_error(profile_X, profile_Y, truth_X, truth_Y, relative_error);
 
-  luke::print_vec(errors, "errors");
+  // luke::print_vec(errors, "errors");
 
-  return 0;
+  // return 0;
 
   /* ----- run a test of 10 learning steps ----- */
 
@@ -156,7 +156,7 @@ int main(int argc, char** argv)
 
   /* ----- load the gripper, generic testing ----- */
 
-  std::string relpath = "task/gripper_task_0.xml";
+  std::string relpath = "gripper_N10/gripper_task_0.xml";
 
   MjClass mjObj;
   mjObj.load_relative(relpath);
@@ -171,10 +171,10 @@ int main(int argc, char** argv)
   mjObj.spawn_object(0);
   mjObj.set_step_target(6000, 7000, 0);
 
-  // disable all other sensors except wrist Z sensor gauge
+  // disable or enable sensors
   mjObj.s_.motor_state_sensor.in_use = false;
   mjObj.s_.base_state_sensor.in_use = false;
-  mjObj.s_.bending_gauge.in_use = false;
+  mjObj.s_.bending_gauge.in_use = true;
   mjObj.s_.axial_gauge.in_use = false;
   mjObj.s_.palm_sensor.in_use = false;
   mjObj.s_.wrist_sensor_XY.in_use = false;
@@ -205,17 +205,29 @@ int main(int argc, char** argv)
         luke::print_vec(mjObj.get_observation(), "Observation");
         continue;
       }
+      else if (c == 'm') {
+        mjObj.move_step_target(500, 1000, 0);
+        mjObj.action_step();
+        std::cout << "moved (x,y,z) by (500,1000,0) steps\n";
+      }
+
+      // test new features
+      else if (c == 't') {
+        
+      }
 
       mjObj.step();
 
       std::printf("Time is: %.1f ms, ", (mjObj.data->time - start_time ) * 1000);
-      mjObj.wrist_Z_sensor.print(10);
+      std::cout << "printing finger 1 sensor: ";
+      // mjObj.wrist_Z_sensor.print(10);
+      mjObj.finger1_gauge.print(10);
 
       
     }
 
     mjObj.step();
-    // mjObj.render();
+    // mjObj.render(); // does nothing
   }
 
   MjType::Sensor mysensor(true, 1, 1);
