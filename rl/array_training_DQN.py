@@ -438,7 +438,7 @@ def logging_job(model, run_name, group_name):
   model.log_wandb(force=True, end=True)
   model.plot(force=True, end=True, hang=True)
 
-def baseline_training(model, lr=5e-5, eps_decay=4000, sensors=2, network=networks.DQN_5L100, 
+def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=2, network=networks.DQN_5L100, 
                       memory=50_000, state_steps=1, sensor_steps=1, z_state=True, sensor_mode=2,
                       state_mode=1, reward_style="mixed_v3", reward_options=[], scale_rewards=2.5,
                       scale_penalties=1.0, penalty_termination=False, finger_stiffness=-101,
@@ -448,6 +448,7 @@ def baseline_training(model, lr=5e-5, eps_decay=4000, sensors=2, network=network
   """
 
   # set parameters
+  model.env.mj.set.XYZ_action_mm_rad = False # we do NOT use SI step actions
   model.env.params.max_episode_steps = 250 # note the hardcoded override
   model.params.learning_rate = lr
   model.params.eps_decay = eps_decay
@@ -472,9 +473,74 @@ def baseline_training(model, lr=5e-5, eps_decay=4000, sensors=2, network=network
                       z_state=z_state)
   model = setup_HER(model, use=False)
 
-  # train and finish
-  model.train(network)
-  exit()
+  # finish initialisation of model
+  model.init(network)
+
+  return model
+
+def heuristic_test(model, inputarg=None, render=False):
+  """
+  Do a heuristic test with baseline settings. Most of these settings are irrelevant
+  (RL hyperparameters) but matter, like sensor setup. Best to be safe
+  """
+
+  # # temporary override!
+  # model.env.params.test_objects = 5
+
+  if inputarg is None: inputarg = 1
+
+  sensors_list = [
+    0, # bending and z state
+    1, # + palm
+    2  # + wrist
+  ]
+
+  thickness_list = [
+    0.8e-3,
+    0.9e-3,
+    1.0e-3
+  ]
+
+  # allow repeats
+  trainings = 9
+  while inputarg > trainings: inputarg -= trainings
+
+  # lists are zero indexed so adjust inputarg
+  inputarg -= 1
+
+  # we vary wrt memory_list every inputarg increment
+  x = len(thickness_list)
+
+  # get the sensors and memory size for this training
+  this_sensor = sensors_list[inputarg // x]                # vary every x steps
+  this_thickness = thickness_list[inputarg % x]       # vary every +1 & loop
+
+  # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
+  #   A1, A2, A3, ...
+  #   B1, B2, B3, ...
+  #   C1, C2, C3, ...
+
+  # make note
+  param_1 = f"Sensors is {this_sensor}\n"
+  param_2 = f"Thickness is {this_thickness}\n"
+  model.wandb_note += param_1 + param_2
+
+  # if we are just printing help information
+  if args.print:
+    print("Input arg", args.job)
+    print("\t" + param_1, end="")
+    print("\t" + param_2, end="")
+    print("\t" + param_3, end="")
+    exit()
+
+  # apply baseline settings
+  model = baseline_settings(model, sensors=this_sensor, finger_thickness=this_thickness) 
+
+  # perform the test
+  if render: model.env.disable_rendering = False
+  model.test_heuristic_baseline()
+
+  print(f"Finished heurisitc test with sensors = {this_sensor} and thickness = {this_thickness}")
 
 if __name__ == "__main__":
 
@@ -520,6 +586,7 @@ if __name__ == "__main__":
   parser.add_argument("-l", "--log-wandb",    action="store_true") # log to wandb job
   parser.add_argument("-p", "--plot",         action="store_true") # plot to wandb job
   parser.add_argument("-n", "--no-wandb",     action="store_true") # no wandb logging
+  parser.add_argument("-H", "--heuristic",    action="store_true") # run a test using heuristic actions
   parser.add_argument("--device",             default=None)        # override device
   parser.add_argument("--savedir",            default=None)        # override save/load directory
   parser.add_argument("--print",              action="store_true") # don't train, print help
@@ -601,6 +668,12 @@ if __name__ == "__main__":
       input("Press enter to quit plotting windows and terminate program")
     exit()
 
+  # if we are running a heuristic action test (no training)
+  if args.heuristic:
+    if log_level > 0: print("Running a heuristic test")
+    heuristic_test(model, inputarg=inputarg, render=True)
+    exit()
+
   # ----- BEGIN TRAININGS ----- #
 
   """ 
@@ -646,7 +719,6 @@ if __name__ == "__main__":
 
   # CONFIGURE SETTINGS
   model.params.use_curriculum = False
-  model.env.mj.set.XYZ_action_mm_rad = False # are we using step actions of SI actions
   model.params.num_episodes = 60000
 
   # # varying 3x5 = possible trainings 1-15
@@ -703,7 +775,8 @@ if __name__ == "__main__":
     exit()
 
   # perform the training with other parameters standard
-  baseline_training(model, sensors=this_sensor, finger_thickness=this_thickness) 
+  model = baseline_settings(model, sensors=this_sensor, finger_thickness=this_thickness) 
+  model.train()
 
   # ----- END ----- #
   

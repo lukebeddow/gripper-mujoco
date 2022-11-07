@@ -135,7 +135,8 @@ int main(int argc, char** argv)
 
   }
 
-  std::vector<float> errors = testmj.profile_error(profile_X, profile_Y, truth_X, truth_Y);
+  bool relative_error = false;
+  std::vector<float> errors = testmj.profile_error(profile_X, profile_Y, truth_X, truth_Y, relative_error);
 
   luke::print_vec(errors, "errors");
 

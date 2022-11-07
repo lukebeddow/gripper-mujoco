@@ -12,8 +12,8 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N Array45_thickness
-#$ -t 1-9
+#$ -N Array46_baseline_continued
+#$ -t 1-15
 
 # The code you want to run now goes here.
 

@@ -118,6 +118,7 @@ gfloat get_palm_force(const mjModel* model, mjData* data);
 std::vector<gfloat> get_panda_state(const mjData* data);
 std::vector<gfloat> get_gripper_state(const mjData* data);
 std::vector<gfloat> get_target_state();
+gfloat get_target_finger_angle();
 
 // environment
 Gripper get_gripper_target();
@@ -146,6 +147,8 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
   float force, float finger_stiffness);
 void fill_theory_curve(std::vector<float>& theory_X, std::vector<float>& theory_Y, 
   float force, int num);
+std::vector<float> discretise_curve(std::vector<float> X, std::vector<float> truth_X, 
+  std::vector<float> truth_Y);
 int last_action_robot();
 bool is_sim_unstable(mjModel* model, mjData* data);
 int get_N();

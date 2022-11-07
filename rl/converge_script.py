@@ -7,8 +7,9 @@ import argparse
 
 # define arguments and parse them
 parser = argparse.ArgumentParser()
-parser.add_argument("-t", "--thickness", type=float, default=None)
-parser.add_argument("-a", "--accuracy", type=float, default=None)
+parser.add_argument("-t", "--thickness", type=float, default=0.9e-3)
+parser.add_argument("-a", "--accuracy", type=float,  default=5e-4)
+parser.add_argument("-m", "--method", type=int, default=1)
 
 args = parser.parse_args()
 
@@ -31,6 +32,8 @@ print("Finger thickness set to ", mj.params.finger_thickness)
 # specify which segments to test
 segments = list(range(5, 31))
 # segments = [5, 6, 7, 8, 9, 10, 15, 20, 25, 30]
+# segments = [5, 6, 7, 8, 9, 10]
+# segments = [5]
 
 # mujoco_timesteps = [
 #   # 3.105e-3,
@@ -77,7 +80,17 @@ def run_curve_data(mjenv, segments, converge_to=None, converge_target_accuracy=5
       # mjenv.mj.set.mujoco_timestep *= 0.8
       # mjenv.reset()
 
-      if isinstance(converge_to, (int, float)):
+      # TESTING converge to all forces
+      if args.method == 2:
+        print(f"Curve convergence to theory deflection at {converge_to:.2f} newtons, target_accuracy is {converge_target_accuracy * 100}%, N =", N, "\t N in sim is", mjenv.mj.get_N(), flush=True)
+        info = mjenv.mj.numerical_stiffness_converge_2(converge_target_accuracy) # converge to 300g, basic theory curve
+
+      # elif False:
+      #   for f in [4 * 0.981, 3 * 0.981, 2 * 0.981, 1 * 0.981]:
+      #     print(f"Curve convergence to theory deflection at {converge_to:.2f} newtons, target_accuracy is {converge_target_accuracy * 100}%, N =", N, "\t N in sim is", mjenv.mj.get_N(), flush=True)
+      #     info = mjenv.mj.numerical_stiffness_converge(f, converge_target_accuracy)
+
+      elif isinstance(converge_to, (int, float)):
         # if given an int/float value converge to the theory point load deflection curve for this value
         print(f"Curve convergence to theory deflection at {converge_to:.2f} newtons, target_accuracy is {converge_target_accuracy * 100}%, N =", N, "\t N in sim is", mjenv.mj.get_N(), flush=True)
         info = mjenv.mj.numerical_stiffness_converge(converge_to, converge_target_accuracy) # converge to 300g, basic theory curve
@@ -88,7 +101,7 @@ def run_curve_data(mjenv, segments, converge_to=None, converge_target_accuracy=5
 
       vec_str = ""
       vec = mjenv.mj.get_finger_stiffnesses()
-      for v in vec: vec_str += f"{v:.2f}, "
+      for v in vec: vec_str += f"{v:.4f}, "
       code_stiffness = "std::vector<float> N{0} {{ {1} }};\n".format(N, vec_str[:-2]) # trim ', '
 
       split = info.replace(",", "=").split("=")
@@ -119,18 +132,15 @@ def run_curve_data(mjenv, segments, converge_to=None, converge_target_accuracy=5
   return data
 
 # set finger stiffness algorithm
-finger_stiffness = -100 # hardcoded real data convergence
-finger_stiffness = -0.5 # original model based on linear bending
-finger_stiffness = -6.5 # new attempt at theory, equating angles 
-finger_stiffness = -101 # hardcoded theory predictions convergence
 finger_stiffness = -7.5 # finalised theory result
+# finger_stiffness = -101 # last convergence as initial guess
+finger_stiffness = -102 # testing new convergence
 
 auto_timestep = True
 converge = None
 
 # uncomment to recalculate stiffnesses and converge
 converge = 3 * 0.981 # grams force, not newtons
-finger_stiffness = -101 # finalised theory as intial guess
 accuracy = 2e-4 if args.accuracy is None else args.accuracy
 print(f"Convergence accuracy set to {accuracy * 100}%")
 

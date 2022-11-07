@@ -364,6 +364,127 @@ class MjEnv():
 
   # ----- public functions ----- #
 
+  def start_heuristic_grasping(self):
+    """
+    Prepare to begin a heuristic grasping procedure.
+    """
+
+    self.grasp_phase = 0
+
+  def get_heuristic_action(self):
+    """
+    Return an action based on a simplistic grasping strategy. The grasp has
+    the following phases:
+      - 1. Lower fingers to table height
+      - 2. Angle fingers at 20deg
+      - 3. Constrict fingers until bending limit exceeded
+      - 4. Advance palm until contact is made
+      - 5. Lift to target height
+    """
+
+    # first, determine what sensors are available
+    bending = self.mj.set.bending_gauge.in_use
+    palm = self.mj.set.palm_sensor.in_use
+    wrist = self.mj.set.wrist_sensor_Z.in_use
+
+    # get sensor output if we can
+    unnormalise_state = True
+    state_readings = self.mj.get_state_readings(unnormalise_state)
+    if bending:
+      unnormalise_bend = True
+      bending_readings = self.mj.get_bend_gauge_readings(unnormalise_bend)
+    if palm:
+      unnormalise_palm = True
+      palm_reading = self.mj.get_palm_reading(unnormalise_palm)
+    if wrist:
+      unnormalise_wrist = True
+      wrist_reading = self.mj.get_wrist_reading(unnormalise_wrist)
+
+    action = None
+
+    target_z_height = 10e-3
+    min_x_value = 55e-3
+    target_angle_deg = 15
+    target_bend_force_N = 1
+    target_palm_force_N = 1
+    target_wrist_force_N = 1
+
+    # hardcode action values
+    X_close = 0
+    X_open = 1
+    Y_close = 2
+    Y_open = 3
+    Z_plus = 4
+    Z_minus = 5
+    H_down = 6
+    H_up = 7
+
+    # lower fingers to table height
+    if self.grasp_phase == 0:
+
+      if wrist:
+        # detect the ground with the wrist sensor
+        if wrist_reading < target_wrist_force_N:
+          action = H_down
+        else:
+          self.grasp_phase = 1
+
+      else:
+        # we aim for a z certain height
+        if state_readings[3] < target_z_height:
+          action = H_down
+        else:
+          self.grasp_phase = 1
+
+    # angle the fingers
+    if self.grasp_phase == 1:
+
+      # we aim for a certain angle
+      print(f"target angle is {-target_angle_deg * (3.14159 / 180.0)}, actual is {self.mj.get_finger_angle()}")
+      if -1 * self.mj.get_finger_angle() < target_angle_deg * (3.14159 / 180.0):
+        action = Y_close
+      else:
+        self.grasp_phase = 2
+
+    # constrict until we feel the squeeze on the object
+    if self.grasp_phase == 2:
+
+      # wait for a certain bending
+      avg_bend = (bending_readings[0] + bending_readings[1] + bending_readings[2]) / 3.
+      print(f"target bending is {target_bend_force_N}, actual is {avg_bend}")
+      if avg_bend < target_bend_force_N:
+        action = X_close
+        # if we have closed as much as we can
+        if state_readings[0] < min_x_value:
+          print(f"minimum x is {min_x_value}, actual is {state_readings[0]}")
+          self.grasp_phase = 3
+      else:
+        self.grasp_phase = 3
+
+    # advance palm to contact object
+    if self.grasp_phase == 3:
+
+      if palm:
+        print(f"target palm force is {target_palm_force_N}, actual is {palm_reading}")
+        if palm_reading < target_palm_force_N:
+          action = Z_plus
+        else:
+          self.grasp_phase = 4
+      else:
+        pass
+
+    # lift up object
+    if self.grasp_phase == 4:
+      action = H_up
+
+    # check for dangerous behaviour?
+    # - lifted object too high
+    # - panda dangerously low
+    # - dangerous bending
+    # - dangerous palm force
+
+    return action
+
   def seed(self, seed=None):
     """
     Set the seed for the environment

@@ -14,9 +14,9 @@ def compressed_pickle(title, data):
   pickle.dump(data, f)
 
 def decompress_pickle(file):
- data = bz2.BZ2File(file, 'rb')
- data = pickle.load(data)
- return data
+  data = bz2.BZ2File(file, 'rb')
+  data = pickle.load(data)
+  return data
 
 class ModelSaver:
 
