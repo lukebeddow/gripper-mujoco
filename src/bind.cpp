@@ -68,6 +68,13 @@ PYBIND11_MODULE(bind, m) {
     .def("get_finger_thickness", &MjClass::get_finger_thickness)
     .def("get_finger_stiffnesses", &MjClass::get_finger_stiffnesses)
 
+    // sensor getters
+    .def("get_bend_gauge_readings", &MjClass::get_bend_gauge_readings)
+    .def("get_palm_reading", &MjClass::get_palm_reading)
+    .def("get_wrist_reading", &MjClass::get_wrist_reading)
+    .def("get_state_readings", &MjClass::get_state_readings)
+    .def("get_finger_angle", &MjClass::get_finger_angle)
+
     // real life gripper functions
     .def("get_finger_gauge_data", &MjClass::get_finger_gauge_data)
     .def("input_real_data", &MjClass::input_real_data)
@@ -90,7 +97,8 @@ PYBIND11_MODULE(bind, m) {
     .def("last_action_panda", &MjClass::last_action_panda)
     .def("profile_error", &MjClass::profile_error)
     .def("numerical_stiffness_converge", static_cast<std::string (MjClass::*)(float, float)>(&MjClass::numerical_stiffness_converge))
-    .def("numerical_stiffness_converge", static_cast<std::string (MjClass::*)(std::vector<float>, std::vector<float>, float)>(&MjClass::numerical_stiffness_converge))
+    .def("numerical_stiffness_converge", static_cast<std::string (MjClass::*)(float, float, std::vector<float>, std::vector<float>)>(&MjClass::numerical_stiffness_converge))
+    .def("numerical_stiffness_converge_2", &MjClass::numerical_stiffness_converge_2)
 
     // exposed variables
     .def_readwrite("set", &MjClass::s_)
@@ -630,6 +638,88 @@ PYBIND11_MODULE(bind, m) {
     .def_readonly("std_y_wrt_theory_y", &MjType::CurveFitData::PoseData::FingerData::Error::std_y_wrt_theory_y)
     .def_readonly("std_y_pred_wrt_theory_y", &MjType::CurveFitData::PoseData::FingerData::Error::std_y_pred_wrt_theory_y)
     .def_readonly("std_j_wrt_pred_j", &MjType::CurveFitData::PoseData::FingerData::Error::std_j_wrt_pred_j)
+
+    // pickle support
+    .def(py::pickle(
+      [](const MjType::CurveFitData::PoseData::FingerData::Error e) { // __getstate___
+        /* return a tuple that fully encodes the state of the object */
+
+        return py::make_tuple(
+          e.x_wrt_pred_x,
+          e.x_wrt_pred_x_percent,
+          e.x_wrt_pred_x_tipratio,
+          e.y_wrt_pred_y,
+          e.y_wrt_pred_y_percent,
+          e.y_wrt_pred_y_tipratio,
+          e.y_wrt_theory_y,
+          e.y_wrt_theory_y_percent,
+          e.y_wrt_theory_y_tipratio,
+          e.y_pred_wrt_theory_y,
+          e.y_pred_wrt_theory_y_percent,
+          e.y_pred_wrt_theory_y_tipratio,
+          e.j_wrt_pred_j,
+          e.j_wrt_pred_j_percent,
+          e.x_tip_wrt_pred_x,
+          e.y_tip_wrt_pred_y,
+          e.y_tip_wrt_theory_y,
+          e.y_pred_tip_wrt_theory_y,
+          e.x_tip_wrt_pred_x_percent,
+          e.y_tip_wrt_pred_y_percent,
+          e.y_tip_wrt_theory_y_percent,
+          e.y_pred_tip_wrt_theory_y_percent,
+          e.std_x_wrt_pred_x,
+          e.std_y_wrt_pred_y,
+          e.std_y_wrt_theory_y,
+          e.std_y_pred_wrt_theory_y,
+          e.std_j_wrt_pred_j
+        );
+      },
+      [](py::tuple t) { // __setstate__
+        
+        if (debug_bind)
+          std::cout << "unpickling MjType::CurveFitData::PoseData::FingerData::Error now\n";
+
+        // create new c++ instance
+        MjType::CurveFitData::PoseData::FingerData::Error out;
+
+        // fill in with the old data
+        int i = 0;
+
+        out.x_wrt_pred_x = t[i].cast<float>(); i++;
+        out.x_wrt_pred_x_percent = t[i].cast<float>(); i++;
+        out.x_wrt_pred_x_tipratio = t[i].cast<float>(); i++;
+        out.y_wrt_pred_y = t[i].cast<float>(); i++;
+        out.y_wrt_pred_y_percent = t[i].cast<float>(); i++;
+        out.y_wrt_pred_y_tipratio = t[i].cast<float>(); i++;
+        out.y_wrt_theory_y = t[i].cast<float>(); i++;
+        out.y_wrt_theory_y_percent = t[i].cast<float>(); i++;
+        out.y_wrt_theory_y_tipratio = t[i].cast<float>(); i++;
+        out.y_pred_wrt_theory_y = t[i].cast<float>(); i++;
+        out.y_pred_wrt_theory_y_percent = t[i].cast<float>(); i++;
+        out.y_pred_wrt_theory_y_tipratio = t[i].cast<float>(); i++;
+        out.j_wrt_pred_j = t[i].cast<float>(); i++;
+        out.j_wrt_pred_j_percent = t[i].cast<float>(); i++;
+        out.x_tip_wrt_pred_x = t[i].cast<float>(); i++;
+        out.y_tip_wrt_pred_y = t[i].cast<float>(); i++;
+        out.y_tip_wrt_theory_y = t[i].cast<float>(); i++;
+        out.y_pred_tip_wrt_theory_y = t[i].cast<float>(); i++;
+        out.x_tip_wrt_pred_x_percent = t[i].cast<float>(); i++;
+        out.y_tip_wrt_pred_y_percent = t[i].cast<float>(); i++;
+        out.y_tip_wrt_theory_y_percent = t[i].cast<float>(); i++;
+        out.y_pred_tip_wrt_theory_y_percent = t[i].cast<float>(); i++;
+        out.std_x_wrt_pred_x = t[i].cast<float>(); i++;
+        out.std_y_wrt_pred_y = t[i].cast<float>(); i++;
+        out.std_y_wrt_theory_y = t[i].cast<float>(); i++;
+        out.std_y_pred_wrt_theory_y = t[i].cast<float>(); i++;
+        out.std_j_wrt_pred_j = t[i].cast<float>(); i++;
+
+        if (debug_bind)
+          std::cout << "unpickling MjType::CurveFitData::PoseData::FingerData::Error finished, i is " << i
+            << ", size of tuple is " << t.size() << '\n';
+
+        return out;
+      }
+    ))
     ;
   }
 
@@ -647,6 +737,58 @@ PYBIND11_MODULE(bind, m) {
     .def_readonly("theory_x_curve", &MjType::CurveFitData::PoseData::FingerData::theory_x_curve)
     .def_readonly("theory_y_curve", &MjType::CurveFitData::PoseData::FingerData::theory_y_curve)
     .def_readonly("error", &MjType::CurveFitData::PoseData::FingerData::error)
+
+    // pickle support
+    .def(py::pickle(
+      [](const MjType::CurveFitData::PoseData::FingerData f) { // __getstate___
+        /* return a tuple that fully encodes the state of the object */
+
+        return py::make_tuple(
+          py::tuple(py::cast(f.x)),
+          py::tuple(py::cast(f.y)),
+          py::tuple(py::cast(f.coeff)),
+          py::tuple(py::cast(f.errors)),
+          py::tuple(py::cast(f.joints)),
+          py::tuple(py::cast(f.pred_j)),
+          py::tuple(py::cast(f.pred_x)),
+          py::tuple(py::cast(f.pred_y)),
+          py::tuple(py::cast(f.theory_y)),
+          py::tuple(py::cast(f.theory_x_curve)),
+          py::tuple(py::cast(f.theory_y_curve)),
+          f.error
+        );
+      },
+      [](py::tuple t) { // __setstate__
+        
+        if (debug_bind)
+          std::cout << "unpickling MjType::CurveFitData::PoseData::FingerData now\n";
+
+        // create new c++ instance
+        MjType::CurveFitData::PoseData::FingerData out;
+
+        // fill in with the old data
+        int i = 0;
+
+        out.x = t[i].cast<std::vector<float>>(); i++;
+        out.y = t[i].cast<std::vector<float>>(); i++;
+        out.coeff = t[i].cast<std::vector<float>>(); i++;
+        out.errors = t[i].cast<std::vector<float>>(); i++;
+        out.joints = t[i].cast<std::vector<float>>(); i++;
+        out.pred_j = t[i].cast<std::vector<float>>(); i++;
+        out.pred_x = t[i].cast<std::vector<float>>(); i++;
+        out.pred_y = t[i].cast<std::vector<float>>(); i++;
+        out.theory_y = t[i].cast<std::vector<float>>(); i++;
+        out.theory_x_curve = t[i].cast<std::vector<float>>(); i++;
+        out.theory_y_curve = t[i].cast<std::vector<float>>(); i++;
+        out.error = t[i].cast<MjType::CurveFitData::PoseData::FingerData::Error>(); i++;
+
+        if (debug_bind)
+          std::cout << "unpickling MjType::CurveFitData::PoseData::FingerData finished, i is " << i
+            << ", size of tuple is " << t.size() << '\n';
+
+        return out;
+      }
+    ))
     ;
   }
 
@@ -658,6 +800,40 @@ PYBIND11_MODULE(bind, m) {
     .def_readonly("f3", &MjType::CurveFitData::PoseData::f3)
     .def_readonly("avg_error", &MjType::CurveFitData::PoseData::avg_error)
     .def_readonly("tag_string", &MjType::CurveFitData::PoseData::tag_string)
+
+    // pickle support
+    .def(py::pickle(
+      [](const MjType::CurveFitData::PoseData p) { // __getstate___
+        /* return a tuple that fully encodes the state of the object */
+
+        return py::make_tuple(
+          p.f1, p.f2, p.f3, p.avg_error, p.tag_string
+        );
+      },
+      [](py::tuple t) { // __setstate__
+        
+        if (debug_bind)
+          std::cout << "unpickling MjType::CurveFitData::PoseData now\n";
+
+        // create new c++ instance
+        MjType::CurveFitData::PoseData out;
+
+        // fill in with the old data
+        int i = 0;
+
+        out.f1 = t[i].cast<MjType::CurveFitData::PoseData::FingerData>(); i++;
+        out.f2 = t[i].cast<MjType::CurveFitData::PoseData::FingerData>(); i++;
+        out.f3 = t[i].cast<MjType::CurveFitData::PoseData::FingerData>(); i++;
+        out.avg_error = t[i].cast<MjType::CurveFitData::PoseData::FingerData::Error>(); i++;
+        out.tag_string = t[i].cast<std::string>(); i++;
+
+        if (debug_bind)
+          std::cout << "unpickling MjType::CurveFitData::PoseData finished, i is " << i
+            << ", size of tuple is " << t.size() << '\n';
+
+        return out;
+      }
+    ))
     ;
   }
 
@@ -666,6 +842,39 @@ PYBIND11_MODULE(bind, m) {
     .def_readonly("entries", &MjType::CurveFitData::entries)
     .def("update", &MjType::CurveFitData::update)
     .def("print", &MjType::CurveFitData::print)
+
+    // pickle support
+    .def(py::pickle(
+      [](const MjType::CurveFitData c) { // __getstate___
+        /* return a tuple that fully encodes the state of the object */
+
+        return py::make_tuple(
+          py::tuple(py::cast(c.entries))
+        );
+      },
+      [](py::tuple t) { // __setstate__
+        
+        if (debug_bind)
+          std::cout << "unpickling MjType::CurveFitData: now\n";
+
+        // create new c++ instance
+        MjType::CurveFitData out;
+
+        // fill in with the old data
+        int i = 0;
+
+        // auto entries_vec = t[i].cast<std::vector<MjType::CurveFitData::PoseData>>();
+        // out.entries.push_back(entries_vec[0]);
+
+        out.entries = t[i].cast<std::vector<MjType::CurveFitData::PoseData>>(); i++;
+
+        if (debug_bind)
+          std::cout << "unpickling MjType::CurveFitData finished, i is " << i
+            << ", size of tuple is " << t.size() << '\n';
+
+        return out;
+      }
+    ))
     ;
   }
 

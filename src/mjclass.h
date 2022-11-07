@@ -843,7 +843,7 @@ namespace MjType
   struct RealGaugeCalibrations {
 
     /* applied as follows: g_out = (g_raw + offset) * scale */
-    struct RealSensors { float g1 {}, g2 {}, g3 {}, palm {}; };
+    struct RealSensors { float g1 {}, g2 {}, g3 {}, palm {}, wrist_Z {}; };
 
     RealSensors offset;
     RealSensors scale;
@@ -1031,6 +1031,13 @@ public:
   float get_finger_thickness();
   std::vector<luke::gfloat> get_finger_stiffnesses();
 
+  // sensor getters
+  std::vector<luke::gfloat> get_bend_gauge_readings(bool unnormalise);
+  luke::gfloat get_palm_reading(bool unnormalise);
+  luke::gfloat get_wrist_reading(bool unnormalise);
+  std::vector<luke::gfloat> get_state_readings(bool unnormalise);
+  luke::gfloat get_finger_angle();
+
   // real world gripper functions
   std::vector<float> input_real_data(std::vector<float> state_data, 
     std::vector<float> sensor_data, float timestamp);
@@ -1045,9 +1052,11 @@ public:
   MjType::CurveFitData::PoseData validate_curve_under_force(float force);
   MjType::CurveFitData curve_validation_regime(bool print = true);
   std::string numerical_stiffness_converge(float force, float target_accuracy);
-  std::string numerical_stiffness_converge(std::vector<float> X, std::vector<float> Y, float target_accuracy);
+  std::string numerical_stiffness_converge(float force, float target_accuracy, 
+    std::vector<float> X, std::vector<float> Y);
+  std::string numerical_stiffness_converge_2(float target_accuracy);
   std::vector<float> profile_error(std::vector<float> profile_X, std::vector<float> profile_Y,
-  std::vector<float> truth_X, std::vector<float> truth_Y);
+  std::vector<float> truth_X, std::vector<float> truth_Y, bool relative);
   void calibrate_gauges();
   void set_finger_thickness(float thickness);
   void tick();
@@ -1065,6 +1074,7 @@ public:
 // utility functions
 float linear_reward(float val, float min, float max, float overshoot);
 float normalise_between(float val, float min, float max);
+float unnormalise_from(float val, float min, float max);
 void update_events(MjType::EventTrack& events, MjType::Settings& settings);
 float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings);
 float goal_rewards(MjType::EventTrack& events, MjType::Settings& settings,
