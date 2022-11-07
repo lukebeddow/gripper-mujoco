@@ -1679,12 +1679,6 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     output.push_back(sensor_data[j]);
     ++j;
 
-    // // TEST CODE FOR MAKING ALL FINGERS HAVE IDENTICAL DATA: delete later
-    // finger2_gauge.add(sensor_data[j - 1]);
-    // finger3_gauge.add(sensor_data[j - 1]);
-    // output.push_back(sensor_data[j - 1]);
-    // output.push_back(sensor_data[j - 1]);
-    // j += 2;
   }
 
   if (s_.palm_sensor.in_use) {
@@ -1711,6 +1705,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
 
   if (s_.wrist_sensor_Z.in_use) {
 
+    constexpr bool debug_wrist_Z = true;
     float pre_cal = sensor_data[j];
 
     // hardcoded from mujoco: wrist sensor starts at -0.832, *28=23.3
@@ -1718,12 +1713,19 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
 
     // calibrate the wrist sensor
     if (wrist_Z_calibration.size() < calibration_samples) {
-      wrist_Z_calibration.push_back(sensor_data[j]);
-      calibrate_.offset.wrist_Z = 0;
-      for (int k = 0; k < wrist_Z_calibration.size(); k++) {
-        calibrate_.offset.wrist_Z += wrist_Z_calibration[k]  - target_wrist_value;
+
+      // known error: wrist sensor initially gives out (0,0,0,0,0,0)
+      constexpr float tol = 1e-5;
+      if (abs(sensor_data[j]) > tol) {
+
+        // add the data to calibration vector, tally up and calculate
+        wrist_Z_calibration.push_back(sensor_data[j]);
+        calibrate_.offset.wrist_Z = 0;
+        for (int k = 0; k < wrist_Z_calibration.size(); k++) {
+          calibrate_.offset.wrist_Z += wrist_Z_calibration[k]  - target_wrist_value;
+        }
+        calibrate_.offset.wrist_Z /= (float) wrist_Z_calibration.size();
       }
-      calibrate_.offset.wrist_Z /= (float) wrist_Z_calibration.size();
     }
 
     // scale, normalise, and save wrist data
@@ -1737,8 +1739,9 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     output.push_back(sensor_data[j]);
     ++j;
 
-    std::cout << "Wrist sensor data raw " << pre_cal << ", after scaling "
-      << post_cal << ", normalised " << sensor_data[j-1] << '\n';
+    if (debug_wrist_Z)
+      std::cout << "Wrist sensor data raw " << pre_cal << ", after scaling "
+        << post_cal << ", normalised " << sensor_data[j-1] << '\n';
   }
 
   // add timestamp data - not used currently
