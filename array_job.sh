@@ -12,8 +12,8 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N Array46_baseline_continued
-#$ -t 1-15
+#$ -N Array47_new_normalisation
+#$ -t 1-27
 
 # The code you want to run now goes here.
 

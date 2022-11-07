@@ -20,7 +20,7 @@ def set_penalties(model, value, done=False, trigger=1, make_binary=None):
   # penalties                            reward   done   trigger  min   max  overshoot
   model.env.mj.set.exceed_limits.set     (value,  done,  trigger)
   model.env.mj.set.exceed_axial.set      (value,  done,  trigger, 3.0,  6.0,  -1)
-  model.env.mj.set.exceed_lateral.set    (value,  done,  trigger, 4.0,  6.0,  -1)
+  model.env.mj.set.exceed_lateral.set    (value,  done,  trigger, 4.0,  6.0,  -1) # min and max currently overwritten with (1.0 and 1.5)*yield_load()
   model.env.mj.set.exceed_palm.set       (value,  done,  trigger, 6.0,  10.0, -1)
 
   # make rewards binary trigger by setting 'max' to 'min' for immediate saturation
@@ -721,24 +721,18 @@ if __name__ == "__main__":
   model.params.use_curriculum = False
   model.params.num_episodes = 60000
 
-  # # varying 3x5 = possible trainings 1-15
-  # sensors_list = [
-  #   0, # bending and z state
-  #   1, # + palm
-  #   2  # + wrist
-  # ]
-  this_sensor = 2
+  # varying 3x3 = possible trainings 1-9
+  sensors_list = [
+    0, # bending and z state
+    1, # + palm
+    2  # + wrist
+  ]
 
   # varying 3x3 = possible trainings 1-9
   thickness_list = [
     0.8e-3,
     0.9e-3,
     1.0e-3
-  ]
-  # this_thickness = 0.9e-3
-
-  repeats = [
-    1, 2, 3
   ]
 
   # allow repeats
@@ -752,7 +746,7 @@ if __name__ == "__main__":
   x = len(thickness_list)
 
   # get the sensors and memory size for this training
-  repeat_num = repeats[inputarg // x]                 # vary every x steps
+  this_sensor = sensors_list[inputarg // x]           # vary every x steps
   this_thickness = thickness_list[inputarg % x]       # vary every +1 & loop
 
   # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
@@ -761,9 +755,8 @@ if __name__ == "__main__":
   #   C1, C2, C3, ...
 
   # make note
-  param_1 = f"Repeat num is {repeat_num}\n"
-  param_2 = f"Sensors is {this_sensor}\n"
-  param_3 = f"Thickness is {this_thickness}\n"
+  param_1 = f"Sensors is {this_sensor}\n"
+  param_2 = f"Thickness is {this_thickness}\n"
   model.wandb_note += param_1 + param_2
 
   # if we are just printing help information
@@ -771,7 +764,6 @@ if __name__ == "__main__":
     print("Input arg", args.job)
     print("\t" + param_1, end="")
     print("\t" + param_2, end="")
-    print("\t" + param_3, end="")
     exit()
 
   # perform the training with other parameters standard

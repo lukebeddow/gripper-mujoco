@@ -1060,6 +1060,7 @@ public:
   std::vector<float> truth_X, std::vector<float> truth_Y, bool relative);
   void calibrate_simulated_sensors();
   void set_finger_thickness(float thickness);
+  float yield_load();
   void tick();
   float tock();
   MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2);
