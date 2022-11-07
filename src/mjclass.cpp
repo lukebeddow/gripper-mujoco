@@ -228,6 +228,12 @@ void MjClass::configure_settings()
     old_random_seed = s_.random_seed;
   }
 
+  // OVERRIDE: HERE WE OVERRIDE USER SETTINGS, VERY DANGEROUS
+  s_.bend_gauge_normalise = yield_load(); // mysimluate typically gives saturation at +20% from this value, likely due to different loading (point load in theory but 4/5th length loading in practice)
+  s_.exceed_lateral.min = yield_load();
+  s_.exceed_lateral.max = 1.5 * yield_load();
+  // VERY DANGEROUS CODE, MUST CHECK LATER!!!!
+
   /* start of automatic settings changes */
   
   bool echo_auto_changes = true; // s_.debug;
@@ -262,6 +268,8 @@ void MjClass::configure_settings()
     if (echo_auto_changes) {
       std::cout << "MjClass auto-setting: Bending gauge normalisation set to: " << s_.bending_gauge.normalise << '\n';
       std::cout << "MjClass auto-setting: Wrist Z sensor offset set to: " << s_.wrist_sensor_Z.raw_value_offset << '\n';
+
+      std::cout << "bend gauge normalise is now: " << s_.bend_gauge_normalise << '\n';
     }
 
     // one additional reset() as fingers will be wobbling from the calibration
@@ -703,10 +711,6 @@ void MjClass::update_env()
   // extract the gripper height (don't use object height for lifting as fingers tilt)
   std::vector<float> state_vec = luke::get_target_state();
   float gripper_z_height = -1 * state_vec[state_vec.size() - 1]; // last entry
-
-  std::cout << "GRIPPER Z HEIGHT IS: " << gripper_z_height << '\n';
-  std::cout << "fingertip above ground is "
-    << luke::get_fingertip_distance_above_ground() << "\n";
   
   // // for testing
   // forces.print();
@@ -2459,6 +2463,13 @@ void MjClass::set_finger_thickness(float thickness)
 
   // changes are finished upon next call to reset()
   resetFlags.finger_thickness_changed = changed;
+}
+
+float MjClass::yield_load()
+{
+  /* return the yield force (end applied) for the current finger thickness */
+
+  return luke::calc_yield_point_load();
 }
 
 MjType::EventTrack MjClass::add_events(MjType::EventTrack& e1, MjType::EventTrack& e2)
