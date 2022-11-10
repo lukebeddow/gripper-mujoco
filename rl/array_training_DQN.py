@@ -720,6 +720,12 @@ if __name__ == "__main__":
   # CONFIGURE SETTINGS
   model.params.use_curriculum = False
   model.params.num_episodes = 60000
+  
+  # special settings to test new object set, set5_multi_9540
+  model.params.object_set = "set5_multi_9540"
+  model.env.testing_xmls = 15
+  model.env.params.test_objects = 300
+  model.env.params.task_reload_chance = 1.0 / 20.0
 
   # varying 3x3 = possible trainings 1-9
   sensors_list = [
@@ -748,6 +754,10 @@ if __name__ == "__main__":
   # get the sensors and memory size for this training
   this_sensor = sensors_list[inputarg // x]           # vary every x steps
   this_thickness = thickness_list[inputarg % x]       # vary every +1 & loop
+
+  # OVERRIDE FOR TESTING NEW OBJECT SET
+  this_sensor = 2
+  this_thickness = 0.9e-3
 
   # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
   #   A1, A2, A3, ...
