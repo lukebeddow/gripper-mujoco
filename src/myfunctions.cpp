@@ -593,6 +593,19 @@ std::vector<float> errors { 0.533019, 0.532631, 1.423055, 0.63254, 2.468435, 0.7
     std::vector<int> palm;
   } geom_idx;
 
+  // segement matrix (3x3) orientations
+  struct SegmentMatrices {
+    mjtNum finger1[9];
+    mjtNum finger2[9];
+    mjtNum finger3[9];
+    // std::vector<mjtNum*> fingers { finger1, finger2, finger3 };
+    std::vector<int> f1_idx;
+    std::vector<int> f2_idx;
+    std::vector<int> f3_idx;
+    std::vector<int> apply_flags;
+    std::vector<float> force;
+  } segmentMatrices;
+
   /* ----- Member functions ----- */
 
   // only resets the automatically generated settings
@@ -625,6 +638,9 @@ std::vector<float> errors { 0.533019, 0.532631, 1.423055, 0.63254, 2.468435, 0.7
 
     JointNum joint_num_reset;
     num = joint_num_reset;
+
+    SegmentMatrices seg_mat_reset;
+    segmentMatrices = seg_mat_reset;
   }
 
   // printing functions
@@ -711,18 +727,20 @@ void init(mjModel* model, mjData* data)
 
   last_step_time_ = 0.0;
 
-  // extract model information and store it in our global variable j_
-  init_J(model, data);
-
   // set the model to the inital keyframe
   keyframe(model, data, j_.initial_keyframe);
+
+  // calculate all object positions/forces
+  mj_forward(model, data);
+
+  // extract model information and store it in our global variable j_
+  init_J(model, data);
 
   // initialise the object handler
   oh_.init(model, data);
 
   // // assign my control function to the mujoco control fcn pointer
   // mjcb_control = control;
-
 }
 
 void init_J(mjModel* model, mjData* data)
@@ -736,6 +754,7 @@ void init_J(mjModel* model, mjData* data)
   get_joint_indexes(model);
   get_joint_addresses(model);
   get_geom_indexes(model);
+  get_segment_matrices(model, data);
 
   if (debug_) {
     print_joint_names(model);
@@ -773,6 +792,7 @@ void reset(mjModel* model, mjData* data)
 
   // reset the targets and disable any constraints
   target_.reset();
+  wipe_segment_forces();
   set_all_constraints(model, data, false);
 
   // wipe object positions and reset
@@ -1718,6 +1738,187 @@ void calibrate_reset(mjModel* model, mjData* data)
     k += 1;
   }
 
+}
+
+void get_segment_matrices(mjModel* model, mjData* data)
+{
+  /* find the matrix orientation for each of the segments of the fingers */
+
+  j_.segmentMatrices.f1_idx.clear();
+  j_.segmentMatrices.f2_idx.clear();
+  j_.segmentMatrices.f3_idx.clear();
+
+  // get the name of the last finger link (hook link is removed by mujoco as fixed joint)
+  int tip_num = j_.num.per_finger + j_.dim.fixed_first_segment;
+
+  // reset vectors back to empty
+  j_.segmentMatrices.apply_flags.clear(); // wipe all flags
+  j_.segmentMatrices.apply_flags.resize(tip_num, 0); // set all to 0 (false)
+  j_.segmentMatrices.force.clear();
+  j_.segmentMatrices.force.resize(tip_num, 0.0);
+
+  std::string f1_names = "finger_1_segment_link_{X}";
+  std::string f2_names = "finger_2_segment_link_{X}";
+  std::string f3_names = "finger_3_segment_link_{X}";
+
+  for (int i = 0; i < model->nbody; i++) {
+
+    std::string name = mj_id2name(model, mjOBJ_BODY, i);
+
+    // we assume the order must be correct without checking
+    if (strcmp_w_sub(name, f1_names, tip_num)) {
+      j_.segmentMatrices.f1_idx.push_back(i);
+    }
+    if (strcmp_w_sub(name, f2_names, tip_num)) {
+      j_.segmentMatrices.f2_idx.push_back(i);
+    }
+    if (strcmp_w_sub(name, f3_names, tip_num)) {
+      j_.segmentMatrices.f3_idx.push_back(i);
+    }
+  }
+
+  if (debug_) {
+    print_vec(j_.segmentMatrices.f1_idx, "finger 1 segment idx");
+    print_vec(j_.segmentMatrices.f2_idx, "finger 2 segment idx");
+    print_vec(j_.segmentMatrices.f3_idx, "finger 3 segment idx");
+  }
+  
+  if (j_.segmentMatrices.f1_idx.size() != tip_num) {
+    throw std::runtime_error("f1_idx vec in get_segment_matrices() has size != num segments");
+  }
+  if (j_.segmentMatrices.f2_idx.size() != tip_num) {
+    throw std::runtime_error("f2_idx vec in get_segment_matrices() has size != num segments");
+  }
+  if (j_.segmentMatrices.f3_idx.size() != tip_num) {
+    throw std::runtime_error("f3_idx vec in get_segment_matrices() has size != num segments");
+  }
+
+  // std::cout << "get_segment_matrices() tip idx are " << j_.segmentMatrices.f1_idx[tip_num - 1]
+  //   << ", " << j_.segmentMatrices.f2_idx[tip_num - 1]
+  //   << ", " << j_.segmentMatrices.f3_idx[tip_num - 1] << '\n';
+
+  // find the starting body orientation
+  for (int j = 0; j < 9; j++) {
+
+    // std::cout << "matrix values finger 2: " << data->xmat[j_.segmentMatrices.f2_idx[tip_num - 1] * 9 + j] << '\n';
+
+    j_.segmentMatrices.finger1[j] = data->xmat[j_.segmentMatrices.f1_idx[tip_num - 1] * 9 + j];
+    j_.segmentMatrices.finger2[j] = data->xmat[j_.segmentMatrices.f2_idx[tip_num - 1] * 9 + j];
+    j_.segmentMatrices.finger3[j] = data->xmat[j_.segmentMatrices.f3_idx[tip_num - 1] * 9 + j];
+  }
+}
+
+void set_segment_force(int seg_num, bool set_as, float force)
+{
+  /* toggle whether to apply force to a given segment */
+
+  if (seg_num < 0 or seg_num >= j_.num.per_finger) {
+    std::cout << "ERROR: seg_num is " << seg_num << '\n';
+    throw std::runtime_error("apply_segment_force() recieved seg_num out of bounds");
+  }
+
+  // std::cout << "set segement force, seg_num = " << seg_num << ", force = " << force << "\n";
+
+  j_.segmentMatrices.apply_flags[seg_num] = set_as;
+  j_.segmentMatrices.force[seg_num] = force;
+}
+
+void resolve_segment_forces(mjModel* model, mjData* data)
+{
+  /* apply forces to segments specified, should be called every step */
+
+  // std::cout << "resolve_segment_forces():\n";
+  // print_vec(j_.segmentMatrices.apply_flags, "apply flags");
+  // print_vec(j_.segmentMatrices.force, "force");
+  // std::cout << "\n\n";
+
+  for (int i = 0; i < j_.segmentMatrices.apply_flags.size(); i++) {
+    if (j_.segmentMatrices.apply_flags[i]) {
+      apply_segment_force(model, data, i, j_.segmentMatrices.force[i]);
+      // std::cout << "applying force " << j_.segmentMatrices.force[i] << " on segment " << i << '\n';
+    }
+  }
+}
+
+void apply_segment_force(mjModel* model, mjData* data, int seg_num, float force)
+{
+  /* apply a force to a given segment from 1..N */
+
+  if (seg_num < 0 or seg_num >= j_.num.per_finger) {
+    std::cout << "ERROR: seg_num is " << seg_num << '\n';
+    throw std::runtime_error("apply_segment_force() recieved seg_num out of bounds");
+  }
+
+  // lock the fingers in place
+  for (int i : j_.con_idx.prismatic) {
+    set_constraint(model, data, i, true);
+  }
+  for (int i : j_.con_idx.revolute) {
+    set_constraint(model, data, i, true);
+  }
+
+  std::vector<std::vector<int>*> idx_vecs {
+    &j_.segmentMatrices.f1_idx,
+    &j_.segmentMatrices.f2_idx,
+    &j_.segmentMatrices.f3_idx
+  };
+
+  std::vector<mjtNum*> mats {
+    j_.segmentMatrices.finger1,
+    j_.segmentMatrices.finger2,
+    j_.segmentMatrices.finger3
+  };
+
+  // loop through and apply force to the given segment
+  for (int i = 0; i < 3; i++) {
+
+    // prepare to apply force outwards on fingertips
+    mjtNum fvec[3] = { 0, 0, -force };
+    mjtNum rotfvec[3];
+
+    // std::cout << "finger " << i + 1 << " matrix values in apply: ";
+    // for (int j = 0; j < 9; j++) std::cout << mats[i][j] << ", ";
+    // std::cout << "\n";
+
+    // rotate into the tip frame to pull directly horizontal
+    mju_mulMatVec(rotfvec, mats[i], fvec, 3, 3);
+
+    // apply force in cartesian space (joint space is qfrc_applied)
+    data->xfrc_applied[(*idx_vecs[i])[seg_num] * 6 + 0] = rotfvec[0];
+    data->xfrc_applied[(*idx_vecs[i])[seg_num] * 6 + 1] = rotfvec[1];
+    data->xfrc_applied[(*idx_vecs[i])[seg_num] * 6 + 2] = rotfvec[2];
+
+    // std::cout << "apply_segment_force() finger " << i + 1 << " rotfvec is " << rotfvec[0] << ", " << rotfvec[1]
+    //   << ", " << rotfvec[2] << '\n';
+  }
+}
+
+void apply_UDL(double total_force)
+{
+  /* apply a uniformally distributed load with a total force such that the force
+  per segment will be applied as total_force / N */
+
+  float force_per = total_force / (float) j_.num.per_finger;
+
+  for (int i = 0; i < j_.num.per_finger; i++) {
+    set_segment_force(i, true, force_per);
+  }
+}
+
+void wipe_segment_forces()
+{
+  /* remove all segment fores */
+
+  for (int i = 0; i < j_.num.per_finger; i++) {
+    set_segment_force(i, false, 0.0);
+  }
+}
+
+void apply_tip_force(double force)
+{
+  /* apply a force at the tip of the finger */
+
+  set_segment_force(j_.num.per_finger - 1, true, force);
 }
 
 void apply_tip_force(mjModel* model, mjData* data, double force, bool reset)

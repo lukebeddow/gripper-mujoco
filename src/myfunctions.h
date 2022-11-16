@@ -77,11 +77,19 @@ void keyframe(mjModel* model, mjData* data, std::string keyframe_name);
 void keyframe(mjModel* model, mjData* data, int keyframe_index);
 void reset(mjModel* model, mjData* data);
 void calibrate_reset(mjModel* model, mjData* data);
+void get_segment_matrices(mjModel* model, mjData* data);
 void set_all_constraints(mjModel* model, mjData* data, bool set_to);
 void toggle_constraint(mjModel* model, mjData* data, int id);
 void set_constraint(mjModel* model, mjData* data, int id, bool set_as);
 void target_constraint(mjModel* model, mjData* data, int id, bool set_as, int type);
 void apply_tip_force(mjModel* model, mjData* data, double force, bool reset = false);
+
+void apply_segment_force(mjModel* model, mjData* data, int seg_num, float force);
+void set_segment_force(int seg_num, bool set_as, float force);
+void resolve_segment_forces(mjModel* model, mjData* data);
+void apply_UDL(double total_force);
+void wipe_segment_forces();
+void apply_tip_force(double force);
 
 // simulation
 void before_step(mjModel* model, mjData* data);

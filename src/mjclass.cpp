@@ -430,8 +430,12 @@ void MjClass::step()
   luke::before_step(model, data);
 
   if (s_.curve_validation) {
-    // if doing curve validation, can apply a set tip force
-    luke::apply_tip_force(model, data, s_.tip_force_applied);
+
+    // // if doing curve validation, can apply a set tip force
+    // luke::apply_tip_force(model, data, s_.tip_force_applied);
+
+    // can apply forces on finger segments, eg tip force
+    luke::resolve_segment_forces(model, data);
   }
 
   luke::step(model, data);
@@ -1870,7 +1874,7 @@ MjType::CurveFitData::PoseData MjClass::validate_curve()
     pose.f3.theory_x_curve, pose.f3.theory_y_curve,
     s_.tip_force_applied, s_.finger_stiffness);
 
-  // TESTING: replace theory with new points
+  // TESTING: replace theory with new points (more accurate)
   pose.f1.theory_y = luke::discretise_curve(pose.f1.x, pose.f1.theory_x_curve,
     pose.f1.theory_y_curve);
   pose.f2.theory_y = luke::discretise_curve(pose.f1.x, pose.f2.theory_x_curve,
@@ -1907,10 +1911,14 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force)
 
   while (true) {
 
+    // luke::apply_tip_force(force);
+    luke::apply_UDL(force * 3);
+
     for (int i = 0; i < steps_to_make; i++) {
 
       step();
 
+      // do we catch instability? If so reduce timestep
       if (dynamic_timestep_adjustment) {
         if (luke::is_sim_unstable(model, data)) {
           s_.mujoco_timestep *= 0.9;
@@ -1935,6 +1943,7 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force)
 
   // turn off curve validation mode
   s_.curve_validation = false;
+  luke::wipe_segment_forces();
   
   return pose;
 }
