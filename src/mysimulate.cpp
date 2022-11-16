@@ -2338,7 +2338,11 @@ void uiEvent(mjuiState* state)
                 break;
             }
             case 15: {          // calibrate gauge readings
-                myMjClass.calibrate_simulated_sensors();
+                float yield = myMjClass.yield_load();
+                float factor = myMjClass.s_.saturation_yield_factor;
+                float sat_load = yield * factor;
+                std::cout << "The saturation load for calibration is " << sat_load << '\n';
+                myMjClass.calibrate_simulated_sensors(sat_load);
                 break;
             }
             case 16: {          // print stiffness

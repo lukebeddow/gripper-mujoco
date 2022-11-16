@@ -930,6 +930,7 @@ public:
     bool auto_timestep = false;
     bool auto_calibrate = false;
     bool auto_simsteps = false;
+    bool auto_exceed_lateral_lim = false;
 
     bool finger_thickness_changed = false;
 
@@ -1058,7 +1059,7 @@ public:
   std::string numerical_stiffness_converge_2(float target_accuracy);
   std::vector<float> profile_error(std::vector<float> profile_X, std::vector<float> profile_Y,
   std::vector<float> truth_X, std::vector<float> truth_Y, bool relative);
-  void calibrate_simulated_sensors();
+  void calibrate_simulated_sensors(float bend_gauge_normalise);
   void set_finger_thickness(float thickness);
   float yield_load();
   void tick();

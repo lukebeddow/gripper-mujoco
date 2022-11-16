@@ -245,17 +245,23 @@ def add_sensors(model, num=None, sensor_mode=None, state_mode=None, sensor_steps
   model.env.mj.set.sensor_n_prev_steps = sensor_steps
   model.env.mj.set.state_n_prev_steps = state_steps
 
+  # state sensor (default)
+  if num >= 0: model.env.mj.set.motor_state_sensor.in_use = True
+
+  # bending sensor
+  if num >= 1: model.env.mj.set.bending_gauge.in_use = True
+
   # palm force sensor
-  if num >= 1: model.env.mj.set.palm_sensor.in_use = True
+  if num >= 2: model.env.mj.set.palm_sensor.in_use = True
 
   # wrist z force sensor
-  if num >= 2: model.env.mj.set.wrist_sensor_Z.in_use = True
+  if num >= 3: model.env.mj.set.wrist_sensor_Z.in_use = True
 
   # finger axial gauges
-  if num >= 3: model.env.mj.set.axial_gauge.in_use = True
+  if num >= 4: model.env.mj.set.axial_gauge.in_use = True
 
   # know where z is in physical space (base z state sensor)
-  if num >= 4 or z_state is True: model.env.mj.set.base_state_sensor.in_use = True
+  if num >= 5 or z_state is True: model.env.mj.set.base_state_sensor.in_use = True
 
   model.wandb_note += (
     f"Num sensors: {num}, state mode: {state_mode}, sensor mode: {sensor_mode}" +
@@ -318,8 +324,12 @@ def apply_to_all_models(model):
   model.env.mj.set.auto_set_timestep = True
   model.env.mj.set.auto_calibrate_gauges = True
   model.env.mj.set.auto_sim_steps = True
-  model.env.mj.set.bend_gauge_normalise = 5.0
+  model.env.mj.set.auto_exceed_lateral_lim = True # THIS OVERRIDES LATERAL PUNISHMENT ONLY
+  # model.env.mj.set.bend_gauge_normalise = 5.0 # calibrate saturation to 5.0N # setting deleted
   model.env.mj.set.time_for_action = 0.2
+  model.env.mj.set.saturation_yield_factor = 1.0
+  model.env.mj.set.exceed_lat_min_factor = 0.75
+  model.env.mj.set.exceed_lat_max_factor = 1.5
 
   # define lengths and forces
   model.env.mj.set.finger_stiffness = -7.5 # finalised theory (101? 102?)
@@ -337,6 +347,7 @@ def apply_to_all_models(model):
   model.env.mj.set.Y_action_rad = 0.01
   model.env.mj.set.Z_action_mm = 2.0
   model.env.mj.set.base_action_mm = 2.0 # not used currently
+  model.env.mj.set.fingertip_min_mm = -12.5 # MOVEMENT BELOW THIS SETS within_limits=false;
 
   # what sensing mode (0=raw data, 1=change, 2=average)
   model.env.mj.set.sensor_sample_mode = 1
@@ -438,7 +449,7 @@ def logging_job(model, run_name, group_name):
   model.log_wandb(force=True, end=True)
   model.plot(force=True, end=True, hang=True)
 
-def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=2, network=networks.DQN_5L100, 
+def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=networks.DQN_5L100, 
                       memory=50_000, state_steps=1, sensor_steps=1, z_state=True, sensor_mode=2,
                       state_mode=1, reward_style="mixed_v3", reward_options=[], scale_rewards=2.5,
                       scale_penalties=1.0, penalty_termination=False, finger_stiffness=-101,
@@ -720,21 +731,23 @@ if __name__ == "__main__":
   # CONFIGURE SETTINGS
   model.params.use_curriculum = False
   model.params.num_episodes = 60000
+  use_set_5 = False
   
   # special settings to test new object set, set5_multi_9540
-  model.params.object_set = "set5_multi_9540"
-  model.env.testing_xmls = 15
-  model.env.params.test_objects = 300
-  model.env.params.task_reload_chance = 1.0 / 20.0
+  if use_set_5:
+    model.params.object_set = "set5_multi_9540"
+    model.env.testing_xmls = 15
+    model.env.params.test_objects = 300
+    model.env.params.task_reload_chance = 1.0 / 20.0
 
-  # varying 3x3 = possible trainings 1-9
+  # varying 3x4 = possible trainings 1-12
   sensors_list = [
-    0, # bending and z state
-    1, # + palm
-    2  # + wrist
+    0, # no sensors, state only
+    1, # bending and z state
+    2, # + palm
+    3  # + wrist
   ]
 
-  # varying 3x3 = possible trainings 1-9
   thickness_list = [
     0.8e-3,
     0.9e-3,
@@ -742,7 +755,7 @@ if __name__ == "__main__":
   ]
 
   # allow repeats
-  trainings = 9
+  trainings = 12
   while inputarg > trainings: inputarg -= trainings
 
   # lists are zero indexed so adjust inputarg
@@ -755,9 +768,9 @@ if __name__ == "__main__":
   this_sensor = sensors_list[inputarg // x]           # vary every x steps
   this_thickness = thickness_list[inputarg % x]       # vary every +1 & loop
 
-  # OVERRIDE FOR TESTING NEW OBJECT SET
-  this_sensor = 2
-  this_thickness = 0.9e-3
+  # # OVERRIDE FOR TESTING NEW OBJECT SET
+  # this_sensor = 2
+  # this_thickness = 0.9e-3
 
   # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
   #   A1, A2, A3, ...

@@ -38,8 +38,11 @@
   XX(  auto_set_timestep,       bool,     true)     /* find the highest stable timestep, overrides mujoco_timestep */\
   XX(  auto_calibrate_gauges,   bool,     true)     /* normalise gauges between +-5N, overrides bending_gauge.normalise */\
   XX(  auto_sim_steps,          bool,     true)     /* automatically find the sim steps per action, overrides sim_steps_per_action */\
-  XX(  bend_gauge_normalise,    float,    5.0)      /* force in newtons to normalise all gauge readings between, only used if auto_calibrate_gauges=true */\
+  XX(  auto_exceed_lateral_lim, bool,     true)     /* calculate safe finger bending automaticalled based on yield load */\
   XX(  time_for_action,         float,    0.2)      /* time in seconds to give for each action to complete, only used if auto_sim_steps=true */\
+  XX(  saturation_yield_factor, float,    1.0)      /* saturate bend sensors at what factor times yield load */\
+  XX(  exceed_lat_min_factor,   float,    0.75)     /* minimum factor of yield load to consider lateral force exceeded */\
+  XX(  exceed_lat_max_factor,   float,    1.5)      /* maximum factor of yield load to consider lateral force exceeded (saturates beyond)*/\
   /*    
   HER settings */\
   XX(  use_HER,                 bool,     false)    /* use hindsight experience replay (HER) */\
@@ -84,6 +87,7 @@
   XX(  Y_action_rad,            double,   0.01)     /* rad of movement for a Y action, moves revolute joint, 100steps from vertical=0.02rad */\
   XX(  Z_action_mm,             double,   2.0)      /* mm of movement for a Z action, moves palm joint, 100steps=1.22mm */\
   XX(  base_action_mm,          double,   2.0)      /* mm of movement for a gripper base cartesian action */\
+  XX(  fingertip_min_mm,        double,   -12.5)    /* minimum allowable fingertip depth below start position */\
   /*
   render() settings */\
   XX(  render_on_step,          bool,     false)    /* render on every single sim step */\
@@ -99,7 +103,7 @@
   SS(  axial_gauge,             true,     3.0,      10)  /* strain gauge to measure axial finger strain */\
   SS(  palm_sensor,             true,     8.0,      10)  /* palm force sensor */\
   SS(  wrist_sensor_XY,         true,     5.0,      10)  /* force wrist sensor X and Y forces */\
-  SS(  wrist_sensor_Z,          true,     10.0,     10)  /* force wrist sensor Z force */\
+  SS(  wrist_sensor_Z,          true,     5.0,      10)  /* force wrist sensor Z force */\
   /* 
 
   3. Binary rewards

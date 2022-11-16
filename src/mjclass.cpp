@@ -228,12 +228,6 @@ void MjClass::configure_settings()
     old_random_seed = s_.random_seed;
   }
 
-  // OVERRIDE: HERE WE OVERRIDE USER SETTINGS, VERY DANGEROUS
-  s_.bend_gauge_normalise = yield_load(); // mysimluate typically gives saturation at +20% from this value, likely due to different loading (point load in theory but 4/5th length loading in practice)
-  s_.exceed_lateral.min = yield_load();
-  s_.exceed_lateral.max = 1.5 * yield_load();
-  // VERY DANGEROUS CODE, MUST CHECK LATER!!!!
-
   /* start of automatic settings changes */
   
   bool echo_auto_changes = true; // s_.debug;
@@ -243,10 +237,11 @@ void MjClass::configure_settings()
     resetFlags.auto_calibrate = s_.auto_calibrate_gauges;
     resetFlags.auto_simsteps = s_.auto_sim_steps;
     resetFlags.auto_timestep = s_.auto_set_timestep;
+    resetFlags.auto_exceed_lateral_lim = s_.auto_exceed_lateral_lim;
     resetFlags.flags_init = true;
-    // resetFlags.some_set = resetFlags.all_done();
   }
 
+  // it is best also to do timestep first as it spams the terminal
   // find timestep automatically, this change must be done before calibrate_simulated_sensors()
   if (resetFlags.auto_timestep) {
     resetFlags.auto_timestep = false;                     // disable auto timestep immediately due to recursion
@@ -261,15 +256,29 @@ void MjClass::configure_settings()
   // set the simulation timestep in mujoco
   model->opt.timestep = s_.mujoco_timestep;
 
+  // automatically set the exceed lateral force limits (ie safe bending limits)
+  if (resetFlags.auto_exceed_lateral_lim) {
+    resetFlags.auto_exceed_lateral_lim = false;
+    s_.exceed_lateral.min = s_.exceed_lat_min_factor * yield_load();
+    s_.exceed_lateral.max = s_.exceed_lat_max_factor * yield_load();
+    if (echo_auto_changes) std::cout << "MjClass auto-setting: yield load is " 
+      << yield_load() << ", exceed lateral (min, max) is ("
+      << s_.exceed_lateral.min << ", " << s_.exceed_lateral.max << ")\n";
+  }
+
   // calibrate the gauges and wrist Z sensor, requires timestep to be stable
   if (resetFlags.auto_calibrate) {
     resetFlags.auto_calibrate = false;
-    calibrate_simulated_sensors();
+    // determine the safe finger loads based on the yield of this finger stiffness
+    /* mysimluate typically gives saturation at +20% from this value, likely due 
+    to different loading (point load in theory but 4/5th length loading in practice) */
+    float bend_gauge_normalise = s_.saturation_yield_factor * yield_load();
+    calibrate_simulated_sensors(bend_gauge_normalise);
     if (echo_auto_changes) {
-      std::cout << "MjClass auto-setting: Bending gauge normalisation set to: " << s_.bending_gauge.normalise << '\n';
-      std::cout << "MjClass auto-setting: Wrist Z sensor offset set to: " << s_.wrist_sensor_Z.raw_value_offset << '\n';
-
-      std::cout << "bend gauge normalise is now: " << s_.bend_gauge_normalise << '\n';
+      std::cout << "MjClass auto-setting: Bending gauge normalisation set to: " 
+        << s_.bending_gauge.normalise << ", based on saturation load of " << bend_gauge_normalise <<'\n';
+      std::cout << "MjClass auto-setting: Wrist Z sensor offset set to: " 
+        << s_.wrist_sensor_Z.raw_value_offset << '\n';
     }
 
     // one additional reset() as fingers will be wobbling from the calibration
@@ -1005,8 +1014,17 @@ std::vector<float> MjClass::set_action(int action)
    
   }
 
+  // special check for whether the fingertips are outside safe limits
+  if (luke::get_fingertip_z_height() < s_.fingertip_min_mm * 1e-3) {
+    wl = false;
+  }
+
   if (s_.debug)
     std::cout << ", within_limits = " << wl << '\n';
+
+  // // for testing only, delete later
+  // std::cout << "fingertip z height is " << luke::get_fingertip_z_height() * 1e3
+  //     << ", minimum allowed is " << s_.fingertip_min_mm << "\n";
 
   env_.cnt.exceed_limits.value = not wl;
 
@@ -2441,7 +2459,7 @@ std::vector<float> MjClass::profile_error(std::vector<float> profile_X, std::vec
   return errors;
 }
 
-void MjClass::calibrate_simulated_sensors()
+void MjClass::calibrate_simulated_sensors(float bend_gauge_normalise)
 {
   /* run a calibration scheme to normalise gauge outputs for a set force and
   to zero the wrist Z sensor */
@@ -2462,7 +2480,7 @@ void MjClass::calibrate_simulated_sensors()
   s_.wrist_sensor_Z.use_noise = original_noise;
 
   // now calibrate the finger bending gauges
-  validate_curve_under_force(s_.bend_gauge_normalise);
+  validate_curve_under_force(bend_gauge_normalise);
   luke::gfloat max_gauge_reading = luke::read_armadillo_gauge(data, 0);
   s_.bending_gauge.normalise = max_gauge_reading;
 
