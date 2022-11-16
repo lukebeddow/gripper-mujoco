@@ -97,6 +97,8 @@ struct
     int object_z_rot_deg = 0;      // added by luke
     int complete_action_steps = 1; // added by luke
     double finger_thickness = 0.9;  // added by luke
+    int seg_num_for_frc = 1;       // added by luke
+    double seg_force = 0.0;         // added by luke
 
     // figure show flags
     int bendgauge = 0;             // added by luke
@@ -1491,6 +1493,12 @@ void makeObjectUI(int oldstate)
         {mjITEM_BUTTON,   "find timestep",     2, NULL,                 " #311"},
         {mjITEM_BUTTON,   "cal. gauges",     2, NULL,                   " #312"},
         {mjITEM_BUTTON,   "print stiffness",   2, NULL,                 " #313"},
+        {mjITEM_BUTTON,   "apply seg frc",   2, NULL,                   " #314"},
+        {mjITEM_BUTTON,   "apply UDL",   2, NULL,                   " #315"},
+        {mjITEM_BUTTON,   "apply tip frc",   2, NULL,                   " #316"},
+        {mjITEM_BUTTON,   "wipe seg frc",    2, NULL,                   " #317"},
+        {mjITEM_SLIDERINT,   "seg num",           2, &settings.seg_num_for_frc, "1 10"},
+        {mjITEM_SLIDERNUM,  "force",         2, &settings.seg_force, "0 10"},
 
         // {mjITEM_BUTTON,    "Copy pose",     2, NULL,                    " #304"},
         {mjITEM_SLIDERINT, "Live Object",   3, &settings.object_int,    "0 20"},
@@ -1499,6 +1507,9 @@ void makeObjectUI(int oldstate)
         {mjITEM_SLIDERINT, "z rotation",    3, &settings.object_z_rot_deg,  "0 360"},
         // {mjITEM_BUTTON,    "Reset to key",  3},
         // {mjITEM_BUTTON,    "Set key",       3},
+
+        
+
         {mjITEM_END}
     };
 
@@ -2334,6 +2345,45 @@ void uiEvent(mjuiState* state)
                 luke::print_stiffnesses();
                 break;
             }
+            case 17: {          // apply segment force
+                if (not myMjClass.s_.curve_validation) {
+                    myMjClass.s_.curve_validation = true;
+                }
+                // static bool first_call = true;
+                // if (first_call) luke::get_segment_matrices(m, d);
+                // first_call = false;
+                luke::set_segment_force(settings.seg_num_for_frc, true, 2);
+                break;
+            }
+            case 18: {          // apply UDL
+                if (not myMjClass.s_.curve_validation) {
+                        myMjClass.s_.curve_validation = true;
+                    }
+                // static bool first_call = true;
+                // if (first_call) luke::get_segment_matrices(m, d);
+                // first_call = false;
+                luke::apply_UDL(settings.seg_force);
+                break;
+            }
+            case 19: {          // apply tip force
+                if (not myMjClass.s_.curve_validation) {
+                    myMjClass.s_.curve_validation = true;
+                }
+                // static bool first_call = true;
+                // if (first_call) luke::get_segment_matrices(m, d);
+                // first_call = false;
+                luke::apply_tip_force(settings.seg_force);
+                break;
+            }
+            case 20: {          // wipe segment forces
+                if (myMjClass.s_.curve_validation) {
+                    myMjClass.s_.curve_validation = false;
+                }
+                luke::wipe_segment_forces();
+                break;
+            }
+            // case 20: seg num int slider
+            // case 21: seg frc num slider
             }
         }
 
