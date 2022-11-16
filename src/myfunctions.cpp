@@ -173,6 +173,7 @@ struct JointSettings {
 
   // key dimensions and details
   struct Dim {
+    
     double finger_length = 235e-3;
     double finger_thickness = 0.9e-3;
     double finger_width = 28e-3;
@@ -2870,7 +2871,7 @@ float calc_yield_point_load()
   return F_max;
 }
 
-float get_fingertip_distance_above_ground()
+float get_fingertip_z_height()
 {
   /* return the distance from the fingertip to the ground in mm. A negative value
   means the fingertips hit the ground */
@@ -2879,7 +2880,7 @@ float get_fingertip_distance_above_ground()
   float tip_lift = j_.dim.finger_length * (1 - std::cos(target_.end.get_th_rad()));
   float height_above_min = straight_finger_distance + tip_lift;
 
-  return height_above_min + (Target::base_z_min + j_.dim.gripper_distance_above_ground);
+  return height_above_min + Target::base_z_min;
 }
 
 /* ----- environment ----- */

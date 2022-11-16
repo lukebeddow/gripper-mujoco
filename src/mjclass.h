@@ -1069,6 +1069,7 @@ public:
   void default_goal_event_triggering();
   bool last_action_gripper();
   bool last_action_panda();
+  float get_fingertip_z_height();
   float find_highest_stable_timestep();
 
 }; // class MjClass

@@ -1642,8 +1642,8 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     output.push_back(state_data[i]);
     ++i; 
 
-    std::cout << "Base height unnormalised " << start << ", normalised "
-      << state_data[i-1] << '\n';
+    // std::cout << "Base height unnormalised " << start << ", normalised "
+    //   << state_data[i-1] << '\n';
 
   }
 
@@ -1730,11 +1730,11 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
 
   if (s_.wrist_sensor_Z.in_use) {
 
-    constexpr bool debug_wrist_Z = true;
+    constexpr bool debug_wrist_Z = false;
     float pre_cal = sensor_data[j];
 
     // hardcoded from mujoco: wrist sensor starts at -0.832, *28=23.3
-    float target_wrist_value = 23.3;
+    float target_wrist_value = 0; // was 23.3
 
     // calibrate the wrist sensor
     if (wrist_Z_calibration.size() < calibration_samples) {
@@ -1830,6 +1830,15 @@ bool MjClass::last_action_panda()
     return true;
   else 
     return false;
+}
+
+float MjClass::get_fingertip_z_height()
+{
+  /* return the z height of the fingertips, given that the starting position
+  is 0.0, so if the fingers start 10mm above the ground, a value of -10mm or
+  less indicates ground contact */
+
+  return luke::get_fingertip_z_height();
 }
 
 MjType::TestReport MjClass::get_test_report()
