@@ -21,7 +21,7 @@ def set_penalties(model, value, done=False, trigger=1, make_binary=None):
   model.env.mj.set.exceed_limits.set     (value,  done,  trigger)
   model.env.mj.set.exceed_axial.set      (value,  done,  trigger, 3.0,  6.0,  -1)
   model.env.mj.set.exceed_lateral.set    (value,  done,  trigger, 4.0,  6.0,  -1) # min and max currently overwritten with (1.0 and 1.5)*yield_load()
-  model.env.mj.set.exceed_palm.set       (value,  done,  trigger, 6.0,  10.0, -1)
+  model.env.mj.set.exceed_palm.set       (value,  done,  trigger, 6.0,  15.0, -1)
 
   # make rewards binary trigger by setting 'max' to 'min' for immediate saturation
   if make_binary == True:
@@ -229,10 +229,6 @@ def add_sensors(model, num=None, sensor_mode=None, state_mode=None, sensor_steps
   if sensor_steps is None: sensor_steps = 1
   if state_steps is None: state_steps = 2
 
-  # default: state sensor and bending gauge sensor
-  model.env.mj.set.motor_state_sensor.in_use = True
-  model.env.mj.set.bending_gauge.in_use = True
-
   # what sensing mode (0=raw data, 1=change, 2=average, 3=median)
   model.env.mj.set.sensor_sample_mode = sensor_mode
   model.env.mj.set.state_sample_mode = state_mode
@@ -244,6 +240,8 @@ def add_sensors(model, num=None, sensor_mode=None, state_mode=None, sensor_steps
   # set the number of steps in the past we use for observations
   model.env.mj.set.sensor_n_prev_steps = sensor_steps
   model.env.mj.set.state_n_prev_steps = state_steps
+
+  # --- start adding sensors, all should initially be disabled --- #
 
   # state sensor (default)
   if num >= 0: model.env.mj.set.motor_state_sensor.in_use = True
@@ -371,9 +369,10 @@ def apply_to_all_models(model):
   model.env.mj.set.sensor_n_prev_steps = 1 # lookback only 1 step
   model.env.mj.set.state_n_prev_steps = 1 # lookback only 1 step
 
-  # add back default sensors
-  model.env.mj.set.motor_state_sensor.in_use = True
-  model.env.mj.set.bending_gauge.in_use = True
+  # DONT ADD BACK DEFAULT SENSORS, leave to add_sensors(...) function
+  # # add back default sensors
+  # model.env.mj.set.motor_state_sensor.in_use = True
+  # model.env.mj.set.bending_gauge.in_use = True
 
   # ensure state sensors only give one reading per step (read_rate < 0)
   model.env.mj.set.motor_state_sensor.read_rate = -1
@@ -553,6 +552,76 @@ def heuristic_test(model, inputarg=None, render=False):
 
   print(f"Finished heurisitc test with sensors = {this_sensor} and thickness = {this_thickness}")
 
+def vary_all_inputs(raw_inputarg=None, param_1=None, param_2=None, param_3=None, repeats=None):
+  """
+  Helper function for adjusting parameters. With param_1 set to list_1 and param_2 set to list_2:
+
+  The pattern goes (with param_1=[A,B,C...] and param_2=[1,2,3...])
+    A1, A2, A3, ...
+    B1, B2, B3, ...
+    C1, C2, C3, ...
+
+  With param_3=[X,Y,Z,...] we repeat the above grid first for X, then Y etc
+
+  Set repeats to get sequential repeats, eg repeats=3 gives
+    A1, A1, A1, A2, A2, A2, A3, A3, A3, ...
+  """
+
+  # convert input arg from 1...Max to 0...Max-1
+  inputarg = raw_inputarg - 1
+
+  # understand inputs
+  if param_1 is not None:
+    if isinstance(param_1, list):
+      list_1 = param_1
+    else:
+      list_1 = [param_1]
+    len_list_1 = len(list_1)
+  else:
+    raise RuntimeError("param_1 must be specified in vary_all_inputs()")
+    len_list_1 = 1
+
+  if param_2 is not None:
+    if isinstance(param_2, list):
+      list_2 = param_2
+    else:
+      list_2 = [param_2]
+    len_list_2 = len(list_2)
+  else:
+    len_list_2 = 1
+
+  if param_3 is not None:
+    if param_2 is None: raise RuntimeError("param_2 must be specified before param_3 in vary_all_inputs()")
+    if isinstance(param_3, list):
+      list_3 = param_3
+    else:
+      list_3 = [param_3]
+    len_list_3 = len(list_3)
+  else:
+    len_list_3 = 1
+
+  if repeats is None: repeats = 1
+
+  # how fast do we move through lists
+  list_1_changes = repeats
+  list_2_changes = repeats * len_list_1
+  list_3_changes = repeats * len_list_1 * len_list_2
+
+  # don't allow overflow
+  num_trainings = len_list_1 * len_list_2 * len_list_3 * repeats
+  if raw_inputarg > num_trainings:
+    raise RuntimeError(f"vary_all_inputs() got raw_inputarg={raw_inputarg} too high, num_trainings={num_trainings}")
+
+  var_1 = list_1[(inputarg // list_1_changes) % len_list_1]
+  if param_2 is not None:
+    var_2 = list_2[(inputarg // list_2_changes) % len_list_2]
+  else: var_2 = None
+  if param_3 is not None:
+    var_3 = list_3[(inputarg // list_3_changes) % len_list_3]
+  else: var_3 = None
+
+  return var_1, var_2, var_3
+
 if __name__ == "__main__":
 
   """
@@ -625,7 +694,7 @@ if __name__ == "__main__":
 
   # seperate process for safety
   sleep(inputarg)
-  sleep(random())
+  sleep(0.25 * random())
 
   save_suffix = f"{timestamp[-5:]}_A{inputarg}" # only include hr:min
 
@@ -685,53 +754,21 @@ if __name__ == "__main__":
     heuristic_test(model, inputarg=inputarg, render=True)
     exit()
 
+
+
+
   # ----- BEGIN TRAININGS ----- #
 
-  """ 
-  # How to perform a baseline training example:
 
-  # varying two parameters 6x5 = 30 possible trainings 1-30
-  stiffness_list = [5, 6, 7, 8, 9, 10]
-  sensors_list = [1, 2, 3, 4, 5]
 
-  # lists are zero indexed so adjust inputarg
-  inputarg -= 1
 
-  # we vary wrt the second list every inputarg increment
-  x = len(sensors_list)
-
-  # choose the values of each parameter for this training (based on inputarg)
-  this_stiffness = stiffness_list[inputarg // x]       # vary every x steps
-  this_sensors = sensors_list[inputarg % x]            # vary every +1 & loop
-
-  # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
-  #   A1, A2, A3, ...
-  #   B1, B2, B3, ...
-  #   C1, C2, C3, ...
-
-  # make note of the parameters chosen
-  param_1 = f"Finger stiffness used: {this_stiffness}\n"
-  param_2 = f"Sensors used: {this_sensors}\n"
-  model.wandb_note += param_1 + param_2
-
-  # if we are just printing help information
-  if args.print:
-    print("Input arg", inputarg + 1)
-    print("\t" + param_1, end="")
-    print("\t" + param_2, end="")
-    exit()
-
-  # parameter changes can be applied here or in the following function args
-  model.env.mj.set.finger_stiffness = this_stiffness
-
-  # perform the training with standard baseline settings unless specified by args
-  baseline_training(model, sensors=this_sensors)
-  """
-
-  # CONFIGURE SETTINGS
+  # CONFIGURE KEY SETTINGS (take care that baseline_settings(...) does not overwrite)
   model.params.use_curriculum = False
   model.params.num_episodes = 60000
+  model.env.params.max_episode_steps = 300
   use_set_5 = False
+  training_type = "vary sensors only"
+  this_segments = 8
   
   # special settings to test new object set, set5_multi_9540
   if use_set_5:
@@ -740,57 +777,83 @@ if __name__ == "__main__":
     model.env.params.test_objects = 300
     model.env.params.task_reload_chance = 1.0 / 20.0
 
-  # varying 3x4 = possible trainings 1-12
-  sensors_list = [
-    0, # no sensors, state only
-    1, # bending and z state
-    2, # + palm
-    3  # + wrist
-  ]
+  if training_type == "vary sensors and thickness":
 
-  thickness_list = [
-    0.8e-3,
-    0.9e-3,
-    1.0e-3
-  ]
+    sensors_list = [
+      0, # no sensors, state only
+      1, # bending and z state
+      2, # + palm
+      3  # + wrist
+    ]
+    thickness_list = [
+      0.8e-3,
+      0.9e-3,
+      1.0e-3
+    ]
+    repeats = None
+    param_1_name = "Sensors"
+    param_2_name = "Thickness"
+    param_3_name = None
 
-  # allow repeats
-  trainings = 12
-  while inputarg > trainings: inputarg -= trainings
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=sensors_list,
+                                                param_2=thickness_list, repeats=repeats)
 
-  # lists are zero indexed so adjust inputarg
-  inputarg -= 1
+    this_sensor = param_1
+    this_thickness = param_2
 
-  # we vary wrt memory_list every inputarg increment
-  x = len(thickness_list)
+  elif training_type == "vary sensors only":
 
-  # get the sensors and memory size for this training
-  this_sensor = sensors_list[inputarg // x]           # vary every x steps
-  this_thickness = thickness_list[inputarg % x]       # vary every +1 & loop
+    vary_1 = [
+      0, # no sensors, state only
+      1, # bending and z state
+      2, # + palm
+      3  # + wrist
+    ]
+    vary_2 = None
+    vary_3 = None
+    repeats = 5
+    param_1_name = "Sensors"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    this_sensor = param_1
+    this_thickness = 0.9e-3
 
-  # # OVERRIDE FOR TESTING NEW OBJECT SET
-  # this_sensor = 2
-  # this_thickness = 0.9e-3
+  elif training_type == "vary others":
 
-  # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
-  #   A1, A2, A3, ...
-  #   B1, B2, B3, ...
-  #   C1, C2, C3, ...
+    vary_1 = None
+    vary_2 = None
+    vary_3 = None
+    repeats = None
+    param_1_name = None
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    this_one = param_1
+    this_two = param_2
+    this_three = param_3
 
-  # make note
-  param_1 = f"Sensors is {this_sensor}\n"
-  param_2 = f"Thickness is {this_thickness}\n"
-  model.wandb_note += param_1 + param_2
+  else: raise RuntimeError(f"array_training_DQN.py: training_type of {training_type} not recognised")
+
+  # note and printing information
+  param_1_string = f"{param_1_name} is {param_1}\n" if param_1 is not None else ""
+  param_2_string = f"{param_2_name} is {param_2}\n" if param_2 is not None else ""
+  param_3_string = f"{param_3_name} is {param_3}\n" if param_3 is not None else ""
+  model.wandb_note += param_1_string + param_2_string + param_3_string
 
   # if we are just printing help information
   if args.print:
     print("Input arg", args.job)
-    print("\t" + param_1, end="")
-    print("\t" + param_2, end="")
+    print("\t" + param_1_string, end="")
+    print("\t" + param_2_string, end="")
+    print("\t" + param_3_string, end="\n")
     exit()
 
   # perform the training with other parameters standard
-  model = baseline_settings(model, sensors=this_sensor, finger_thickness=this_thickness) 
+  model = baseline_settings(model, sensors=this_sensor, finger_thickness=this_thickness,
+                            num_segments=this_segments) 
   model.train()
 
   # ----- END ----- #
