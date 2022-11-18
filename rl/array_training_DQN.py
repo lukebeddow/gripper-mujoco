@@ -229,11 +229,14 @@ def add_sensors(model, num=None, sensor_mode=None, state_mode=None, sensor_steps
   if sensor_steps is None: sensor_steps = 1
   if state_steps is None: state_steps = 2
 
+  # enable noise and normalisation for every sensor (should be enabled by default anyway)
+  model.env.mj.set_sensor_noise_and_normalisation_to(True)
+
   # what sensing mode (0=raw data, 1=change, 2=average, 3=median)
   model.env.mj.set.sensor_sample_mode = sensor_mode
   model.env.mj.set.state_sample_mode = state_mode
 
-  # add minor gaussian sensing noise with mean 0
+  # set the same noise to regular sensors and state sensors
   model.env.mj.set.sensor_noise_std = noise_std
   model.env.mj.set.state_noise_std = noise_std
 
@@ -450,9 +453,9 @@ def logging_job(model, run_name, group_name):
 
 def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=networks.DQN_5L100, 
                       memory=50_000, state_steps=1, sensor_steps=1, z_state=True, sensor_mode=2,
-                      state_mode=1, reward_style="mixed_v3", reward_options=[], scale_rewards=2.5,
-                      scale_penalties=1.0, penalty_termination=False, finger_stiffness=-101,
-                      num_segments=6, finger_thickness=0.9e-3):
+                      state_mode=1, sensor_noise=0.05, reward_style="mixed_v3", reward_options=[], 
+                      scale_rewards=2.5, scale_penalties=1.0, penalty_termination=False, 
+                      finger_stiffness=-101, num_segments=6, finger_thickness=0.9e-3):
   """
   Runs a baseline training on the model
   """
@@ -480,7 +483,7 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=network
                                  penalty_termination=penalty_termination)
   model = add_sensors(model, num=sensors, sensor_mode=sensor_mode, state_mode=state_mode,
                       state_steps=state_steps, sensor_steps=sensor_steps,
-                      z_state=z_state)
+                      z_state=z_state, noise_std=sensor_noise)
   model = setup_HER(model, use=False)
 
   # finish initialisation of model
@@ -767,8 +770,9 @@ if __name__ == "__main__":
   model.params.num_episodes = 60000
   model.env.params.max_episode_steps = 300
   use_set_5 = False
-  training_type = "vary sensors only"
+  training_type = "vary sensors and noise"
   this_segments = 8
+  this_noise = 0.05
   
   # special settings to test new object set, set5_multi_9540
   if use_set_5:
@@ -820,6 +824,26 @@ if __name__ == "__main__":
     this_sensor = param_1
     this_thickness = 0.9e-3
 
+  elif training_type == "vary sensors and noise":
+
+    vary_1 = [
+      0, # no sensors, state only
+      1, # bending and z state
+      2, # + palm
+      3  # + wrist
+    ]
+    vary_2 = [0, 0.025, 0.05]
+    vary_3 = None
+    repeats = 3
+    param_1_name = "Sensors"
+    param_2_name = "Noise std"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    this_sensor = param_1
+    this_thickness = 0.9e-3
+    this_noise = param_2
+
   elif training_type == "vary others":
 
     vary_1 = None
@@ -853,7 +877,7 @@ if __name__ == "__main__":
 
   # perform the training with other parameters standard
   model = baseline_settings(model, sensors=this_sensor, finger_thickness=this_thickness,
-                            num_segments=this_segments) 
+                            num_segments=this_segments, sensor_noise=this_noise) 
   model.train()
 
   # ----- END ----- #

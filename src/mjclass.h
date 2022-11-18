@@ -1072,6 +1072,7 @@ public:
   bool last_action_panda();
   float get_fingertip_z_height();
   float find_highest_stable_timestep();
+  void set_sensor_noise_and_normalisation_to(bool set_as);
 
 }; // class MjClass
 

@@ -99,6 +99,7 @@ struct
     double finger_thickness = 0.9;  // added by luke
     int seg_num_for_frc = 1;       // added by luke
     double seg_force = 0.0;         // added by luke
+    int all_sensors_use_noise = 1;  // added by luke
 
     // figure show flags
     int bendgauge = 0;             // added by luke
@@ -198,7 +199,7 @@ const mjuiDef defOption[] =
     {mjITEM_CHECKINT,  "Wrist sensor",  2, &settings.wristsensor,   " #404"}, // added by luke
     {mjITEM_CHECKINT,  "Motor sensor",  2, &settings.statesensor,   " #405"}, // added by luke
     {mjITEM_CHECKINT,  "All sensors",   2, &settings.allsensors,    " #406"}, // added by luke
-    {mjITEM_CHECKINT,  "Use noise",     2, &myMjClass.s_.all_sensors_use_noise, " #407"},  // added by luke
+    {mjITEM_CHECKINT,  "Use noise",     2, &settings.all_sensors_use_noise, " #407"},  // added by luke
     {mjITEM_SLIDERNUM, "Noise mag",     2, &myMjClass.s_.sensor_noise_mag,   "0.0 1.0"},   // added by luke
     {mjITEM_SLIDERNUM, "Noise mean",    2, &myMjClass.s_.sensor_noise_mu,    "-1.0 1.0"},  // added by luke
     {mjITEM_SLIDERNUM, "Noise std",     2, &myMjClass.s_.sensor_noise_std,   "-0.1 1.0"},  // added by luke
@@ -2019,7 +2020,7 @@ void uiEvent(mjuiState* state)
                 myMjClass.s_.state_noise_mag = myMjClass.s_.sensor_noise_mag;
                 myMjClass.s_.state_noise_mu = myMjClass.s_.sensor_noise_mu;
                 myMjClass.s_.state_noise_std = myMjClass.s_.sensor_noise_std;
-                myMjClass.s_.set_use_noise(myMjClass.s_.all_sensors_use_noise);
+                myMjClass.s_.set_use_noise(settings.all_sensors_use_noise);
                 myMjClass.s_.apply_noise_params();
                 break;
 

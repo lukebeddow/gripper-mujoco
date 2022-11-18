@@ -56,10 +56,9 @@
   XX(  state_sample_mode,       int,      0)        /* how to sample motor state, see MjType::Sample*/\
   XX(  sensor_n_prev_steps,     int,      1)        /* how many steps back do we sample with sensors */\
   XX(  state_n_prev_steps,      int,      1)        /* how many steps back do we sample with state sensors */\
-  XX(  all_sensors_use_noise,   bool,     false)    /* do all of the sensors use noise */\
   XX(  sensor_noise_mag,        double,   0.0)      /* noise magnitude if using uniform distribution (std <= 0) */\
   XX(  sensor_noise_mu,         double,   0.0)      /* abs range of sensor mean shift */\
-  XX(  sensor_noise_std,        double,   0.015)    /* std deviation of noise, <= 0 means uniform */\
+  XX(  sensor_noise_std,        double,   0.05)     /* std deviation of noise, <= 0 means uniform */\
   XX(  state_noise_mag,         double,   0.0)      /* noise magnitude if using uniform distribution (std <= 0)*/\
   XX(  state_noise_mu,          double,   0.0)      /* abs range of state sensor mean shift*/\
   XX(  state_noise_std,         double,   0.05)     /* std deviation of noise, <= 0 means uniform*/\

@@ -1095,6 +1095,27 @@ std::vector<luke::gfloat> MjClass::get_observation()
   // use for printing detailed observation debug information
   constexpr bool debug_obs = false;
 
+  // std::cout << "Use noise is "
+  //   << s_.bending_gauge.use_noise << ", "
+  //   << s_.palm_sensor.use_noise << ", "
+  //   << s_.motor_state_sensor.use_noise << ", "
+  //   << s_.base_state_sensor.use_noise << ", "
+  //   << s_.wrist_sensor_Z.use_noise << "\n";
+
+  // std::cout << "Noise value is "
+  //   << s_.bending_gauge.noise_std << ", "
+  //   << s_.palm_sensor.noise_std << ", "
+  //   << s_.motor_state_sensor.noise_std << ", "
+  //   << s_.base_state_sensor.noise_std << ", "
+  //   << s_.wrist_sensor_Z.noise_std << "\n";
+
+  // std::cout << "Use normalisation is "
+  //   << s_.bending_gauge.use_normalisation << ", "
+  //   << s_.palm_sensor.use_normalisation << ", "
+  //   << s_.motor_state_sensor.use_normalisation << ", "
+  //   << s_.base_state_sensor.use_normalisation << ", "
+  //   << s_.wrist_sensor_Z.use_normalisation << "\n";
+
   std::vector<luke::gfloat> observation;
 
   // // FOR TESTING
@@ -2644,6 +2665,14 @@ float MjClass::find_highest_stable_timestep()
   return final_timestep;
 }
 
+void MjClass::set_sensor_noise_and_normalisation_to(bool set_as)
+{
+  /* setter to overwrtie all sensor settings for noise and normalisation */
+
+  s_.set_use_normalisation(set_as);
+  s_.set_use_noise(set_as);
+}
+
 /* ------ utility functions ----- */
 
 float linear_reward(float val, float min, float max, float overshoot)
@@ -2911,11 +2940,7 @@ void MjType::Settings::update_sensor_settings(double time_since_last_sample)
   /* updates the number of readings each sensor is taking based on time between
   samples and read rate */
 
-  // turn on normalisation behaviour for all sensors
-  set_use_normalisation(true);
-
   // apply noise settings
-  set_use_noise(all_sensors_use_noise);
   apply_noise_params(); // currently prevents customising sensors differently
 
   // set the number of previous steps to sample back for all sensors

@@ -100,6 +100,7 @@ PYBIND11_MODULE(bind, m) {
     .def("numerical_stiffness_converge", static_cast<std::string (MjClass::*)(float, float)>(&MjClass::numerical_stiffness_converge))
     .def("numerical_stiffness_converge", static_cast<std::string (MjClass::*)(float, float, std::vector<float>, std::vector<float>)>(&MjClass::numerical_stiffness_converge))
     .def("numerical_stiffness_converge_2", &MjClass::numerical_stiffness_converge_2)
+    .def("set_sensor_noise_and_normalisation_to", &MjClass::set_sensor_noise_and_normalisation_to)
 
     // exposed variables
     .def_readwrite("set", &MjClass::s_)

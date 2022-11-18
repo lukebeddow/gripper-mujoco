@@ -12,8 +12,8 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N Array48_try_no_sensors
-#$ -t 1-20
+#$ -N Array48_noise_and_no_sensors
+#$ -t 1-36
 
 # The code you want to run now goes here.
 
