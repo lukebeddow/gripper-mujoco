@@ -34,6 +34,7 @@ class MjEnv():
     reward: float = 0
     steps: int = 0
     object_name: str = ""
+    object_category: str = ""
     cnt = None
 
   @dataclass
@@ -338,6 +339,9 @@ class MjEnv():
     trial_data.object_name = test_report.object_name
     trial_data.reward = self.track.cumulative_reward
     trial_data.cnt = test_report.cnt
+
+    # get the object category by assuming its the first word of _ seperated string
+    trial_data.object_category = trial_data.object_name.split("_")[0]
 
     # insert information into stored data list
     self.test_trial_data.append(trial_data)

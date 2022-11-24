@@ -460,6 +460,13 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=network
   Runs a baseline training on the model
   """
 
+  print("thickness is:", finger_thickness)
+  print("learning rate is", lr)
+  print("eps decay is", eps_decay)
+  print("sensor noise is", sensor_noise)
+
+  exit()
+
   # set parameters
   model.env.mj.set.XYZ_action_mm_rad = False # we do NOT use SI step actions
   model.env.params.max_episode_steps = 250 # note the hardcoded override
@@ -805,6 +812,13 @@ if __name__ == "__main__":
     this_sensor = param_1
     this_thickness = param_2
 
+    baseline_args = {
+      "sensors" : this_sensor,
+      "finger_thickness" : this_thickness,
+      "sensor_noise" : this_noise,
+      "num_segments" : this_segments
+    }
+
   elif training_type == "vary sensors only":
 
     vary_1 = [
@@ -823,6 +837,13 @@ if __name__ == "__main__":
                                                 param_3=vary_3, repeats=repeats)
     this_sensor = param_1
     this_thickness = 0.9e-3
+
+    baseline_args = {
+      "sensors" : this_sensor,
+      "finger_thickness" : this_thickness,
+      "sensor_noise" : this_noise,
+      "num_segments" : this_segments
+    }
 
   elif training_type == "vary sensors and noise":
 
@@ -844,6 +865,35 @@ if __name__ == "__main__":
     this_thickness = 0.9e-3
     this_noise = param_2
 
+    baseline_args = {
+      "sensors" : this_sensor,
+      "finger_thickness" : this_thickness,
+      "sensor_noise" : this_noise,
+      "num_segments" : this_segments
+    }
+
+  elif training_type == "vary lr and eps":
+
+    vary_1 = [5e-6, 1e-5, 5e-5, 1e-4, 5e-4]
+    vary_2 = [2000, 4000, 6000, 8000]
+    vary_3 = None
+    repeats = None
+    param_1_name = "learning rate"
+    param_2_name = "eps decay"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    this_lr = param_1
+    this_eps_decay = param_2
+    this_three = param_3
+
+    baseline_args = {
+      "lr" : this_lr,
+      "eps_decay" : this_eps_decay,
+      "sensor_noise" : this_noise,
+      "num_segments" : this_segments
+    }
+
   elif training_type == "vary others":
 
     vary_1 = None
@@ -858,6 +908,14 @@ if __name__ == "__main__":
     this_one = param_1
     this_two = param_2
     this_three = param_3
+
+    baseline_args = {
+      "param_1_arg" : param_1,
+      "param_2_arg" : param_2,
+      "param_3_arg" : param_3,
+      "sensor_noise" : this_noise,
+      "num_segments" : this_segments
+    }
 
   else: raise RuntimeError(f"array_training_DQN.py: training_type of {training_type} not recognised")
 
@@ -876,8 +934,11 @@ if __name__ == "__main__":
     exit()
 
   # perform the training with other parameters standard
-  model = baseline_settings(model, sensors=this_sensor, finger_thickness=this_thickness,
-                            num_segments=this_segments, sensor_noise=this_noise) 
+  # model = baseline_settings(model, sensors=this_sensor, finger_thickness=this_thickness,
+  #                           num_segments=this_segments, sensor_noise=this_noise) 
+
+  model = baseline_settings(model, **baseline_args)
+
   model.train()
 
   # ----- END ----- #

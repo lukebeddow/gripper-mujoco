@@ -229,6 +229,7 @@ class TrainDQN():
       self.plot_test_raw = True
       self.plot_test_metrics = True
       self.plot_success_rate = True
+      self.plot_bar_chart = True
       self.success_rate_metric = "stable height"
       self.plot_time_taken = True
       # general
@@ -249,6 +250,13 @@ class TrainDQN():
       self.avgS_episodes = np.array([], dtype=np.int32)
       self.avgS_rewards = np.array([], dtype=numpy_float)
       self.avgS_durations = np.array([], dtype=numpy_float)
+      # object category data
+      self.object_categories = []
+      self.category_num = []
+      self.category_stable = []
+      self.category_lifted = []
+      self.category_target_height = []
+      self.category_stable_height = []
       # test data
       self.test_episodes = np.array([], dtype=np.int32)
       self.test_rewards = np.array([], dtype=numpy_float)
@@ -399,6 +407,8 @@ class TrainDQN():
       if (self.last_plot + plt_frequency > time.time()):
         return
 
+      self.plot_bar_chart = True
+
       if self.fig is None:
         # multiple figures
         self.fig = []
@@ -431,6 +441,10 @@ class TrainDQN():
           fig7, axs7 = plt.subplots(1, 1)
           self.fig.append(fig7)
           self.axs.append([axs7, axs7]) # add paired to hold the pattern
+        if self.plot_bar_chart:
+          fig8, axs8 = plt.subplots(1, 1)
+          self.fig.append(fig8)
+          self.axs.append([axs8, axs8]) # add paired to hold the pattern
 
       ind = 0
 
@@ -523,7 +537,29 @@ class TrainDQN():
       if self.plot_time_taken:
         self.plot_matplotlib(self.avgS_episodes, self.avg_time_taken, "Time per action / s",
           f"Time per action static average ({self.static_avg_num} samples)", self.axs[ind][0])
-        ind += 1     
+        ind += 1 
+
+      if self.plot_bar_chart:
+
+        labels = [*self.object_categories, "all"]
+        x = np.arange(len(labels))
+        width = 0.35
+
+        rects1 = self.axs[ind][0].bar(x - width/2, [*self.category_target_height[-1], self.avg_target_height[-1]], width, label="target height")
+        rects2 = self.axs[ind][0].bar(x + width/2, [*self.category_stable_height[-1], self.avg_stable_height[-1]], width, label="stable height")
+
+        self.axs[ind][0].set_ylabel("Success rate")
+        # self.axs[ind][0].set_xlabel("Object category")
+        self.axs[ind][0].set_xticks(x)
+        self.axs[ind][0].set_xticklabels(labels)
+        self.axs[ind][0].set_title("Grasping by category")
+        self.axs[ind][0].legend()
+
+        # this gives an error, its intended to put the bar values above them eg 0.43
+        # self.axs[ind][0].bar_label(rects1, padding=3)
+        # self.axs[ind][0].bar_label(rects2, padding=3)
+        
+        ind += 1
 
       plt.pause(0.001)
 
@@ -620,6 +656,33 @@ class TrainDQN():
         self.plot_wandb(self.avgS_episodes, self.avg_time_taken, E, "Time per action / s",
                         f"Time per action static average ({self.static_avg_num} samples)")
 
+      # OLD CODE COMPATIBLE: delete later
+      try:
+        test = self.plot_bar_chart
+      except Exception as e:
+        print("Tracker() does not have variable self.plot_bar_chart")
+        print(e)
+        self.plot_bar_chart = False
+
+      # create bar chart to visualise performance on different categories
+      if self.plot_bar_chart:
+
+        data = [[label, var] for (label, var) in zip(
+          [*self.object_categories, "all"],
+          [*self.category_stable_height[-1], self.avg_stable_height[-1]]
+        )]
+        table = wandb.Table(data=data, columns=["categories", "success rate"])
+        wandb.log({"stable_height_bar_chart" : wandb.plot.bar(table, "categories", "success rate",
+                                                   title="Stable height success rate by category")})
+
+        data = [[label, var] for (label, var) in zip(
+          [*self.object_categories, "all"],
+          [*self.category_target_height[-1], self.avg_target_height[-1]]
+        )]
+        table = wandb.Table(data=data, columns=["categories", "success rate"])
+        wandb.log({"target_height_bar_chart" : wandb.plot.bar(table, "categories", "success rate",
+                                                   title="Target height success rate by category")})
+
       # finish by recording the last log time
       self.last_log = time.time()
 
@@ -632,6 +695,10 @@ class TrainDQN():
     # define key training parameters
     self.params = TrainDQN.Parameters()
     self.track = TrainDQN.Tracker()
+
+    # define some class variables
+    self.log_rate_for_episodes = 25
+    self.last_test_data = None
 
     # prepare environment, but don't load a model xml file yet
     self.env = MjEnv(noload=True, num_segments=num_segments)
@@ -891,11 +958,13 @@ class TrainDQN():
 
   def create_test_report(self, test_data, i_episode=None):
     """
-    Process the test data from a finished test
+    Process the test data from a finished test to get a test report string
     """
 
-    # do we print the test report in the terminal
-    print_out = True
+    # how much do we print from this function
+    print_objects = False     # print results from every object
+    print_categories = True   # print averages from object categories (eg cube/sphere)
+    print_overall = True      # print overall average from all objects
 
     len_data = len(test_data)
     num_trials = self.env.params.test_trials_per_object
@@ -911,42 +980,47 @@ class TrainDQN():
 
     # save all outputs in one place
     output_str = ""
+    object_table = ""
+    category_table = ""
+    overall_avg_table = ""
+
+    # create intro text and column header text
+    start_str = f"Test report on {num_obj} objects, with {num_trials} trials each"
+    if i_episode != None: start_str += f", after {i_episode} training steps"
+    else: start_str += ", before any training steps"
 
     # define the number of columns for the print out table and group them into styles
     col_str = (
         "{0} | " * 1 # name
-      + "{1} | " * 4 # float fields - reward, steps, palm f, fing.f
-      + "{2} | " * 5 # end conditions - Lft, Stb, oob, t.h, s.h
-      + "{3} | " * 7 # percentages - pLft, pCon, pPlmFrc, pXLim, pXAxial, pXlaT, pXPalm
+      + "{1} | " * 1 # number of instances
+      + "{2} | " * 4 # float fields - reward, steps, palm f, fing.f
+      + "{3} | " * 5 # end conditions - Lft, Stb, oob, t.h, s.h
+      + "{4} | " * 7 # percentages - pLft, pCon, pPlmFrc, pXLim, pXAxial, pXlaT, pXPalm
       + "\n"
     )
 
     # insert string formatting information for each column style
-    header_str = col_str.format("{:<36}", "{:<6}", "{:<4}", "{:<3}")
-    row_str = col_str.format("{:<36}", "{:<6.2f}", "{:<4}", "{:<3.0f}")
-    res_str = col_str.format("{:<36}", "{:<6.2f}", "{:<4.2f}", "{:<3.0f}")
+    header_str = col_str.format    ("{}",     "{:<3}", "{:<6}",    "{:<4}",    "{:<3}")
+    normal_row_str = col_str.format("{:<36}", "{:<3}", "{:<6.2f}", "{:<4}",    "{:<3.0f}")
+    avg_row_str = col_str.format   ("{:<36}", "{:<3}", "{:<6.2f}", "{:<4.2f}", "{:<3.0f}")
 
     # insert the names into the top of each column - notice the grouping of styles
-    first_row = header_str.format(
-      "Object name", 
+    table_header = header_str.format(
+      "{:<36}",
+      "Num",
       "Reward", "Steps", "Palm f", "Fing.f", 
       "lft", "stb", "oob", "t.h", "s.h", 
-      "%Lt", "%Cn", "%PF", "%XL", "%XA", "%XT", "%XP"
+      "%Lt", "%Cn", "%PF", "%XL", "%XA", "%XT", "%XP"                                                                         
     )
-
-    # create intro text and column header text
-    start_str = f"Starting test on {num_obj} objects, with {num_trials} trials each"
-    if i_episode != None: start_str += f", after {i_episode} training steps"
-    else: start_str += ", before any training steps"
-    start_str += "\n\n" + first_row
-
-    output_str += start_str
-
-    if print_out: print(start_str)
+    
+    object_table += table_header.format("Object name")
 
     # create cpp counter objects
     total_counter = self.env._make_event_track()
     obj_counter = self.env._make_event_track()
+
+    # create dictionary to store the object categories
+    category_dict = {}
 
     # loop through the number of objects in the test
     for i in range(num_obj):
@@ -956,11 +1030,31 @@ class TrainDQN():
       names.append(test_data[j].object_name)
       total_rewards = 0
 
+      # is this object in a new catergory, if so add an event tracker
+      new_category = True
+      for key in category_dict.keys():
+        if key == test_data[j].object_category:
+          new_category = False
+          break
+      if new_category:
+        category_dict[test_data[j].object_category] = {
+          "counter" : self.env._make_event_track(),
+          "num" : 0.0,
+          "reward" : 0.0
+        }
+
       # loop through the number of trials for each object
       for k in range(num_trials):
 
         # add together the event counts for this object
         obj_counter = self.env._add_events(obj_counter, test_data[j+k].cnt)
+
+        # add the counts for this category
+        category_dict[test_data[j].object_category]["counter"] = self.env._add_events(
+          category_dict[test_data[j].object_category]["counter"], test_data[j+k].cnt
+        )
+        category_dict[test_data[j].object_category]["num"] += 1
+        category_dict[test_data[j].object_category]["reward"] += test_data[j + k].reward
 
         # sum end of episode rewards for this set of trials
         total_rewards += test_data[j + k].reward
@@ -972,9 +1066,11 @@ class TrainDQN():
       obj_counter.calculate_percentage()
 
       # save all data in a string to output to a test summary text file
-      obj_row = row_str.format(
+      obj_row = normal_row_str.format(
         # name x1
         names[-1], 
+        # number x1
+        num_trials,
         # float style x4
         avg_rewards[-1], 
         obj_counter.step_num.abs / float(num_trials),
@@ -996,9 +1092,7 @@ class TrainDQN():
         obj_counter.exceed_palm.percent
       )
 
-      output_str += obj_row
-
-      if print_out: print(obj_row)
+      object_table += obj_row
 
       # add these events to the total counter
       total_counter = self.env._add_events(total_counter, obj_counter)
@@ -1016,9 +1110,12 @@ class TrainDQN():
     N = float(num_trials * num_obj)
 
     # add the overall averages to the test report string
-    end_str = "\n" + res_str.format(
+    overall_avg_table += table_header.format("Overall average")
+    overall_avg_table += avg_row_str.format(
       # name x1
-      "Overall averages per object: ", 
+      "All objects",
+      # number x1
+      int(N),
       # float style x4
       mean_reward, 
       total_counter.step_num.abs / N,
@@ -1040,8 +1137,103 @@ class TrainDQN():
       total_counter.exceed_palm.percent
     )
 
+    # now extract category data
+
+    # use try-catch for old code compatibility
+    try:
+      test = self.track.object_categories
+    except Exception as e:
+      print("Object categories fields did not exist in this model, old code")
+      print(e)
+      self.track.object_categories = []
+      self.track.category_num = []
+      self.track.category_stable = []
+      self.track.category_lifted = []
+      self.track.category_target_height = []
+      self.track.category_stable_height = []
+
+    self.track.object_categories = list(category_dict.keys())
+
+    category_table += table_header.format("Overall averages by category")
+
+    num_per_obj = []
+    reward_per_obj = []
+    step_num_per_obj = []
+    palm_force_per_obj = []
+    finger_force_per_obj = []
+    lifted_per_obj = []
+    stable_per_obj = []
+    oob_per_obj = []
+    target_height_per_obj = []
+    stable_height_per_obj = []
+    lifted_percentage_per_obj = []
+    contact_percentage_per_obj = []
+    palm_force_percentage_per_obj = []
+    exceed_limits_percentage_per_obj = []
+    exceed_axial_percentage_per_obj = []
+    exceed_lateral_percentage_per_obj = []
+    exceed_palm_percentage_per_obj = []
+
+    for i, cat in enumerate(self.track.object_categories):
+
+      category_dict[cat]["counter"].calculate_percentage()
+      category_dict[cat]["reward"] /= category_dict[cat]["num"]
+
+      num_per_obj.append(category_dict[cat]["num"])
+      reward_per_obj.append(category_dict[cat]["reward"])
+
+      step_num_per_obj.append(category_dict[cat]["counter"].step_num.abs / category_dict[cat]["num"])
+      palm_force_per_obj.append(category_dict[cat]["counter"].palm_force.last_value / category_dict[cat]["num"])
+      finger_force_per_obj.append(category_dict[cat]["counter"].finger_force.last_value / category_dict[cat]["num"])
+
+      lifted_per_obj.append(category_dict[cat]["counter"].lifted.last_value / category_dict[cat]["num"])
+      stable_per_obj.append(category_dict[cat]["counter"].object_stable.last_value / category_dict[cat]["num"])
+      oob_per_obj.append(category_dict[cat]["counter"].oob.last_value / category_dict[cat]["num"])
+      target_height_per_obj.append(category_dict[cat]["counter"].target_height.last_value / category_dict[cat]["num"])
+      stable_height_per_obj.append(category_dict[cat]["counter"].stable_height.last_value / category_dict[cat]["num"])
+
+      lifted_percentage_per_obj.append(category_dict[cat]["counter"].lifted.percent)
+      contact_percentage_per_obj.append(category_dict[cat]["counter"].object_contact.percent)
+      palm_force_percentage_per_obj.append(category_dict[cat]["counter"].palm_force.percent)
+      exceed_limits_percentage_per_obj.append(category_dict[cat]["counter"].exceed_limits.percent)
+      exceed_axial_percentage_per_obj.append(category_dict[cat]["counter"].exceed_axial.percent)
+      exceed_lateral_percentage_per_obj.append(category_dict[cat]["counter"].exceed_lateral.percent)
+      exceed_palm_percentage_per_obj.append(category_dict[cat]["counter"].exceed_palm.percent)
+
+    for c in range(len(self.track.object_categories)):
+
+      cat_row = avg_row_str.format(
+        # name x1
+        self.track.object_categories[c], 
+        # number x1
+        int(category_dict[self.track.object_categories[c]]["num"]),
+        # float style x4
+        reward_per_obj[c], 
+        step_num_per_obj[c],
+        palm_force_per_obj[c],
+        finger_force_per_obj[c],
+        # end state style x5
+        lifted_per_obj[c], 
+        stable_per_obj[c], 
+        oob_per_obj[c], 
+        target_height_per_obj[c], 
+        stable_height_per_obj[c],
+        # perentage style x7
+        lifted_percentage_per_obj[c],
+        contact_percentage_per_obj[c],
+        palm_force_percentage_per_obj[c],
+        exceed_limits_percentage_per_obj[c],
+        exceed_axial_percentage_per_obj[c],
+        exceed_lateral_percentage_per_obj[c],
+        exceed_palm_percentage_per_obj[c]
+      )
+
+      category_table += cat_row
+
     # save test results if we are mid-training
-    if i_episode != None:
+    if True or i_episode != None:
+
+      # overall results
       self.track.test_episodes = np.append(self.track.test_episodes, i_episode)
       self.track.test_durations = np.append(self.track.test_durations, total_counter.step_num.abs / N)
       self.track.test_rewards = np.append(self.track.test_rewards, mean_reward)
@@ -1058,9 +1250,25 @@ class TrainDQN():
       self.track.avg_target_height = np.append(self.track.avg_target_height, total_counter.target_height.last_value / N)
       self.track.avg_stable_height = np.append(self.track.avg_stable_height, total_counter.stable_height.last_value / N)
 
-    output_str += end_str
+      # save only select category data
+      self.track.category_num.append(num_per_obj)
+      self.track.category_lifted.append(lifted_per_obj)
+      self.track.category_stable.append(stable_per_obj)
+      self.track.category_target_height.append(target_height_per_obj)
+      self.track.category_stable_height.append(stable_height_per_obj)
 
-    if print_out: print(end_str)
+    # finally, assembly the output string
+    output_str += start_str + "\n"
+    output_str += "\n" + object_table
+    output_str += "\n" + category_table
+    output_str += "\n" + overall_avg_table
+
+    # print out information based on flags at top of function
+    print_out = bool(print_objects + print_categories + print_overall)
+    if print_out: print(start_str + "\n")
+    if print_objects: print(object_table)
+    if print_categories: print(category_table)
+    if print_overall: print(overall_avg_table)
 
     return output_str
 
@@ -1309,7 +1517,7 @@ class TrainDQN():
     # begin training episodes
     for i_episode in range(i_start + 1, self.params.num_episodes + 1):
 
-      if self.log_level == 1 and i_episode % 25 == 1:
+      if self.log_level == 1 and i_episode % self.log_rate_for_episodes == 1:
         print("Begin training episode", i_episode, flush=True)
       elif self.log_level > 1:
         print("Begin training episode", i_episode, flush=True)
@@ -1358,6 +1566,12 @@ class TrainDQN():
     in order to use a human written function for selecting actions.
     """
 
+    if self.log_level > 0: 
+      print("Starting test with", 
+            self.env.params.test_objects * self.env.params.test_trials_per_object,
+            "trial episodes", 
+            f"({self.env.params.test_objects} objects each with {self.env.params.test_trials_per_object} trials)")
+
     # begin test mode
     self.env.start_test()
 
@@ -1369,9 +1583,10 @@ class TrainDQN():
         i_episode -= 1 # we didn't finish this episode
         break
 
-      if self.log_level > 0: 
-        print("Begin test episode", i_episode)
-        # self.env.mj.print(f"Begin test episode {i_episode}")
+      if self.log_level == 1 and i_episode % self.log_rate_for_episodes == 1:
+        print("Begin test episode", i_episode, flush=True)
+      elif self.log_level > 1:
+        print("Begin test episode", i_episode, flush=True)
 
       if heuristic: self.env.start_heuristic_grasping()
 
@@ -1390,6 +1605,9 @@ class TrainDQN():
     if self.use_wandb:
       self.log_wandb(force=True) # guarantees data will be logged
 
+    # save internally this test data
+    self.last_test_data = test_data
+
     if self.log_level > 0: print("Testing complete, finished", i_episode, "episodes")
 
     return test_data
@@ -1407,7 +1625,6 @@ class TrainDQN():
     if self.log_level > 0: print("Testing heuristic baseline")
 
     # run the test chooseing heuristic actions
-    self.env.start_heuristic_grasping()
     test_data = self.test(heuristic=True, pause_each_episode=pause_each_episode)
 
     # save results
@@ -1555,20 +1772,21 @@ class TrainDQN():
     self.track = load_data.track
       
     if load_data.extra != None:
-      self.loaded_test_data = load_data.extra[0]
+      self.last_test_data = load_data.extra
 
     # reseed and reload environment
     self.env.seed()      # reseeds with same seed as before (but not contiguous!)
     self.env._load_xml() # segfault without this
 
+    # move to the current device
+    self.memory.all_to(self.device)
+    self.policy_net.to(self.device)
+
     # reinitialise to prepare for further training
     self.target_net = deepcopy(self.policy_net)
     self.target_net.load_state_dict(self.policy_net.state_dict())
 
-    # move to the current device
-    self.memory.all_to(self.device)
-    self.policy_net.to(self.device)
-    self.target_net.to(self.device)
+    # self.target_net.to(self.device)
 
     # re-initialise the class
     self.init(network="loaded")
@@ -1577,7 +1795,7 @@ class TrainDQN():
     return self.modelsaver.last_loadpath
   
   def continue_training(self, foldername, folderpath, new_endpoint=None,
-                        network=None, extra_episodes=None, object_set=None):
+                        extra_episodes=None, object_set=None):
     """
     Load a model and then continue training it
     """
@@ -1618,7 +1836,7 @@ if __name__ == "__main__":
   
   # ----- prepare ----- #
 
-  use_wandb = False
+  use_wandb = True
   force_device = "cpu"
   no_plot = True
 
@@ -1660,10 +1878,20 @@ if __name__ == "__main__":
   # ----- load ----- #
 
   # load
-  folderpath = "/home/luke/mymujoco/rl/models/dqn/baselines-oct/"
-  foldername = "sensor_2_thickness_0.9"
+  folderpath = "/home/luke/cluster/rl/models/dqn/07-11-22/"
+  foldername = "cluster_17:43_A19"
   model.set_device("cpu")
-  model.load(id=None, folderpath=folderpath, foldername=foldername)
+  model.load(id=33, folderpath=folderpath, foldername=foldername)
+
+  # FOR TESTING - delete later
+  # test_data = model.test()
+  # print("test data is", test_data)
+  # model.save(tupledata=(test_data))
+  model.create_test_report(model.last_test_data)
+  # model.no_plot = False
+  # model.plot(force=True, hang=True)
+  model.log_wandb(force=True)
+  exit()
 
   # ----- train ----- #
 
@@ -1714,11 +1942,11 @@ if __name__ == "__main__":
   model.env.mj.set.debug = False
   model.env.disable_rendering = False
   # model.env.params.test_trials_per_object = 1
-  model.env.test_objects = 30
-  # model.env.test_obj_per_file = 5
-  # model.env.max_episode_steps = 20
+  # model.env.params.test_objects = 20
+  # model.env.params.test_obj_per_file = 5
+  # model.env.params.max_episode_steps = 20
 
-  # model.env.mj.set.step_num.set          (0,      70,   1)
+  # model.env.mj.set.step_num.set          (0,      70,     1)
   # model.env.mj.set.exceed_limits.set     (-0.005, True,   10)
   # model.env.mj.set.exceed_axial.set      (-0.005, True,   10,    3.0,  6.0,  -1)
   # model.env.mj.set.exceed_lateral.set    (-0.005, True,   10,    4.0,  6.0,  -1)
@@ -1727,8 +1955,8 @@ if __name__ == "__main__":
 
   # save results
   test_report = model.create_test_report(test_data)
-  model.modelsaver.new_folder(label="DQN_testing")
-  model.save_hyperparameters(labelstr=f"Loaded model path: {model.modelsaver.last_loadpath}\n")
+  # model.modelsaver.new_folder(label="DQN_testing")
+  # model.save_hyperparameters(labelstr=f"Loaded model path: {model.modelsaver.last_loadpath}\n")
   # model.save(txtstring=test_report, txtlabel="test_results_demo")
   
 
