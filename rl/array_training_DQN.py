@@ -460,13 +460,6 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=network
   Runs a baseline training on the model
   """
 
-  print("thickness is:", finger_thickness)
-  print("learning rate is", lr)
-  print("eps decay is", eps_decay)
-  print("sensor noise is", sensor_noise)
-
-  exit()
-
   # set parameters
   model.env.mj.set.XYZ_action_mm_rad = False # we do NOT use SI step actions
   model.env.params.max_episode_steps = 250 # note the hardcoded override
@@ -774,14 +767,14 @@ if __name__ == "__main__":
 
   # CONFIGURE KEY SETTINGS (take care that baseline_settings(...) does not overwrite)
   model.params.use_curriculum = False
-  model.params.num_episodes = 60000
-  model.env.params.max_episode_steps = 300
-  use_set_5 = False
-  training_type = "vary sensors and noise"
-  this_segments = 8
-  this_noise = 0.05
+  model.params.num_episodes = 40_000 # was 60k, change to 40k for speed
+  # model.env.params.max_episode_steps = 250 # this is hardcoded to override in baseline_settings(...)
+  training_type = "vary lr and eps"
+  this_segments = 6 # was 8, change to 6 for speed
+  this_noise = 0.025 # was 0.05, change to 0.025 for stability
   
   # special settings to test new object set, set5_multi_9540
+  use_set_5 = False
   if use_set_5:
     model.params.object_set = "set5_multi_9540"
     model.env.testing_xmls = 15
@@ -875,7 +868,7 @@ if __name__ == "__main__":
   elif training_type == "vary lr and eps":
 
     vary_1 = [5e-6, 1e-5, 5e-5, 1e-4, 5e-4]
-    vary_2 = [2000, 4000, 6000, 8000]
+    vary_2 = [1000, 2000, 4000, 6000]
     vary_3 = None
     repeats = None
     param_1_name = "learning rate"

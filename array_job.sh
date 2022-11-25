@@ -12,8 +12,8 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N Array48_noise_and_no_sensors
-#$ -t 1-36
+#$ -N Array49_lr_eps
+#$ -t 1-20
 
 # The code you want to run now goes here.
 

@@ -665,7 +665,7 @@ class TrainDQN():
         self.plot_bar_chart = False
 
       # create bar chart to visualise performance on different categories
-      if self.plot_bar_chart:
+      if self.plot_bar_chart and len(self.avg_stable_height) > 0:
 
         data = [[label, var] for (label, var) in zip(
           [*self.object_categories, "all"],
