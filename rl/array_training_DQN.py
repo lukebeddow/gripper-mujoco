@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 # fix for cluster, numpy causes segfault
-# import os
-# os.environ['OPENBLAS_NUM_THREADS'] = '1'
+import os
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
 
 import sys
 from datetime import datetime
@@ -653,7 +653,6 @@ if __name__ == "__main__":
   # key default settings
   use_wandb = True
   no_plot = True
-  log_level = 1
   datestr = "%d-%m-%Y-%H:%M" # all date inputs must follow this format
 
   # # print all the inputs we have received
@@ -673,6 +672,7 @@ if __name__ == "__main__":
   parser.add_argument("--device",             default=None)        # override device
   parser.add_argument("--savedir",            default=None)        # override save/load directory
   parser.add_argument("--print",              action="store_true") # don't train, print help
+  parser.add_argument("--log-level",          default=1)           # set script log level
 
   args = parser.parse_args()
 
@@ -683,6 +683,8 @@ if __name__ == "__main__":
   inputarg = args.job
   timestamp = args.timestamp if args.timestamp else datetime.now().strftime(datestr)
   if args.no_wandb: use_wandb = False
+
+  log_level = args.log_level
 
   if args.print: 
     args.log_wandb = False
@@ -769,8 +771,8 @@ if __name__ == "__main__":
   model.params.use_curriculum = False
   model.params.num_episodes = 40_000 # was 60k, change to 40k for speed
   # model.env.params.max_episode_steps = 250 # this is hardcoded to override in baseline_settings(...)
-  training_type = "vary lr and eps"
-  this_segments = 6 # was 8, change to 6 for speed
+  training_type = "vary reward and network"
+  this_segments = 8 # was 8, change to 6 for speed
   this_noise = 0.025 # was 0.05, change to 0.025 for stability
   
   # special settings to test new object set, set5_multi_9540
@@ -883,6 +885,32 @@ if __name__ == "__main__":
     baseline_args = {
       "lr" : this_lr,
       "eps_decay" : this_eps_decay,
+      "sensor_noise" : this_noise,
+      "num_segments" : this_segments
+    }
+
+  elif training_type == "vary reward and network":
+
+    vary_1 = [
+      (1.5, 1.0),
+      (2.5, 1.0),
+      (2.5, 2.5),
+      (3.5, 1.0),
+      (3.5, 2.5)
+    ]
+    vary_2 = [networks.DQN_3L100, networks.DQN_5L100, networks.DQN_7L100]
+    vary_3 = None
+    repeats = 2
+    param_1_name = "reward/penalty scaling"
+    param_2_name = "network size"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    baseline_args = {
+      "scale_rewards" : param_1[0],
+      "scale_penalties" : param_1[1],
+      "network" : param_2,
       "sensor_noise" : this_noise,
       "num_segments" : this_segments
     }
