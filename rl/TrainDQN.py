@@ -18,6 +18,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+# confine pytorch to one thread only
+torch.set_num_threads(1)
+
 import networks
 from env.MjEnv import MjEnv
 from ModelSaver import ModelSaver
@@ -1465,7 +1468,7 @@ class TrainDQN():
 
         if self.log_level > 1:
           print(f"Time for episode was {ep_end - ep_start:.3f}s"
-            f", time per step was {time_per_step * 1e3:.3f} ms")
+            f", time per action was {time_per_step * 1e3:.3f} ms")
 
         # if we are testing, no data is logged
         if test: break
