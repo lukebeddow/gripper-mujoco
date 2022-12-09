@@ -1,8 +1,8 @@
 # These are flags you must include - Two memory and one runtime.
 # Runtime is either seconds or hours:min:sec (1day=24, 2days=48, 3days=72, 4days=96, 5days=120)
 
-#$ -l tmem=4G
-#$ -l h_vmem=4G
+#$ -l tmem=3G
+#$ -l h_vmem=3G
 #$ -l h_rt=96:0:0 
 
 # Some important notes
@@ -12,8 +12,8 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N Array50_bug_test
-#$ -t 1-4
+#$ -N Array51_action_compare
+#$ -t 1-24
 
 # The code you want to run now goes here.
 

@@ -434,18 +434,33 @@ PYBIND11_MODULE(bind, m) {
         return py::make_tuple(
           r.in_use, 
           r.normalise, 
-          r.read_rate
+          r.read_rate,
+          r.use_normalisation,
+          r.use_noise,
+          r.raw_value_offset,
+          r.noise_mag,
+          r.noise_mu,
+          r.noise_std
         );
       },
       [](py::tuple t) { // __setstate__
 
-        if (t.size() != 3)
+        // size == 3 is old and can be later deleted
+        if (t.size() != 3 or t.size() != 9)
           throw std::runtime_error("MjType::Sensor py::pickle got invalid state");
 
         // create new c++ instance with old data
-        MjType::Sensor out(t[0].cast<bool>(), t[1].cast<float>(), 
-          t[2].cast<float>());
+        MjType::Sensor out(t[0].cast<bool>(), t[1].cast<float>(), t[2].cast<float>());
 
+        if (t.size() == 9) {
+          out.use_normalisation = t[3].cast<bool>();
+          out.use_noise = t[4].cast<bool>();
+          out.raw_value_offset = t[5].cast<float>();
+          out.noise_mag = t[6].cast<float>();
+          out.noise_mu = t[7].cast<float>();
+          out.noise_std = t[8].cast<float>();
+        }
+        
         return out;
       }
     ))
