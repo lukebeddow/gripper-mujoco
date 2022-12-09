@@ -65,7 +65,7 @@
   /* 
   update_env() settings */\
   XX(  oob_distance,            double,   75e-3)    /* distance to consider object out of bounds */\
-  XX(  done_height,             double,   15e-3)    /* grasp done if the gripper reaches this height with the object */\
+  XX(  done_height,             double,   15e-3)    /* the object AND the gripper must go up by this height from starting positions */\
   XX(  stable_finger_force,     double,   1.0)      /* finger force (N) on object to consider stable */\
   XX(  stable_palm_force,       double,   1.0)      /* palm force (N) on object to consider stable */\
   /* 

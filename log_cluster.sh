@@ -2,11 +2,11 @@
 
 # quick script to take a cluster training and log it to weights and biases
 
-LOADFROM=~/cluster/rl/models/dqn/
-MACHINE=cluster
+LOADFROM=~/mymujoco/rl/models/dqn/
+MACHINE=luke-PC
 STAGGER=8
-TIMESTAMP=25-11-22-16:22
-JOBS="1:20"
+TIMESTAMP=29-11-22-17:31
+JOBS="10"
 
 cd ~/mymujoco
 

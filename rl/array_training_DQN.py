@@ -17,11 +17,24 @@ def set_penalties(model, value, done=False, trigger=1, make_binary=None):
   Set penalty rewards with given value, alongside defaults
   """
 
+  # # choose penalties ranges based on the desired stable force
+  # min = 0.0
+  # mnf = model.env.mj.set.stable_finger_force
+  # mnp = model.env.mj.set.stable_palm_force
+  # mxf = 2
+  # mxp
+
   # penalties                            reward   done   trigger  min   max  overshoot
   model.env.mj.set.exceed_limits.set     (value,  done,  trigger)
   model.env.mj.set.exceed_axial.set      (value,  done,  trigger, 3.0,  6.0,  -1)
   model.env.mj.set.exceed_lateral.set    (value,  done,  trigger, 4.0,  6.0,  -1) # min and max currently overwritten with (1.0 and 1.5)*yield_load()
   model.env.mj.set.exceed_palm.set       (value,  done,  trigger, 6.0,  15.0, -1)
+
+  # # penalties                            reward   done   trigger  min   max  overshoot
+  # model.env.mj.set.exceed_limits.set     (value,  done,  trigger)
+  # model.env.mj.set.exceed_axial.set      (value,  done,  trigger, 3.0,  6.0,  -1)
+  # model.env.mj.set.exceed_lateral.set    (value,  done,  trigger, 4.0,  6.0,  -1) # min and max currently overwritten with (1.0 and 1.5)*yield_load()
+  # model.env.mj.set.exceed_palm.set       (value,  done,  trigger, sbp,  15.0, -1)
 
   # make rewards binary trigger by setting 'max' to 'min' for immediate saturation
   if make_binary == True:
@@ -45,6 +58,15 @@ def set_bonuses(model, value, make_binary=None):
   # linear rewards                       reward   done   trigger min   max  overshoot
   model.env.mj.set.finger_force.set      (value,  False,   1,    0.2,  1.0,  -1)
   model.env.mj.set.palm_force.set        (value,  False,   1,    1.0,  6.0,  -1)
+
+  # # choose reward ranges based on the desired stable force
+  # min = 0.0
+  # sbf = model.env.mj.set.stable_finger_force
+  # sbp = model.env.mj.set.stable_palm_force
+
+  # # linear rewards                       reward   done   trigger min   max  overshoot
+  # model.env.mj.set.finger_force.set      (value,  False,   1,    min,  sbf,  -1)
+  # model.env.mj.set.palm_force.set        (value,  False,   1,    min,  sbp,  -1)
 
   # make linear rewards binary by setting 'max' to 'min' for immediate saturation
   if make_binary == True:
@@ -455,14 +477,15 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=network
                       memory=50_000, state_steps=1, sensor_steps=1, z_state=True, sensor_mode=2,
                       state_mode=1, sensor_noise=0.05, reward_style="mixed_v3", reward_options=[], 
                       scale_rewards=2.5, scale_penalties=1.0, penalty_termination=False, 
-                      finger_stiffness=-101, num_segments=6, finger_thickness=0.9e-3):
+                      finger_stiffness=-101, num_segments=6, finger_thickness=0.9e-3,
+                      max_episode_steps=250):
   """
   Runs a baseline training on the model
   """
 
   # set parameters
   model.env.mj.set.XYZ_action_mm_rad = False # we do NOT use SI step actions
-  model.env.params.max_episode_steps = 250 # note the hardcoded override
+  model.env.params.max_episode_steps = max_episode_steps
   model.params.learning_rate = lr
   model.params.eps_decay = eps_decay
   model.params.memory_replay = memory
@@ -471,7 +494,7 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=network
   model.env.params.finger_thickness = finger_thickness # options are 0.8e-3, 0.9e-3, 1.0e-3
 
   # wandb notes
-  model.wandb_note += f"Network: {network.name}\n"
+  # model.wandb_note += f"Network: {network.name}\n"
   model.wandb_note += f"Learning rate {lr}\n"
   model.wandb_note += f"eps_decay = {eps_decay}\n"
   model.wandb_note += f"finger_stiffness = {finger_stiffness}\n"
@@ -487,7 +510,8 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=network
   model = setup_HER(model, use=False)
 
   # finish initialisation of model
-  model.init(network)
+  if network is not None:
+    model.init(network)
 
   return model
 
@@ -500,60 +524,43 @@ def heuristic_test(model, inputarg=None, render=False):
   # # temporary override!
   # model.env.params.test_objects = 5
 
-  if inputarg is None: inputarg = 1
+  vary_1 = [0, 1, 2, 3]
+  vary_2 = [0.9e-3]
+  vary_3 = [8]
+  repeats = 5
+  param_1_name = "Num sensors"
+  param_2_name = "Finger thickness"
+  param_3_name = "Num segments"
+  param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                              param_3=vary_3, repeats=repeats)
+  baseline_args = {
+    "sensors" : param_1,
+    "finger_thickness" : param_2,
+    "num_segments" : param_3
+  }
 
-  sensors_list = [
-    0, # bending and z state
-    1, # + palm
-    2  # + wrist
-  ]
-
-  thickness_list = [
-    0.8e-3,
-    0.9e-3,
-    1.0e-3
-  ]
-
-  # allow repeats
-  trainings = 9
-  while inputarg > trainings: inputarg -= trainings
-
-  # lists are zero indexed so adjust inputarg
-  inputarg -= 1
-
-  # we vary wrt memory_list every inputarg increment
-  x = len(thickness_list)
-
-  # get the sensors and memory size for this training
-  this_sensor = sensors_list[inputarg // x]                # vary every x steps
-  this_thickness = thickness_list[inputarg % x]       # vary every +1 & loop
-
-  # The pattern goes (with list_1=A,B,C... and list_2=1,2,3...)
-  #   A1, A2, A3, ...
-  #   B1, B2, B3, ...
-  #   C1, C2, C3, ...
-
-  # make note
-  param_1 = f"Sensors is {this_sensor}\n"
-  param_2 = f"Thickness is {this_thickness}\n"
-  model.wandb_note += param_1 + param_2
+  # note and printing information
+  param_1_string = f"{param_1_name} is {param_1}\n" if param_1 is not None else ""
+  param_2_string = f"{param_2_name} is {param_2}\n" if param_2 is not None else ""
+  param_3_string = f"{param_3_name} is {param_3}\n" if param_3 is not None else ""
+  model.wandb_note += param_1_string + param_2_string + param_3_string
 
   # if we are just printing help information
   if args.print:
     print("Input arg", args.job)
-    print("\t" + param_1, end="")
-    print("\t" + param_2, end="")
-    print("\t" + param_3, end="")
+    print("\t" + param_1_string, end="")
+    print("\t" + param_2_string, end="")
+    print("\t" + param_3_string, end="\n")
     exit()
 
   # apply baseline settings
-  model = baseline_settings(model, sensors=this_sensor, finger_thickness=this_thickness) 
+  model = baseline_settings(model, **baseline_args)
 
   # perform the test
   if render: model.env.disable_rendering = False
   model.test_heuristic_baseline()
 
-  print(f"Finished heurisitc test with sensors = {this_sensor} and thickness = {this_thickness}")
+  print(f"Finished heurisitc test with sensors = {param_1} and thickness = {param_2} and num segments = {param_3}")
 
 def vary_all_inputs(raw_inputarg=None, param_1=None, param_2=None, param_3=None, repeats=None):
   """
@@ -672,7 +679,7 @@ if __name__ == "__main__":
   parser.add_argument("--device",             default=None)        # override device
   parser.add_argument("--savedir",            default=None)        # override save/load directory
   parser.add_argument("--print",              action="store_true") # don't train, print help
-  parser.add_argument("--log-level",          default=1)           # set script log level
+  parser.add_argument("--log-level",          type=int, default=1) # set script log level
 
   args = parser.parse_args()
 
@@ -756,10 +763,8 @@ if __name__ == "__main__":
   # if we are running a heuristic action test (no training)
   if args.heuristic:
     if log_level > 0: print("Running a heuristic test")
-    heuristic_test(model, inputarg=inputarg, render=True)
+    heuristic_test(model, inputarg=inputarg, render=False)
     exit()
-
-
 
 
   # ----- BEGIN TRAININGS ----- #
@@ -769,11 +774,13 @@ if __name__ == "__main__":
 
   # CONFIGURE KEY SETTINGS (take care that baseline_settings(...) does not overwrite)
   model.params.use_curriculum = False
-  model.params.num_episodes = 40_000 # was 60k, change to 40k for speed
+  model.params.num_episodes = 50_000 # was 60k, change to 40k for speed
   # model.env.params.max_episode_steps = 250 # this is hardcoded to override in baseline_settings(...)
-  training_type = "vary reward and network"
-  this_segments = 8 # was 8, change to 6 for speed
+  training_type = "network architecture"
+  this_segments = 6 # was 8, change to 6 for speed
   this_noise = 0.025 # was 0.05, change to 0.025 for stability
+
+  model.env.log_level = 2
   
   # special settings to test new object set, set5_multi_9540
   use_set_5 = False
@@ -915,6 +922,64 @@ if __name__ == "__main__":
       "num_segments" : this_segments
     }
 
+  elif training_type == "vary episode length":
+
+    vary_1 = [200, 250, 300, 350]
+    vary_2 = None
+    vary_3 = None
+    repeats = 3
+    param_1_name = "max episode steps"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "max_episode_steps" : param_1,
+      "sensor_noise" : this_noise,
+      "num_segments" : this_segments
+    }
+
+  elif training_type == "bug test":
+
+    param_1 = None
+    param_2 = None
+    param_3 = None
+    param_1_name = None
+    param_2_name = None
+    param_3_name = None
+
+    baseline_args = {
+      "sensor_noise" : this_noise,
+      "num_segments" : 6
+    }
+
+  elif training_type == "network architecture":
+
+    vary_1 = [
+      [100, 100, 100],
+      [82,  82,  82,  82,  82],
+      [74,  74,  74,  74,  74,  74,  74],
+      [150, 100, 50],
+      [150, 100, 50,  50,  50],
+      [150, 100, 50,  50,  50,  50,  50],
+      [128, 96,  64],
+      [128, 96,  64,  64,  64],
+      [128, 96,  64,  64,  64,  64,  64]
+    ]
+    vary_2 = None
+    vary_3 = None
+    repeats = 4
+    param_1_name = "hidden layer weights"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "network" : param_1,
+      "sensor_noise" : this_noise,
+      "num_segments" : this_segments
+    }
+
   elif training_type == "vary others":
 
     vary_1 = None
@@ -926,10 +991,6 @@ if __name__ == "__main__":
     param_3_name = None
     param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
                                                 param_3=vary_3, repeats=repeats)
-    this_one = param_1
-    this_two = param_2
-    this_three = param_3
-
     baseline_args = {
       "param_1_arg" : param_1,
       "param_2_arg" : param_2,
@@ -946,7 +1007,7 @@ if __name__ == "__main__":
   param_3_string = f"{param_3_name} is {param_3}\n" if param_3 is not None else ""
   model.wandb_note += param_1_string + param_2_string + param_3_string
 
-  # if we are just printing help information
+  # if we are just printing help information (--print flag)
   if args.print:
     print("Input arg", args.job)
     print("\t" + param_1_string, end="")
@@ -954,12 +1015,8 @@ if __name__ == "__main__":
     print("\t" + param_3_string, end="\n")
     exit()
 
-  # perform the training with other parameters standard
-  # model = baseline_settings(model, sensors=this_sensor, finger_thickness=this_thickness,
-  #                           num_segments=this_segments, sensor_noise=this_noise) 
-
+  # apply settings and begin training
   model = baseline_settings(model, **baseline_args)
-
   model.train()
 
   # ----- END ----- #

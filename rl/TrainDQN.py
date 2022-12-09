@@ -772,6 +772,19 @@ class TrainDQN():
     elif network == "loaded":
       # no need to load networks
       pass
+    elif isinstance(network, list):
+
+      # we have been given a list of hidden layer sizes
+      layers = [self.env.n_obs, *network, self.env.n_actions]
+      self.policy_net = networks.DQN_variable(layers, self.device).to(self.device)
+      self.target_net = networks.DQN_variable(layers, self.device).to(self.device)
+      self.target_net.load_state_dict(self.policy_net.state_dict())
+      self.memory = TrainDQN.ReplayMemory(self.params.memory_replay, self.device,
+                      HER=self.params.use_HER, HERMethod=self.params.HER_mode,
+                      k=self.params.HER_k)
+      # prepare for saving and loading
+      self.modelsaver = ModelSaver(self.savedir + self.group_name)
+
     else:
       # use the network passed as input
       self.policy_net = network(self.env.n_obs, self.env.n_actions,
@@ -815,10 +828,10 @@ class TrainDQN():
       print("TrainDQN init settings:")
       print(" -> Using machine:", self.machine)
       print(" -> Using device:", self.device.type)
-      print(" -> Using model:", self.policy_net.name)
       print(" -> Using object set:", self.params.object_set)
       print(" -> Network inputs (n_obs):", self.env.n_obs)
       print(" -> Network outputs (n_actions):", self.env.n_actions)
+      print(" -> Network name:", self.policy_net.name)
       print(" -> Using HER:", self.params.use_HER)
       print(" -> Using wandb:", self.use_wandb)
       print(" -> Using curriculum:", self.params.use_curriculum)
@@ -1416,6 +1429,15 @@ class TrainDQN():
 
     ep_start = time.time()
 
+    # # for testing: is noise certainly in use?
+    # def print_noise_details(sensor, sensor_name):
+    #   in_use = sensor.in_use
+    #   use_noise = sensor.use_noise
+    #   noise_std = sensor.noise_std
+    #   print(f"Sensor: {sensor_name}; in_use = {in_use}; use_noise = {use_noise}; noise_std = {noise_std}")
+    # print_noise_details(self.env.mj.set.bending_gauge, "bending_gauge")
+    # print_noise_details(self.env.mj.set.palm_sensor, "palm_sensor")
+
     # count up through actions
     for t in count():
 
@@ -1466,7 +1488,7 @@ class TrainDQN():
         ep_end = time.time()
         time_per_step = (ep_end - ep_start) / float(t + 1)
 
-        if self.log_level > 1:
+        if self.log_level > 2:
           print(f"Time for episode was {ep_end - ep_start:.3f}s"
             f", time per action was {time_per_step * 1e3:.3f} ms")
 
@@ -1667,7 +1689,7 @@ class TrainDQN():
 
     return params_dict
 
-  def save_hyperparameters(self, labelstr=None, name=None):
+  def save_hyperparameters(self, labelstr=None, name=None, printonly=None):
     """
     Save a text file with the current hyperparameters
     """
@@ -1712,6 +1734,11 @@ class TrainDQN():
 
     # if we are printing, put this info also into the terminal
     if print_out: print(param_str)
+
+    # if we are only printing
+    if printonly is True:
+      print(param_str)
+      return
 
     savepath = self.modelsaver.save(name, txtstr=param_str,
                                     txtonly=True)
@@ -1781,15 +1808,18 @@ class TrainDQN():
     self.env.seed()      # reseeds with same seed as before (but not contiguous!)
     self.env._load_xml() # segfault without this
 
+    # delete this later: needed until wrist_z_offset is saved in bind.cpp
+    self.env.reset(hard=True)
+
     # move to the current device
     self.memory.all_to(self.device)
     self.policy_net.to(self.device)
+    self.policy_net.device = self.device
 
     # reinitialise to prepare for further training
     self.target_net = deepcopy(self.policy_net)
     self.target_net.load_state_dict(self.policy_net.state_dict())
-
-    # self.target_net.to(self.device)
+    self.target_net.to(self.device)
 
     # re-initialise the class
     self.init(network="loaded")
@@ -1839,7 +1869,7 @@ if __name__ == "__main__":
   
   # ----- prepare ----- #
 
-  use_wandb = True
+  use_wandb = False
   force_device = "cpu"
   no_plot = True
 
@@ -1878,23 +1908,38 @@ if __name__ == "__main__":
   # model.env.mj.goal.ground_force.involved = True
   # model.env.mj.goal.palm_force.involved = True
 
+  # ----- heuristic test ----- #
+
+  # net = networks.DQN_2L60
+  # model.init(network=net)
+  # model.log_level = 2
+  # model.env.mj.set.debug = False
+  # model.env.disable_rendering = False
+  # # model.env.params.test_trials_per_object = 1
+  # model.env.params.test_objects = 20
+  # model.env.params.max_episode_steps = 250
+  # # model.env.log_level = 2
+
+  # model.env.mj.set.bending_gauge.in_use = False
+  # model.env.mj.set.palm_sensor.in_use = False
+  # model.env.mj.set.wrist_sensor_Z.in_use = False
+
+  # test_data = model.test(pause_each_episode=False, heuristic=True)
+  # test_report = model.create_test_report(test_data)
+  # exit()
+
   # ----- load ----- #
 
   # load
-  folderpath = "/home/luke/cluster/rl/models/dqn/07-11-22/"
-  foldername = "cluster_17:43_A19"
-  model.set_device("cpu")
-  model.load(id=33, folderpath=folderpath, foldername=foldername)
-
-  # FOR TESTING - delete later
-  # test_data = model.test()
-  # print("test data is", test_data)
-  # model.save(tupledata=(test_data))
-  model.create_test_report(model.last_test_data)
-  # model.no_plot = False
-  # model.plot(force=True, hang=True)
-  model.log_wandb(force=True)
-  exit()
+  folder = "mymujoco"
+  group = "05-12-22"
+  run = "luke-PC_11:39_A1"
+  # folder = "mymujoco"
+  # group = "02-12-22"
+  # run = "luke-PC_16:55_A3"
+  folderpath = f"/home/luke/{folder}/rl/models/dqn/{group}/"
+  model.set_device("cuda")
+  model.load(id=None, folderpath=folderpath, foldername=run)
 
   # ----- train ----- #
 
@@ -1942,10 +1987,11 @@ if __name__ == "__main__":
   # ----- test ----- #
 
   # test
+  model.log_level = 2
   model.env.mj.set.debug = False
   model.env.disable_rendering = False
   # model.env.params.test_trials_per_object = 1
-  # model.env.params.test_objects = 20
+  model.env.params.test_objects = 20
   # model.env.params.test_obj_per_file = 5
   # model.env.params.max_episode_steps = 20
 

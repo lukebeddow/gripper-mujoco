@@ -105,10 +105,6 @@ void MjClass::configure_settings()
 
   /* --- start of real calibration hardcoding --- */
 
-  // calibrate_.offset.palm = 215000; // runtime depends
-  // calibrate_.scale.palm = 1.0;
-  // calibrate_.norm.palm = 500000;
-
   // recalibrate offsets automatically upon any reset
   calibrate_.recalibrate_offset_flag = true;
 
@@ -123,15 +119,17 @@ void MjClass::configure_settings()
   calibrate_.scale.g3 = (-1.0 / 7.18e5);
 
   // these should be the same as bend_gauge.normalise
-  calibrate_.norm.g1 = calibrate_.norm.g2 = calibrate_.norm.g3 = 5;
+  // calibrate_.norm.g1 = calibrate_.norm.g2 = calibrate_.norm.g3 = 5;
+  calibrate_.norm.g1 = calibrate_.norm.g2 = calibrate_.norm.g3 = s_.bending_gauge.normalise;
 
-  // calibrate_.offset.palm = 3.31e5; // overriden at runtime, auto calibrated
+  // calibrate_.offset.palm = 3.31e5;  // overriden at runtime, auto calibrated
   calibrate_.scale.palm = (1.0 / 1.34e4);
-  calibrate_.norm.palm = 8.0; // should be same as palm_sensor.normalise
+  calibrate_.norm.palm = 8.0;       // should be same as palm_sensor.normalise
 
-  // calibrate_.offset.wrist_Z = 0; // overriden at runtime, auto calibrated
-  calibrate_.scale.wrist_Z = -1;  // already SI units (voltage x2??)
-  calibrate_.norm.wrist_Z = 28.0; // should be same as wrist_Z_sensor.normalise
+  // calibrate_.offset.wrist_Z = 0;    // overriden at runtime, auto calibrated
+  calibrate_.scale.wrist_Z = -1;    // already SI units (voltage x2??)
+  // calibrate_.norm.wrist_Z = 28.0;   // should be same as wrist_Z_sensor.normalise
+  calibrate_.norm.wrist_Z = s_.wrist_sensor_Z.normalise;
 
   /* --- end of real calibration hardcoding --- */
 
@@ -244,12 +242,20 @@ void MjClass::configure_settings()
   // it is best also to do timestep first as it spams the terminal
   // find timestep automatically, this change must be done before calibrate_simulated_sensors()
   if (resetFlags.auto_timestep) {
+    
+    // save initial state of resetFlags variables
+    static bool auto_timestep;
+    static bool auto_calibrate;
+    static bool auto_simsteps;
+    auto_calibrate = resetFlags.auto_calibrate;
+    auto_simsteps = resetFlags.auto_simsteps;
+    
     resetFlags.auto_timestep = false;                     // disable auto timestep immediately due to recursion
     resetFlags.auto_calibrate = false;                    // disable calibration before timestep found
     resetFlags.auto_simsteps = false;                     // disable simsteps before timestep found
     s_.mujoco_timestep = find_highest_stable_timestep();  // find the timestep, calls configure_settings() recursively
-    resetFlags.auto_calibrate = s_.auto_calibrate_gauges; // re-enable calibration after timestep found
-    resetFlags.auto_simsteps = s_.auto_sim_steps;         // re-enable simsteps after timestep found
+    resetFlags.auto_calibrate = auto_calibrate;           // re-enable calibration after timestep found
+    resetFlags.auto_simsteps = auto_simsteps;             // re-enable simsteps after timestep found
     if (echo_auto_changes) std::cout << "MjClass auto-setting: Mujoco timestep set to: " << s_.mujoco_timestep << '\n';
   }
 
@@ -427,6 +433,25 @@ void MjClass::hard_reset()
   resetFlags.flags_init = false;
 
   // regular reset code
+  reset();
+}
+
+void MjClass::reset_timestep()
+{
+  /* reset the environment and also recalibrate the timestep */
+
+  // set flags to recalibrate timestep and sim steps
+  resetFlags.auto_timestep = true;
+  resetFlags.auto_simsteps = true;
+
+  /* delete this: testing confirmed that the bug where loaded models did not
+  perform the correct actions was due to this offset not being saved when models
+  are pickled. The fix is to add it to bind.cpp pickle, but this makes things
+  backwards incompatible. So delete this code when that is all solved */
+  // s_.wrist_sensor_Z.raw_value_offset = -23.0;
+  // std::cout << "MjClass auto-setting: Wrist Z sensor offset set to: " 
+  //       << s_.wrist_sensor_Z.raw_value_offset << '\n';
+
   reset();
 }
 
@@ -724,6 +749,7 @@ void MjClass::update_env()
   // extract the gripper height (don't use object height for lifting as fingers tilt)
   std::vector<float> state_vec = luke::get_target_state();
   float gripper_z_height = -1 * state_vec[state_vec.size() - 1]; // last entry
+  float object_lift = env_.obj.qpos.z - env_.start_qpos.z; // how much have we lifted it
   
   // // for testing
   // forces.print();
@@ -790,9 +816,21 @@ void MjClass::update_env()
 
   // lifted above the target height and not oob (env_.cnt.lifted and env_.cnt.oob must be set)
   // if (env_.obj.qpos.z > env_.start_qpos.z + s_.done_height // old
-  if (gripper_z_height > s_.done_height and env_.cnt.lifted.value // new
-      and not env_.cnt.oob.value)
+  // if (gripper_z_height > s_.done_height and env_.cnt.lifted.value // next tray
+  //     and not env_.cnt.oob.value)
+
+  if (object_lift > s_.done_height and
+      gripper_z_height > s_.done_height and
+      env_.cnt.lifted.value and
+      not env_.cnt.oob.value) // newest version, lift object AND gripper
+
     env_.cnt.target_height.value = true;
+
+  // for testing
+  // std::cout << "Object lift is: " << object_lift << '\n';
+  // std::cout << "Gripper z height is: " << gripper_z_height << '\n';
+  // std::cout << "Lifted is: " << env_.cnt.lifted.value << '\n';
+  // std::cout << "Target height is: " << env_.cnt.target_height.value << '\n';
 
   // detect any gripper contact with the object
   if (finger1_force_mag > ftol or

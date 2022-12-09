@@ -1017,9 +1017,9 @@ bool change_finger_thickness(float thickness)
   }
 
   // check if thickness is greater than 5mm
-  if (thickness > 5e-3) {
+  if (thickness > 2e-3) {
     std::cout << "thickness given = " << thickness << '\n';
-    throw std::runtime_error("change_finger_thickness() got value above 5mm - make sure you are using SI units!");
+    throw std::runtime_error("change_finger_thickness() got value above 2mm - make sure you are using SI units!");
   }
 
   constexpr float tol = 1e-5;

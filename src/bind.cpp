@@ -30,6 +30,7 @@ PYBIND11_MODULE(bind, m) {
     .def("load_relative", &MjClass::load_relative)
     .def("reset", &MjClass::reset)
     .def("hard_reset", &MjClass::hard_reset)
+    .def("reset_timestep", &MjClass::reset_timestep)
     .def("step", &MjClass::step)
     .def("render", &MjClass::render)
 
@@ -419,6 +420,12 @@ PYBIND11_MODULE(bind, m) {
     .def_readwrite("normalise", &MjType::Sensor::normalise)
     .def_readwrite("read_rate", &MjType::Sensor::read_rate)
     .def_readwrite("prev_steps", &MjType::Sensor::prev_steps)
+    .def_readwrite("use_normalisation", &MjType::Sensor::use_normalisation)
+    .def_readwrite("use_noise", &MjType::Sensor::use_noise)
+    .def_readwrite("raw_value_offset", &MjType::Sensor::raw_value_offset)
+    .def_readwrite("noise_mag", &MjType::Sensor::noise_mag)
+    .def_readwrite("noise_mu", &MjType::Sensor::noise_mu)
+    .def_readwrite("noise_std", &MjType::Sensor::noise_std)
 
     // pickle support
     .def(py::pickle(

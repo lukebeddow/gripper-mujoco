@@ -12,8 +12,8 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N Array49_lr_eps
-#$ -t 1-20
+#$ -N Array50_bug_test
+#$ -t 1-4
 
 # The code you want to run now goes here.
 

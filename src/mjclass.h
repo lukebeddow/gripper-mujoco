@@ -993,6 +993,7 @@ public:
   void load_relative(std::string file_path);
   void reset();
   void hard_reset();
+  void reset_timestep();
   void step();
   bool render();
 
