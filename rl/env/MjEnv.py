@@ -34,6 +34,7 @@ class MjEnv():
     reward: float = 0
     steps: int = 0
     object_name: str = ""
+    object_category: str = ""
     cnt = None
 
   @dataclass
@@ -125,10 +126,10 @@ class MjEnv():
       r = np.random.randint(self.testing_xmls, self.testing_xmls + self.training_xmls)
       filename = self.task_xml_template.format(r)
 
-    if self.log_level > 2: 
+    if self.log_level > 1: 
       print("Load path: ", self.mj.model_folder_path
             + self.mj.object_set_name + "/" + self.task_xml_folder)
-    if self.log_level > 1: print("Loading xml: ", filename)
+    if self.log_level > 0: print("Loading xml: ", filename)
 
     # load the new task xml (old model/data are deleted)
     self.mj.load_relative(self.task_xml_folder + '/' + filename)
@@ -339,6 +340,9 @@ class MjEnv():
     trial_data.reward = self.track.cumulative_reward
     trial_data.cnt = test_report.cnt
 
+    # get the object category by assuming its the first word of _ seperated string
+    trial_data.object_category = trial_data.object_name.split("_")[0]
+
     # insert information into stored data list
     self.test_trial_data.append(trial_data)
 
@@ -370,6 +374,15 @@ class MjEnv():
     """
 
     self.grasp_phase = 0
+    self.gauge_read_history = np.array([])
+
+    # for help debugging
+    print_on = False
+    if print_on:
+      bending = self.mj.set.bending_gauge.in_use
+      palm = self.mj.set.palm_sensor.in_use
+      wrist = self.mj.set.wrist_sensor_Z.in_use
+      print(f"Sensors (bend, palm, wrist) are ({bending}, {palm}, {wrist})")
 
   def get_heuristic_action(self):
     """
@@ -377,37 +390,106 @@ class MjEnv():
     the following phases:
       - 1. Lower fingers to table height
       - 2. Angle fingers at 20deg
-      - 3. Constrict fingers until bending limit exceeded
-      - 4. Advance palm until contact is made
+      - 3. Constrict fingers to threshold force
+      - 4. Advance palm until threshold force
       - 5. Lift to target height
+      - 6. Loop squeezing actions to aim for specific grasp force
     """
+
+    def bend_to_force(target_force_N):
+      """
+      Try to bend the fingers to a certain force
+      """
+
+      action = None
+
+      # if we have access to bending sensors
+      if bending:
+        # wait for a certain bending
+        if print_on:
+          print(f"target bending is {target_force_N}, actual is {avg_bend}")
+        if avg_bend < target_force_N:
+          action = X_close
+          # if we have closed as much as we can
+          if state_readings[0] < min_x_value_m:
+            # halt as we have reached gripper limits
+            if print_on:
+              print(f"minimum x is {min_x_value_m}, actual is {state_readings[0]}")
+
+      else:
+        # simply constrict to a predetermined point
+        if print_on:
+          print(f"x constrict target: {target_x_constrict_m}, actual: {state_readings[0]}")
+        if state_readings[0] > target_x_constrict_m:
+          action = X_close
+
+      return action
+
+    def palm_push_to_force(target_force_N):
+      """
+      Try to push with the palm to a specific force
+      """
+
+      action = None
+
+      # if we have palm sensing
+      if palm:
+        if print_on:
+          print(f"target palm force is {target_force_N}, actual is {palm_reading}")
+        if palm_reading < target_force_N:
+          action = Z_plus
+
+      # if we don't have palm sensing, but we do have bend sensing
+      elif bending:
+        # start saving previous gauge readings
+        if len(self.gauge_read_history) < bend_history_length:
+          self.gauge_read_history = np.append(self.gauge_read_history, avg_bend)
+        else:
+          self.gauge_read_history[:-1] = self.gauge_read_history[1:]
+          self.gauge_read_history[-1] = avg_bend
+        if len(self.gauge_read_history) < bend_update_length + 1:
+          if print_on:
+            print("shortcircuit by giving Z_plus")
+          return Z_plus # shortcut to ensure our buffer is full before logic
+        # if we have finger bending data, try to infer palm contact
+        old_bend_avg = np.mean(self.gauge_read_history[:-bend_update_length])
+        new_bend_avg = np.mean(self.gauge_read_history[bend_history_length - bend_update_length:])
+        # see if bending values have increased by a certain percentage
+        if print_on:
+          print(f"old bend avg: {old_bend_avg}, new bend avg: {new_bend_avg}, factor: {new_bend_avg / old_bend_avg}, target: {1 + (target_palm_bend_increase_percentage / 100.0)}")
+        if new_bend_avg / old_bend_avg < 1 + (target_palm_bend_increase_percentage / 100.0):
+          action = Z_plus
+      
+      # we have neither palm nor bend sensing
+      else:
+        # simply aim for a target palm position
+        if state_readings[2] < target_z_position_m:
+          action = Z_plus
+
+      return action
+
+    print_on = False
 
     # first, determine what sensors are available
     bending = self.mj.set.bending_gauge.in_use
     palm = self.mj.set.palm_sensor.in_use
     wrist = self.mj.set.wrist_sensor_Z.in_use
 
-    # get sensor output if we can
-    unnormalise_state = True
-    state_readings = self.mj.get_state_readings(unnormalise_state)
-    if bending:
-      unnormalise_bend = True
-      bending_readings = self.mj.get_bend_gauge_readings(unnormalise_bend)
-    if palm:
-      unnormalise_palm = True
-      palm_reading = self.mj.get_palm_reading(unnormalise_palm)
-    if wrist:
-      unnormalise_wrist = True
-      wrist_reading = self.mj.get_wrist_reading(unnormalise_wrist)
-
-    action = None
-
-    target_z_height = 10e-3
-    min_x_value = 55e-3
+    # hardcoded 'globals' used in sub-functions
     target_angle_deg = 15
-    target_bend_force_N = 1
-    target_palm_force_N = 1
     target_wrist_force_N = 1
+    min_x_value_m = 55e-3
+    target_x_constrict_m = 100e-3
+    target_palm_bend_increase_percentage = 15
+    target_z_position_m = 80e-3
+    bend_history_length = 6 # how many historical bending values to save
+    bend_update_length = 3  # how many values in history do we consider 'new'
+    initial_z_height_target_m = 10e-3
+    final_z_height_target_m = -20e-3
+    initial_bend_target_N = 1
+    initial_palm_target_N = 2
+    final_bend_target_N = 2
+    final_palm_target_N = 2
 
     # hardcode action values
     X_close = 0
@@ -419,63 +501,124 @@ class MjEnv():
     H_down = 6
     H_up = 7
 
+    # get sensor output if we can
+    unnormalise_state = True
+    state_readings = self.mj.get_state_readings(unnormalise_state)
+    if bending:
+      unnormalise_bend = True
+      bending_readings = self.mj.get_bend_gauge_readings(unnormalise_bend)
+      avg_bend = (bending_readings[0] + bending_readings[1] + bending_readings[2]) / 3.
+    if palm:
+      unnormalise_palm = True
+      palm_reading = self.mj.get_palm_reading(unnormalise_palm)
+    if wrist:
+      unnormalise_wrist = True
+      wrist_reading = self.mj.get_wrist_reading(unnormalise_wrist)
+
+    action = None
+
     # lower fingers to table height
     if self.grasp_phase == 0:
 
       if wrist:
         # detect the ground with the wrist sensor
+        if print_on:
+          print(f"target wrist force is {target_wrist_force_N}, actual is {wrist_reading}")
         if wrist_reading < target_wrist_force_N:
           action = H_down
         else:
+          if print_on:
+            print("Grasp phase 0 completed")
           self.grasp_phase = 1
 
       else:
         # we aim for a z certain height
-        if state_readings[3] < target_z_height:
+        if print_on:
+          print(f"target z height is {initial_z_height_target_m}, actual is {state_readings[3]}")
+        if state_readings[3] < initial_z_height_target_m:
           action = H_down
         else:
+          if print_on:
+            print("Grasp phase 0 completed")
           self.grasp_phase = 1
 
     # angle the fingers
     if self.grasp_phase == 1:
 
       # we aim for a certain angle
-      print(f"target angle is {-target_angle_deg * (3.14159 / 180.0)}, actual is {self.mj.get_finger_angle()}")
+      if print_on:
+        print(f"target angle is {-target_angle_deg * (3.14159 / 180.0)}, actual is {self.mj.get_finger_angle()}")
       if -1 * self.mj.get_finger_angle() < target_angle_deg * (3.14159 / 180.0):
         action = Y_close
       else:
+        if print_on:
+          print("Grasp phase 1 completed")
         self.grasp_phase = 2
 
     # constrict until we feel the squeeze on the object
     if self.grasp_phase == 2:
 
-      # wait for a certain bending
-      avg_bend = (bending_readings[0] + bending_readings[1] + bending_readings[2]) / 3.
-      print(f"target bending is {target_bend_force_N}, actual is {avg_bend}")
-      if avg_bend < target_bend_force_N:
-        action = X_close
-        # if we have closed as much as we can
-        if state_readings[0] < min_x_value:
-          print(f"minimum x is {min_x_value}, actual is {state_readings[0]}")
-          self.grasp_phase = 3
-      else:
+      action = bend_to_force(initial_bend_target_N)
+
+      if action is None:
+        if print_on:
+          print("Grasp phase 2 completed")
         self.grasp_phase = 3
 
     # advance palm to contact object
     if self.grasp_phase == 3:
 
-      if palm:
-        print(f"target palm force is {target_palm_force_N}, actual is {palm_reading}")
-        if palm_reading < target_palm_force_N:
-          action = Z_plus
-        else:
-          self.grasp_phase = 4
-      else:
-        pass
+      action = palm_push_to_force(initial_palm_target_N)
+
+      if action is None:
+        if print_on:
+          print("Grasp phase 3 completed")
+        self.grasp_phase = 4
+
+        self.gauge_read_history = np.array([])
 
     # lift up object
     if self.grasp_phase == 4:
-      action = H_up
+
+      if state_readings[3] > final_z_height_target_m:
+          if print_on:
+            print(f"target height is {final_z_height_target_m}, actual is {state_readings[3]}")
+          action = H_up
+      else:
+        if print_on:
+          print("Grasp phase 4 completed")
+        self.grasp_phase = 5
+
+    # squeeze grip further
+    if self.grasp_phase == 5:
+
+      # squeeze fingers
+      action = bend_to_force(final_bend_target_N)
+      action_name = "finger X close"
+
+      # squeeze palm
+      if action is None:
+        action = palm_push_to_force(final_palm_target_N)
+        action_name = "palm forward"
+
+      # or just try to lift higher
+      if action is None:
+        action = H_up
+        action_name = "height up"
+
+      # if no sensors, choose random action
+      if not bending and not palm and not wrist:
+        choice = np.random.randint(0, 3)
+        options = [
+          (X_close, "finger X close"),
+          (Z_plus, "palm forward"),
+          (H_up, "height up")
+        ]
+        action = options[choice][0]
+        action_name = options[choice][1]
+
+      if print_on:
+        print("Grasp phase 5: action is", action_name)
 
     # check for dangerous behaviour?
     # - lifted object too high
@@ -595,11 +738,11 @@ class MjEnv():
 
     t1 = time.time()
 
-    if self.log_level > 1: print("MjEnv step() time was ", t1 - t0)
+    if self.log_level > 2: print("MjEnv step() time was ", t1 - t0)
 
     return to_return
 
-  def reset(self, hard=None):
+  def reset(self, hard=None, timestep=None):
     """
     Reset the simulation to the start
     """
@@ -614,6 +757,7 @@ class MjEnv():
 
     # reset the simulation and spawn a new random object
     if hard is True: self.mj.hard_reset()
+    elif timestep is True: self.mj.reset_timestep() # recalibrate timestep
     else: self.mj.reset()
     self._spawn_object()
 
@@ -628,7 +772,7 @@ class MjEnv():
 
       self.mj.render()
 
-      if self.log_level > 0:
+      if self.log_level > 2:
         print('MjEnv render update:')
         print(f'\tStep: {self.track.current_step}')
         print(f'\tLast action: {self.track.last_action}')

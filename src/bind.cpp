@@ -30,6 +30,7 @@ PYBIND11_MODULE(bind, m) {
     .def("load_relative", &MjClass::load_relative)
     .def("reset", &MjClass::reset)
     .def("hard_reset", &MjClass::hard_reset)
+    .def("reset_timestep", &MjClass::reset_timestep)
     .def("step", &MjClass::step)
     .def("render", &MjClass::render)
 
@@ -68,11 +69,11 @@ PYBIND11_MODULE(bind, m) {
     .def("get_finger_thickness", &MjClass::get_finger_thickness)
     .def("get_finger_stiffnesses", &MjClass::get_finger_stiffnesses)
 
-    // sensor getters
-    .def("get_bend_gauge_readings", &MjClass::get_bend_gauge_readings)
-    .def("get_palm_reading", &MjClass::get_palm_reading)
-    .def("get_wrist_reading", &MjClass::get_wrist_reading)
-    .def("get_state_readings", &MjClass::get_state_readings)
+    // sensor getters (set a default argument for 'unnormalise' to be false)
+    .def("get_bend_gauge_readings", &MjClass::get_bend_gauge_readings, py::arg("unnormalise") = false)
+    .def("get_palm_reading", &MjClass::get_palm_reading, py::arg("unnormalise") = false)
+    .def("get_wrist_reading", &MjClass::get_wrist_reading, py::arg("unnormalise") = false)
+    .def("get_state_readings", &MjClass::get_state_readings, py::arg("unnormalise") = false)
     .def("get_finger_angle", &MjClass::get_finger_angle)
 
     // real life gripper functions
@@ -95,10 +96,12 @@ PYBIND11_MODULE(bind, m) {
     .def("curve_validation_regime", &MjClass::curve_validation_regime)
     .def("last_action_gripper", &MjClass::last_action_gripper)
     .def("last_action_panda", &MjClass::last_action_panda)
+    .def("get_fingertip_z_height", &MjClass::get_fingertip_z_height)
     .def("profile_error", &MjClass::profile_error)
     .def("numerical_stiffness_converge", static_cast<std::string (MjClass::*)(float, float)>(&MjClass::numerical_stiffness_converge))
     .def("numerical_stiffness_converge", static_cast<std::string (MjClass::*)(float, float, std::vector<float>, std::vector<float>)>(&MjClass::numerical_stiffness_converge))
     .def("numerical_stiffness_converge_2", &MjClass::numerical_stiffness_converge_2)
+    .def("set_sensor_noise_and_normalisation_to", &MjClass::set_sensor_noise_and_normalisation_to)
 
     // exposed variables
     .def_readwrite("set", &MjClass::s_)
@@ -417,6 +420,12 @@ PYBIND11_MODULE(bind, m) {
     .def_readwrite("normalise", &MjType::Sensor::normalise)
     .def_readwrite("read_rate", &MjType::Sensor::read_rate)
     .def_readwrite("prev_steps", &MjType::Sensor::prev_steps)
+    .def_readwrite("use_normalisation", &MjType::Sensor::use_normalisation)
+    .def_readwrite("use_noise", &MjType::Sensor::use_noise)
+    .def_readwrite("raw_value_offset", &MjType::Sensor::raw_value_offset)
+    .def_readwrite("noise_mag", &MjType::Sensor::noise_mag)
+    .def_readwrite("noise_mu", &MjType::Sensor::noise_mu)
+    .def_readwrite("noise_std", &MjType::Sensor::noise_std)
 
     // pickle support
     .def(py::pickle(

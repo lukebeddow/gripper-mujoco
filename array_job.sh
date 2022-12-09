@@ -3,7 +3,7 @@
 
 #$ -l tmem=4G
 #$ -l h_vmem=4G
-#$ -l h_rt=72:0:0 
+#$ -l h_rt=96:0:0 
 
 # Some important notes
 #dollar -t X-Y   -> submit array job inclusive of both X and Y
@@ -12,8 +12,8 @@
 
 #$ -S /bin/bash
 #$ -j y
-#$ -N Array46_baseline_continued
-#$ -t 1-15
+#$ -N Array50_bug_test
+#$ -t 1-4
 
 # The code you want to run now goes here.
 

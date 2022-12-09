@@ -68,7 +68,8 @@ namespace MjType
 
     // user options that can be overriden
     bool use_normalisation = true;      // are we using normalisation
-    bool use_noise = true;              // are we adding synthetic nois
+    bool use_noise = true;              // are we adding synthetic noise
+    float raw_value_offset = 0.0;       // value to subract from the sensor raw value (only used for wrist Z sensor)
     float noise_mag = 0;                // magnitude of added noise
     float noise_mu = 0;                 // mean of noise (ie zero error)
     float noise_std = -1;               // std deviation of noise (< 0 means flat)
@@ -929,6 +930,7 @@ public:
     bool auto_timestep = false;
     bool auto_calibrate = false;
     bool auto_simsteps = false;
+    bool auto_exceed_lateral_lim = false;
 
     bool finger_thickness_changed = false;
 
@@ -991,6 +993,7 @@ public:
   void load_relative(std::string file_path);
   void reset();
   void hard_reset();
+  void reset_timestep();
   void step();
   bool render();
 
@@ -1057,8 +1060,9 @@ public:
   std::string numerical_stiffness_converge_2(float target_accuracy);
   std::vector<float> profile_error(std::vector<float> profile_X, std::vector<float> profile_Y,
   std::vector<float> truth_X, std::vector<float> truth_Y, bool relative);
-  void calibrate_gauges();
+  void calibrate_simulated_sensors(float bend_gauge_normalise);
   void set_finger_thickness(float thickness);
+  float yield_load();
   void tick();
   float tock();
   MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2);
@@ -1067,7 +1071,9 @@ public:
   void default_goal_event_triggering();
   bool last_action_gripper();
   bool last_action_panda();
+  float get_fingertip_z_height();
   float find_highest_stable_timestep();
+  void set_sensor_noise_and_normalisation_to(bool set_as);
 
 }; // class MjClass
 
