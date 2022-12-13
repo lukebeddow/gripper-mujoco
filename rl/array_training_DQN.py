@@ -775,6 +775,8 @@ if __name__ == "__main__":
     model.env.params.test_objects = 300
     model.env.params.task_reload_chance = 1.0 / 20.0
 
+  extra_info_string = ""
+
   if training_type == "vary sensors and thickness":
 
     sensors_list = [
@@ -970,7 +972,7 @@ if __name__ == "__main__":
     vary_1 = [0.7, 1.0]
     vary_2 = [0.01, 0.02]
     vary_3 = [1.0, 2.0]
-    repeats = 3
+    repeats = 4
     param_1_name = "X_action_mm"
     param_2_name = "Y_action_rad"
     param_3_name = "Z_action_mm"
@@ -978,13 +980,29 @@ if __name__ == "__main__":
                                                 param_3=vary_3, repeats=repeats)
     baseline_args = {
       "XYZ_mm_rad" : True,
-      "max_episode_steps" : 400,
+      "max_episode_steps" : 250, # default: scaled below
       "sensor_noise" : this_noise,
-      "num_segments" : 6
+      "num_segments" : 8
     }
     model.env.mj.set.X_action_mm = param_1
     model.env.mj.set.Y_action_rad = param_2
     model.env.mj.set.Z_action_mm = param_3
+
+    # what is the scale change in our action workspace
+    scale = (0.67 * 0.02 * 1.22) / (param_1 * param_2 * param_3)
+
+    # adjust replay memory to have size based on actions
+    new_mem = int(((scale * model.params.memory_replay // 10000) + 1) * 10000)
+    if new_mem < model.params.memory_replay: new_mem = model.params.memory_replay # only increase size
+    model.params.memory_replay = new_mem
+
+    # adjust steps per episode based on actions size
+    new_steps = int(((scale * baseline_args['max_episode_steps'] // 50) + 1) * 50)
+    if new_steps < baseline_args['max_episode_steps']: new_steps = baseline_args['max_episode_steps']
+    baseline_args['max_episode_steps'] = new_steps
+
+    extra_info_string = f"\tNew replay memory size is: {model.params.memory_replay}"
+    extra_info_string += f"\n\tNew max episode steps is: {baseline_args['max_episode_steps']}"
 
   elif training_type == "vary others":
 
@@ -1018,7 +1036,8 @@ if __name__ == "__main__":
     print("Input arg", args.job)
     print("\t" + param_1_string, end="")
     print("\t" + param_2_string, end="")
-    print("\t" + param_3_string, end="\n")
+    print("\t" + param_3_string, end="")
+    print(extra_info_string)
     exit()
 
   # apply settings and begin training
