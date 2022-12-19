@@ -69,6 +69,7 @@ void get_joint_indexes(mjModel* model);
 void get_joint_addresses(mjModel* model);
 void get_geom_indexes(mjModel* model);
 bool change_finger_thickness(float thickness);
+bool change_finger_width(float width);
 void set_finger_stiffness(mjModel* model, mjtNum stiffness);
 void set_finger_stiffness(mjModel* model, std::vector<luke::gfloat> stiffness);
 void configure_qpos(mjModel* model, mjData* data);
@@ -84,8 +85,8 @@ void set_constraint(mjModel* model, mjData* data, int id, bool set_as);
 void target_constraint(mjModel* model, mjData* data, int id, bool set_as, int type);
 void apply_tip_force(mjModel* model, mjData* data, double force, bool reset = false);
 
-void apply_segment_force(mjModel* model, mjData* data, int seg_num, float force);
-void set_segment_force(int seg_num, bool set_as, float force);
+void apply_segment_force(mjModel* model, mjData* data, int seg_num, double force);
+void set_segment_force(int seg_num, bool set_as, double force);
 void resolve_segment_forces(mjModel* model, mjData* data);
 void apply_UDL(double total_force);
 void wipe_segment_forces();

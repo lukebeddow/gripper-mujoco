@@ -932,7 +932,7 @@ public:
     bool auto_simsteps = false;
     bool auto_exceed_lateral_lim = false;
 
-    bool finger_thickness_changed = false;
+    bool finger_EI_changed = false;
 
   } resetFlags;
 
@@ -1062,6 +1062,7 @@ public:
   std::vector<float> truth_X, std::vector<float> truth_Y, bool relative);
   void calibrate_simulated_sensors(float bend_gauge_normalise);
   void set_finger_thickness(float thickness);
+  void set_finger_width(float width);
   float yield_load();
   void tick();
   float tock();

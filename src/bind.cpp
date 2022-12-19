@@ -66,6 +66,7 @@ PYBIND11_MODULE(bind, m) {
     .def("get_n_obs", &MjClass::get_n_obs)
     .def("get_N", &MjClass::get_N)
     .def("set_finger_thickness", &MjClass::set_finger_thickness)
+    .def("set_finger_width", &MjClass::set_finger_width)
     .def("get_finger_thickness", &MjClass::get_finger_thickness)
     .def("get_finger_stiffnesses", &MjClass::get_finger_stiffnesses)
 

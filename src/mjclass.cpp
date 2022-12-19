@@ -96,9 +96,9 @@ void MjClass::configure_settings()
 {
   /* apply simulation settings */
 
-  // if thickness has changed, we should recalibrate timestep/sim steps/gauges etc
-  if (resetFlags.finger_thickness_changed) {
-    resetFlags.finger_thickness_changed = false;
+  // if finger stiffness has changed, we should recalibrate timestep/sim steps/gauges etc
+  if (resetFlags.finger_EI_changed) {
+    resetFlags.finger_EI_changed = false;
     hard_reset(); // this calls reset()->configure_settings()
     return;
   }
@@ -426,8 +426,8 @@ void MjClass::hard_reset()
   // reinitialise the joint settings structure
   luke::init_J(model, data);
 
-  // reset the tip force function
-  luke::apply_tip_force(model, data, 0, true);
+  // // reset the tip force function
+  // luke::apply_tip_force(model, data, 0, true);
 
   // we want to reset the auto setting flags to original values
   resetFlags.flags_init = false;
@@ -1980,7 +1980,12 @@ MjType::CurveFitData::PoseData MjClass::validate_curve()
 MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force)
 {
   /* determine the cubic fit error and displacement of the fingers under
-  a given force */
+  a given force. Settle time is time to wait before we consider the simulation is
+  settled and no-longer changing
+  
+  force_style:    0 = tip force
+                  1 = UDL
+  */
 
   bool dynamic_timestep_adjustment = true;
   int dynamic_repeats_allowed = 5;
@@ -1991,14 +1996,14 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force)
   s_.tip_force_applied = force;
 
   // step the simulation to allow the forces to settle
-  float time_to_settle = 2;
+  float time_to_settle = 15; // 10 guarantees smooth but is slow
   int steps_to_make = time_to_settle / s_.mujoco_timestep;
   // std::cout << "Stepping for " << steps_to_make << " steps to allow settling\n";
 
   while (true) {
 
-    // luke::apply_tip_force(force);
-    luke::apply_UDL(force * 3);
+    luke::apply_tip_force(force);
+    // luke::apply_UDL(force);
 
     for (int i = 0; i < steps_to_make; i++) {
 
@@ -2096,14 +2101,14 @@ std::string MjClass::numerical_stiffness_converge(float force, float target_accu
 
   bool print = true;            // print out only the final result
   bool print_minimal = true;    // also print out error every 50 loops
-  bool print_detailed = true;  // also print out all possible information every loop
+  bool print_detailed = false;  // also print out all possible information every loop
 
   // use default stiffnesses as initial guess
   std::vector<luke::gfloat> stiffnesses = luke::get_stiffnesses();
   int N = stiffnesses.size();
 
   int loops = 0;
-  int max_loops = 500;
+  int max_loops = 200;
   float max_stiffness = 800;
   float min_stiffness = 0.5;
 
@@ -2557,7 +2562,20 @@ void MjClass::set_finger_thickness(float thickness)
   bool changed = luke::change_finger_thickness(thickness);
 
   // changes are finished upon next call to reset()
-  resetFlags.finger_thickness_changed = changed;
+  if (changed) resetFlags.finger_EI_changed = true;
+}
+
+void MjClass::set_finger_width(float width)
+{
+  /* set a new finger width for the gripper. For the actual width to change a new
+  URDF should have been or about to be loaded. Since EI has changed we need new
+  finger stiffnesses. It will also throw off the gauge calibration so if auto-calibration
+  is on then it recalibrates */
+
+  bool changed = luke::change_finger_width(width);
+
+  // changes are finished upon next call to reset()
+  if (changed) resetFlags.finger_EI_changed = true;
 }
 
 float MjClass::yield_load()
