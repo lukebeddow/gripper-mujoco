@@ -153,8 +153,10 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
   std::vector<float>& joint_angles, std::vector<float>& joint_pred,
   std::vector<float>& pred_x, std::vector<float>& pred_y, std::vector<float>& theory_y,
   std::vector<float>& theory_x_curve, std::vector<float>& theory_y_curve,
-  float force, float finger_stiffness);
+  float force, float finger_stiffness, int force_style = 0);
 void fill_theory_curve(std::vector<float>& theory_X, std::vector<float>& theory_Y, 
+  float force, int num);
+void fill_UDL_theory_curve(std::vector<float>& theory_X, std::vector<float>& theory_Y,
   float force, int num);
 std::vector<float> discretise_curve(std::vector<float> X, std::vector<float> truth_X, 
   std::vector<float> truth_Y);

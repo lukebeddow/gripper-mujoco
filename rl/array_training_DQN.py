@@ -780,7 +780,7 @@ if __name__ == "__main__":
   this_segments = 8 # was 8, change to 6 for speed
   this_noise = 0.025 # was 0.05, change to 0.025 for stability
 
-  model.env.log_level = 2
+  model.params.object_set = "set6_fullset_800_50i"
   
   # special settings to test new object set, set5_multi_9540
   use_set_5 = False

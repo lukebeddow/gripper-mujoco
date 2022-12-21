@@ -1933,7 +1933,7 @@ MjType::TestReport MjClass::get_test_report()
   return testReport_;
 }
 
-MjType::CurveFitData::PoseData MjClass::validate_curve()
+MjType::CurveFitData::PoseData MjClass::validate_curve(int force_style)
 {
   /* for testing the curvature of the fingers */
 
@@ -1950,15 +1950,15 @@ MjType::CurveFitData::PoseData MjClass::validate_curve()
   luke::verify_small_angle_model(data, 0, pose.f1.joints, 
     pose.f1.pred_j, pose.f1.pred_x, pose.f1.pred_y, pose.f1.theory_y,
     pose.f1.theory_x_curve, pose.f1.theory_y_curve,
-    s_.tip_force_applied, s_.finger_stiffness);
+    s_.tip_force_applied, s_.finger_stiffness, force_style);
   luke::verify_small_angle_model(data, 1, pose.f2.joints, 
     pose.f2.pred_j, pose.f2.pred_x, pose.f2.pred_y, pose.f2.theory_y,
     pose.f2.theory_x_curve, pose.f2.theory_y_curve,
-    s_.tip_force_applied, s_.finger_stiffness);
+    s_.tip_force_applied, s_.finger_stiffness, force_style);
   luke::verify_small_angle_model(data, 2, pose.f3.joints, 
     pose.f3.pred_j, pose.f3.pred_x, pose.f3.pred_y, pose.f3.theory_y,
     pose.f3.theory_x_curve, pose.f3.theory_y_curve,
-    s_.tip_force_applied, s_.finger_stiffness);
+    s_.tip_force_applied, s_.finger_stiffness, force_style);
 
   // TESTING: replace theory with new points (more accurate)
   pose.f1.theory_y = luke::discretise_curve(pose.f1.x, pose.f1.theory_x_curve,
@@ -1977,11 +1977,10 @@ MjType::CurveFitData::PoseData MjClass::validate_curve()
   return pose;
 }
 
-MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force)
+MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force, int force_style)
 {
   /* determine the cubic fit error and displacement of the fingers under
-  a given force. Settle time is time to wait before we consider the simulation is
-  settled and no-longer changing
+  a given force
   
   force_style:    0 = tip force
                   1 = UDL
@@ -1996,14 +1995,14 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force)
   s_.tip_force_applied = force;
 
   // step the simulation to allow the forces to settle
-  float time_to_settle = 15; // 10 guarantees smooth but is slow
+  float time_to_settle = 20; // 10 guarantees smooth but is slow
   int steps_to_make = time_to_settle / s_.mujoco_timestep;
   // std::cout << "Stepping for " << steps_to_make << " steps to allow settling\n";
 
   while (true) {
 
-    luke::apply_tip_force(force);
-    // luke::apply_UDL(force);
+    if (force_style == 0) luke::apply_tip_force(force);
+    if (force_style == 1) luke::apply_UDL(force);
 
     for (int i = 0; i < steps_to_make; i++) {
 
@@ -2029,7 +2028,7 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force)
 
   // evaluate the finger pose
   MjType::CurveFitData::PoseData pose;
-  pose = validate_curve();
+  pose = validate_curve(force_style);
   pose.tag_string = "Force is " + std::to_string(force) + " N";
 
   // turn off curve validation mode
@@ -2039,7 +2038,7 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force)
   return pose;
 }
 
-MjType::CurveFitData MjClass::curve_validation_regime(bool print)
+MjType::CurveFitData MjClass::curve_validation_regime(bool print, int force_style)
 {
   /* peform test battery to validate finger bending, print is false by default */
 
@@ -2052,10 +2051,17 @@ MjType::CurveFitData MjClass::curve_validation_regime(bool print)
   // NOTE: not forces in newtons, these are 100/200/300/400g (ie 0.981*1/2/3/4)
   std::vector<float> forces { 1 * 0.981, 2 * 0.981, 3 * 0.981, 4 * 0.981 };
 
+  // testing: triple the forces for a UDL to get comparable deflection values
+  if (force_style == 1) {
+    for (int i = 0; i < forces.size(); i++) {
+      forces[i] *= 3;
+    }
+  }
+
   for (float f : forces) {
     
     MjType::CurveFitData::PoseData pose;
-    pose = validate_curve_under_force(f);
+    pose = validate_curve_under_force(f, force_style);
     if (print) pose.print();
     curvedata.entries.push_back(pose);
 
@@ -2652,7 +2658,7 @@ float MjClass::find_highest_stable_timestep()
   constexpr bool debug = true;
 
   float increment = 50e-6;     // 0.05 milliseconds
-  float start_value = 4.0e-3;  // 3.5 millseconds
+  float start_value = 5.0e-3;  // 5 millseconds
   float test_time = 1.0;       // 0.5 seconds
 
   float tune_param = 1.0;       // should be 1.0, reduce to make timestep shorter

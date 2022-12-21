@@ -94,7 +94,7 @@ PYBIND11_MODULE(bind, m) {
     .def("print", &MjClass::print)
     .def("default_goal_event_triggering", &MjClass::default_goal_event_triggering)
     .def("validate_under_force", &MjClass::validate_curve_under_force)
-    .def("curve_validation_regime", &MjClass::curve_validation_regime)
+    .def("curve_validation_regime", &MjClass::curve_validation_regime, py::arg("print") = false, py::arg("force_style") = 0)
     .def("last_action_gripper", &MjClass::last_action_gripper)
     .def("last_action_panda", &MjClass::last_action_panda)
     .def("get_fingertip_z_height", &MjClass::get_fingertip_z_height)

@@ -951,7 +951,11 @@ class TrainDQN():
 
     freq = self.params.wandb_freq_s if force is not True else 0
 
-    self.track.log_wandb(log_frequency=freq)
+    try:
+      self.track.log_wandb(log_frequency=freq)
+    except Exception as e:
+      print("LOG WANDB ERROR:", e)
+      print("Taking no action and continuing with program, tracking data may have issues")
 
     # if we are at the end, log the final best performance
     if end is True:

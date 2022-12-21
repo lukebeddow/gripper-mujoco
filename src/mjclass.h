@@ -1051,9 +1051,9 @@ public:
   int get_number_of_objects() { return env_.object_names.size(); }
   std::string get_current_object_name() { return env_.obj.name; }
   MjType::TestReport get_test_report();
-  MjType::CurveFitData::PoseData validate_curve();
-  MjType::CurveFitData::PoseData validate_curve_under_force(float force);
-  MjType::CurveFitData curve_validation_regime(bool print = true);
+  MjType::CurveFitData::PoseData validate_curve(int force_style = 0);
+  MjType::CurveFitData::PoseData validate_curve_under_force(float force, int force_style = 0);
+  MjType::CurveFitData curve_validation_regime(bool print = false, int force_style = 0);
   std::string numerical_stiffness_converge(float force, float target_accuracy);
   std::string numerical_stiffness_converge(float force, float target_accuracy, 
     std::vector<float> X, std::vector<float> Y);

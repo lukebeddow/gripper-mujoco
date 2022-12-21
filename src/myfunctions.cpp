@@ -1807,10 +1807,8 @@ void apply_UDL(double total_force)
   /* apply a uniformally distributed load with a total force such that the force
   per segment will be applied as total_force / N */
 
-  // force at first segment has no effect
-  bool ignore_first_seg = true;
-
-  // do not include first segment in division, force is split from segments 1...N
+  // do we apply force to joint 0 (which will have no effect)
+  bool ignore_first_seg = false; // yes we do, otherwise the UDL is not uniform
   float force_per = total_force / (float) (j_.segmentMatrices.idx_size - ignore_first_seg);
 
   // add force also to first segment for visual consistency in mujoco, it has no effect
@@ -2681,10 +2679,14 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
   std::vector<float>& joint_angles, std::vector<float>& joint_pred,
   std::vector<float>& pred_x, std::vector<float>& pred_y, std::vector<float>& theory_y,
   std::vector<float>& theory_x_curve, std::vector<float>& theory_y_curve,
-  float force, float finger_stiffness)
+  float force, float finger_stiffness, int force_style)
 {
   /* evaluate the difference in joint angle between the actual and model
-  predicted values */
+  predicted values
+  
+  force style: 0 = point load
+               1 = UDL
+  */
 
   int ffs =  j_.dim.fixed_first_segment;
 
@@ -2748,15 +2750,34 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
     // theory_y[i + 1 + ffs] = (force * std::pow(theory_x[i + 1 + ffs], 3)) / (3 * j_.dim.EI); 
 
     // basic theory attempt 2
-    double theory_factor = (force) / (6.0 * j_.dim.EI);
-    double x = (i + 1) * j_.dim.segment_length;
-    theory_x[i + 1 + ffs] = x;
-    theory_y[i + 1 + ffs] = theory_factor * (-std::pow(x, 3) + 3 * j_.dim.finger_length * std::pow(x, 2));  
+    if (force_style == 0) {
+      double theory_factor = (force) / (6.0 * j_.dim.EI);
+      double x = (i + 1) * j_.dim.segment_length;
+      theory_x[i + 1 + ffs] = x;
+      theory_y[i + 1 + ffs] = theory_factor * (-std::pow(x, 3) + 3 * j_.dim.finger_length * std::pow(x, 2)); 
+    }
+    else if (force_style == 1) {
+      double theory_factor = ((force / j_.dim.finger_length) / (24.0 * j_.dim.EI));
+      double x = (i + 1) * j_.dim.segment_length;
+      theory_x[i + 1 + ffs] = x;
+      theory_y[i + 1 + ffs] = theory_factor * 
+        (std::pow(x, 4) - 4 * j_.dim.finger_length * std::pow(x, 3) 
+          + 6 * j_.dim.finger_length * j_.dim.finger_length * std::pow(x, 2)); 
+    }
+    else {
+      std::cout << "force_style = " << force_style << '\n';
+      throw std::runtime_error("force style was not 0 or 1 in verify_small_angle_model(...)");
+    }
     
   }
 
-  fill_theory_curve(theory_x_curve, theory_y_curve, force, theory_N);
-
+  if (force_style == 0) {
+    fill_theory_curve(theory_x_curve, theory_y_curve, force, theory_N);
+  }
+  else if (force_style == 1) {
+    fill_UDL_theory_curve(theory_x_curve, theory_y_curve, force, theory_N);
+  }
+  
   // // approximate free end tangent angle
   // double B = (force * std::pow(j_.dim.finger_length, 2)) / (j_.dim.EI);
   // double phi_0 = 0.5 * B * (1.0 - (1.0/12.0) * std::pow(B, 2));
@@ -2806,7 +2827,8 @@ void fill_theory_curve(std::vector<float>& theory_X, std::vector<float>& theory_
   float force, int num)
 {
   /* take two vectors (which are wiped) and fill them with the theory curve, this
-  is basic bending theory for Euler-Bernoulli beam. Force should be given in NEWTONS */
+  is basic bending theory for Euler-Bernoulli beam. Force should be given in NEWTONS.
+  This does a point load on a cantilever */
 
   theory_X.clear();
   theory_Y.clear();
@@ -2821,6 +2843,33 @@ void fill_theory_curve(std::vector<float>& theory_X, std::vector<float>& theory_
     double x = j_.dim.finger_length * ((i / (float) (num - 1)));
     theory_X[i] = x;
     theory_Y[i] = theory_factor * (-std::pow(x, 3) + 3 * j_.dim.finger_length * std::pow(x, 2)); 
+  }
+}
+
+void fill_UDL_theory_curve(std::vector<float>& theory_X, std::vector<float>& theory_Y,
+  float force, int num)
+{
+  /* take two vectors (which are wiped) and fill them with the theory curve, this
+  is basic bending theory for Euler-Bernoulli beam. Force should be given in NEWTONS.
+  This does a UDL on a cantilever */
+
+  theory_X.clear();
+  theory_Y.clear();
+
+  theory_X.resize(num);
+  theory_Y.resize(num);
+
+  // convert force (total force) into force per metre
+  float L = j_.dim.finger_length;
+  float W = force / L;
+
+  // create theory curve
+  for (int i = 0; i < num; i++) {
+
+    double theory_factor = (W / (24.0 * j_.dim.EI));
+    double x = L * ((i / (float) (num - 1)));
+    theory_X[i] = x;
+    theory_Y[i] = theory_factor * (std::pow(x, 4) - 4 * L * std::pow(x, 3) + 6 * L * L * std::pow(x, 2)); 
   }
 }
 

@@ -21,12 +21,15 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("-t", "--thickness", type=float, default=0.9e-3)
 parser.add_argument("-w", "--width", type=float, default=28e-3)
+parser.add_argument("-f", "--force-style", type=int, default=0)
+parser.add_argument("-s", "--set", default="set6_testing")
+parser.add_argument("-e", "--end", default="")
 
 args = parser.parse_args()
 
 # global variables
 max_force = 4
-set_name = "set6_testing"
+set_name = args.set #"set6_testing"
 
 # create and prepare the mujoco instance
 mj = MjEnv(noload=True)
@@ -46,6 +49,7 @@ segments = list(range(3, 31))
 
 print(f"Finger thickness is {mj.params.finger_thickness * 1000:.1f} mm")
 print(f"Finger width is {mj.load_finger_width * 1000:.1f} mm")
+print(f"Force style is {args.force_style}")
 
 
 # In[2]:
@@ -159,7 +163,8 @@ REAL_xy = [
 # In[6]:
 
 
-def run_curve_data(mjenv, segments, converge_to=None, converge_target_accuracy=5e-4, auto=True, stiffness=-7.5):
+def run_curve_data(mjenv, segments, converge_to=None, converge_target_accuracy=5e-4, 
+                   auto=True, stiffness=-7.5, UDL=False):
   """
   This function returns a data structure containing curve validation data for
   a given mjenv across a given list of segments eg [5, 10, 15, 20]
@@ -222,8 +227,11 @@ def run_curve_data(mjenv, segments, converge_to=None, converge_target_accuracy=5
       print("Curve validation running for N =", N, "\t N in sim is", mjenv.mj.get_N(), flush=True)
 
     print_out = False
-    finger_data = mjenv.mj.curve_validation_regime(print_out)
+    force_style = 1 if UDL else 0
+    finger_data = mjenv.mj.curve_validation_regime(print_out, force_style)
     data.append(finger_data)
+
+    print(f"force style was {force_style}")
 
   if converge_to is not None:
     print("\n" + stiffness_code_string)
@@ -245,7 +253,9 @@ accuracy = None
 # finger_stiffness = -7.5 # finalised theory as intial guess
 
 if get_data:
-  data = run_curve_data(mj, segments, auto=auto_timestep, stiffness=finger_stiffness, converge_to=converge, converge_target_accuracy=accuracy)
+  data = run_curve_data(mj, segments, auto=auto_timestep, stiffness=finger_stiffness, 
+                        converge_to=converge, converge_target_accuracy=accuracy, 
+                        UDL=True if args.force_style == 1 else False)
 
 
 # In[7]:
@@ -508,7 +518,9 @@ finger_stiffness = -101 # hardcoded theory predictions convergence
 accuracy = None
 
 if get_converged:
-  data_converged = run_curve_data(mj, segments, converge_to=converge_force, auto=auto_timestep, stiffness=finger_stiffness)
+  data_converged = run_curve_data(mj, segments, converge_to=converge_force, auto=auto_timestep, 
+                                  stiffness=finger_stiffness,
+                                  UDL=True if args.force_style == 1 else False)
 
 
 # In[11]:
@@ -699,7 +711,9 @@ plot_avg_errors(avg_data, labels, joint_percent=False, tip_percent=False)
 # take care with overwrites
 overwrite = True
 
-name_style = "pickle_thickness_{0:.1f}mm_width_{1:.0f}mm.pickle"
+if args.end != "": args.end = "_" + args.end
+args.end += ".pickle"
+name_style = "pickle_thickness_{0:.1f}mm_width_{1:.0f}mm" + args.end
 
 if overwrite:
   thickness_mm = mj.params.finger_thickness * 1000
