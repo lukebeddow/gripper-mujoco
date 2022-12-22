@@ -809,8 +809,8 @@ namespace MjType
         // print identifying information
         std::cout << "Finger pose data: \t" << tag_string << '\n';
 
-        // print table data only for finger 1
-        f1.print_table();
+        // print table data only for finger 2
+        f2.print_table();
         
         // update and print error calculations for all three fingers
         calc_error();
@@ -993,7 +993,6 @@ public:
   void load_relative(std::string file_path);
   void reset();
   void hard_reset();
-  void reset_timestep();
   void step();
   bool render();
 

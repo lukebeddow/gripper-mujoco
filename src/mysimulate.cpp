@@ -99,6 +99,8 @@ struct
     double finger_thickness = 0.9;  // added by luke
     int seg_num_for_frc = 1;       // added by luke
     double seg_force = 0.0;         // added by luke
+    double seg_moment = 0.0;        // added by luke
+    int force_style = 0;            // added by luke
     int all_sensors_use_noise = 1;  // added by luke
 
     // figure show flags
@@ -1500,6 +1502,8 @@ void makeObjectUI(int oldstate)
         {mjITEM_BUTTON,   "wipe seg frc",    2, NULL,                   " #317"},
         {mjITEM_SLIDERINT,   "seg num",           2, &settings.seg_num_for_frc, "0 10"},
         {mjITEM_SLIDERNUM,  "force",         2, &settings.seg_force, "0 10"},
+        {mjITEM_SLIDERNUM,  "moment",         2, &settings.seg_moment, "0 2"},
+        {mjITEM_SLIDERINT,   "frc style",     2, &settings.force_style, "0 2"},
 
         // {mjITEM_BUTTON,    "Copy pose",     2, NULL,                    " #304"},
         {mjITEM_SLIDERINT, "Live Object",   3, &settings.object_int,    "0 20"},
@@ -2308,7 +2312,9 @@ void uiEvent(mjuiState* state)
             }
             case 8: {
                 std::cout << "Running curve validation regime\n";
-                myMjClass.curve_validation_regime();
+                bool print = true;
+                myMjClass.curve_validation_regime(print, settings.force_style);
+                std::cout << "force style was " << settings.force_style << '\n';
                 break;
             }
             case 9: {           // randomise object colour
@@ -2358,7 +2364,10 @@ void uiEvent(mjuiState* state)
                 // if (first_call) luke::get_segment_matrices(m, d);
                 // first_call = false;
                 luke::set_segment_force(settings.seg_num_for_frc, true, settings.seg_force);
+                luke::set_segment_moment(settings.seg_num_for_frc, true, settings.seg_moment);
                 std::cout << "Applying force of " << settings.seg_force
+                    << "N on segment " << settings.seg_num_for_frc << "\n";
+                std::cout << "Applying moment of " << settings.seg_moment
                     << "N on segment " << settings.seg_num_for_frc << "\n";
                 break;
             }
@@ -2394,6 +2403,7 @@ void uiEvent(mjuiState* state)
             }
             // case 20: seg num int slider
             // case 21: seg frc num slider
+            // case 22: seg frc moment slider
             }
         }
 

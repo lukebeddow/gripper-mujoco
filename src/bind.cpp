@@ -30,7 +30,6 @@ PYBIND11_MODULE(bind, m) {
     .def("load_relative", &MjClass::load_relative)
     .def("reset", &MjClass::reset)
     .def("hard_reset", &MjClass::hard_reset)
-    .def("reset_timestep", &MjClass::reset_timestep)
     .def("step", &MjClass::step)
     .def("render", &MjClass::render)
 

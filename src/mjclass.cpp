@@ -368,7 +368,7 @@ void MjClass::reset()
 
   // reset the simulation
   luke::reset(model, data);
-
+  
   // reset sensor saved data
   finger1_gauge.reset();
   finger2_gauge.reset();
@@ -426,32 +426,10 @@ void MjClass::hard_reset()
   // reinitialise the joint settings structure
   luke::init_J(model, data);
 
-  // // reset the tip force function
-  // luke::apply_tip_force(model, data, 0, true);
-
   // we want to reset the auto setting flags to original values
   resetFlags.flags_init = false;
 
   // regular reset code
-  reset();
-}
-
-void MjClass::reset_timestep()
-{
-  /* reset the environment and also recalibrate the timestep */
-
-  // set flags to recalibrate timestep and sim steps
-  resetFlags.auto_timestep = true;
-  resetFlags.auto_simsteps = true;
-
-  /* delete this: testing confirmed that the bug where loaded models did not
-  perform the correct actions was due to this offset not being saved when models
-  are pickled. The fix is to add it to bind.cpp pickle, but this makes things
-  backwards incompatible. So delete this code when that is all solved */
-  // s_.wrist_sensor_Z.raw_value_offset = -23.0;
-  // std::cout << "MjClass auto-setting: Wrist Z sensor offset set to: " 
-  //       << s_.wrist_sensor_Z.raw_value_offset << '\n';
-
   reset();
 }
 
@@ -464,9 +442,6 @@ void MjClass::step()
   luke::before_step(model, data);
 
   if (s_.curve_validation) {
-
-    // // if doing curve validation, can apply a set tip force
-    // luke::apply_tip_force(model, data, s_.tip_force_applied);
 
     // can apply forces on finger segments, eg tip force
     luke::resolve_segment_forces(model, data);
@@ -1984,6 +1959,7 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force, 
   
   force_style:    0 = tip force
                   1 = UDL
+                  2 = tip moment
   */
 
   bool dynamic_timestep_adjustment = true;
@@ -1995,14 +1971,20 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force, 
   s_.tip_force_applied = force;
 
   // step the simulation to allow the forces to settle
-  float time_to_settle = 20; // 10 guarantees smooth but is slow
+  float time_to_settle = 20;
   int steps_to_make = time_to_settle / s_.mujoco_timestep;
   // std::cout << "Stepping for " << steps_to_make << " steps to allow settling\n";
 
   while (true) {
 
+    // what is the loading condition
     if (force_style == 0) luke::apply_tip_force(force);
-    if (force_style == 1) luke::apply_UDL(force);
+    else if (force_style == 1) luke::apply_UDL(force);
+    else if (force_style == 2) luke::apply_tip_moment(force);
+    else {
+      std::cout << "force_style = " << force_style << '\n';
+      throw std::runtime_error("force style was not valid in validate_curve_under_force(...)");
+    }
 
     for (int i = 0; i < steps_to_make; i++) {
 
@@ -2054,7 +2036,12 @@ MjType::CurveFitData MjClass::curve_validation_regime(bool print, int force_styl
   // testing: triple the forces for a UDL to get comparable deflection values
   if (force_style == 1) {
     for (int i = 0; i < forces.size(); i++) {
-      forces[i] *= 3;
+      forces[i] *= 11.3475;
+    }
+  }
+  else if (force_style == 2) {
+    for (int i = 0; i < forces.size(); i++) {
+      forces[i] *= 0.15667;
     }
   }
 

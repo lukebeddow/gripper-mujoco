@@ -485,6 +485,7 @@ struct JointSettings {
     std::vector<int> f3_idx;
     std::vector<int> apply_flags;
     std::vector<float> force;
+    std::vector<float> moment;
   } segmentMatrices;
 
   /* ----- Member functions ----- */
@@ -1635,7 +1636,6 @@ void calibrate_reset(mjModel* model, mjData* data)
     (*j_.to_qpos.gripper[i]) = qpos_positions[k]; 
     k += 1;
   }
-
 }
 
 void get_segment_matrices(mjModel* model, mjData* data)
@@ -1655,6 +1655,8 @@ void get_segment_matrices(mjModel* model, mjData* data)
   j_.segmentMatrices.apply_flags.resize(tip_num, 0); // set all to 0 (false)
   j_.segmentMatrices.force.clear();
   j_.segmentMatrices.force.resize(tip_num, 0.0);
+  j_.segmentMatrices.moment.clear();
+  j_.segmentMatrices.moment.resize(tip_num, 0.0);
 
   std::string f1_names = "finger_1_segment_link_{X}";
   std::string f2_names = "finger_2_segment_link_{X}";
@@ -1719,7 +1721,7 @@ void get_segment_matrices(mjModel* model, mjData* data)
 
 void set_segment_force(int seg_num, bool set_as, double force)
 {
-  /* toggle whether to apply force to a given segment */
+  /* toggle whether to apply force and/or moment to a given segment */
 
   if (seg_num < 0 or seg_num >= j_.segmentMatrices.idx_size) {
     std::cout << "ERROR: seg_num is " << seg_num << '\n';
@@ -1730,6 +1732,21 @@ void set_segment_force(int seg_num, bool set_as, double force)
 
   j_.segmentMatrices.apply_flags[seg_num] = set_as;
   j_.segmentMatrices.force[seg_num] = force;
+}
+
+void set_segment_moment(int seg_num, bool set_as, double moment)
+{
+  /* toggle whether to apply force and/or moment to a given segment */
+
+  if (seg_num < 0 or seg_num >= j_.segmentMatrices.idx_size) {
+    std::cout << "ERROR: seg_num is " << seg_num << '\n';
+    throw std::runtime_error("apply_segment_moment() recieved seg_num out of bounds");
+  }
+
+  // std::cout << "set segement moment, seg_num = " << seg_num << ", moment = " << moment << "\n";
+
+  j_.segmentMatrices.apply_flags[seg_num] = set_as;
+  j_.segmentMatrices.moment[seg_num] = moment;
 }
 
 void resolve_segment_forces(mjModel* model, mjData* data)
@@ -1743,15 +1760,17 @@ void resolve_segment_forces(mjModel* model, mjData* data)
 
   for (int i = 0; i < j_.segmentMatrices.apply_flags.size(); i++) {
     if (j_.segmentMatrices.apply_flags[i]) {
-      apply_segment_force(model, data, i, j_.segmentMatrices.force[i]);
+      apply_segment_force(model, data, i, j_.segmentMatrices.force[i], j_.segmentMatrices.moment[i]);
       // std::cout << "applying force " << j_.segmentMatrices.force[i] << " on segment " << i << '\n';
+      // std::cout << "applying moment " << j_.segmentMatrices.moment[i] << " on segment " << i << '\n';
     }
   }
 }
 
-void apply_segment_force(mjModel* model, mjData* data, int seg_num, double force)
+void apply_segment_force(mjModel* model, mjData* data, int seg_num, double force, double moment)
 {
-  /* apply a force to a given segment from 1..N */
+  /* apply a horizontal force to a given segment from 1..N. Can also apply a 
+  moment around the joint axis, this = 0 by default*/
 
   if (seg_num < 0 or seg_num >= j_.segmentMatrices.idx_size) {
     std::cout << "ERROR: seg_num is " << seg_num << '\n';
@@ -1783,7 +1802,9 @@ void apply_segment_force(mjModel* model, mjData* data, int seg_num, double force
 
     // prepare to apply force outwards on fingertips
     mjtNum fvec[3] = { 0, 0, -force };
+    mjtNum mvec[3] = { 0, moment, 0 };
     mjtNum rotfvec[3];
+    mjtNum rotmvec[3];
 
     // std::cout << "finger " << i + 1 << " matrix values in apply: ";
     // for (int j = 0; j < 9; j++) std::cout << mats[i][j] << ", ";
@@ -1791,21 +1812,29 @@ void apply_segment_force(mjModel* model, mjData* data, int seg_num, double force
 
     // rotate into the tip frame to pull directly horizontal
     mju_mulMatVec(rotfvec, mats[i], fvec, 3, 3);
+    mju_mulMatVec(rotmvec, mats[i], mvec, 3, 3);
 
     // apply force in cartesian space (joint space is qfrc_applied)
     data->xfrc_applied[(*idx_vecs[i])[seg_num] * 6 + 0] = rotfvec[0];
     data->xfrc_applied[(*idx_vecs[i])[seg_num] * 6 + 1] = rotfvec[1];
     data->xfrc_applied[(*idx_vecs[i])[seg_num] * 6 + 2] = rotfvec[2];
+    data->xfrc_applied[(*idx_vecs[i])[seg_num] * 6 + 3] = rotmvec[0];
+    data->xfrc_applied[(*idx_vecs[i])[seg_num] * 6 + 4] = rotmvec[1];
+    data->xfrc_applied[(*idx_vecs[i])[seg_num] * 6 + 5] = rotmvec[2];
 
     // std::cout << "apply_segment_force() finger " << i + 1 << " rotfvec is " << rotfvec[0] << ", " << rotfvec[1]
     //   << ", " << rotfvec[2] << '\n';
   }
 }
 
-void apply_UDL(double total_force)
+void apply_UDL(double force_per_m)
 {
-  /* apply a uniformally distributed load with a total force such that the force
-  per segment will be applied as total_force / N */
+  /* apply a uniformally distributed load with a force per metre W */
+
+  // find total force applied over the finger length
+  double total_force = force_per_m * j_.dim.finger_length;
+
+  // std::cout << "total force applied in UDL is " << total_force << '\n';
 
   // do we apply force to joint 0 (which will have no effect)
   bool ignore_first_seg = false; // yes we do, otherwise the UDL is not uniform
@@ -1831,6 +1860,13 @@ void apply_tip_force(double force)
   /* apply a force at the tip of the finger */
 
   set_segment_force(j_.segmentMatrices.idx_size - 1, true, force);
+}
+
+void apply_tip_moment(double moment)
+{
+  /* apply a moment at the tip of the finger */
+
+  set_segment_moment(j_.segmentMatrices.idx_size - 1, true, moment);
 }
 
 void apply_tip_force(mjModel* model, mjData* data, double force, bool reset)
@@ -1927,94 +1963,100 @@ void step(mjModel* model, mjData* data)
 {
   /* make a simulation step */
 
-  // mj_step(model, data);
+  // mj_step(model, data); // needs ctrl ptr assigned
 
   mj_step1(model, data);
-
-  /* 
-  To make the 'leadscrews' non-backdriveable, we want no forces to be
-  transferred from the finger to the finger platform/joints. So we will
-  try wiping any forces, and trust that the momentum forces are sufficiently
-  small.
-
-  The joints to wipe are either:
-    finger_1_revolute_joint (1 + panda)
-    finger_2_revolute_joint (12 + panda)
-    finger_3_revolute_joint (23 + panda)
-  or:
-    finger_1_segment_joint_1 (2 + panda)
-    finger_2_segment_joint_2 (13 + panda)
-    finger_3_segment_joint_3 (24 + panda)
-
-  */   
-
-  static std::vector<int> to_wipe {
-    j_.idx.gripper[j_.gripper.prismatic[0]],  // 0
-    j_.idx.gripper[j_.gripper.prismatic[1]],  // 11
-    j_.idx.gripper[j_.gripper.prismatic[2]],  // 22
-    j_.idx.gripper[j_.gripper.revolute[0]],   // 1
-    j_.idx.gripper[j_.gripper.revolute[1]],   // 12
-    j_.idx.gripper[j_.gripper.revolute[2]],   // 23
-  };
-
-  control(model, data);   // since ctrl pntr not assigned
-
-  for (int i = 0; i < to_wipe.size(); i++) {
-    // all are (nv * 1), and nv = 34 for gripper, which = njnts
-    // data->qfrc_passive[to_wipe[i]] = 0;  // passive force
-    // data->efc_vel[to_wipe[i]] = 0;       // velocity in constraint space: J*qvel
-    // data->efc_aref[to_wipe[i]] = 0;      // reference pseudo-acceleartion
-    // data->qfrc_bias[to_wipe[i]] = 0;     // C(qpos, qvel)
-    // data->cvel[to_wipe[i]] = 0;          // com-based velcotiy [3D rot; 3D tran]
-
-    // data->qfrc_unc[to_wipe[i]] = 0;
-    // data->qacc_unc[to_wipe[i]] = 0;
-  }
-
-  // // for testing, applly known force to the end of the finger
-  // data->xfrc_applied[11 * 6 + 1] = 10;
-
+  control(model, data); // since ctrl ptr not assigned
   mj_step2(model, data);
+
   return;
 
-  mj_fwdActuation(model, data);
-  mj_fwdAcceleration(model, data);
-  mj_fwdConstraint(model, data);
+  // mj_step1(model, data);
 
+  // /* 
+  // To make the 'leadscrews' non-backdriveable, we want no forces to be
+  // transferred from the finger to the finger platform/joints. So we will
+  // try wiping any forces, and trust that the momentum forces are sufficiently
+  // small.
 
-  std::vector<mjtNum> qfrc;
-  // std::cout << "qfrc constraint is ";
-  for (int i = 0; i < to_wipe.size(); i++) {
+  // The joints to wipe are either:
+  //   finger_1_revolute_joint (1 + panda)
+  //   finger_2_revolute_joint (12 + panda)
+  //   finger_3_revolute_joint (23 + panda)
+  // or:
+  //   finger_1_segment_joint_1 (2 + panda)
+  //   finger_2_segment_joint_2 (13 + panda)
+  //   finger_3_segment_joint_3 (24 + panda)
 
-    // // wipe forces arising from constraints (contacts)
-    // qfrc.push_back(data->qfrc_constraint[to_wipe[i]]);
-    // data->qfrc_constraint[to_wipe[i]] = 0;
-    // // std::cout << data->qfrc_constraint[to_wipe[i]] << " ";
-  } 
-  // std::cout << "\n";
+  // */   
 
-  // int j = 0;
-  // for (int i : j_.gripper.prismatic) {
-  //   data->ctrl[j_.num.panda + i] += -qfrc[j];
-  //   j += 1;
+  // static std::vector<int> to_wipe {
+  //   j_.idx.gripper[j_.gripper.prismatic[0]],  // 0
+  //   j_.idx.gripper[j_.gripper.prismatic[1]],  // 11
+  //   j_.idx.gripper[j_.gripper.prismatic[2]],  // 22
+  //   j_.idx.gripper[j_.gripper.revolute[0]],   // 1
+  //   j_.idx.gripper[j_.gripper.revolute[1]],   // 12
+  //   j_.idx.gripper[j_.gripper.revolute[2]],   // 23
+  // };
+
+  // control(model, data);   // since ctrl pntr not assigned
+
+  // for (int i = 0; i < to_wipe.size(); i++) {
+  //   // all are (nv * 1), and nv = 34 for gripper, which = njnts
+  //   // data->qfrc_passive[to_wipe[i]] = 0;  // passive force
+  //   // data->efc_vel[to_wipe[i]] = 0;       // velocity in constraint space: J*qvel
+  //   // data->efc_aref[to_wipe[i]] = 0;      // reference pseudo-acceleartion
+  //   // data->qfrc_bias[to_wipe[i]] = 0;     // C(qpos, qvel)
+  //   // data->cvel[to_wipe[i]] = 0;          // com-based velcotiy [3D rot; 3D tran]
+
+  //   // data->qfrc_unc[to_wipe[i]] = 0;
+  //   // data->qacc_unc[to_wipe[i]] = 0;
   // }
-  // for (int i : j_.gripper.revolute) {
-  //   data->ctrl[j_.num.panda + i] += -qfrc[j];
-  //   j += 1;
-  // }
+
+  // // // for testing, applly known force to the end of the finger
+  // // data->xfrc_applied[11 * 6 + 1] = 10;
+
+  // mj_step2(model, data);
+  // return;
+
   // mj_fwdActuation(model, data);
   // mj_fwdAcceleration(model, data);
   // mj_fwdConstraint(model, data);
 
-  mj_sensorAcc(model, data);
-  mj_checkAcc(model, data);
 
-  // compare forward and inverse solutions if enabled
-  // if( mjENABLED(mjENBL_FWDINV) )
-  if (model->opt.enableflags and mjENBL_FWDINV)
-      mj_compareFwdInv(model, data);
+  // std::vector<mjtNum> qfrc;
+  // // std::cout << "qfrc constraint is ";
+  // for (int i = 0; i < to_wipe.size(); i++) {
 
-  mj_Euler(model, data);
+  //   // // wipe forces arising from constraints (contacts)
+  //   // qfrc.push_back(data->qfrc_constraint[to_wipe[i]]);
+  //   // data->qfrc_constraint[to_wipe[i]] = 0;
+  //   // // std::cout << data->qfrc_constraint[to_wipe[i]] << " ";
+  // } 
+  // // std::cout << "\n";
+
+  // // int j = 0;
+  // // for (int i : j_.gripper.prismatic) {
+  // //   data->ctrl[j_.num.panda + i] += -qfrc[j];
+  // //   j += 1;
+  // // }
+  // // for (int i : j_.gripper.revolute) {
+  // //   data->ctrl[j_.num.panda + i] += -qfrc[j];
+  // //   j += 1;
+  // // }
+  // // mj_fwdActuation(model, data);
+  // // mj_fwdAcceleration(model, data);
+  // // mj_fwdConstraint(model, data);
+
+  // mj_sensorAcc(model, data);
+  // mj_checkAcc(model, data);
+
+  // // compare forward and inverse solutions if enabled
+  // // if( mjENABLED(mjENBL_FWDINV) )
+  // if (model->opt.enableflags and mjENBL_FWDINV)
+  //     mj_compareFwdInv(model, data);
+
+  // mj_Euler(model, data);
 
 
 }
@@ -2203,7 +2245,8 @@ void update_stepper(mjModel* model, mjData* data)
   /* update the gripper joint positions and determine equilibirum/target_reached 
   assuming a stepper motor style */
 
-  constexpr static bool log_test_data = true;
+  // disable motor position data logging if hook isn't fixed (ie deflection test set)
+  static bool log_test_data = true * j_.dim.fixed_hook_segment;
 
   bool stepped = false;
 
@@ -2684,8 +2727,9 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
   /* evaluate the difference in joint angle between the actual and model
   predicted values
   
-  force style: 0 = point load
+  force style: 0 = point end load
                1 = UDL
+               2 = pure end moment
   */
 
   int ffs =  j_.dim.fixed_first_segment;
@@ -2757,26 +2801,27 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
       theory_y[i + 1 + ffs] = theory_factor * (-std::pow(x, 3) + 3 * j_.dim.finger_length * std::pow(x, 2)); 
     }
     else if (force_style == 1) {
-      double theory_factor = ((force / j_.dim.finger_length) / (24.0 * j_.dim.EI));
+      double theory_factor = (force / (24.0 * j_.dim.EI));
       double x = (i + 1) * j_.dim.segment_length;
       theory_x[i + 1 + ffs] = x;
       theory_y[i + 1 + ffs] = theory_factor * 
         (std::pow(x, 4) - 4 * j_.dim.finger_length * std::pow(x, 3) 
           + 6 * j_.dim.finger_length * j_.dim.finger_length * std::pow(x, 2)); 
     }
+    else if (force_style == 2) {
+      double theory_factor = ((force) / (2.0 * j_.dim.EI));
+      double x = (i + 1) * j_.dim.segment_length;
+      theory_x[i + 1 + ffs] = x;
+      theory_y[i + 1 + ffs] = theory_factor * std::pow(x, 2);
+    }
     else {
       std::cout << "force_style = " << force_style << '\n';
-      throw std::runtime_error("force style was not 0 or 1 in verify_small_angle_model(...)");
+      throw std::runtime_error("force style was not valid in verify_small_angle_model(...)");
     }
     
   }
 
-  if (force_style == 0) {
-    fill_theory_curve(theory_x_curve, theory_y_curve, force, theory_N);
-  }
-  else if (force_style == 1) {
-    fill_UDL_theory_curve(theory_x_curve, theory_y_curve, force, theory_N);
-  }
+  fill_theory_curve(theory_x_curve, theory_y_curve, force, theory_N, force_style);
   
   // // approximate free end tangent angle
   // double B = (force * std::pow(j_.dim.finger_length, 2)) / (j_.dim.EI);
@@ -2824,11 +2869,16 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
 }
 
 void fill_theory_curve(std::vector<float>& theory_X, std::vector<float>& theory_Y, 
-  float force, int num)
+  float force, int num, int force_style)
 {
   /* take two vectors (which are wiped) and fill them with the theory curve, this
   is basic bending theory for Euler-Bernoulli beam. Force should be given in NEWTONS.
-  This does a point load on a cantilever */
+  This does a point load on a cantilever 
+  
+  force style: 0 = point end load
+               1 = UDL
+               2 = pure end moment
+  */
 
   theory_X.clear();
   theory_Y.clear();
@@ -2836,40 +2886,46 @@ void fill_theory_curve(std::vector<float>& theory_X, std::vector<float>& theory_
   theory_X.resize(num);
   theory_Y.resize(num);
 
-  // create theory curve
-  for (int i = 0; i < num; i++) {
-
-    double theory_factor = (force / (6.0 * j_.dim.EI));
-    double x = j_.dim.finger_length * ((i / (float) (num - 1)));
-    theory_X[i] = x;
-    theory_Y[i] = theory_factor * (-std::pow(x, 3) + 3 * j_.dim.finger_length * std::pow(x, 2)); 
-  }
-}
-
-void fill_UDL_theory_curve(std::vector<float>& theory_X, std::vector<float>& theory_Y,
-  float force, int num)
-{
-  /* take two vectors (which are wiped) and fill them with the theory curve, this
-  is basic bending theory for Euler-Bernoulli beam. Force should be given in NEWTONS.
-  This does a UDL on a cantilever */
-
-  theory_X.clear();
-  theory_Y.clear();
-
-  theory_X.resize(num);
-  theory_Y.resize(num);
-
-  // convert force (total force) into force per metre
   float L = j_.dim.finger_length;
-  float W = force / L;
 
-  // create theory curve
-  for (int i = 0; i < num; i++) {
+  if (force_style == 0) {
 
-    double theory_factor = (W / (24.0 * j_.dim.EI));
-    double x = L * ((i / (float) (num - 1)));
-    theory_X[i] = x;
-    theory_Y[i] = theory_factor * (std::pow(x, 4) - 4 * L * std::pow(x, 3) + 6 * L * L * std::pow(x, 2)); 
+    // create point end load theory curve
+    for (int i = 0; i < num; i++) {
+
+      double theory_factor = (force / (6.0 * j_.dim.EI));
+      double x = L * ((i / (float) (num - 1)));
+      theory_X[i] = x;
+      theory_Y[i] = theory_factor * (-std::pow(x, 3) + 3 * L * std::pow(x, 2)); 
+    }
+  }
+  else if (force_style == 1) {
+
+    // float W = force / L; // if we are doing UDL
+
+    // create UDL theory curve
+    for (int i = 0; i < num; i++) {
+
+      double theory_factor = (force / (24.0 * j_.dim.EI));
+      double x = L * ((i / (float) (num - 1)));
+      theory_X[i] = x;
+      theory_Y[i] = theory_factor * (std::pow(x, 4) - 4 * L * std::pow(x, 3) + 6 * L * L * std::pow(x, 2)); 
+    }
+  }
+  else if (force_style == 2) {
+
+    // create pure end moment theory curve
+    for (int i = 0; i < num; i++) {
+
+      double theory_factor = (force / (2.0 * j_.dim.EI));
+      double x = L * ((i / (float) (num - 1)));
+      theory_X[i] = x;
+      theory_Y[i] = theory_factor * (std::pow(x, 2)); 
+    }
+  }
+  else {
+    std::cout << "force_style = " << force_style << '\n';
+      throw std::runtime_error("force style was not valid in fill_theory_curve(...)");
   }
 }
 

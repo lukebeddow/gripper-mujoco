@@ -59,6 +59,9 @@ print(f"Force style is {args.force_style}")
 get_data = True
 get_converged = True
 
+# take care with overwrites
+overwrite = True
+
 if not get_data or not get_converged:
 
   default_name_style = "pickle_thickness_{0:.1f}mm_width_{1:.0f}mm.pickle"
@@ -115,7 +118,6 @@ if not get_data or not get_converged:
   else:
     raise RuntimeError("no finger thickness matches")
 
-
 # In[3]:
 
 
@@ -164,7 +166,7 @@ REAL_xy = [
 
 
 def run_curve_data(mjenv, segments, converge_to=None, converge_target_accuracy=5e-4, 
-                   auto=True, stiffness=-7.5, UDL=False):
+                   auto=True, stiffness=-7.5, force_style=0):
   """
   This function returns a data structure containing curve validation data for
   a given mjenv across a given list of segments eg [5, 10, 15, 20]
@@ -174,6 +176,9 @@ def run_curve_data(mjenv, segments, converge_to=None, converge_target_accuracy=5
 
   # turn on automatic finding of highest stable timestep
   mjenv.mj.set.auto_set_timestep = auto
+
+  # turn off automatic finding of calibrations as they are not needed
+  mjenv.mj.set.auto_calibrate_gauges = False
 
   # set finger stiffness style (-7.5=final theory, -100=hardcoded real, -101=hardcoded theory)
   mjenv.mj.set.finger_stiffness = stiffness
@@ -227,7 +232,6 @@ def run_curve_data(mjenv, segments, converge_to=None, converge_target_accuracy=5
       print("Curve validation running for N =", N, "\t N in sim is", mjenv.mj.get_N(), flush=True)
 
     print_out = False
-    force_style = 1 if UDL else 0
     finger_data = mjenv.mj.curve_validation_regime(print_out, force_style)
     data.append(finger_data)
 
@@ -255,7 +259,7 @@ accuracy = None
 if get_data:
   data = run_curve_data(mj, segments, auto=auto_timestep, stiffness=finger_stiffness, 
                         converge_to=converge, converge_target_accuracy=accuracy, 
-                        UDL=True if args.force_style == 1 else False)
+                        force_style=args.force_style)
 
 
 # In[7]:
@@ -285,12 +289,12 @@ def plot_deflection(data, entries=None, pred=False, theory=True, FEA=None, real=
     for j, ind in enumerate(entries):
 
       # lets start by plotting a basic example
-      x =        1e3 * np.array(data[ind].entries[force - 1].f1.x)
-      y =        1e3 * np.array(data[ind].entries[force - 1].f1.y)
-      pred_x =   1e3 * np.array(data[ind].entries[force - 1].f1.pred_x)
-      pred_y =   1e3 * np.array(data[ind].entries[force - 1].f1.pred_y)
-      theory_x = 1e3 * np.array(data[ind].entries[force - 1].f1.theory_x_curve)
-      theory_y = 1e3 * np.array(data[ind].entries[force - 1].f1.theory_y_curve)
+      x =        1e3 * np.array(data[ind].entries[force - 1].f2.x)
+      y =        1e3 * np.array(data[ind].entries[force - 1].f2.y)
+      pred_x =   1e3 * np.array(data[ind].entries[force - 1].f2.pred_x)
+      pred_y =   1e3 * np.array(data[ind].entries[force - 1].f2.pred_y)
+      theory_x = 1e3 * np.array(data[ind].entries[force - 1].f2.theory_x_curve)
+      theory_y = 1e3 * np.array(data[ind].entries[force - 1].f2.theory_y_curve)
 
       if pred is True:
         axs[j][i].plot(pred_x,   pred_y,   "r--*", label="model predictions")
@@ -306,10 +310,10 @@ def plot_deflection(data, entries=None, pred=False, theory=True, FEA=None, real=
         axs[j][i].plot(real[force - 1][:,0], real[force - 1][:,1], label="Real")
 
       # add error labelling, not currently wanted
-      # axs[j][i].text(0.005, data[ind].entries[force - 1].f1.theory_y[-1] * 0.4,
-      #   f"mujoco stddev wrt model= {1000 * data[ind].entries[force - 1].f1.error.std_y_wrt_pred_y:.2f}mm\n" +
-      #   f"mujoco stddev wrt theory = {1000 * data[ind].entries[force - 1].f1.error.std_y_wrt_theory_y:.2f}mm\n" +
-      #   f"model stddev wrt theory = {1000 * data[ind].entries[force - 1].f1.error.std_y_pred_wrt_theory_y:.2f}mm",
+      # axs[j][i].text(0.005, data[ind].entries[force - 1].f2.theory_y[-1] * 0.4,
+      #   f"mujoco stddev wrt model= {1000 * data[ind].entries[force - 1].f2.error.std_y_wrt_pred_y:.2f}mm\n" +
+      #   f"mujoco stddev wrt theory = {1000 * data[ind].entries[force - 1].f2.error.std_y_wrt_theory_y:.2f}mm\n" +
+      #   f"model stddev wrt theory = {1000 * data[ind].entries[force - 1].f2.error.std_y_pred_wrt_theory_y:.2f}mm",
       #   fontsize=14)
 
       # adjusting axis settings
@@ -325,7 +329,7 @@ def plot_deflection(data, entries=None, pred=False, theory=True, FEA=None, real=
         axs[j][i].set_title(f"Applied force = {force * 100} grams", fontsize=20)
         # axs[j][i].set_title(f"{force * 100} grams", fontsize=20)
       if i == 0:
-        temp_N = len(data[ind].entries[force - 1].f1.y) - 1
+        temp_N = len(data[ind].entries[force - 1].f2.y) - 1
         axs[j][i].set_ylabel(f"N = {temp_N}", fontsize=20, rotation=90)
 
   fig.set_size_inches(12, 2*plot_size)
@@ -384,32 +388,32 @@ def plot_errors(data, plot=None, y_vs_pred=True, y_vs_theory=True, pred_vs_theor
 
   for i in range(num_sets):
 
-    sets_N.append(len(data[i].entries[0].f1.y) - 1)
+    sets_N.append(len(data[i].entries[0].f2.y) - 1)
 
     for j in range(len(forces)):
 
       if plot == "joints":
         # joint error std dev in millimeters
         if percent:
-          y_wrt_pred_y[i, j] = data[i].entries[forces[j] - 1].f1.error.y_wrt_pred_y_percent * 100
-          y_wrt_theory_y[i, j] = data[i].entries[forces[j] - 1].f1.error.y_wrt_theory_y_percent * 100
-          y_pred_wrt_theory_y[i, j] = data[i].entries[forces[j] - 1].f1.error.y_pred_wrt_theory_y_percent * 100
-          j_wrt_pred_j[i, j] = data[i].entries[forces[j] - 1].f1.error.j_wrt_pred_j_percent * 100
+          y_wrt_pred_y[i, j] = data[i].entries[forces[j] - 1].f2.error.y_wrt_pred_y_percent * 100
+          y_wrt_theory_y[i, j] = data[i].entries[forces[j] - 1].f2.error.y_wrt_theory_y_percent * 100
+          y_pred_wrt_theory_y[i, j] = data[i].entries[forces[j] - 1].f2.error.y_pred_wrt_theory_y_percent * 100
+          j_wrt_pred_j[i, j] = data[i].entries[forces[j] - 1].f2.error.j_wrt_pred_j_percent * 100
         else:
-          y_wrt_pred_y[i, j] = data[i].entries[forces[j] - 1].f1.error.y_wrt_pred_y * 1000
-          y_wrt_theory_y[i, j] = data[i].entries[forces[j] - 1].f1.error.y_wrt_theory_y * 1000
-          y_pred_wrt_theory_y[i, j] = data[i].entries[forces[j] - 1].f1.error.y_pred_wrt_theory_y * 1000
-          j_wrt_pred_j[i, j] = data[i].entries[forces[j] - 1].f1.error.j_wrt_pred_j * 1000
+          y_wrt_pred_y[i, j] = data[i].entries[forces[j] - 1].f2.error.y_wrt_pred_y * 1000
+          y_wrt_theory_y[i, j] = data[i].entries[forces[j] - 1].f2.error.y_wrt_theory_y * 1000
+          y_pred_wrt_theory_y[i, j] = data[i].entries[forces[j] - 1].f2.error.y_pred_wrt_theory_y * 1000
+          j_wrt_pred_j[i, j] = data[i].entries[forces[j] - 1].f2.error.j_wrt_pred_j * 1000
       elif plot == "tip":
         # Tip y error percentage
         if percent:
-          y_wrt_pred_y[i, j] = data[i].entries[forces[j] - 1].f1.error.y_tip_wrt_pred_y_percent * -100
-          y_wrt_theory_y[i, j] = data[i].entries[forces[j] - 1].f1.error.y_tip_wrt_theory_y_percent * -100
-          y_pred_wrt_theory_y[i, j] = data[i].entries[forces[j] - 1].f1.error.y_pred_tip_wrt_theory_y_percent * -100
+          y_wrt_pred_y[i, j] = data[i].entries[forces[j] - 1].f2.error.y_tip_wrt_pred_y_percent * -100
+          y_wrt_theory_y[i, j] = data[i].entries[forces[j] - 1].f2.error.y_tip_wrt_theory_y_percent * -100
+          y_pred_wrt_theory_y[i, j] = data[i].entries[forces[j] - 1].f2.error.y_pred_tip_wrt_theory_y_percent * -100
         else:
-          y_wrt_pred_y[i, j] = data[i].entries[forces[j] - 1].f1.error.y_tip_wrt_pred_y * -1000
-          y_wrt_theory_y[i, j] = data[i].entries[forces[j] - 1].f1.error.y_tip_wrt_theory_y * -1000
-          y_pred_wrt_theory_y[i, j] = data[i].entries[forces[j] - 1].f1.error.y_pred_tip_wrt_theory_y * -1000
+          y_wrt_pred_y[i, j] = data[i].entries[forces[j] - 1].f2.error.y_tip_wrt_pred_y * -1000
+          y_wrt_theory_y[i, j] = data[i].entries[forces[j] - 1].f2.error.y_tip_wrt_theory_y * -1000
+          y_pred_wrt_theory_y[i, j] = data[i].entries[forces[j] - 1].f2.error.y_pred_tip_wrt_theory_y * -1000
 
   # do we convert to absolute error
   if absolute_error:
@@ -520,7 +524,7 @@ accuracy = None
 if get_converged:
   data_converged = run_curve_data(mj, segments, converge_to=converge_force, auto=auto_timestep, 
                                   stiffness=finger_stiffness,
-                                  UDL=True if args.force_style == 1 else False)
+                                  force_style=args.force_style)
 
 
 # In[11]:
@@ -579,30 +583,30 @@ def plot_avg_errors(data_array, labels, titles=None, joint_plot=True, tip_plot=T
 
   for i in range(num_sets):
 
-    sets_N.append(len(data_array[k][i].entries[0].f1.y) - 1)
+    sets_N.append(len(data_array[k][i].entries[0].f2.y) - 1)
 
     for j in range(len(forces)):
       for k in range(len(data_array)):
 
         # joint error std dev in millimeters
         if joint_percent:
-          joint_vec[k][0][i, j] = data_array[k][i].entries[forces[j] - 1].f1.error.y_wrt_pred_y_percent * 100
-          joint_vec[k][1][i, j] = data_array[k][i].entries[forces[j] - 1].f1.error.y_wrt_theory_y_percent * 100
-          joint_vec[k][2][i, j] = data_array[k][i].entries[forces[j] - 1].f1.error.y_pred_wrt_theory_y_percent * 100
+          joint_vec[k][0][i, j] = data_array[k][i].entries[forces[j] - 1].f2.error.y_wrt_pred_y_percent * 100
+          joint_vec[k][1][i, j] = data_array[k][i].entries[forces[j] - 1].f2.error.y_wrt_theory_y_percent * 100
+          joint_vec[k][2][i, j] = data_array[k][i].entries[forces[j] - 1].f2.error.y_pred_wrt_theory_y_percent * 100
         else:
-          joint_vec[k][0][i, j] = data_array[k][i].entries[forces[j] - 1].f1.error.y_wrt_pred_y * 1000
-          joint_vec[k][1][i, j] = data_array[k][i].entries[forces[j] - 1].f1.error.y_wrt_theory_y * 1000
-          joint_vec[k][2][i, j] = data_array[k][i].entries[forces[j] - 1].f1.error.y_pred_wrt_theory_y * 1000
+          joint_vec[k][0][i, j] = data_array[k][i].entries[forces[j] - 1].f2.error.y_wrt_pred_y * 1000
+          joint_vec[k][1][i, j] = data_array[k][i].entries[forces[j] - 1].f2.error.y_wrt_theory_y * 1000
+          joint_vec[k][2][i, j] = data_array[k][i].entries[forces[j] - 1].f2.error.y_pred_wrt_theory_y * 1000
 
         # Tip y error percentage
         if tip_percent:
-          tip_vec[k][0][i, j] = data_array[k][i].entries[forces[j] - 1].f1.error.y_tip_wrt_pred_y_percent * -100
-          tip_vec[k][1][i, j] = data_array[k][i].entries[forces[j] - 1].f1.error.y_tip_wrt_theory_y_percent * -100
-          tip_vec[k][2][i, j] = data_array[k][i].entries[forces[j] - 1].f1.error.y_pred_tip_wrt_theory_y_percent * -100
+          tip_vec[k][0][i, j] = data_array[k][i].entries[forces[j] - 1].f2.error.y_tip_wrt_pred_y_percent * -100
+          tip_vec[k][1][i, j] = data_array[k][i].entries[forces[j] - 1].f2.error.y_tip_wrt_theory_y_percent * -100
+          tip_vec[k][2][i, j] = data_array[k][i].entries[forces[j] - 1].f2.error.y_pred_tip_wrt_theory_y_percent * -100
         else:
-          tip_vec[k][0][i, j] = data_array[k][i].entries[forces[j] - 1].f1.error.y_tip_wrt_pred_y * -1000
-          tip_vec[k][1][i, j] = data_array[k][i].entries[forces[j] - 1].f1.error.y_tip_wrt_theory_y * -1000
-          tip_vec[k][2][i, j] = data_array[k][i].entries[forces[j] - 1].f1.error.y_pred_tip_wrt_theory_y * -1000
+          tip_vec[k][0][i, j] = data_array[k][i].entries[forces[j] - 1].f2.error.y_tip_wrt_pred_y * -1000
+          tip_vec[k][1][i, j] = data_array[k][i].entries[forces[j] - 1].f2.error.y_tip_wrt_theory_y * -1000
+          tip_vec[k][2][i, j] = data_array[k][i].entries[forces[j] - 1].f2.error.y_pred_tip_wrt_theory_y * -1000
 
   # convert to absolute errors
   if absolute_error:
@@ -706,10 +710,6 @@ plot_avg_errors(avg_data, labels, joint_percent=False, tip_percent=False)
 
 
 # In[ ]:
-
-
-# take care with overwrites
-overwrite = True
 
 if args.end != "": args.end = "_" + args.end
 args.end += ".pickle"
