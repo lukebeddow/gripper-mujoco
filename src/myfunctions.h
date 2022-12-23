@@ -69,6 +69,7 @@ void get_joint_indexes(mjModel* model);
 void get_joint_addresses(mjModel* model);
 void get_geom_indexes(mjModel* model);
 bool change_finger_thickness(float thickness);
+bool change_finger_width(float width);
 void set_finger_stiffness(mjModel* model, mjtNum stiffness);
 void set_finger_stiffness(mjModel* model, std::vector<luke::gfloat> stiffness);
 void configure_qpos(mjModel* model, mjData* data);
@@ -84,12 +85,15 @@ void set_constraint(mjModel* model, mjData* data, int id, bool set_as);
 void target_constraint(mjModel* model, mjData* data, int id, bool set_as, int type);
 void apply_tip_force(mjModel* model, mjData* data, double force, bool reset = false);
 
-void apply_segment_force(mjModel* model, mjData* data, int seg_num, float force);
-void set_segment_force(int seg_num, bool set_as, float force);
+void apply_segment_force(mjModel* model, mjData* data, int seg_num, double force,
+  double moment = 0);
+void set_segment_force(int seg_num, bool set_as, double force);
+void set_segment_moment(int seg_num, bool set_as, double moment);
 void resolve_segment_forces(mjModel* model, mjData* data);
-void apply_UDL(double total_force);
+void apply_UDL(double force_per_m);
 void wipe_segment_forces();
 void apply_tip_force(double force);
+void apply_tip_moment(double moment);
 
 // simulation
 void before_step(mjModel* model, mjData* data);
@@ -152,9 +156,9 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
   std::vector<float>& joint_angles, std::vector<float>& joint_pred,
   std::vector<float>& pred_x, std::vector<float>& pred_y, std::vector<float>& theory_y,
   std::vector<float>& theory_x_curve, std::vector<float>& theory_y_curve,
-  float force, float finger_stiffness);
+  float force, float finger_stiffness, int force_style = 0);
 void fill_theory_curve(std::vector<float>& theory_X, std::vector<float>& theory_Y, 
-  float force, int num);
+  float force, int num, int force_style = 0);
 std::vector<float> discretise_curve(std::vector<float> X, std::vector<float> truth_X, 
   std::vector<float> truth_Y);
 int last_action_robot();

@@ -46,10 +46,11 @@ class MjEnv():
     task_reload_chance: float = 1.0 / float(test_obj_per_file)
     test_trials_per_object: int = 1
     test_objects: int = 100
-    num_segments: int = 6
+    num_segments: int = 8
     finger_thickness: float = 0.9e-3
+    finger_width: float = 28e-3
 
-  def __init__(self, seed=None, noload=None, num_segments=None):
+  def __init__(self, seed=None, noload=None, num_segments=None, finger_width=None):
     """
     A mujoco environment, optionally set the random seed or prevent loading a
     model, in which case the user should call load() before using the class
@@ -74,6 +75,10 @@ class MjEnv():
     if num_segments == None: self.load_num_segments = self.params.num_segments
     else: self.load_num_segments = num_segments
 
+    # what finger width to load, default is params.finger_width
+    if finger_width == None: self.load_finger_width = self.params.finger_width
+    else: self.load_finger_width = finger_width
+
     # calculate how many files we need to reserve for testing
     self.testing_xmls = int(np.ceil(self.params.test_objects / float(self.params.test_obj_per_file)))
     
@@ -97,20 +102,62 @@ class MjEnv():
 
   # ----- semi-private functions, advanced use ----- #
 
-  def _set_num_segments(self, N):
+  def _set_finger_variables(self, num_segments=None, width=None):
     """
-    Set the number of segments in use, typically should be from 5-30 but depends on object set.
-    None means we are using an old object set where we cannot choose the number of segments.
-    This functionality can be removed once backwards compatibility is not needed.
+    Set the number of segments in use and also the finger width. The available
+    options will depend on the object set chosen, None means use the value in
+    params
     """
 
-    if N is None:
-      self.task_xml_folder = "task" # old default folder for gripper files
-      self.load_num_segments = None
-      return
+    debug_fcn = False
 
-    self.task_xml_folder = self.task_folder_template.format(N)
-    self.load_num_segments = N
+    if num_segments is None: num_segments = self.params.num_segments
+    if width is None: width = self.params.finger_width
+
+    # ensure width is in integer millimeters
+    if width < 1:
+      width = int(width * 1000)
+    if isinstance(width, float):
+      width = int(width)
+
+    if debug_fcn:
+      print(f"_set_finger_variables fcn input: num_segments={num_segments}, width={width}")
+
+    # determine if object set has multiple widths available
+    task_path = self.mj.model_folder_path + "/" + self.mj.object_set_name
+    task_folders = [x for x in os.listdir(task_path) if os.path.isdir(task_path + "/" + x) is True
+                                                      and x.startswith("gripper")]
+    width_options = []
+    for folder in task_folders:
+      namesplit = folder.split("_")
+      if len(namesplit) == 3:
+        if int(namesplit[2]) not in width_options:
+          width_options.append(int(namesplit[2]))
+
+    if debug_fcn:
+      print("task folders are", task_folders)
+      print("width options are", width_options)
+
+    # apply the chosen width option
+    if width_options == []:
+      self.load_finger_width = 28e-3 # hardcoded default
+      self.task_xml_folder = self.task_folder_template.format(num_segments)
+      if width != 28:
+        print(f"MjEnv warning: selected finger width of {width} is not available from this object set")
+    else:
+      if width in width_options:
+        self.load_finger_width = width * 1e-3 # convert from mm to m
+        self.task_xml_folder = self.task_folder_template.format("{0}_{1}".format(num_segments, width))
+      else:
+        raise RuntimeError(f"chosen width of {width} not found amoung width options: {width_options}")
+
+    # apply the selected finger width in mujoco (EI change requires reset to finalise)
+    self.mj.set_finger_width(self.load_finger_width)
+    self.params.finger_width = self.load_finger_width
+
+    if debug_fcn:
+      print("the width which will be loaded is:", self.load_finger_width)
+      print("final task_xml_folder is:", self.task_xml_folder)
 
   def _load_xml(self, test=None, index=None):
     """
@@ -140,10 +187,12 @@ class MjEnv():
     # get the number of segments currently in use
     self.params.num_segments = self.mj.get_N()
 
-  def _load_object_set(self, name=None, mjcf_path=None, num_segments=-1):
+  def _load_object_set(self, name=None, mjcf_path=None, num_segments=None, finger_width=None):
     """
     Load and determine how many model xml files are in the object set
     """
+
+    debug_fcn = False
 
     # if a mjcf_path is given, override, otherwise we use default
     if mjcf_path != None: self.mj.model_folder_path = mjcf_path
@@ -151,10 +200,8 @@ class MjEnv():
     # if a object set name is given, override, otherwise we use default
     if name != None: self.mj.object_set_name = name
 
-    # how many segments will we use (None means use 'task' folder)
-    if num_segments == -1: load_num_segments = self.load_num_segments
-    else: load_num_segments = num_segments
-    self._set_num_segments(load_num_segments)
+    # how many segments and what finger width are in use
+    self._set_finger_variables(num_segments=num_segments, width=finger_width)
 
     # check the mjcf_path is correctly formatted
     if self.mj.model_folder_path[-1] != '/':
@@ -167,6 +214,10 @@ class MjEnv():
     # find out how many xmls are available for training/testing
     xml_files = [x for x in os.listdir(self.xml_path) if os.path.isdir(self.xml_path + "/" + x) is False]
     self.training_xmls = len(xml_files) - self.testing_xmls
+
+    if debug_fcn:
+      print("_load_object_set gives xml path:", self.xml_path)
+      print(f"Training xmls: {self.training_xmls}, testing xmls: {self.testing_xmls}")
 
     if self.training_xmls < 1:
       raise RuntimeError(f"enough training xmls failed to be found in MjEnv at: {self.xml_path}")
@@ -673,22 +724,38 @@ class MjEnv():
 
     return asdict(self.params)
 
-  def load(self, object_set_name=None, object_set_path=None, index=None, num_segments=None):
+  def load(self, object_set_name=None, object_set_path=None, index=None, 
+           num_segments=None, finger_width=None, finger_thickness=None):
     """
     Load and prepare the mujoco environment, uses defaults if arguments are not given.
     This function sets the 'params' for the class as well.
     """
 
+    # old code compatibility: can delete once all models have finger width options
+    try:
+      test1 = self.load_finger_width
+      test2 = self.params.finger_width
+    except AttributeError as e:
+      print("MjEnv old code catch, error is:", e)
+      self.load_finger_width = 28e-3
+      self.params.finger_width = 28e-3
+
     # if not given an input, use class value
     if num_segments is None: set_N = self.load_num_segments
     else: set_N = num_segments
 
+    if finger_width is None: set_W = self.load_finger_width
+    else: set_W = finger_width
+
+    if finger_thickness is None: set_T = self.params.finger_thickness
+    else: set_T = finger_thickness
+
     # set the finger thickness (changes only applied upon reset(), causes hard_reset() if changed)
-    self.mj.set_finger_thickness(self.params.finger_thickness)
+    self.mj.set_finger_thickness(set_T)
     self.params.finger_thickness = self.mj.get_finger_thickness()
 
     self._load_object_set(name=object_set_name, mjcf_path=object_set_path,
-                          num_segments=set_N)
+                          num_segments=set_N, finger_width=set_W)
     self._load_xml(index=index)  
 
     # auto generated parameters
@@ -792,9 +859,15 @@ if __name__ == "__main__":
 
   # import pickle
 
-  mj = MjEnv()
+  mj = MjEnv(noload=True)
 
-  
+  mj.load_finger_width = 24e-3
+
+  mj.load("set_fullset_795", num_segments=7, finger_width=None, finger_thickness=1.0e-3)
+
+  exit()
+
+
   # mj.mj.set.set_sensor_prev_steps_to(3)
   mj.mj.set.sensor_n_prev_steps = 1
   mj.mj.set.state_n_prev_steps = 1

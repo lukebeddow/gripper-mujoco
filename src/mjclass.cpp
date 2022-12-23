@@ -96,9 +96,9 @@ void MjClass::configure_settings()
 {
   /* apply simulation settings */
 
-  // if thickness has changed, we should recalibrate timestep/sim steps/gauges etc
-  if (resetFlags.finger_thickness_changed) {
-    resetFlags.finger_thickness_changed = false;
+  // if finger stiffness has changed, we should recalibrate timestep/sim steps/gauges etc
+  if (resetFlags.finger_EI_changed) {
+    resetFlags.finger_EI_changed = false;
     hard_reset(); // this calls reset()->configure_settings()
     return;
   }
@@ -368,7 +368,7 @@ void MjClass::reset()
 
   // reset the simulation
   luke::reset(model, data);
-
+  
   // reset sensor saved data
   finger1_gauge.reset();
   finger2_gauge.reset();
@@ -426,32 +426,10 @@ void MjClass::hard_reset()
   // reinitialise the joint settings structure
   luke::init_J(model, data);
 
-  // reset the tip force function
-  luke::apply_tip_force(model, data, 0, true);
-
   // we want to reset the auto setting flags to original values
   resetFlags.flags_init = false;
 
   // regular reset code
-  reset();
-}
-
-void MjClass::reset_timestep()
-{
-  /* reset the environment and also recalibrate the timestep */
-
-  // set flags to recalibrate timestep and sim steps
-  resetFlags.auto_timestep = true;
-  resetFlags.auto_simsteps = true;
-
-  /* delete this: testing confirmed that the bug where loaded models did not
-  perform the correct actions was due to this offset not being saved when models
-  are pickled. The fix is to add it to bind.cpp pickle, but this makes things
-  backwards incompatible. So delete this code when that is all solved */
-  // s_.wrist_sensor_Z.raw_value_offset = -23.0;
-  // std::cout << "MjClass auto-setting: Wrist Z sensor offset set to: " 
-  //       << s_.wrist_sensor_Z.raw_value_offset << '\n';
-
   reset();
 }
 
@@ -464,9 +442,6 @@ void MjClass::step()
   luke::before_step(model, data);
 
   if (s_.curve_validation) {
-
-    // // if doing curve validation, can apply a set tip force
-    // luke::apply_tip_force(model, data, s_.tip_force_applied);
 
     // can apply forces on finger segments, eg tip force
     luke::resolve_segment_forces(model, data);
@@ -1933,7 +1908,7 @@ MjType::TestReport MjClass::get_test_report()
   return testReport_;
 }
 
-MjType::CurveFitData::PoseData MjClass::validate_curve()
+MjType::CurveFitData::PoseData MjClass::validate_curve(int force_style)
 {
   /* for testing the curvature of the fingers */
 
@@ -1950,15 +1925,15 @@ MjType::CurveFitData::PoseData MjClass::validate_curve()
   luke::verify_small_angle_model(data, 0, pose.f1.joints, 
     pose.f1.pred_j, pose.f1.pred_x, pose.f1.pred_y, pose.f1.theory_y,
     pose.f1.theory_x_curve, pose.f1.theory_y_curve,
-    s_.tip_force_applied, s_.finger_stiffness);
+    s_.tip_force_applied, s_.finger_stiffness, force_style);
   luke::verify_small_angle_model(data, 1, pose.f2.joints, 
     pose.f2.pred_j, pose.f2.pred_x, pose.f2.pred_y, pose.f2.theory_y,
     pose.f2.theory_x_curve, pose.f2.theory_y_curve,
-    s_.tip_force_applied, s_.finger_stiffness);
+    s_.tip_force_applied, s_.finger_stiffness, force_style);
   luke::verify_small_angle_model(data, 2, pose.f3.joints, 
     pose.f3.pred_j, pose.f3.pred_x, pose.f3.pred_y, pose.f3.theory_y,
     pose.f3.theory_x_curve, pose.f3.theory_y_curve,
-    s_.tip_force_applied, s_.finger_stiffness);
+    s_.tip_force_applied, s_.finger_stiffness, force_style);
 
   // TESTING: replace theory with new points (more accurate)
   pose.f1.theory_y = luke::discretise_curve(pose.f1.x, pose.f1.theory_x_curve,
@@ -1977,10 +1952,15 @@ MjType::CurveFitData::PoseData MjClass::validate_curve()
   return pose;
 }
 
-MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force)
+MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force, int force_style)
 {
   /* determine the cubic fit error and displacement of the fingers under
-  a given force */
+  a given force
+  
+  force_style:    0 = tip force
+                  1 = UDL
+                  2 = tip moment
+  */
 
   bool dynamic_timestep_adjustment = true;
   int dynamic_repeats_allowed = 5;
@@ -1991,14 +1971,20 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force)
   s_.tip_force_applied = force;
 
   // step the simulation to allow the forces to settle
-  float time_to_settle = 2;
+  float time_to_settle = 20;
   int steps_to_make = time_to_settle / s_.mujoco_timestep;
   // std::cout << "Stepping for " << steps_to_make << " steps to allow settling\n";
 
   while (true) {
 
-    // luke::apply_tip_force(force);
-    luke::apply_UDL(force * 3);
+    // what is the loading condition
+    if (force_style == 0) luke::apply_tip_force(force);
+    else if (force_style == 1) luke::apply_UDL(force);
+    else if (force_style == 2) luke::apply_tip_moment(force);
+    else {
+      std::cout << "force_style = " << force_style << '\n';
+      throw std::runtime_error("force style was not valid in validate_curve_under_force(...)");
+    }
 
     for (int i = 0; i < steps_to_make; i++) {
 
@@ -2024,7 +2010,7 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force)
 
   // evaluate the finger pose
   MjType::CurveFitData::PoseData pose;
-  pose = validate_curve();
+  pose = validate_curve(force_style);
   pose.tag_string = "Force is " + std::to_string(force) + " N";
 
   // turn off curve validation mode
@@ -2034,7 +2020,7 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force)
   return pose;
 }
 
-MjType::CurveFitData MjClass::curve_validation_regime(bool print)
+MjType::CurveFitData MjClass::curve_validation_regime(bool print, int force_style)
 {
   /* peform test battery to validate finger bending, print is false by default */
 
@@ -2047,10 +2033,22 @@ MjType::CurveFitData MjClass::curve_validation_regime(bool print)
   // NOTE: not forces in newtons, these are 100/200/300/400g (ie 0.981*1/2/3/4)
   std::vector<float> forces { 1 * 0.981, 2 * 0.981, 3 * 0.981, 4 * 0.981 };
 
+  // testing: triple the forces for a UDL to get comparable deflection values
+  if (force_style == 1) {
+    for (int i = 0; i < forces.size(); i++) {
+      forces[i] *= 11.3475;
+    }
+  }
+  else if (force_style == 2) {
+    for (int i = 0; i < forces.size(); i++) {
+      forces[i] *= 0.15667;
+    }
+  }
+
   for (float f : forces) {
     
     MjType::CurveFitData::PoseData pose;
-    pose = validate_curve_under_force(f);
+    pose = validate_curve_under_force(f, force_style);
     if (print) pose.print();
     curvedata.entries.push_back(pose);
 
@@ -2096,14 +2094,14 @@ std::string MjClass::numerical_stiffness_converge(float force, float target_accu
 
   bool print = true;            // print out only the final result
   bool print_minimal = true;    // also print out error every 50 loops
-  bool print_detailed = true;  // also print out all possible information every loop
+  bool print_detailed = false;  // also print out all possible information every loop
 
   // use default stiffnesses as initial guess
   std::vector<luke::gfloat> stiffnesses = luke::get_stiffnesses();
   int N = stiffnesses.size();
 
   int loops = 0;
-  int max_loops = 500;
+  int max_loops = 200;
   float max_stiffness = 800;
   float min_stiffness = 0.5;
 
@@ -2557,7 +2555,20 @@ void MjClass::set_finger_thickness(float thickness)
   bool changed = luke::change_finger_thickness(thickness);
 
   // changes are finished upon next call to reset()
-  resetFlags.finger_thickness_changed = changed;
+  if (changed) resetFlags.finger_EI_changed = true;
+}
+
+void MjClass::set_finger_width(float width)
+{
+  /* set a new finger width for the gripper. For the actual width to change a new
+  URDF should have been or about to be loaded. Since EI has changed we need new
+  finger stiffnesses. It will also throw off the gauge calibration so if auto-calibration
+  is on then it recalibrates */
+
+  bool changed = luke::change_finger_width(width);
+
+  // changes are finished upon next call to reset()
+  if (changed) resetFlags.finger_EI_changed = true;
 }
 
 float MjClass::yield_load()
@@ -2634,7 +2645,7 @@ float MjClass::find_highest_stable_timestep()
   constexpr bool debug = true;
 
   float increment = 50e-6;     // 0.05 milliseconds
-  float start_value = 4.0e-3;  // 3.5 millseconds
+  float start_value = 5.0e-3;  // 5 millseconds
   float test_time = 1.0;       // 0.5 seconds
 
   float tune_param = 1.0;       // should be 1.0, reduce to make timestep shorter

@@ -693,7 +693,7 @@ class TrainDQN():
 
   def __init__(self, run_name=None, group_name=None, device=None, use_wandb=None, 
                no_plot=None, log_level=None, object_set=None, use_curriculum=None,
-               num_segments=None, finger_thickness=None):
+               num_segments=None, finger_thickness=None, finger_width=None):
 
     # define key training parameters
     self.params = TrainDQN.Parameters()
@@ -707,6 +707,7 @@ class TrainDQN():
     self.env = MjEnv(noload=True, num_segments=num_segments)
     self.num_segments = num_segments
     self.finger_thickness = finger_thickness
+    self.finger_width = finger_width
 
     # what machine are we on
     self.machine = self.env._get_machine()
@@ -759,9 +760,10 @@ class TrainDQN():
     self.env.mj.set.use_HER = self.params.use_HER
 
     # apply any thickness changes and then load the object set from params
-    if self.finger_thickness is not None: 
-      self.env.params.finger_thickness = self.finger_thickness
-    self.load_object_set(num_segments=self.num_segments)
+    # if self.finger_thickness is not None: 
+    #   self.env.params.finger_thickness = self.finger_thickness
+    self.load_object_set(num_segments=self.num_segments, finger_thickness=self.finger_thickness,
+                         finger_width=self.finger_width)
 
     # now update the environment with correct numbers of actions and observations
     self.env._update_n_actions_obs()
@@ -849,7 +851,8 @@ class TrainDQN():
     else:
       raise RuntimeError("device should be 'cuda' or 'cpu'")
 
-  def load_object_set(self, object_set=None, num_segments=None):
+  def load_object_set(self, object_set=None, num_segments=None, finger_thickness=None,
+                      finger_width=None):
     """
     Load an object set into the simulation
     """
@@ -857,7 +860,8 @@ class TrainDQN():
     if object_set is None: object_set = self.params.object_set[:]
 
     # load the object set and the first xml file
-    self.env.load(object_set_name=object_set, num_segments=num_segments)
+    self.env.load(object_set_name=object_set, num_segments=num_segments,
+                  finger_thickness=finger_thickness, finger_width=finger_width)
 
     # save the changes
     self.params.object_set = object_set
@@ -947,7 +951,11 @@ class TrainDQN():
 
     freq = self.params.wandb_freq_s if force is not True else 0
 
-    self.track.log_wandb(log_frequency=freq)
+    try:
+      self.track.log_wandb(log_frequency=freq)
+    except Exception as e:
+      print("LOG WANDB ERROR:", e)
+      print("Taking no action and continuing with program, tracking data may have issues")
 
     # if we are at the end, log the final best performance
     if end is True:
@@ -1931,12 +1939,12 @@ if __name__ == "__main__":
   # ----- load ----- #
 
   # load
-  folder = "mymujoco"
-  group = "05-12-22"
-  run = "luke-PC_11:39_A1"
   # folder = "mymujoco"
-  # group = "02-12-22"
-  # run = "luke-PC_16:55_A3"
+  # group = "05-12-22"
+  # run = "luke-PC_11:39_A1"
+  folder = "mymujoco"
+  group = "02-12-22"
+  run = "luke-PC_16:55_A3"
   folderpath = f"/home/luke/{folder}/rl/models/dqn/{group}/"
   model.set_device("cuda")
   model.load(id=None, folderpath=folderpath, foldername=run)

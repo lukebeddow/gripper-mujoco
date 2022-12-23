@@ -460,12 +460,13 @@ def logging_job(model, run_name, group_name):
   model.log_wandb(force=True, end=True)
   model.plot(force=True, end=True, hang=True)
 
-def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=networks.DQN_5L100, 
+def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 100, 50], 
                       memory=50_000, state_steps=1, sensor_steps=1, z_state=True, sensor_mode=2,
                       state_mode=1, sensor_noise=0.05, reward_style="mixed_v3", reward_options=[], 
-                      scale_rewards=2.5, scale_penalties=1.0, penalty_termination=False, 
-                      finger_stiffness=-101, num_segments=6, finger_thickness=0.9e-3,
+                      scale_rewards=2.5, scale_penalties=1.0, penalty_termination=False,
+                      finger_stiffness=-7.5, num_segments=6, finger_thickness=0.9e-3,
                       max_episode_steps=250, XYZ_mm_rad=False):
+
   """
   Runs a baseline training on the model
   """
@@ -763,9 +764,12 @@ if __name__ == "__main__":
   model.params.use_curriculum = False
   model.params.num_episodes = 50_000 # was 60k, change to 40k for speed
   # model.env.params.max_episode_steps = 250 # this is hardcoded to override in baseline_settings(...)
-  training_type = "vary action size"
+
+  training_type = "vary sensors and thickness"
   this_segments = 8 # was 8, change to 6 for speed
   this_noise = 0.025 # was 0.05, change to 0.025 for stability
+
+  model.params.object_set = "set6_fullset_800_50i"
   
   # special settings to test new object set, set5_multi_9540
   use_set_5 = False
@@ -786,11 +790,11 @@ if __name__ == "__main__":
       3  # + wrist
     ]
     thickness_list = [
-      0.8e-3,
+      # 0.8e-3,
       0.9e-3,
       1.0e-3
     ]
-    repeats = None
+    repeats = 4
     param_1_name = "Sensors"
     param_2_name = "Thickness"
     param_3_name = None

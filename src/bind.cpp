@@ -30,7 +30,6 @@ PYBIND11_MODULE(bind, m) {
     .def("load_relative", &MjClass::load_relative)
     .def("reset", &MjClass::reset)
     .def("hard_reset", &MjClass::hard_reset)
-    .def("reset_timestep", &MjClass::reset_timestep)
     .def("step", &MjClass::step)
     .def("render", &MjClass::render)
 
@@ -66,6 +65,7 @@ PYBIND11_MODULE(bind, m) {
     .def("get_n_obs", &MjClass::get_n_obs)
     .def("get_N", &MjClass::get_N)
     .def("set_finger_thickness", &MjClass::set_finger_thickness)
+    .def("set_finger_width", &MjClass::set_finger_width)
     .def("get_finger_thickness", &MjClass::get_finger_thickness)
     .def("get_finger_stiffnesses", &MjClass::get_finger_stiffnesses)
 
@@ -93,7 +93,7 @@ PYBIND11_MODULE(bind, m) {
     .def("print", &MjClass::print)
     .def("default_goal_event_triggering", &MjClass::default_goal_event_triggering)
     .def("validate_under_force", &MjClass::validate_curve_under_force)
-    .def("curve_validation_regime", &MjClass::curve_validation_regime)
+    .def("curve_validation_regime", &MjClass::curve_validation_regime, py::arg("print") = false, py::arg("force_style") = 0)
     .def("last_action_gripper", &MjClass::last_action_gripper)
     .def("last_action_panda", &MjClass::last_action_panda)
     .def("get_fingertip_z_height", &MjClass::get_fingertip_z_height)

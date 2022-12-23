@@ -809,8 +809,8 @@ namespace MjType
         // print identifying information
         std::cout << "Finger pose data: \t" << tag_string << '\n';
 
-        // print table data only for finger 1
-        f1.print_table();
+        // print table data only for finger 2
+        f2.print_table();
         
         // update and print error calculations for all three fingers
         calc_error();
@@ -932,7 +932,7 @@ public:
     bool auto_simsteps = false;
     bool auto_exceed_lateral_lim = false;
 
-    bool finger_thickness_changed = false;
+    bool finger_EI_changed = false;
 
   } resetFlags;
 
@@ -993,7 +993,6 @@ public:
   void load_relative(std::string file_path);
   void reset();
   void hard_reset();
-  void reset_timestep();
   void step();
   bool render();
 
@@ -1051,9 +1050,9 @@ public:
   int get_number_of_objects() { return env_.object_names.size(); }
   std::string get_current_object_name() { return env_.obj.name; }
   MjType::TestReport get_test_report();
-  MjType::CurveFitData::PoseData validate_curve();
-  MjType::CurveFitData::PoseData validate_curve_under_force(float force);
-  MjType::CurveFitData curve_validation_regime(bool print = true);
+  MjType::CurveFitData::PoseData validate_curve(int force_style = 0);
+  MjType::CurveFitData::PoseData validate_curve_under_force(float force, int force_style = 0);
+  MjType::CurveFitData curve_validation_regime(bool print = false, int force_style = 0);
   std::string numerical_stiffness_converge(float force, float target_accuracy);
   std::string numerical_stiffness_converge(float force, float target_accuracy, 
     std::vector<float> X, std::vector<float> Y);
@@ -1062,6 +1061,7 @@ public:
   std::vector<float> truth_X, std::vector<float> truth_Y, bool relative);
   void calibrate_simulated_sensors(float bend_gauge_normalise);
   void set_finger_thickness(float thickness);
+  void set_finger_width(float width);
   float yield_load();
   void tick();
   float tock();
