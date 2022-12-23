@@ -1584,8 +1584,14 @@ class TrainDQN():
     # save, log and plot now we are finished
     if self.log_level > 0:
       print("\nTRAINING COMPLETE, finished", i_episode, "episodes\n")
-    self.save(txtstring=f"Training finished after {i_episode} episodes",
-              txtlabel="training_finished")
+  
+    # get some key details to save in a text file now training is finished
+    best_sr, best_ep = self.track.calc_best_performance()
+    finish_txt = f"Training finished after {i_episode} episodes"
+    finish_txt += f"\n\nBest performance was {best_sr} at episode {best_ep}"
+    self.save(txtstring=finish_txt, txtlabel="training_finished")
+
+    # wrap up
     self.env.render()
     self.log_wandb(force=True, end=True)
     self.plot(force=True, end=True, hang=True) # leave plots on screen if we are plotting

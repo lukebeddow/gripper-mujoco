@@ -1971,7 +1971,7 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force, 
   s_.tip_force_applied = force;
 
   // step the simulation to allow the forces to settle
-  float time_to_settle = 20;
+  float time_to_settle = 50;
   int steps_to_make = time_to_settle / s_.mujoco_timestep;
   // std::cout << "Stepping for " << steps_to_make << " steps to allow settling\n";
 
@@ -2029,6 +2029,9 @@ MjType::CurveFitData MjClass::curve_validation_regime(bool print, int force_styl
   bool debug_state = s_.debug;
 
   s_.debug = false;
+
+  // move base to maximum to ensure finger hooks could never touch the ground
+  luke::set_base_to_max_height(data);
 
   // NOTE: not forces in newtons, these are 100/200/300/400g (ie 0.981*1/2/3/4)
   std::vector<float> forces { 1 * 0.981, 2 * 0.981, 3 * 0.981, 4 * 0.981 };
@@ -2644,22 +2647,29 @@ float MjClass::find_highest_stable_timestep()
 
   constexpr bool debug = true;
 
-  float increment = 50e-6;     // 0.05 milliseconds
-  float start_value = 5.0e-3;  // 5 millseconds
-  float test_time = 1.0;       // 0.5 seconds
+  float coarse_increment = 0.5e-3;          // 1 millisecond
+  float fine_increment = 50e-6;             // 0.05 milliseconds
+  float start_value = 1.0e-3;               // 1 millseconds
+  float test_time = 1.0;                    // 1.0 seconds
+  float max_allowable_timestep = 50.0e-3;   // 50 milliseconds
 
-  float tune_param = 1.0;       // should be 1.0, reduce to make timestep shorter
+  float tune_param = 1.0;           // should be 1.0, reduce to make timestep shorter
 
   float next_timestep = start_value;
   bool unstable = false;
 
-  // find stable timestep
-  while (next_timestep > increment) {
+  // are we making coarse or fine increments
+  bool coarse_pass = true;
 
+  // find stable timestep
+  while (true) {
+
+    // prepare and set the new timestep
     int num_steps = (test_time / next_timestep) + 1;
     s_.mujoco_timestep = next_timestep;
     reset();
 
+    // loop and determine if the simulation becomes unstable
     for (int i = 0; i < num_steps; i++) {
 
       step();
@@ -2674,13 +2684,33 @@ float MjClass::find_highest_stable_timestep()
       }
     }
 
+    // if there is instability, propose a new timestep, otherwise break
     if (unstable) {
-      next_timestep -= increment;
+
+      if (coarse_pass) coarse_pass = false;
+
+      // comb down in fine steps
+      next_timestep -= fine_increment;
       unstable = false;
-      continue;
+
     }
     else {
-      break;
+
+      if (coarse_pass) {
+        // search up in coarse steps
+        next_timestep += coarse_increment;
+      }
+      else break; // we are finished
+
+    }
+
+    // check that the next timestep does not violate end conditions
+    if (next_timestep < fine_increment) {
+      throw std::runtime_error("no stable timestep found for the simulation\n");
+    }
+    if (next_timestep > max_allowable_timestep) {
+      next_timestep = max_allowable_timestep;
+      coarse_pass = false;
     }
   }
 
@@ -2689,12 +2719,16 @@ float MjClass::find_highest_stable_timestep()
             next_timestep * 1000, test_time);
   }
 
+  // hand tuned conversions as 1.0 is not long enough to be sure of stability and accuracy
   float factor;
-  if (next_timestep > 3.0e-3) {
+  if (next_timestep <= 3.0e-3) {
+    factor = tune_param * 0.8;
+  }
+  else if (next_timestep > 3.0e-3) {
     factor = tune_param * 0.75;
   }
-  else {
-    factor = tune_param * 0.8; // used to be 0.9
+  else if (next_timestep > 5.0e-3) {
+    factor = tune_param * 0.65;
   }
 
   // for safety, reduce timestep by 10 percent

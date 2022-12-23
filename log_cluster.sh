@@ -5,8 +5,8 @@
 LOADFROM=~/mymujoco/rl/models/dqn/
 MACHINE=luke-PC
 STAGGER=8
-TIMESTAMP=29-11-22-17:31
-JOBS="10"
+TIMESTAMP=21-12-22-17:07
+JOBS="1:32"
 
 cd ~/mymujoco
 

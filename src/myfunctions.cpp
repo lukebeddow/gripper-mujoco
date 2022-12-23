@@ -2414,6 +2414,30 @@ bool set_gripper_target_m_rad(double x, double th, double z)
   return target_.end.set_xyz_m(x, th, z);
 }
 
+bool set_base_target_m(double x, double y, double z)
+{
+  /* specify an x,y,z base target */
+
+  target_.last_robot = Target::Robot::panda;
+
+  /* only z motion currently implemented */
+  target_.base[0] = z;
+
+  // check limits, currently only z movements supported
+  double z_min = luke::Target::base_z_min;
+  double z_max = luke::Target::base_z_max;
+
+  // check if we have gone outside the limits
+  if (target_.base[0] > z_max) {
+    target_.base[0] = z_max;
+    return false;
+  }
+  if (target_.base[0] < z_min) {
+    target_.base[0] = z_min;
+    return false;
+  }
+}
+
 bool move_gripper_target_step(int x, int y, int z)
 {
   /* adjust the gripper target by the indicated number of steps */
@@ -2482,6 +2506,27 @@ void print_target()
 void update_target()
 {
   target_.end.update();
+}
+
+void set_base_to_max_height(mjData* data)
+{
+  /* moves the base position to maximum height, should only ber used for specific
+  tests and not during any grasping */
+
+  // confusingly, for the base down is +ve and up is -ve
+  float max_height = Target::base_z_min;
+
+  // set the base target to maximum
+  set_base_target_m(0, 0, max_height);
+
+  // override qpos for the base to snap model to maximum
+
+  /* ONLY Z MOTION SUPPORTED */
+  if (j_.num.base > 1) {
+    throw std::runtime_error("only z motion supported in set_base_to_max_height(...)");
+  }
+
+  (*j_.to_qpos.base[0]) = max_height; 
 }
 
 /* ----- sensing ------ */

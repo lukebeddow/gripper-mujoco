@@ -116,10 +116,12 @@ void update_constraints(mjModel* model, mjData* data);
 bool set_gripper_target_m(double x, double y, double z);
 bool set_gripper_target_m_rad(double x, double th, double z);
 bool set_gripper_target_step(int x, int y, int z);
+bool set_base_target_m(double x, double y, double z);
 bool move_gripper_target_m(double x, double y, double z);
 bool move_gripper_target_m_rad(double x, double th, double z);
 bool move_gripper_target_step(int x, int y, int z);
 bool move_base_target_m(double x, double y, double z);
+void set_base_to_max_height(mjData* data);
 void print_target();
 void update_target();
 
