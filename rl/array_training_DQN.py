@@ -12,13 +12,20 @@ from random import random
 import networks
 import argparse
 
+global exceed_lims_multiplier
+exceed_lims_multiplier = 1.0
+
 def set_penalties(model, value, done=False, trigger=1, make_binary=None):
   """
   Set penalty rewards with given value, alongside defaults
   """
 
+  # TESTING: extra punishment for exceeding limits (touching table in particular we want to target)
+  global exceed_lims_multiplier
+  print("TESTING: EXCEED_LIMS_MULTIPLIER IS", exceed_lims_multiplier)
+
   # penalties                            reward   done   trigger  min   max  overshoot
-  model.env.mj.set.exceed_limits.set     (value,  done,  trigger)
+  model.env.mj.set.exceed_limits.set     (value * exceed_lims_multiplier,  done,  trigger)
   model.env.mj.set.exceed_axial.set      (value,  done,  trigger, 3.0,  6.0,  -1)
   model.env.mj.set.exceed_lateral.set    (value,  done,  trigger, 4.0,  6.0,  -1) # min and max currently overwritten with (1.0 and 1.5)*yield_load()
   model.env.mj.set.exceed_palm.set       (value,  done,  trigger, 6.0,  15.0, -1)
@@ -664,6 +671,7 @@ if __name__ == "__main__":
   parser.add_argument("-p", "--plot",         action="store_true") # plot to wandb job
   parser.add_argument("-n", "--no-wandb",     action="store_true") # no wandb logging
   parser.add_argument("-H", "--heuristic",    action="store_true") # run a test using heuristic actions
+  parser.add_argument("--program",            default=None)        # program name to select from if..else if
   parser.add_argument("--device",             default=None)        # override device
   parser.add_argument("--savedir",            default=None)        # override save/load directory
   parser.add_argument("--print",              action="store_true") # don't train, print help
@@ -691,6 +699,7 @@ if __name__ == "__main__":
     print(" -> Input arg:", inputarg)
     print(" -> Timestamp is:", timestamp)
     print(" -> Use wandb is:", use_wandb)
+    print(" -> Program name override is:", args.program)
 
   # seperate process for safety
   sleep(inputarg)
@@ -765,7 +774,11 @@ if __name__ == "__main__":
   model.params.num_episodes = 50_000 # was 60k, change to 40k for speed
   # model.env.params.max_episode_steps = 250 # this is hardcoded to override in baseline_settings(...)
 
-  training_type = "vary sensors and thickness"
+  if args.program is None:
+    training_type = "vary_xmas"
+  else:
+    training_type = args.program
+
   this_segments = 8 # was 8, change to 6 for speed
   this_noise = 0.025 # was 0.05, change to 0.025 for stability
 
@@ -930,20 +943,6 @@ if __name__ == "__main__":
       "num_segments" : this_segments
     }
 
-  elif training_type == "bug test":
-
-    param_1 = None
-    param_2 = None
-    param_3 = None
-    param_1_name = None
-    param_2_name = None
-    param_3_name = None
-
-    baseline_args = {
-      "sensor_noise" : this_noise,
-      "num_segments" : 6
-    }
-
   elif training_type == "network architecture":
 
     vary_1 = [
@@ -1007,6 +1006,33 @@ if __name__ == "__main__":
 
     extra_info_string = f"\tNew replay memory size is: {model.params.memory_replay}"
     extra_info_string += f"\n\tNew max episode steps is: {baseline_args['max_episode_steps']}"
+
+  elif training_type == "vary_xmas":
+ 
+    vary_1 = [1, 1.5, 2.0]    # exceed_lims multiplier
+    vary_2 = [0, 1, 2, 3]     # sensors
+    vary_3 = [0.9e-3, 1.0e-3] # thickness
+    repeats = 5               # 120 trainings total
+    param_1_name = "exceed limits multiplier"
+    param_2_name = "sensors"
+    param_3_name = "thickness"
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "XYZ_mm_rad" : True,
+      "max_episode_steps" : 250, # default: scaled below
+      "sensor_noise" : this_noise,
+      "num_segments" : 8,
+      "sensors" : param_2,
+      "finger_thickness" : param_3
+    }
+
+    exceed_lims_multiplier = param_1
+
+    # this setup means no change to replay memory or steps per episode
+    model.env.mj.set.X_action_mm = 1.0
+    model.env.mj.set.Y_action_rad = 0.01
+    model.env.mj.set.Z_action_mm = 2.0
 
   elif training_type == "vary others":
 
