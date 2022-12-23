@@ -17,24 +17,11 @@ def set_penalties(model, value, done=False, trigger=1, make_binary=None):
   Set penalty rewards with given value, alongside defaults
   """
 
-  # # choose penalties ranges based on the desired stable force
-  # min = 0.0
-  # mnf = model.env.mj.set.stable_finger_force
-  # mnp = model.env.mj.set.stable_palm_force
-  # mxf = 2
-  # mxp
-
   # penalties                            reward   done   trigger  min   max  overshoot
   model.env.mj.set.exceed_limits.set     (value,  done,  trigger)
   model.env.mj.set.exceed_axial.set      (value,  done,  trigger, 3.0,  6.0,  -1)
   model.env.mj.set.exceed_lateral.set    (value,  done,  trigger, 4.0,  6.0,  -1) # min and max currently overwritten with (1.0 and 1.5)*yield_load()
   model.env.mj.set.exceed_palm.set       (value,  done,  trigger, 6.0,  15.0, -1)
-
-  # # penalties                            reward   done   trigger  min   max  overshoot
-  # model.env.mj.set.exceed_limits.set     (value,  done,  trigger)
-  # model.env.mj.set.exceed_axial.set      (value,  done,  trigger, 3.0,  6.0,  -1)
-  # model.env.mj.set.exceed_lateral.set    (value,  done,  trigger, 4.0,  6.0,  -1) # min and max currently overwritten with (1.0 and 1.5)*yield_load()
-  # model.env.mj.set.exceed_palm.set       (value,  done,  trigger, sbp,  15.0, -1)
 
   # make rewards binary trigger by setting 'max' to 'min' for immediate saturation
   if make_binary == True:
@@ -55,18 +42,18 @@ def set_bonuses(model, value, make_binary=None):
   model.env.mj.set.target_height.set     (value,  False,   1)
   model.env.mj.set.object_stable.set     (value,  False,   1)
   
+  # # OLD: linear rewards                       reward   done   trigger min   max  overshoot
+  # model.env.mj.set.finger_force.set      (value,  False,   1,    0.2,  1.0,  -1)
+  # model.env.mj.set.palm_force.set        (value,  False,   1,    1.0,  6.0,  -1)
+
+  # NEW IDEA: choose reward ranges based on the desired stable force
+  min = 0.2
+  sbf = model.env.mj.set.stable_finger_force
+  sbp = model.env.mj.set.stable_palm_force
+
   # linear rewards                       reward   done   trigger min   max  overshoot
-  model.env.mj.set.finger_force.set      (value,  False,   1,    0.2,  1.0,  -1)
-  model.env.mj.set.palm_force.set        (value,  False,   1,    1.0,  6.0,  -1)
-
-  # # choose reward ranges based on the desired stable force
-  # min = 0.0
-  # sbf = model.env.mj.set.stable_finger_force
-  # sbp = model.env.mj.set.stable_palm_force
-
-  # # linear rewards                       reward   done   trigger min   max  overshoot
-  # model.env.mj.set.finger_force.set      (value,  False,   1,    min,  sbf,  -1)
-  # model.env.mj.set.palm_force.set        (value,  False,   1,    min,  sbp,  -1)
+  model.env.mj.set.finger_force.set      (value,  False,   1,    min,  sbf,  -1)
+  model.env.mj.set.palm_force.set        (value,  False,   1,    min,  sbp,  -1)
 
   # make linear rewards binary by setting 'max' to 'min' for immediate saturation
   if make_binary == True:
@@ -476,15 +463,16 @@ def logging_job(model, run_name, group_name):
 def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 100, 50], 
                       memory=50_000, state_steps=1, sensor_steps=1, z_state=True, sensor_mode=2,
                       state_mode=1, sensor_noise=0.05, reward_style="mixed_v3", reward_options=[], 
-                      scale_rewards=2.5, scale_penalties=1.0, penalty_termination=False, 
+                      scale_rewards=2.5, scale_penalties=1.0, penalty_termination=False,
                       finger_stiffness=-7.5, num_segments=6, finger_thickness=0.9e-3,
-                      max_episode_steps=250):
+                      max_episode_steps=250, XYZ_mm_rad=False):
+
   """
   Runs a baseline training on the model
   """
 
   # set parameters
-  model.env.mj.set.XYZ_action_mm_rad = False # we do NOT use SI step actions
+  model.env.mj.set.XYZ_action_mm_rad = XYZ_mm_rad # default: we do NOT use SI step actions
   model.env.params.max_episode_steps = max_episode_steps
   model.params.learning_rate = lr
   model.params.eps_decay = eps_decay
@@ -776,6 +764,7 @@ if __name__ == "__main__":
   model.params.use_curriculum = False
   model.params.num_episodes = 50_000 # was 60k, change to 40k for speed
   # model.env.params.max_episode_steps = 250 # this is hardcoded to override in baseline_settings(...)
+
   training_type = "vary sensors and thickness"
   this_segments = 8 # was 8, change to 6 for speed
   this_noise = 0.025 # was 0.05, change to 0.025 for stability
@@ -789,6 +778,8 @@ if __name__ == "__main__":
     model.env.testing_xmls = 15
     model.env.params.test_objects = 300
     model.env.params.task_reload_chance = 1.0 / 20.0
+
+  extra_info_string = ""
 
   if training_type == "vary sensors and thickness":
 
@@ -980,6 +971,43 @@ if __name__ == "__main__":
       "num_segments" : this_segments
     }
 
+  elif training_type == "vary action size":
+
+    vary_1 = [0.7, 1.0]
+    vary_2 = [0.01, 0.02]
+    vary_3 = [1.0, 2.0]
+    repeats = 4
+    param_1_name = "X_action_mm"
+    param_2_name = "Y_action_rad"
+    param_3_name = "Z_action_mm"
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "XYZ_mm_rad" : True,
+      "max_episode_steps" : 250, # default: scaled below
+      "sensor_noise" : this_noise,
+      "num_segments" : 8
+    }
+    model.env.mj.set.X_action_mm = param_1
+    model.env.mj.set.Y_action_rad = param_2
+    model.env.mj.set.Z_action_mm = param_3
+
+    # what is the scale change in our action workspace
+    scale = (0.67 * 0.02 * 1.22) / (param_1 * param_2 * param_3)
+
+    # adjust replay memory to have size based on actions
+    new_mem = int(((scale * model.params.memory_replay // 10000) + 1) * 10000)
+    if new_mem < model.params.memory_replay: new_mem = model.params.memory_replay # only increase size
+    model.params.memory_replay = new_mem
+
+    # adjust steps per episode based on actions size
+    new_steps = int(((scale * baseline_args['max_episode_steps'] // 50) + 1) * 50)
+    if new_steps < baseline_args['max_episode_steps']: new_steps = baseline_args['max_episode_steps']
+    baseline_args['max_episode_steps'] = new_steps
+
+    extra_info_string = f"\tNew replay memory size is: {model.params.memory_replay}"
+    extra_info_string += f"\n\tNew max episode steps is: {baseline_args['max_episode_steps']}"
+
   elif training_type == "vary others":
 
     vary_1 = None
@@ -1012,7 +1040,8 @@ if __name__ == "__main__":
     print("Input arg", args.job)
     print("\t" + param_1_string, end="")
     print("\t" + param_2_string, end="")
-    print("\t" + param_3_string, end="\n")
+    print("\t" + param_3_string, end="")
+    print(extra_info_string)
     exit()
 
   # apply settings and begin training
