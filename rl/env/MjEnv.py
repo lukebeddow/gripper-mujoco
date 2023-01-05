@@ -14,6 +14,10 @@ import time
 import numpy as np
 from dataclasses import dataclass, asdict
 
+# random generators for training time and test time
+random_train = np.random.default_rng()
+random_test = np.random.default_rng() 
+
 class MjEnv():
 
   @dataclass
@@ -40,7 +44,7 @@ class MjEnv():
   @dataclass
   class Parameters:
     # key class parameters with default values
-    max_episode_steps: int = 100
+    max_episode_steps: int = 250
     object_position_noise_mm: int = 10
     test_obj_per_file: int = 20
     task_reload_chance: float = 1.0 / float(test_obj_per_file)
@@ -163,6 +167,9 @@ class MjEnv():
     """
     Load the mujoco instance with the given mjcf xml file name
     """
+
+    global random_train
+
     if index:
       filename = self.task_xml_template.format(index)
     elif test is not None:
@@ -170,7 +177,7 @@ class MjEnv():
       filename = self.task_xml_template.format(test)
     else:
       # get a random task xml file
-      r = np.random.randint(self.testing_xmls, self.testing_xmls + self.training_xmls)
+      r = random_train.integers(self.testing_xmls, self.testing_xmls + self.training_xmls)
       filename = self.task_xml_template.format(r)
 
     if self.log_level > 1: 
@@ -340,18 +347,31 @@ class MjEnv():
     Spawn an object into the simulation randomly
     """
 
-    # randomly generate the object index and (x, y) position
-    noise = self.params.object_position_noise_mm
-    obj_idx = np.random.randint(0, self.num_objects)
-    x_pos_mm = np.random.randint(-noise, noise + 1)
-    y_pos_mm = np.random.randint(-noise, noise + 1)
+    global random_test
+    global random_train
 
-    # randomly choose a z rotation
-    z_rot_rad = np.random.choice([0, 60, 120]) * (np.pi / 180.0)
+    # are we using train or test time random generator
+    if self.test_in_progress:
+      generator = random_test
+    else:
+      generator = random_train
 
     # if we are doing a test, chose a specific object
     if self.test_in_progress:
       obj_idx = self.current_test_trial.obj_idx
+    else:
+      # otherwise choose a random object
+      obj_idx = generator.integers(0, self.num_objects)
+
+    # randomly generate the object (x, y) position
+    noise = self.params.object_position_noise_mm
+    x_pos_mm = generator.integers(-noise, noise + 1)
+    y_pos_mm = generator.integers(-noise, noise + 1)
+
+    # randomly choose a z rotation
+    angle_options = [0, 60, 120]
+    rand_index = generator.integers(0, len(angle_options))
+    z_rot_rad = angle_options[rand_index] * (np.pi / 180.0)
 
     # spawn in the object
     self.mj.spawn_object(obj_idx, x_pos_mm * 1e-3, y_pos_mm * 1e-3, z_rot_rad)
@@ -521,6 +541,8 @@ class MjEnv():
 
     print_on = False
 
+    global random_train
+
     # first, determine what sensors are available
     bending = self.mj.set.bending_gauge.in_use
     palm = self.mj.set.palm_sensor.in_use
@@ -659,7 +681,7 @@ class MjEnv():
 
       # if no sensors, choose random action
       if not bending and not palm and not wrist:
-        choice = np.random.randint(0, 3)
+        choice = random_train.integers(0, 3)
         options = [
           (X_close, "finger X close"),
           (Z_plus, "palm forward"),
@@ -684,6 +706,8 @@ class MjEnv():
     Set the seed for the environment
     """
 
+    global random_train # reseed only the training generator
+
     # if we have not been given a seed
     if seed is None:
       # if we have previously had a seed, reuse the same one (eg reloading from pickle)
@@ -691,10 +715,13 @@ class MjEnv():
         seed = self.myseed
       else:
         # otherwise, get a random seed from [0, maxint]
-        seed = np.random.randint(0, 2_147_483_647)
+        seed = random_train.integers(0, 2_147_483_647) #np.random.randint(0, 2_147_483_647)
 
     # set the python random seed in numpy
-    np.random.seed(seed)
+    # np.random.seed(seed)
+
+    # create a new generator with the given seed
+    random_train = np.random.default_rng(seed)
 
     # set the same cpp random seed (reseeded upon call to reset())
     self.mj.set.random_seed = seed
@@ -709,6 +736,11 @@ class MjEnv():
     """
     Begin test mode, should be called by class user
     """
+
+    # reset the test seed to ensure reproducable object noise every test
+    global random_test
+    test_seed = 13337419
+    random_test = np.random.default_rng(test_seed)
 
     self.current_test_trial = MjEnv.Test()
     self.test_trial_data = []
@@ -814,12 +846,15 @@ class MjEnv():
     Reset the simulation to the start
     """
 
+    global random_train
+
     # reset tracking variables
     self.track = MjEnv.Track()
 
     # there is a small chance we reload a new random task
-    if ((np.random.random() < self.params.task_reload_chance or
-        self.reload_flag) and not self.test_in_progress):
+    if not self.test_in_progress:
+      if (random_train.random() < self.params.task_reload_chance
+          or self.reload_flag):
         self._load_xml()
 
     # reset the simulation and spawn a new random object

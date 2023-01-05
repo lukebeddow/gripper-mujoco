@@ -29,13 +29,13 @@ class ModelSaver:
     self.default_num = 1             # starting number for saving files with numbers
     self.file_ext = ".pbz2" if use_compression else ".pickle" # saved file extension
     self.file_num = "{:03d}"         # digit format for saving files with numbers
-    self.date_str = "%d-%m-%Y-%H:%M" # date string, must be seperated by '-'
+    self.date_str = "%d-%m-%y-%H:%M" # date string, must be seperated by '-'
     self.folder_names = "train_{}/"  # default name of created folders, then formatted with date
 
     # if we are given a root, we can use abs paths not relative
     if not root:
       # assume the root is the path to the current running files
-      self.root = pathhere = os.path.dirname(os.path.abspath(__file__)) + "/"
+      self.root = os.path.dirname(os.path.abspath(__file__)) + "/"
       use_root = False
     else:
       if self.root[-1] != '/': self.root += '/'
@@ -63,6 +63,17 @@ class ModelSaver:
         except FileExistsError:
           # file must have just been created
           pass
+
+  def get_current_path(self):
+    """
+    Get the path that modelsaver is currently using
+    """
+
+    path = self.root + self.path
+    if self.in_folder: path += self.folder
+    if path[-1] != '/': path += '/'
+
+    return path
 
   def get_file_num(self, file):
     """
@@ -301,10 +312,10 @@ class ModelSaver:
     else:
       # if the folder name already exists, add a distinguishing number
       i = 1
-      while os.path.exists(self.path + folder_name[:-1] + f"_{i}"):
+      while os.path.exists(self.path + folder_name + f"_{i}"):
         i += 1
-      os.makedirs(self.path + folder_name[:-1] + f"_{i}")
-      folder_name = folder_name[:-1] + f"_{i}" + '/'
+      os.makedirs(self.path + folder_name + f"_{i}")
+      folder_name = folder_name + f"_{i}" + '/'
 
     # enter the folder
     self.enter_folder(folder_name)
@@ -389,7 +400,7 @@ class ModelSaver:
     Copy a file from one location to the default save location.
     """
 
-    copypath = self.root + self.path
+    copypath = self.path
 
     if self.in_folder: copypath += self.folder
 
@@ -434,7 +445,7 @@ class ModelSaver:
       new_loadpath = self.get_recent_file(loadpath, id)
 
       if new_loadpath == None:
-        print(f"No model found at path {new_loadpath}")
+        print(f"No model found at path {loadpath} with id {id}")
       else:
         loadpath = new_loadpath
 
@@ -450,6 +461,32 @@ class ModelSaver:
 
     return loaded_obj
 
+  def read_textfile(self, name, folderpath=None, foldername=None):
+    """
+    Return the contents of a textfile
+    """
+
+    if folderpath is None: readpath = self.path
+    else: readpath = folderpath
+
+    if readpath[-1] != '/': readpath += '/'
+
+    if foldername is None:
+      if self.in_folder: readpath += self.folder
+    else: readpath += foldername
+
+    if readpath[-1] != '/': readpath += '/'
+
+    try:
+      readname = name + '.txt'
+      # print(f"Reading text file: {readpath + readname}")
+      with open(readpath + readname, 'r') as openfile:
+        txt = openfile.read()
+    except FileNotFoundError as e:
+      print("modelsaver.read_textfile() failed with error:", e)
+      txt = f"file with path: {readpath + readname} not found"
+
+    return txt
 
 if __name__ == "__main__":
 

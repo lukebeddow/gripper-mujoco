@@ -319,11 +319,11 @@ class DQN_7L100(nn.Module):
 
     return x
 
-# --- testing architectures --- #
+# --- variable architecture --- #
 
 class DQN_variable(nn.Module):
 
-  name = "DQN_variable"
+  name = "DQN_"
 
   def __init__(self, layers, device):
 
@@ -333,19 +333,12 @@ class DQN_variable(nn.Module):
     self.linear = []
     for i in range(len(layers) - 1):
       self.linear.append(torch.nn.Linear(layers[i], layers[i + 1]))
-      self.name += f"_{layers[i]}"
-    self.name += f"_{layers[-1]}"
+      if i == 1: self.name += f"{layers[i]}"
+      if i > 1: self.name += f"x{layers[i]}"
 
     self.linear = nn.ModuleList(self.linear)
     self.activation = torch.nn.ReLU()
     self.softmax = torch.nn.Softmax(dim=1)
-
-    # self.linear1 = torch.nn.Linear(inputs, 60)
-    # self.linear2 = torch.nn.Linear(60, 60)
-    # self.linear3 = torch.nn.Linear(60, 60)
-    # self.linear4 = torch.nn.Linear(60, outputs)
-    # self.activation = torch.nn.ReLU()
-    # self.softmax = torch.nn.Softmax(dim=1)
 
   def forward(self, x):
 
@@ -357,15 +350,6 @@ class DQN_variable(nn.Module):
 
     x = self.linear[i + 1](x)
     x = self.softmax(x)
-
-    # x = self.linear1(x)
-    # x = self.activation(x)
-    # x = self.linear2(x)
-    # x = self.activation(x)
-    # x = self.linear3(x)
-    # x = self.activation(x)
-    # x = self.linear4(x)
-    # x = self.softmax(x)
 
     return x
 

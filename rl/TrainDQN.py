@@ -333,7 +333,7 @@ class TrainDQN():
           self.avgS_durations = np.append(self.avgS_durations, avg_d)
           self.avg_time_taken = np.append(self.avg_time_taken, avg_t)
 
-    def calc_best_performance(self, from_episode=None):
+    def calc_best_performance(self, from_episode=None, return_id=None):
       """
       Find the best success rate by the model, and what episode number it occured
       """
@@ -354,6 +354,7 @@ class TrainDQN():
 
       best_sr = 0
       best_ep = 0
+      best_id = 0
 
       # loop through, this is slower than numpy but lets us check for 'from_episode'
       for i, sr in enumerate(success_rate_vector):
@@ -368,6 +369,9 @@ class TrainDQN():
         if sr > best_sr:
           best_sr = sr
           best_ep = this_ep
+          best_id = i
+
+      if return_id: return best_sr, best_ep, best_id
 
       return best_sr, best_ep
 
@@ -548,8 +552,13 @@ class TrainDQN():
         x = np.arange(len(labels))
         width = 0.35
 
-        rects1 = self.axs[ind][0].bar(x - width/2, [*self.category_target_height[-1], self.avg_target_height[-1]], width, label="target height")
-        rects2 = self.axs[ind][0].bar(x + width/2, [*self.category_stable_height[-1], self.avg_stable_height[-1]], width, label="stable height")
+        # best performance can be any metric, lookup specifically stable/target height
+        best_metric, best_ep, best_id = self.calc_best_performance(return_id=True)
+        best_sh = self.avg_stable_height[best_id]
+        best_th = self.avg_target_height[best_id]
+
+        rects1 = self.axs[ind][0].bar(x - width/2, [*self.category_target_height[-1], best_th], width, label="target height")
+        rects2 = self.axs[ind][0].bar(x + width/2, [*self.category_stable_height[-1], best_sh], width, label="stable height")
 
         self.axs[ind][0].set_ylabel("Success rate")
         # self.axs[ind][0].set_xlabel("Object category")
@@ -670,21 +679,27 @@ class TrainDQN():
       # create bar chart to visualise performance on different categories
       if self.plot_bar_chart and len(self.avg_stable_height) > 0:
 
+        # best performance can be any metric, lookup specifically stable/target height
+        best_metric, best_ep, best_id = self.calc_best_performance(return_id=True)
+        best_sh = self.avg_stable_height[best_id]
+        best_th = self.avg_target_height[best_id]
+
         data = [[label, var] for (label, var) in zip(
           [*self.object_categories, "all"],
-          [*self.category_stable_height[-1], self.avg_stable_height[-1]]
+          [*self.category_stable_height[-1], best_sh]
         )]
         table = wandb.Table(data=data, columns=["categories", "success rate"])
         wandb.log({"stable_height_bar_chart" : wandb.plot.bar(table, "categories", "success rate",
                                                    title="Stable height success rate by category")})
 
-        data = [[label, var] for (label, var) in zip(
-          [*self.object_categories, "all"],
-          [*self.category_target_height[-1], self.avg_target_height[-1]]
-        )]
-        table = wandb.Table(data=data, columns=["categories", "success rate"])
-        wandb.log({"target_height_bar_chart" : wandb.plot.bar(table, "categories", "success rate",
-                                                   title="Target height success rate by category")})
+        # # don't plot target height for now as it is confusing
+        # data = [[label, var] for (label, var) in zip(
+        #   [*self.object_categories, "all"],
+        #   [*self.category_target_height[-1], best_th]
+        # )]
+        # table = wandb.Table(data=data, columns=["categories", "success rate"])
+        # wandb.log({"target_height_bar_chart" : wandb.plot.bar(table, "categories", "success rate",
+        #                                            title="Target height success rate by category")})
 
       # finish by recording the last log time
       self.last_log = time.time()
@@ -699,9 +714,11 @@ class TrainDQN():
     self.params = TrainDQN.Parameters()
     self.track = TrainDQN.Tracker()
 
-    # define some class variables
+    # define some hardcoded class variables
     self.log_rate_for_episodes = 25
     self.last_test_data = None
+    self.best_performance_txt_file_name = "best_performance"
+    self.best_performance_template = "Best success rate = {0}\nOccured at episode = {1}"
 
     # prepare environment, but don't load a model xml file yet
     self.env = MjEnv(noload=True, num_segments=num_segments)
@@ -924,8 +941,6 @@ class TrainDQN():
 
       # get best success rate and best episode
       best_sr, best_ep = self.track.calc_best_performance(from_episode=from_episode)
-      self.track.log_performance_scatter(best_ep, best_sr)
-
       print(f"Run best performance is {best_sr} at episode {best_ep} " + print_details)
 
     if hang == True:
@@ -1025,12 +1040,12 @@ class TrainDQN():
 
     # insert string formatting information for each column style
     header_str = col_str.format    ("{}",     "{:<3}", "{:<6}",    "{:<4}",    "{:<3}")
-    normal_row_str = col_str.format("{:<36}", "{:<3}", "{:<6.2f}", "{:<4}",    "{:<3.0f}")
-    avg_row_str = col_str.format   ("{:<36}", "{:<3}", "{:<6.2f}", "{:<4.2f}", "{:<3.0f}")
+    normal_row_str = col_str.format("{:<51}", "{:<3}", "{:<6.2f}", "{:<4}",    "{:<3.0f}")
+    avg_row_str = col_str.format   ("{:<51}", "{:<3}", "{:<6.2f}", "{:<4.2f}", "{:<3.0f}")
 
     # insert the names into the top of each column - notice the grouping of styles
     table_header = header_str.format(
-      "{:<36}",
+      "{:<51}",
       "Num",
       "Reward", "Steps", "Palm f", "Fing.f", 
       "lft", "stb", "oob", "t.h", "s.h", 
@@ -1255,7 +1270,7 @@ class TrainDQN():
       category_table += cat_row
 
     # save test results if we are mid-training
-    if True or i_episode != None:
+    if i_episode != None:
 
       # overall results
       self.track.test_episodes = np.append(self.track.test_episodes, i_episode)
@@ -1293,6 +1308,9 @@ class TrainDQN():
     if print_objects: print(object_table)
     if print_categories: print(category_table)
     if print_overall: print(overall_avg_table)
+
+    # save a flag for final success rate
+    self.last_test_success_rate = total_counter.object_stable.last_value / N
 
     return output_str
 
@@ -1589,7 +1607,7 @@ class TrainDQN():
     best_sr, best_ep = self.track.calc_best_performance()
     finish_txt = f"Training finished after {i_episode} episodes"
     finish_txt += f"\n\nBest performance was {best_sr} at episode {best_ep}"
-    self.save(txtstring=finish_txt, txtlabel="training_finished")
+    self.modelsaver.save("training_finished", txtonly=True, txtstr=finish_txt)
 
     # wrap up
     self.env.render()
@@ -1656,23 +1674,25 @@ class TrainDQN():
     Test the grasping performance of a heurisitc baseline
     """
 
-    print_out = True
+    # print_out = True
 
-    if label is not None: label = "heuristic_test_" + label
-    else: label = "heuristic_test"
+    # if label is not None: label = "heuristic_test_" + label
+    # else: label = "heuristic_test"
 
     if self.log_level > 0: print("Testing heuristic baseline")
 
     # run the test chooseing heuristic actions
     test_data = self.test(heuristic=True, pause_each_episode=pause_each_episode)
 
-    # save results
-    test_report = self.create_test_report(test_data)
-    self.modelsaver.save(label, txtstr=test_report, txtonly=True)
+    # # save results
+    # test_report = self.create_test_report(test_data)
+    # self.modelsaver.save(label, txtstr=test_report, txtonly=True)
 
     if self.log_level > 0:
       print("Finished testing heuristic baseline")
-      if print_out: print(test_report)
+      # if print_out: print(test_report)
+
+    return test_data
 
   def get_params_dictionary(self):
     """
@@ -1714,7 +1734,7 @@ class TrainDQN():
       print_out = False
 
     param_str = ""
-    time_stamp = datetime.now().strftime("%d-%m-%Y-%H:%M")
+    time_stamp = datetime.now().strftime("%d-%m-%y-%H:%M") # hardcoded date string
 
     if labelstr != None:
       param_str += labelstr + '\n'
@@ -1790,9 +1810,14 @@ class TrainDQN():
     savepath = self.modelsaver.save(self.policy_net.name, pyobj=save_data, 
                                     txtstr=txtstring, txtlabel=txtlabel)
 
+    # also save the best performance in txt file for fast lookup later
+    best_sr, best_ep = self.track.calc_best_performance()
+    best_txt = self.best_performance_template.format(best_sr, best_ep)
+    self.modelsaver.save(self.best_performance_txt_file_name, txtonly=True, txtstr=best_txt)
+
     return savepath
 
-  def load(self, id=None, folderpath=None, foldername=None):
+  def load(self, id=None, folderpath=None, foldername=None, overridelib=False, best_id=None):
     """
     Load the most recent model, overwrite current networks
     """
@@ -1802,8 +1827,24 @@ class TrainDQN():
       if folderpath is not None:
         print(f"load not given a modelsaver, making one from folderpath: {folderpath}")
         self.modelsaver = ModelSaver(folderpath)
+        self.modelsaver.enter_folder(foldername)
       else:
         raise RuntimeError("load not given a folderpath or a modelsaver")
+
+    # do we override the existing library with one from this load path
+    if overridelib: self.override_library()
+
+    # are we going to get the best possible id for loading
+    if best_id:
+      best_sr, best_ep = self.read_best_performance_from_text()
+      if best_sr is None or best_sr < 1e-5:
+        if self.log_level > 0: print("load(...) cannot find best id as best success rate is zero")
+      elif best_ep % self.params.save_freq != 0:
+        if self.log_level > 0: print(f"load(...) cannot find best id as best_episode = {best_ep} and save_freq = {self.params.save_freq}, these are incompatible")
+      else:
+        id = int((best_ep / self.params.save_freq) + 1)
+        if self.log_level > 0: print(f"id set to {id} with best_ep={best_ep}, save_freq={self.params.save_freq} and best_sr={best_sr}")
+        best_id = False # best_id has been found
 
     # load the model
     load_data = self.modelsaver.load(id=id, folderpath=folderpath, 
@@ -1818,12 +1859,27 @@ class TrainDQN():
     if load_data.extra != None:
       self.last_test_data = load_data.extra
 
+    # CATCH failures above, so compatible with old code. This double check could be deleted but it is quite handy
+    if best_id:
+      best_sr, best_ep = self.track.calc_best_performance()
+      if self.log_level > 0: print(f"BEST_ID_FAILED  -> Preparing to reload with best id in model.load(...)")
+      if best_sr < 1e-5:
+        if self.log_level > 0: print("BEST_ID_FAILED  -> load(...) cannot find best id as best success rate is zero")
+      elif best_ep % self.params.save_freq != 0:
+        if self.log_level > 0: print(f"BEST_ID_FAILED  -> load(...) cannot find best id as best_episode = {best_ep} and save_freq = {self.params.save_freq}, these are incompatible")
+      else:
+        best_id = int((best_ep / self.params.save_freq) + 1)
+        if self.log_level > 0: print(f"BEST_ID_SUCCESS -> best_id set to {best_id} with best_ep={best_ep}, save_freq={self.params.save_freq} and best_sr={best_sr}")
+        # recursive call to load now we have the best id
+        self.load(id=best_id, folderpath=folderpath, foldername=foldername)
+        return
+
     # reseed and reload environment
     self.env.seed()      # reseeds with same seed as before (but not contiguous!)
     self.env._load_xml() # segfault without this
 
-    # delete this later: needed until wrist_z_offset is saved in bind.cpp
-    self.env.reset(hard=True)
+    # # delete this later: needed until wrist_z_offset is saved in bind.cpp
+    # self.env.reset(hard=True)
 
     # move to the current device
     self.memory.all_to(self.device)
@@ -1842,7 +1898,7 @@ class TrainDQN():
     return self.modelsaver.last_loadpath
   
   def continue_training(self, foldername, folderpath, new_endpoint=None,
-                        extra_episodes=None, object_set=None):
+                        extra_episodes=None, object_set=None, overridelib=False):
     """
     Load a model and then continue training it
     """
@@ -1851,7 +1907,7 @@ class TrainDQN():
     self.modelsaver = ModelSaver(folderpath)
 
     # load the most recent model in the given folder
-    self.load(foldername=foldername, folderpath=folderpath)
+    self.load(foldername=foldername, folderpath=folderpath, overridelib=overridelib)
     self.modelsaver.enter_folder(foldername, folderpath=folderpath)
 
     # update the new training episode target
@@ -1878,6 +1934,125 @@ class TrainDQN():
 
     # begin the training at the given starting point (always uses most recent pickle)
     self.train(i_start=self.track.episodes_done)
+
+  def override_library(self, libName="bind.so", libToUsePath=None, libToOverrridePath=None):
+    """
+    Swap the currently compiled mujoco library for one in the current ModelSaver
+    directory. This function relies on hardcoded parameter defaults
+    """
+
+    if libToUsePath is None:
+      # get the new file from the modelsaver
+      libToUsePath = self.modelsaver.get_current_path()
+
+    if libToOverrridePath is None:
+      # use hardcoded default
+      libToOverrridePath = self.modelsaver.root + "/env/mjpy/"
+
+    self.modelsaver.copy_files(libToUsePath, libName, copyto=libToOverrridePath)
+
+    return 
+
+  def read_best_performance_from_text(self, silence=False, fulltest=False):
+    """
+    Read a text file to get the best model performance. This function contains
+    hardcoding
+    """
+
+    readpath = self.savedir + self.group_name + "/" + self.run_name + "/"
+
+    try:
+
+      # special case, get fulltest information
+      if fulltest:
+
+        test_files = [x for x in os.listdir(readpath) if x.startswith("full_test") and x.endswith(".txt")]
+        
+        if len(test_files) == 0: return None, None
+        
+        elif len(test_files) > 1: 
+
+          print("Multiple 'full_test.txt' files found in read_best_performance_from_text(...)")
+
+          # hardcoded date string
+          datestr = "%d-%m-%y-%H:%M"
+          ex_date = datetime.now().strftime(datestr)
+
+          # remove the '.txt' extension
+          to_remove = ".txt"
+          no_txt = [x[:-len(to_remove)] for x in test_files[:]]
+
+          # get only the dates
+          date_strings = [x[-len(ex_date):] for x in no_txt[:]]
+
+          # convert to datetime objects
+          try:
+            dates = [datetime.strptime(x, datestr) for x in date_strings[:]]
+          except ValueError as e:
+            print("read_best_performance_from_text() datetime error:", e)
+            print("Trying again with another datestring") # OLD CODE compatible
+            # try again with alternative datestring
+            datestr = "%d-%m-%Y-%H:%M"
+            ex_date = datetime.now().strftime(datestr)
+            date_strings = [x[-len(ex_date):] for x in no_txt[:]]
+            dates = [datetime.strptime(x, datestr) for x in date_strings[:]]
+
+          # loop over to find the index of the most recent
+          recent_ind = 0
+          recent_date = dates[0]
+          for i in range(1, len(dates)):
+            if recent_date < dates[i]:
+              recent_date = dates[i]
+              recent_ind = i
+
+          # now finally select the most recent date
+          readname = str(test_files[recent_ind])
+
+          print("Most recent fulltest selected:", readname)
+
+        else: readname = str(test_files[0])
+
+      else: readname = self.best_performance_txt_file_name + '.txt'
+
+      if self.log_level > 0: print(f"Reading text file: {readpath + readname}")
+      with open(readpath + readname, 'r') as openfile:
+        file_txt = openfile.read()
+    except FileNotFoundError as e:
+      if not silence: print("read_best_performance_from_text() failed with error:", e)
+      return None, None
+
+    # special case, get the fulltest information
+    if fulltest:
+      lines = file_txt.splitlines()
+      elem = lines[0].split(" ")
+      try:
+        best_sr = float(elem[-1])
+      except ValueError as e:
+        print("Error in read_best_performance_from_text() on fulltest:", e)
+        exit()
+      return best_sr, None
+
+    # extract details based on hardcoded knowledge of txt file structure (see self.best_performance_template)
+    lines = file_txt.splitlines()
+    for i in range(len(lines)):
+      lines[i] = lines[i].split(" ")
+
+    # check for errors
+    if len(lines) < 2:
+      print("Error in read_best_performance_from_text(), lines < 2")
+      return None, None
+    
+    try:
+      best_sr = float(lines[0][-1])
+      best_ep = int(lines[1][-1])
+    except ValueError as e:
+      print("Error in read_best_performance_from_text():", e)
+      exit()
+
+    if self.log_level > 0:
+      print(f"model.read_best_performance_from_text() gives best_sr={best_sr} and best_ep={best_ep}")
+
+    return best_sr, best_ep
 
 if __name__ == "__main__":
   
@@ -1949,11 +2124,11 @@ if __name__ == "__main__":
   # group = "05-12-22"
   # run = "luke-PC_11:39_A1"
   folder = "mymujoco"
-  group = "02-12-22"
-  run = "luke-PC_16:55_A3"
+  group = "23-12-22"
+  run = "luke-PC_16:03_A114"
   folderpath = f"/home/luke/{folder}/rl/models/dqn/{group}/"
-  model.set_device("cuda")
-  model.load(id=None, folderpath=folderpath, foldername=run)
+  # model.set_device("cuda")
+  model.load(id=None, folderpath=folderpath, foldername=run, best_id=True)
 
   # ----- train ----- #
 
@@ -2003,9 +2178,9 @@ if __name__ == "__main__":
   # test
   model.log_level = 2
   model.env.mj.set.debug = False
-  model.env.disable_rendering = False
-  # model.env.params.test_trials_per_object = 1
-  model.env.params.test_objects = 20
+  model.env.disable_rendering = True
+  model.env.params.test_trials_per_object = 5
+  # model.env.params.test_objects = 20
   # model.env.params.test_obj_per_file = 5
   # model.env.params.max_episode_steps = 20
 
