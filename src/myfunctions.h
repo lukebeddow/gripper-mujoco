@@ -167,6 +167,7 @@ int last_action_robot();
 bool is_sim_unstable(mjModel* model, mjData* data);
 int get_N();
 float get_finger_thickness();
+float get_finger_length();
 float calc_yield_point_load();
 float get_fingertip_z_height();
 std::vector<luke::gfloat> get_stiffnesses();

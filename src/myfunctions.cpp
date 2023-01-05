@@ -3122,6 +3122,13 @@ float get_finger_thickness()
   return j_.dim.finger_thickness;
 }
 
+float get_finger_length()
+{
+  /* return the current finger length */
+
+  return j_.dim.finger_length;
+}
+
 std::vector<luke::gfloat> get_stiffnesses()
 {
   return j_.dim.joint_stiffness;

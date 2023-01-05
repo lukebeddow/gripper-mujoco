@@ -446,7 +446,7 @@ PYBIND11_MODULE(bind, m) {
       [](py::tuple t) { // __setstate__
 
         // size == 3 is old and can be later deleted
-        if (t.size() != 3 or t.size() != 9)
+        if (t.size() != 3 and t.size() != 9)
           throw std::runtime_error("MjType::Sensor py::pickle got invalid state");
 
         // create new c++ instance with old data

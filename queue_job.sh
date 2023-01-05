@@ -1,11 +1,6 @@
 # bash script to run several trainings on the lab PC
 
-# to run a new training from array_training.py and train args 1,2,3 use:
-#   $ ./pc_job.sh -j "1 2 3"
-
-# to continue a training from array_training.py and train args 1,2,3 use:
-#   $ ./pc_job.sh -j "1 2 3" -c -t 07-06-22-16:34 -m luke-PC
-#   
+# usage: ./queue_job.sh -j "1:45" -q 15 [pc_job.sh args eg --device cuda --debug]
 
 parseJobs()
 {
@@ -38,7 +33,7 @@ do
 case ${!i} in
     # look for the jobs, queues and stagger flags
     -j | --jobs ) (( i++ )); jobs=$(parseJobs ${!i}); echo Jobs are $jobs ;;
-    -q | --queue ) (( i++ )); QUEUE_NUM=${!i}; QUEUE='Y'; echo Queue mode selected, there will be $QUEUE_NUM queues ;;
+    -q | --queue ) (( i++ )); QUEUE_NUM=${!i}; echo Queue mode selected, there will be $QUEUE_NUM queues ;;
     -s | --stagger ) (( i++ )); echo Stagger flag removed before running pc_job.sh ;;
     # everything else leave it unchanged to pass into pc_job.sh
     * ) QUEUE_ARGS+=( ${!i} ) ;;
@@ -75,9 +70,17 @@ do
         fi
     done
 
+    # randomly shuffle the queue order
+    JOBS_IN_QUEUE=( $(shuf -e "${JOBS_IN_QUEUE[@]}"))
+
     # print and submit (sleep so all print statements complete before jobs start spamming teminal)
     echo Queue number $(( $q + 1 )) jobs are "${JOBS_IN_QUEUE[*]}"
-    sleep 1 && ./pc_job.sh ${QUEUE_ARGS[@]} --jobs "${JOBS_IN_QUEUE[*]}" --stagger 1 &
+    sleep 1 && ./pc_job.sh \
+                    ${QUEUE_ARGS[@]} \
+                    --jobs "${JOBS_IN_QUEUE[*]}" \
+                    --stagger 1 \
+                    --timestamp "$(date +%d-%m-%y-%H:%M)" \
+                    &
 
 done
 

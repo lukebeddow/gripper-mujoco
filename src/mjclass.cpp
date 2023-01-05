@@ -1971,7 +1971,7 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force, 
   s_.tip_force_applied = force;
 
   // step the simulation to allow the forces to settle
-  float time_to_settle = 50;
+  float time_to_settle = 30; // have tried up to 100
   int steps_to_make = time_to_settle / s_.mujoco_timestep;
   // std::cout << "Stepping for " << steps_to_make << " steps to allow settling\n";
 
@@ -2031,20 +2031,28 @@ MjType::CurveFitData MjClass::curve_validation_regime(bool print, int force_styl
   s_.debug = false;
 
   // move base to maximum to ensure finger hooks could never touch the ground
-  luke::set_base_to_max_height(data);
-
+  if (force_style == 2) {
+    // this has only been observed an issue with end moments applied
+    luke::set_base_to_max_height(data);
+  }
+  
   // NOTE: not forces in newtons, these are 100/200/300/400g (ie 0.981*1/2/3/4)
   std::vector<float> forces { 1 * 0.981, 2 * 0.981, 3 * 0.981, 4 * 0.981 };
 
-  // testing: triple the forces for a UDL to get comparable deflection values
+  // scale forces to get equal theoretical tip deflection
+  float L = luke::get_finger_length();
   if (force_style == 1) {
     for (int i = 0; i < forces.size(); i++) {
-      forces[i] *= 11.3475;
+      // W = 8F / 3L
+      // forces[i] *= 11.3475;
+      forces[i] *= 8.0 / (3*L);
     }
   }
   else if (force_style == 2) {
     for (int i = 0; i < forces.size(); i++) {
-      forces[i] *= 0.15667;
+      // M = 2LF / 3
+      // forces[i] *= 0.15667;
+      forces[i] *= (2*L) / 3.0;
     }
   }
 
