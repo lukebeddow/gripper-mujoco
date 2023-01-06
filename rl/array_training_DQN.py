@@ -852,7 +852,7 @@ if __name__ == "__main__":
 
   # CONFIGURE KEY SETTINGS (take care that baseline_settings(...) does not overwrite)
   model.params.use_curriculum = False
-  model.params.num_episodes = 50_000 # was 60k, change to 40k for speed
+  model.params.num_episodes = 50_000
   model.params.object_set = "set6_fullset_800_50i"
 
   if args.program is None:
@@ -1136,6 +1136,26 @@ if __name__ == "__main__":
       "sensor_steps" : param_1,
       "state_steps" : param_2
     }
+
+  elif training_type == "ski_training":
+
+    vary_1 = [0.9e-3, 1.0e-3] # thickness
+    vary_2 = [(1, 1), (2, 2), (3, 3)]
+    vary_3 = None
+    repeats = 10
+    param_1_name = "finger thickness"
+    param_2_name = "sensor/state steps"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "finger_thickness" : param_1,
+      "sensor_steps" : param_2[0],
+      "state_steps" : param_2[1]
+    }
+
+    # run long trainings
+    model.params.num_episodes = 100_000
 
   elif training_type == "vary_others":
 
