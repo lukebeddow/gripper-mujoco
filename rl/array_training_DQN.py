@@ -700,6 +700,83 @@ def test(model, heuristic=False, trials_per_obj=5, render=False, pause=False):
 
   return model
 
+def print_results(model, filename="results.txt"):
+  """
+  Create a results table, presumes a file called 'results.txt' which is the terminal
+  output from running './pc_job -j "X:Y" -t DD-MM-YY-HR:MN --program xxxxx --print
+  """
+
+  filepath = model.savedir + model.group_name + "/" + filename
+
+  table = []
+
+  with open(filepath, 'r') as f:
+    text = f.readlines()
+
+  # print("the text is:\n\n", text)
+
+  first_elem = True
+  done_first_elem = False
+  temp_headings = []
+  headings = []
+  new_elem = []
+
+  for line in text:
+
+    if line.startswith("Input arg"):
+
+      if done_first_elem:
+        table.append(new_elem)
+        if len(temp_headings) > len(headings): headings = temp_headings[:]
+        temp_headings = []
+        new_elem = []
+
+      splits = line.split(" ")
+      # int(...) drops the newline character
+      new_elem.append(int(splits[-1]))
+
+      temp_headings.append("Input arg")
+      done_first_elem = True
+        
+
+    elif line.startswith("\t"):
+      if line.startswith("\tTraining time best"):
+        splits = line.split(" = ")
+        new_elem.append(float(splits[1].split(" at ")[0]))
+        new_elem.append(int(splits[-1]))
+        temp_headings.append("Train best SR")
+        temp_headings.append("Train best episode")
+    
+      elif line.startswith("\tFinal full test"):
+        splits = line.split(" = ")
+        new_elem.append(float(splits[-1]))
+        temp_headings.append("Final test SR")
+
+      else:
+        splits = line.split(" is ")
+        item = splits[-1]
+        if item.endswith("\n"): item = item.strip("\n")
+        new_elem.append(item)
+        item = splits[0]
+        if item.startswith("\t"): item = item.strip("\t")
+        temp_headings.append(splits[0][1:])
+
+  table.append(new_elem)
+
+  # now prepare to print the table
+  heading_str = ""
+  for x in range(len(headings) - 1): heading_str += "{" + str(x) + "} | "
+  heading_str += "{" + str(len(headings) - 1) + "}"
+  formatters = ["{" + f"{x}:<{len(headings[x]) + 2}" + "}" for x in range(len(headings))]
+  heading_str = heading_str.format(*formatters)
+
+  # print the table
+  print(heading_str.format(*headings))
+  for i in range(len(table)):
+    # check if entry is incomplete
+    while len(table[i]) < len(headings): table[i] += ["N/F"]
+    print(heading_str.format(*table[i]))
+
 if __name__ == "__main__":
 
   """
@@ -756,6 +833,7 @@ if __name__ == "__main__":
   parser.add_argument("--override-lib",       action="store_true") # override bind.so library with loaded data
   parser.add_argument("--no-delay",           action="store_true") # prevent a sleep(...) to seperate processes
   parser.add_argument("--test",               action="store_true") # run a thorough test on existing model
+  parser.add_argument("--results",            action="store_true") # print a table of results.txt
 
   args = parser.parse_args()
 
@@ -841,7 +919,11 @@ if __name__ == "__main__":
       input("Press enter to quit plotting windows and terminate program")
     exit()
 
-
+  # if we are printing a results table
+  if args.results:
+    if log_level > 0: print("Printing a results table")
+    print_results(model)
+    exit()
 
 
 
@@ -857,6 +939,7 @@ if __name__ == "__main__":
 
   if args.program is None:
     # cannot have whitespace
+    raise RuntimeError("must specify the program to run with '--program xxxxxxx'")
     training_type = "vary_xmas"
   else:
     training_type = args.program
@@ -1156,6 +1239,30 @@ if __name__ == "__main__":
 
     # run long trainings
     model.params.num_episodes = 100_000
+
+  elif training_type == "paper_baseline_1":
+
+    vary_1 = [0.9e-3, 1.0e-3] # thickness
+    vary_2 = [0, 1, 2, 3]
+    vary_3 = None
+    repeats = 15
+    param_1_name = "finger thickness"
+    param_2_name = "num sensors"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "finger_thickness" : param_1,
+      "sensors" : param_2,
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+    # run long trainings
+    model.params.num_episodes = 100_000
+
+    # run longer tests
+    model.env.params.test_trials_per_object = 5
 
   elif training_type == "vary_others":
 
