@@ -1629,7 +1629,7 @@ std::vector<float> MjClass::get_finger_gauge_data()
 }
 
 std::vector<float> MjClass::input_real_data(std::vector<float> state_data, 
-  std::vector<float> sensor_data, float timestamp)
+  std::vector<float> sensor_data)
 {
   /* insert real data */
 
@@ -1665,23 +1665,30 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
   // add state data
   int i = 0;
 
+  // uncomment for debugging
+  // std::cout << "Adding state noise of " << s_.motor_state_sensor.noise_std << '\n';
+  // std::cout << "Adding sensor noise of " << s_.bending_gauge.noise_std << '\n';
+
   if (s_.motor_state_sensor.in_use) {
 
     // normalise and save state data
     state_data[i] = normalise_between(
       state_data[i], luke::Gripper::xy_min, luke::Gripper::xy_max);
+    state_data[i] = s_.motor_state_sensor.apply_noise(state_data[i], uniform_dist);
     x_motor_position.add(state_data[i]); 
     output.push_back(state_data[i]);
     ++i; 
 
     state_data[i] = normalise_between(
       state_data[i], luke::Gripper::xy_min, luke::Gripper::xy_max);
+    state_data[i] = s_.motor_state_sensor.apply_noise(state_data[i], uniform_dist);
     y_motor_position.add(state_data[i]); 
     output.push_back(state_data[i]);
     ++i; 
 
     state_data[i] = normalise_between(
       state_data[i], luke::Gripper::xy_min, luke::Gripper::xy_max);
+    state_data[i] = s_.motor_state_sensor.apply_noise(state_data[i], uniform_dist);
     z_motor_position.add(state_data[i]); 
     output.push_back(state_data[i]);
     ++i; 
@@ -1694,6 +1701,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
 
     state_data[i] = normalise_between(
       state_data[i], luke::Target::base_z_min, luke::Target::base_z_max);
+    state_data[i] = s_.base_state_sensor.apply_noise(state_data[i], uniform_dist);
     z_base_position.add(state_data[i]);
     output.push_back(state_data[i]);
     ++i; 
@@ -1722,6 +1730,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     sensor_data[j] = (sensor_data[j] - calibrate_.offset.g1) * calibrate_.scale.g1;
     sensor_data[j] = normalise_between(
       sensor_data[j], -calibrate_.norm.g1, calibrate_.norm.g1);
+    sensor_data[i] = s_.bending_gauge.apply_noise(sensor_data[i], uniform_dist);
     finger1_gauge.add(sensor_data[j]); 
     output.push_back(sensor_data[j]);
     ++j;
@@ -1739,6 +1748,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     sensor_data[j] = (sensor_data[j] - calibrate_.offset.g2) * calibrate_.scale.g2;
     sensor_data[j] = normalise_between(
       sensor_data[j], -calibrate_.norm.g2, calibrate_.norm.g2);
+    sensor_data[i] = s_.bending_gauge.apply_noise(sensor_data[i], uniform_dist);
     finger2_gauge.add(sensor_data[j]); 
     output.push_back(sensor_data[j]);
     ++j;
@@ -1756,6 +1766,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     sensor_data[j] = (sensor_data[j] - calibrate_.offset.g3) * calibrate_.scale.g3;
     sensor_data[j] = normalise_between(
       sensor_data[j], -calibrate_.norm.g3, calibrate_.norm.g3);
+    sensor_data[i] = s_.bending_gauge.apply_noise(sensor_data[i], uniform_dist);
     finger3_gauge.add(sensor_data[j]); 
     output.push_back(sensor_data[j]);
     ++j;
@@ -1778,6 +1789,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     sensor_data[j] = (sensor_data[j] - calibrate_.offset.palm) * calibrate_.scale.palm;
     sensor_data[j] = normalise_between(
       sensor_data[j], -calibrate_.norm.palm, calibrate_.norm.palm);
+    sensor_data[i] = s_.palm_sensor.apply_noise(sensor_data[i], uniform_dist);
     palm_sensor.add(sensor_data[j]);  
     output.push_back(sensor_data[j]);
     ++j;
@@ -1816,6 +1828,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     
     sensor_data[j] = normalise_between(
       sensor_data[j], -calibrate_.norm.wrist_Z, calibrate_.norm.wrist_Z);
+    sensor_data[i] = s_.wrist_sensor_Z.apply_noise(sensor_data[i], uniform_dist);
     wrist_Z_sensor.add(sensor_data[j]);  
     output.push_back(sensor_data[j]);
     ++j;
@@ -1825,9 +1838,9 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
         << post_cal << ", normalised " << sensor_data[j-1] << '\n';
   }
 
-  // add timestamp data - not used currently
-  gauge_timestamps.add(timestamp);
-  palm_timestamps.add(timestamp);
+  // // add timestamp data - not used currently
+  // gauge_timestamps.add(timestamp);
+  // palm_timestamps.add(timestamp);
 
   return output;
 }

@@ -1042,7 +1042,7 @@ public:
 
   // real world gripper functions
   std::vector<float> input_real_data(std::vector<float> state_data, 
-    std::vector<float> sensor_data, float timestamp);
+    std::vector<float> sensor_data);
   std::vector<float> get_real_observation();
 
   // misc
