@@ -173,6 +173,9 @@ float get_fingertip_z_height();
 std::vector<luke::gfloat> get_stiffnesses();
 void print_stiffnesses();
 
+// TESTING prevent table impacts
+void prevent_table_impacts(bool set_as);
+
 } // namespace luke
 
 #endif // MYFUNCTIONS_H_

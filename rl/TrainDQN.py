@@ -2124,8 +2124,8 @@ if __name__ == "__main__":
   # group = "05-12-22"
   # run = "luke-PC_11:39_A1"
   folder = "mymujoco"
-  group = "23-12-22"
-  run = "luke-PC_16:03_A114"
+  group = "06-01-23"
+  run = "luke-PC_14:44_A48"
   folderpath = f"/home/luke/{folder}/rl/models/dqn/{group}/"
   # model.set_device("cuda")
   model.load(id=None, folderpath=folderpath, foldername=run, best_id=True)
@@ -2178,9 +2178,9 @@ if __name__ == "__main__":
   # test
   model.log_level = 2
   model.env.mj.set.debug = False
-  model.env.disable_rendering = True
-  model.env.params.test_trials_per_object = 5
-  # model.env.params.test_objects = 20
+  model.env.disable_rendering = False
+  # model.env.params.test_trials_per_object = 5
+  model.env.params.test_objects = 20
   # model.env.params.test_obj_per_file = 5
   # model.env.params.max_episode_steps = 20
 

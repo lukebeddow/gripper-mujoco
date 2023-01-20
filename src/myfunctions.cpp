@@ -601,6 +601,14 @@ static double last_step_time_ = 0.0;
 // turn on/off debug mode for this file only
 constexpr static bool debug_ = false; 
 
+// TESTING global variable to prevent table impacts
+bool TEST_prevent_table_impacts = false; // default should always be false
+float TEST_prevent_table_impacts_value = -12.5e-3; // metres depth below starting position to prevent further motion
+void prevent_table_impacts(bool set_as) {
+  TEST_prevent_table_impacts = set_as;
+}
+// END TESTING - see move_base_m(...) function and header file
+
 /* ----- initialising, setup, and utilities ----- */
 
 void init(mjModel* model, mjData* data)
@@ -2494,6 +2502,19 @@ bool move_base_target_m(double x, double y, double z)
     return false;
   }
 
+  // TESTING prevent table impacts
+  if (TEST_prevent_table_impacts) {
+    // if the action is to go lower (+ve means go lower)
+    if (z > 0) {
+      // if the fingertips are below our threshold height
+      if (luke::get_fingertip_z_height() < TEST_prevent_table_impacts_value) {
+        target_.base[0] -= z; // undo the previous addition of the action
+        return false;
+      }
+    }
+  }
+  // END TESTING
+
   return true;
 }
 
@@ -3153,8 +3174,10 @@ float calc_yield_point_load()
 
 float get_fingertip_z_height()
 {
-  /* return the distance from the fingertip to the ground in mm. A negative value
-  means the fingertips hit the ground */
+  /* returns the current fingertip height with 0 being the starting value before
+  any actions, and negative values meaning the fingertips are going down. Since
+  the gripper starts usually at 10mm height, a value of -10e-3 indicates the tips
+  have hit the ground */
 
   float straight_finger_distance = -Target::base_z_min - target_.base[0];
   float tip_lift = j_.dim.finger_length * (1 - std::cos(target_.end.get_th_rad()));

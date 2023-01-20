@@ -1032,18 +1032,29 @@ std::vector<float> MjClass::set_action(int action)
     wl = false;
   }
 
-  if (s_.debug)
-    std::cout << ", within_limits = " << wl << '\n';
+  if (s_.debug) std::cout << ", within_limits = " << wl << '\n';
 
   // // for testing only, delete later
   // std::cout << "fingertip z height is " << luke::get_fingertip_z_height() * 1e3
   //     << ", minimum allowed is " << s_.fingertip_min_mm << "\n";
 
+  // update whether this action was within limits or not
   env_.cnt.exceed_limits.value = not wl;
 
   // get the target state and return it
   return luke::get_target_state();
 }
+
+// TESTING prevent table impacts
+void MjClass::prevent_table_impacts(bool set_as)
+{
+  /* TEST function toggle a switch to prevent table impacts */
+
+  luke::prevent_table_impacts(set_as);
+
+  std::cout << "\n\nPREVENTING TABLE IMPACTS SET TO " << set_as << "\n\n";
+}
+// END TESTING - see header file and bind.cpp
 
 bool MjClass::is_done()
 {

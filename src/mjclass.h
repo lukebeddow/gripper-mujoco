@@ -1075,6 +1075,9 @@ public:
   float find_highest_stable_timestep();
   void set_sensor_noise_and_normalisation_to(bool set_as);
 
+  // TESTING prevent table impacts
+  void prevent_table_impacts(bool set_as);
+
 }; // class MjClass
 
 // utility functions

@@ -223,6 +223,11 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
   else:
     raise RuntimeError("style was not set to a valid option in create_reward_function()")
 
+  # specific options
+  if "terminate_on_exceed_limits" in options:
+    # reward each step                     reward   done   trigger
+    model.env.mj.set.exceed_limits.set     (-1.0,   True,    3)
+
   # termination on specific reward
   model.env.mj.set.quit_on_reward_below = -1.0 if "neg_cap" in options else -1e6
   model.env.mj.set.quit_on_reward_above = +1.0 if "pos_cap" in options else 1e6
@@ -1259,10 +1264,63 @@ if __name__ == "__main__":
     }
 
     # run long trainings
+    model.params.num_episodes = 100_0
+    # run longer tests
+    model.env.params.test_trials_per_object = 5
+
+  elif training_type == "test_exceed_limits_termination":
+
+    param_1 = None
+    param_2 = None
+    param_3 = None
+    param_1_name = None
+    param_2_name = None
+    param_3_name = None
+    
+    baseline_args = {
+      "finger_thickness" : 0.9e-3,
+      "sensors" : 3,
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+      "reward_options" : ["terminate_on_exceed_limits"]
+    }
+
+    # run long trainings
     model.params.num_episodes = 100_000
 
     # run longer tests
     model.env.params.test_trials_per_object = 5
+
+  elif training_type == "test_prevent_table_impacts":
+
+    param_1 = None
+    param_2 = None
+    param_3 = None
+    param_1_name = None
+    param_2_name = None
+    param_3_name = None
+    
+    baseline_args = {
+      "finger_thickness" : 0.9e-3,
+      "sensors" : 3,
+      "sensor_steps" : 3,
+      "state_steps" : 3
+    }
+
+    # run long trainings
+    model.params.num_episodes = 100_000
+
+    # run longer tests
+    model.env.params.test_trials_per_object = 5
+
+    # # run fewer tests
+    # model.params.test_freq = 4000
+
+    # # reduce fingertip minimum from -12.5 to -10.0
+    # model.env.mj.set.fingertip_min_mm = -10.0 # MOVEMENT BELOW THIS SETS within_limits=false;
+
+    # prevent gripper from going lower than -12.5mm (see myfunctions.cpp for variable hardcoding)
+    model.env.mj.prevent_table_impacts(True)
 
   elif training_type == "vary_others":
 
