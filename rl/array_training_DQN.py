@@ -1264,7 +1264,8 @@ if __name__ == "__main__":
     }
 
     # run long trainings
-    model.params.num_episodes = 100_0
+    model.params.num_episodes = 100_000
+    
     # run longer tests
     model.env.params.test_trials_per_object = 5
 
