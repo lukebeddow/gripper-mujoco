@@ -484,7 +484,7 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 1
                       memory=50_000, state_steps=1, sensor_steps=1, z_state=True, sensor_mode=2,
                       state_mode=1, sensor_noise=0.025, reward_style="mixed_v3", reward_options=[], 
                       scale_rewards=2.5, scale_penalties=1.0, penalty_termination=False,
-                      finger_stiffness=-7.5, num_segments=8, finger_thickness=0.9e-3,
+                      finger_stiffness=-7.5, num_segments=8, finger_thickness=0.9e-3, finger_width=28e-3,
                       max_episode_steps=250, XYZ_mm_rad=[1.0, 0.01, 2.0],
                       exceed_lims_multiplier=2.0):
 
@@ -500,6 +500,7 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 1
   model.env.mj.set.finger_stiffness = finger_stiffness # -7.5 is final derivation
   model.num_segments = num_segments                    # 6 gives fast training primarily
   model.env.params.finger_thickness = finger_thickness # options are 0.8e-3, 0.9e-3, 1.0e-3
+  model.env.load_finger_width = finger_width           # options are 24e-3, 28e-3
 
   # options for setting step size, see current defaults in this function
   if XYZ_mm_rad is False: 
@@ -839,6 +840,8 @@ if __name__ == "__main__":
   parser.add_argument("--no-delay",           action="store_true") # prevent a sleep(...) to seperate processes
   parser.add_argument("--test",               action="store_true") # run a thorough test on existing model
   parser.add_argument("--results",            action="store_true") # print a table of results.txt
+  parser.add_argument("--print-results",      action="store_true") # prepare and print all results
+  parser.add_argument("--delete-results",     action="store_true") # delete any results.txt data
 
   args = parser.parse_args()
 
@@ -928,6 +931,16 @@ if __name__ == "__main__":
   if args.results:
     if log_level > 0: print("Printing a results table")
     print_results(model)
+    exit()
+
+  if args.delete_results:
+    try:
+      if log_level > 0: print("Deleting a results table")
+      filepath = model.savedir + model.group_name + "/results.txt"
+      with open(filepath, 'w') as f:
+        f.write("")
+    except FileNotFoundError as e:
+      print("No results table found")
     exit()
 
 
@@ -1265,9 +1278,68 @@ if __name__ == "__main__":
 
     # run long trainings
     model.params.num_episodes = 100_000
-    
+
     # run longer tests
     model.env.params.test_trials_per_object = 5
+
+  elif training_type == "paper_baseline_1.5":
+
+    # vary_1 = [0.9e-3, 1.0e-3] # thickness
+    vary_1 = [24e-3] # width
+    vary_2 = [0, 1, 2, 3]
+    vary_3 = None
+    repeats = 10
+    param_1_name = "finger width"
+    param_2_name = "num sensors"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "finger_thickness" : 1.0e-3,
+      "finger_width" : param_1,
+      "sensors" : param_2,
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+    # run long trainings
+    model.params.num_episodes = 100_000
+
+    # run longer tests
+    model.env.params.test_trials_per_object = 5
+
+  elif training_type == "paper_baseline_2":
+
+    vary_1 = [
+      (0.9e-3, 28e-3),
+      (1.0e-3, 24e-3),
+      (1.0e-3, 28e-3),
+    ]
+    vary_2 = [0, 1, 2, 3]
+    vary_3 = None
+    repeats = 10
+    param_1_name = "thickness, width"
+    param_2_name = "num sensors"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "finger_thickness" : param_1[0],
+      "finger_width" : param_1[1],
+      "sensors" : param_2,
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+    # run long trainings
+    model.params.num_episodes = 100_000
+
+    # run slightly longer tests
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
 
   elif training_type == "test_exceed_limits_termination":
 
@@ -1348,7 +1420,7 @@ if __name__ == "__main__":
   param_3_string = f"\t{param_3_name} is {param_3}\n" if param_3 is not None else ""
   model.wandb_note += param_1_string + param_2_string + param_3_string
 
-  if not args.print:
+  if not args.print and not args.print_results:
 
     # apply settings
     model = baseline_settings(model, **baseline_args)
@@ -1357,7 +1429,7 @@ if __name__ == "__main__":
     if not args.heuristic: model.train()
 
     # test
-    model = test(model, heuristic=args.heuristic)
+    model = test(model, trials_per_obj=10, heuristic=args.heuristic)
 
     # finishing time, how long did everything take
     finishing_time = datetime.now()
@@ -1378,11 +1450,23 @@ if __name__ == "__main__":
   if full_sr is not None:
     extra_info_string += f"\tFinal full test success rate = {full_sr}\n"
 
-  print("Input arg", args.job)
-  print(param_1_string, end="")
-  print(param_2_string, end="")
-  print(param_3_string, end="")
-  print(extra_info_string)
+  if args.print_results:
+
+    filepath = model.savedir + model.group_name + "/results.txt"
+    new_file_text = f"Input arg {args.job}\n"
+    new_file_text += param_1_string
+    new_file_text += param_2_string
+    new_file_text += param_3_string
+    new_file_text += extra_info_string
+    with open(filepath, 'a') as f:
+      f.write(new_file_text)
+
+  else:
+    print("Input arg", args.job)
+    print(param_1_string, end="")
+    print(param_2_string, end="")
+    print(param_3_string, end="")
+    print(extra_info_string)
 
   # ----- END ----- #
   
