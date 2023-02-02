@@ -841,7 +841,7 @@ class MjEnv():
 
     return to_return
 
-  def reset(self, hard=None, timestep=None):
+  def reset(self, hard=None, timestep=None, realworld=False):
     """
     Reset the simulation to the start
     """
@@ -857,10 +857,15 @@ class MjEnv():
           or self.reload_flag):
         self._load_xml()
 
-    # reset the simulation and spawn a new random object
+    # reset the simulation
     if hard is True: self.mj.hard_reset()
     elif timestep is True: self.mj.reset_timestep() # recalibrate timestep
     else: self.mj.reset()
+
+    # if real world, recalibrate the sensors
+    if realworld is True: self.mj.calibrate_real_sensors() # re-zero sensors
+    
+    # spawn a new random object
     self._spawn_object()
 
     return self._next_observation()

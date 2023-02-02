@@ -80,6 +80,7 @@ PYBIND11_MODULE(bind, m) {
     .def("get_finger_angle", &MjClass::get_finger_angle)
 
     // real life gripper functions
+    .def("calibrate_real_sensors", &MjClass::calibrate_real_sensors)
     .def("get_finger_gauge_data", &MjClass::get_finger_gauge_data)
     .def("input_real_data", &MjClass::input_real_data)
     .def("get_real_observation", &MjClass::get_real_observation)

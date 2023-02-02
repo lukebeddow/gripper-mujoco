@@ -24,6 +24,11 @@
   #include "rendering.h"
 #endif
 
+// utility functions with no MjType dependency
+float linear_reward(float val, float min, float max, float overshoot);
+float normalise_between(float val, float min, float max);
+float unnormalise_from(float val, float min, float max);
+
 namespace MjType
 {
   /* types used inside the MjClass, including data structures */
@@ -855,6 +860,95 @@ namespace MjType
 
   };
 
+
+  struct RealSensors {
+
+    struct Calibration {
+
+      double scale = 0;
+      double offset = 0;
+      double norm = 0;
+
+      Calibration() {}
+      Calibration(double scale, double offset)
+        : scale(scale), offset(offset), norm(0) {}
+
+      double apply_calibration(double value) {
+        double linearly_shifted = (value - offset) * scale;
+        double normalised = normalise_between(linearly_shifted, -norm, norm);
+        return normalised;
+      }
+
+    };
+
+    // gauge calibrations  scale        offset (note ALL offsets are wiped at runtime for zero-ing)
+    Calibration g1_0p9_28 {2.7996e-6,   260576};
+    Calibration g2_0p9_28 {2.7440e-6,   911830};
+    Calibration g3_0p9_28 {2.7303e-6,   1000000};
+    Calibration g1_1p0_24 {2.6866e-6,   196784};
+    Calibration g2_1p0_24 {2.7391e-6,   615652};
+    Calibration g3_1p0_24 {2.7146e-6,   869492};
+    Calibration g1_1p0_28 {3.1321e-6,   96596};
+    Calibration g2_1p0_28 {3.1306e-6,   7583};
+    Calibration g3_1p0_28 {3.1390e-6,   66733};
+    Calibration palm      {7.4626e-5,   0};         // offset set at runtime
+    Calibration wrist_Z   {-1,          0};         // offset set at runtime
+
+    // get the correct calibration for the fingers
+    Calibration get_gauge_calibration(int gauge_num, double thickness, double width)
+    {
+      /* return the correct calibration given finger dimensions */
+
+      if (thickness > 2e-3) {
+        throw std::runtime_error("get_gauge_calibration(...) got finger thickness over 2mm, check SI units!");
+      }
+      if (width > 50e-3) {
+        throw std::runtime_error("get_gauge_calibration(...) got finger width over 50mm, check SI units!");
+      }
+
+      double tol = 1e-5;
+
+      if (abs(thickness - 0.9e-3) < tol) {
+
+        if (abs(width - 28e-3) < tol) {
+          switch (gauge_num) {
+            case 1: return g1_0p9_28;
+            case 2: return g2_0p9_28;
+            case 3: return g3_0p9_28;
+          }
+        }
+        else {
+          throw std::runtime_error("get_gauge_calibration(...) does not have a calibration for 0.9mm finger with this finger width");
+        }
+
+      }
+      else if (abs(thickness - 1.0e-3) < tol) {
+
+        if (abs(width - 24e-3) < tol) {
+          switch (gauge_num) {
+            case 1: return g1_1p0_24;
+            case 2: return g2_1p0_24;
+            case 3: return g3_1p0_24;
+          }
+        }
+        else if (abs(width - 28e-3) < tol) {
+          switch (gauge_num) {
+            case 1: return g1_1p0_28;
+            case 2: return g2_1p0_28;
+            case 3: return g3_1p0_28;
+          }
+        }
+        else {
+          throw std::runtime_error("get_gauge_calibration(...) does not have a calibration for 1.0mm finger with this finger width");
+        }
+
+      }
+      else {
+        throw std::runtime_error("get_gauge_calibration(...) does not have a calibration for this finger thickness");
+      }
+    }
+
+  };
 }
 
 class MjClass
@@ -917,8 +1011,19 @@ public:
   // reward goal (if using)
   MjType::Goal goal_;
 
-  // real gripper parameters
-  MjType::RealGaugeCalibrations calibrate_; 
+  // calibrations for real sensors
+  struct SensorCalibrations {
+
+    MjType::RealSensors::Calibration g1;      // PCB gauge 1
+    MjType::RealSensors::Calibration g2;      // PCB gauge 2
+    MjType::RealSensors::Calibration g3;      // PCB gauge 3
+    MjType::RealSensors::Calibration palm;    // PCB gauge 4
+    MjType::RealSensors::Calibration wrist_Z;
+
+    // flag which indicates if we should re-zero sensors
+    bool recalibrate_offset_flag = false;
+
+  } sensor_calibrations_;
 
   // these flags are only reset with hard_reset()
   struct ResetFlags {
@@ -1041,6 +1146,7 @@ public:
   luke::gfloat get_finger_angle();
 
   // real world gripper functions
+  void calibrate_real_sensors();
   std::vector<float> input_real_data(std::vector<float> state_data, 
     std::vector<float> sensor_data);
   std::vector<float> get_real_observation();
@@ -1080,10 +1186,7 @@ public:
 
 }; // class MjClass
 
-// utility functions
-float linear_reward(float val, float min, float max, float overshoot);
-float normalise_between(float val, float min, float max);
-float unnormalise_from(float val, float min, float max);
+// helper functions
 void update_events(MjType::EventTrack& events, MjType::Settings& settings);
 float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings);
 float goal_rewards(MjType::EventTrack& events, MjType::Settings& settings,

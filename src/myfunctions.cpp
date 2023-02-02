@@ -2503,12 +2503,14 @@ bool move_base_target_m(double x, double y, double z)
   }
 
   // TESTING prevent table impacts
+  /* in future, make a 'base' class to handle all base movements, like the gripper class */
   if (TEST_prevent_table_impacts) {
     // if the action is to go lower (+ve means go lower)
     if (z > 0) {
       // if the fingertips are below our threshold height
       if (luke::get_fingertip_z_height() < TEST_prevent_table_impacts_value) {
         target_.base[0] -= z; // undo the previous addition of the action
+        // std::cout << "\n\n--------------------------- table impact prevented ----------------------\n\n";
         return false;
       }
     }
@@ -3141,6 +3143,11 @@ int get_N()
 float get_finger_thickness()
 {
   return j_.dim.finger_thickness;
+}
+
+float get_finger_width()
+{
+  return j_.dim.finger_width;
 }
 
 float get_finger_length()
