@@ -38,7 +38,7 @@ class ModelSaver:
       self.root = os.path.dirname(os.path.abspath(__file__)) + "/"
       use_root = False
     else:
-      if self.root[-1] != '/': self.root += '/'
+      if root[-1] != '/': root += '/'
       self.root = root
       use_root = True
 
