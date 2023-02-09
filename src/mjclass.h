@@ -874,8 +874,11 @@ namespace MjType
         : scale(scale), offset(offset), norm(0) {}
 
       double apply_calibration(double value) {
+        // std::cout << "value=" << value << ", ";
         double linearly_shifted = (value - offset) * scale;
+        // std::cout << "linear=(" << value << "-" << offset << ")*" << scale << ", ";
         double normalised = normalise_between(linearly_shifted, -norm, norm);
+        // std::cout << "output=" << normalised << " normalised between +-" << norm << '\n';
         return normalised;
       }
 
