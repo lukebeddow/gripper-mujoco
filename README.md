@@ -85,8 +85,8 @@ make debug   # build targets in debug mode
 To run the c++ part of the code and visualise MuJoCo in a GUI, you can use the the executable ```bin/mysimulate```. You will need to run it with command line arguments to specify which object set and gripper configuration you want:
 
 ```bash
-bin/mysimulate gripper_N<num_segments>_<finger_width_mm> <task_number> <object_set_name>
-bin/mysimulate gripper_N8_28 0 set6_fullset_800
+bin/mysimulate gripper_N<num_segments> <task_number> <object_set_name>
+bin/mysimulate gripper_N8 0 set4_fullset_795
 ```
 
 To run the python training, have a look at ```rl/TrainDQN.py``` and ```array_training_DQN.py```.
