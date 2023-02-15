@@ -64,16 +64,8 @@ Next, select the path to the mjcf files in ```$(MJCF_PATH)```. These are the mod
 Finally, edit all of the library locations with the correct paths.
 * If you have the source of a header only library (eg pybind11 above), simply add the path to this
 * If you have a system library already (eg armadillo above), simply add the library with ```-l``` + ```libary-name```
-* If you have a local library (eg mujoco above), either add the full path to the library location (as above) or use ```-L``` to specify the library folder and then ```-l``` to specify the library name in that folder (not shown above)
+* If you have a local library (eg mujoco above), either add the full path to the library location (not shown above) or use ```-L``` to specify the library folder and then ```-l``` to specify the library name in that folder (shown above)
 
-**Temporary extra step for building**
-
-Currently, compilation is set up as well for the old version of mujoco (2.1.0) so for the time being you will also need to move some files. Go to the folder where you have saved your version of mujoco (eg ```mujoco-2.1.5```), then copy across the two uitools files into the include folder:
-
-```shell
-cd /your/path/to/mujoco-2.1.5
-cp sample/uitools.c sample/uitools.h include/
-```
 **Build commands**
 
 To build the project simply naviage to the root directory and run ```make all mybuild``` -> swap ```mybuild``` for the name you chose.
@@ -90,11 +82,18 @@ make debug   # build targets in debug mode
 
 ## Run
 
-To run the simluation and play around, use run ```bin/mysimulate task 0```.
+To run the c++ part of the code and visualise MuJoCo in a GUI, you can use the the executable ```bin/mysimulate```. You will need to run it with command line arguments to specify which object set and gripper configuration you want:
 
-To run the python training, have a look at ```rl/TrainDQN.py```.
+```bash
+bin/mysimulate gripper_N<num_segments>_<finger_width_mm> <task_number> <object_set_name>
+bin/mysimulate gripper_N8_28 0 set6_fullset_800
+```
 
-Note: in order to run you will need to tell the computer about the mujoco shared library which will be in the ```lib``` folder of you mujoco 2.1.5 installation. The computer checks for shared libraries listed in the ```LD_LIBRARY_PATH``` environment variable, so add the path to the mujoco library to this variable:
+To run the python training, have a look at ```rl/TrainDQN.py``` and ```array_training_DQN.py```.
+
+To run multiple trainings concurrently look at ```pc_job.sh``` or to run in queues look at ```queue_job.sh```.
+
+Note: in order to run you will need to tell the computer about the mujoco shared library which will be in the ```lib``` folder of you mujoco-2.1.5 installation. The computer checks for shared libraries listed in the ```LD_LIBRARY_PATH``` environment variable, so add the path to the mujoco library to this variable:
 
 ```bash
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/mujoco-2.1.5/lib
