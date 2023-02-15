@@ -440,7 +440,7 @@ def continue_training(model, run_name, group_name, object_set=None, new_endpoint
   # set up the object set
   model.env.mj.model_folder_path = "/home/luke/mymujoco/mjcf"
 
-  # new_endpoint = 20_000
+  # new_endpoint = 100_010
   # model.wandb_note += f"Continuing training until new endpoint of {new_endpoint} episodes\n"
 
   extra_episodes = 40_000
@@ -773,15 +773,28 @@ def print_results(model, filename="results.txt"):
   heading_str = ""
   for x in range(len(headings) - 1): heading_str += "{" + str(x) + "} | "
   heading_str += "{" + str(len(headings) - 1) + "}"
-  formatters = ["{" + f"{x}:<{len(headings[x]) + 2}" + "}" for x in range(len(headings))]
-  heading_str = heading_str.format(*formatters)
+  row_str = heading_str[:]
+  # formatters = ["{" + f"{x}:<{len(headings[x]) + 2}" + "}" for x in range(len(headings))]
+  heading_formatters = []
+  row_formatters = []
+  for x in range(len(headings)):
+    if False and isinstance(new_elem[x], float):
+      row_formatters.append("{" + f"{x}:<{len(headings[x]) + 2}.4f" + "}")
+    else:
+      row_formatters.append("{" + f"{x}:<{len(headings[x]) + 2}" + "}")
+    heading_formatters.append("{" + f"{x}:<{len(headings[x]) + 2}" + "}")
+  heading_str = heading_str.format(*heading_formatters)
+  row_str = row_str.format(*row_formatters)
 
   # print the table
   print(heading_str.format(*headings))
   for i in range(len(table)):
     # check if entry is incomplete
     while len(table[i]) < len(headings): table[i] += ["N/F"]
-    print(heading_str.format(*table[i]))
+    for elem in table[i]:
+      if isinstance(elem, float):
+        elem = "{:.4f}".format(elem)
+    print(row_str.format(*table[i]))
 
 if __name__ == "__main__":
 
@@ -1327,6 +1340,40 @@ if __name__ == "__main__":
       "finger_thickness" : param_1[0],
       "finger_width" : param_1[1],
       "sensors" : param_2,
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+    # run long trainings
+    model.params.num_episodes = 100_000
+
+    # run slightly longer tests
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
+  elif training_type == "paper_baseline_2_extra_noise":
+
+    vary_1 = [
+      (0.9e-3, 28e-3),
+      (1.0e-3, 24e-3),
+      (1.0e-3, 28e-3),
+    ]
+    vary_2 = [0, 1, 2, 3]
+    vary_3 = None
+    repeats = 10
+    param_1_name = "thickness, width"
+    param_2_name = "num sensors"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "finger_thickness" : param_1[0],
+      "finger_width" : param_1[1],
+      "sensors" : param_2,
+      "sensor_noise" : 0.05,
       "sensor_steps" : 3,
       "state_steps" : 3,
     }

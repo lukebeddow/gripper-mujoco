@@ -26,6 +26,7 @@ parseJobs()
 # ----- handle inputs ----- #
 
 QUEUE_ARGS=() # arguments passed to sub scripts only in a queue scenario
+TIMESTAMP="$(date +%d-%m-%y-%H:%M)"
 
 # loop through input args
 for (( i = 1; i <= "$#"; i++ ));
@@ -35,6 +36,7 @@ case ${!i} in
     -j | --jobs ) (( i++ )); jobs=$(parseJobs ${!i}); echo Jobs are $jobs ;;
     -q | --queue ) (( i++ )); QUEUE_NUM=${!i}; echo Queue mode selected, there will be $QUEUE_NUM queues ;;
     -s | --stagger ) (( i++ )); echo Stagger flag removed before running pc_job.sh ;;
+    -t | --time-stamp ) (( i++ )); TIMESTAMP=${!i}; echo Timestamp given, this will be $TIMESTAMP ;;
     # everything else leave it unchanged to pass into pc_job.sh
     * ) QUEUE_ARGS+=( ${!i} ) ;;
 esac
@@ -79,7 +81,7 @@ do
                     ${QUEUE_ARGS[@]} \
                     --jobs "${JOBS_IN_QUEUE[*]}" \
                     --stagger 1 \
-                    --timestamp "$(date +%d-%m-%y-%H:%M)" \
+                    --timestamp $TIMESTAMP \
                     &
 
 done
