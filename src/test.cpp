@@ -221,7 +221,7 @@ int main(int argc, char** argv)
       std::printf("Time is: %.1f ms, ", (mjObj.data->time - start_time ) * 1000);
       std::cout << "printing finger 1 sensor: ";
       // mjObj.wrist_Z_sensor.print(10);
-      mjObj.finger1_gauge.print(10);
+      mjObj.sim_sensors_.finger1_gauge.print(10);
 
       
     }

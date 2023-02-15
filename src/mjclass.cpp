@@ -340,20 +340,8 @@ void MjClass::reset()
   luke::reset(model, data);
   
   // reset sensor saved data
-  finger1_gauge.reset();
-  finger2_gauge.reset();
-  finger3_gauge.reset();
-  palm_sensor.reset();
-  finger1_axial_gauge.reset();
-  finger2_axial_gauge.reset();
-  finger3_axial_gauge.reset();
-  wrist_X_sensor.reset();
-  wrist_Y_sensor.reset();
-  wrist_Z_sensor.reset();
-  x_motor_position.reset();
-  y_motor_position.reset();
-  z_motor_position.reset();
-  z_base_position.reset();
+  sim_sensors_.reset();
+  real_sensors_.reset();
 
   // reset timestamps for sensor readings
   step_timestamps.reset();
@@ -520,9 +508,9 @@ void MjClass::monitor_sensors()
     gauges[2] = s_.bending_gauge.apply_noise(gauges[2], uniform_dist);
 
     // save
-    finger1_gauge.add(gauges[0]);
-    finger2_gauge.add(gauges[1]);
-    finger3_gauge.add(gauges[2]);
+    sim_sensors_.finger1_gauge.add(gauges[0]);
+    sim_sensors_.finger2_gauge.add(gauges[1]);
+    sim_sensors_.finger3_gauge.add(gauges[2]);
 
     // record time
     gauge_timestamps.add(data->time);
@@ -554,9 +542,9 @@ void MjClass::monitor_sensors()
     axial_gauges[2] = s_.axial_gauge.apply_noise(axial_gauges[2], uniform_dist);
 
     // save
-    finger1_axial_gauge.add(axial_gauges[0]);
-    finger2_axial_gauge.add(axial_gauges[1]);
-    finger3_axial_gauge.add(axial_gauges[2]);
+    sim_sensors_.finger1_axial_gauge.add(axial_gauges[0]);
+    sim_sensors_.finger2_axial_gauge.add(axial_gauges[1]);
+    sim_sensors_.finger3_axial_gauge.add(axial_gauges[2]);
 
     // record time
     axial_timestamps.add(data->time);
@@ -580,7 +568,7 @@ void MjClass::monitor_sensors()
     palm_reading = s_.palm_sensor.apply_noise(palm_reading, uniform_dist);
 
     // save
-    palm_sensor.add(palm_reading);
+    sim_sensors_.palm_sensor.add(palm_reading);
 
     // record time
     palm_timestamps.add(data->time);
@@ -602,8 +590,8 @@ void MjClass::monitor_sensors()
     y = s_.wrist_sensor_XY.apply_noise(y, uniform_dist);
 
     // save
-    wrist_X_sensor.add(x);
-    wrist_Y_sensor.add(y);
+    sim_sensors_.wrist_X_sensor.add(x);
+    sim_sensors_.wrist_Y_sensor.add(y);
     
     // record time
     wristXY_timestamps.add(data->time);
@@ -625,7 +613,7 @@ void MjClass::monitor_sensors()
     z = s_.wrist_sensor_Z.apply_noise(z, uniform_dist);
 
     // save
-    wrist_Z_sensor.add(z);
+    sim_sensors_.wrist_Z_sensor.add(z);
 
     // record time
     wristZ_timestamps.add(data->time);
@@ -656,10 +644,10 @@ void MjClass::sense_gripper_state()
   state_vec[3] = s_.base_state_sensor.apply_noise(state_vec[3], uniform_dist);
 
   // save reading
-  x_motor_position.add(state_vec[0]);
-  y_motor_position.add(state_vec[1]);
-  z_motor_position.add(state_vec[2]);
-  z_base_position.add(state_vec[3]);
+  sim_sensors_.x_motor_position.add(state_vec[0]);
+  sim_sensors_.y_motor_position.add(state_vec[1]);
+  sim_sensors_.z_motor_position.add(state_vec[2]);
+  sim_sensors_.z_base_position.add(state_vec[3]);
 
   // save the time the reading was made
   step_timestamps.add(data->time);
@@ -1084,7 +1072,14 @@ bool MjClass::is_done()
 
 std::vector<luke::gfloat> MjClass::get_observation()
 {
-  /* get an observation with n samples from the gauges */
+  /* get an observation from the simulation sensors */
+
+  return get_observation(sim_sensors_);
+}
+
+std::vector<luke::gfloat> MjClass::get_observation(MjType::SensorData sensors)
+{
+  /* get an observation from a provided set of sensors */
 
   // use for printing detailed observation debug information
   constexpr bool debug_obs = false;
@@ -1125,11 +1120,11 @@ std::vector<luke::gfloat> MjClass::get_observation()
 
     // sample data
     std::vector<luke::gfloat> f1 = 
-      (s_.bending_gauge.*sampleFcnPtr)(finger1_gauge);
+      (s_.bending_gauge.*sampleFcnPtr)(sensors.finger1_gauge);
     std::vector<luke::gfloat> f2 = 
-      (s_.bending_gauge.*sampleFcnPtr)(finger2_gauge);
+      (s_.bending_gauge.*sampleFcnPtr)(sensors.finger2_gauge);
     std::vector<luke::gfloat> f3 = 
-      (s_.bending_gauge.*sampleFcnPtr)(finger3_gauge);
+      (s_.bending_gauge.*sampleFcnPtr)(sensors.finger3_gauge);
 
     // insert data into observation output
     observation.insert(observation.end(), f1.begin(), f1.end());
@@ -1148,11 +1143,11 @@ std::vector<luke::gfloat> MjClass::get_observation()
 
     // sample data
     std::vector<luke::gfloat> a1 = 
-      (s_.axial_gauge.*sampleFcnPtr)(finger1_axial_gauge);
+      (s_.axial_gauge.*sampleFcnPtr)(sensors.finger1_axial_gauge);
     std::vector<luke::gfloat> a2 = 
-      (s_.axial_gauge.*sampleFcnPtr)(finger2_axial_gauge);
+      (s_.axial_gauge.*sampleFcnPtr)(sensors.finger2_axial_gauge);
     std::vector<luke::gfloat> a3 = 
-      (s_.axial_gauge.*sampleFcnPtr)(finger3_axial_gauge);
+      (s_.axial_gauge.*sampleFcnPtr)(sensors.finger3_axial_gauge);
 
     // insert data into observation output
     observation.insert(observation.end(), a1.begin(), a1.end());
@@ -1171,7 +1166,7 @@ std::vector<luke::gfloat> MjClass::get_observation()
 
     // sample data
     std::vector<luke::gfloat> p1 = 
-      (s_.palm_sensor.*sampleFcnPtr)(palm_sensor);
+      (s_.palm_sensor.*sampleFcnPtr)(sensors.palm_sensor);
 
     // insert data into observation output
     observation.insert(observation.end(), p1.begin(), p1.end());
@@ -1186,9 +1181,9 @@ std::vector<luke::gfloat> MjClass::get_observation()
 
     // sample data
     std::vector<luke::gfloat> wX =
-      (s_.wrist_sensor_XY.*sampleFcnPtr)(wrist_X_sensor);
+      (s_.wrist_sensor_XY.*sampleFcnPtr)(sensors.wrist_X_sensor);
     std::vector<luke::gfloat> wY =
-      (s_.wrist_sensor_XY.*sampleFcnPtr)(wrist_Y_sensor);
+      (s_.wrist_sensor_XY.*sampleFcnPtr)(sensors.wrist_Y_sensor);
 
     // insert data into observation output
     observation.insert(observation.end(), wX.begin(), wX.end());
@@ -1205,7 +1200,7 @@ std::vector<luke::gfloat> MjClass::get_observation()
     
     // sample data
     std::vector<luke::gfloat> wZ =
-      (s_.wrist_sensor_XY.*sampleFcnPtr)(wrist_Z_sensor);
+      (s_.wrist_sensor_XY.*sampleFcnPtr)(sensors.wrist_Z_sensor);
 
     // insert data into observation output
     observation.insert(observation.end(), wZ.begin(), wZ.end());
@@ -1220,11 +1215,11 @@ std::vector<luke::gfloat> MjClass::get_observation()
 
     // sample data
     std::vector<luke::gfloat> s1 = 
-      (s_.motor_state_sensor.*stateFcnPtr)(x_motor_position);
+      (s_.motor_state_sensor.*stateFcnPtr)(sensors.x_motor_position);
     std::vector<luke::gfloat> s2 = 
-      (s_.motor_state_sensor.*stateFcnPtr)(y_motor_position);
+      (s_.motor_state_sensor.*stateFcnPtr)(sensors.y_motor_position);
     std::vector<luke::gfloat> s3 = 
-      (s_.motor_state_sensor.*stateFcnPtr)(z_motor_position);
+      (s_.motor_state_sensor.*stateFcnPtr)(sensors.z_motor_position);
 
     // insert data into observation output
     observation.insert(observation.end(), s1.begin(), s1.end());
@@ -1243,7 +1238,7 @@ std::vector<luke::gfloat> MjClass::get_observation()
 
     // sample data
     std::vector<luke::gfloat> bZ = 
-      (s_.base_state_sensor.*stateFcnPtr)(z_base_position);
+      (s_.base_state_sensor.*stateFcnPtr)(sensors.z_base_position);
 
     // insert data into observation output
     observation.insert(observation.end(), bZ.begin(), bZ.end());
@@ -1511,81 +1506,81 @@ std::vector<luke::gfloat> MjClass::get_finger_stiffnesses()
 
 /* ----- sensor functions ----- */
 
-std::vector<luke::gfloat> MjClass::get_bend_gauge_readings(bool unnormalise = false)
-{
-  /* return a vector [g1, g2, g3] of the three bend gauges last reading */
+// std::vector<luke::gfloat> MjClass::get_bend_gauge_readings(bool unnormalise = false)
+// {
+//   /* return a vector [g1, g2, g3] of the three bend gauges last reading */
 
-  /* WARNING: in simulation bend gauge readings are NOT SI */
+//   /* WARNING: in simulation raw unnormalised bend gauge readings are NOT SI */
 
-  std::vector<luke::gfloat> readings(3);
+//   std::vector<luke::gfloat> readings(3);
 
-  readings[0] = finger1_gauge.read_element();
-  readings[1] = finger2_gauge.read_element();
-  readings[2] = finger3_gauge.read_element();
+//   readings[0] = finger1_gauge.read_element();
+//   readings[1] = finger2_gauge.read_element();
+//   readings[2] = finger3_gauge.read_element();
 
-  if (unnormalise) {
-    // map back from [-1, +1] to [min, max] in SI units
-    readings[0] *= s_.bending_gauge.normalise;
-    readings[1] *= s_.bending_gauge.normalise;
-    readings[2] *= s_.bending_gauge.normalise;
-  }
+//   if (unnormalise) {
+//     // map back from [-1, +1] to [min, max] in SI units
+//     readings[0] *= s_.bending_gauge.normalise;
+//     readings[1] *= s_.bending_gauge.normalise;
+//     readings[2] *= s_.bending_gauge.normalise;
+//   }
 
-  return readings;
-}
+//   return readings;
+// }
 
-luke::gfloat MjClass::get_palm_reading(bool unnormalise = false)
-{
-  /* get the last palm reading */
+// luke::gfloat MjClass::get_palm_reading(bool unnormalise = false)
+// {
+//   /* get the last palm reading */
 
-  luke::gfloat reading = palm_sensor.read_element();
+//   luke::gfloat reading = palm_sensor.read_element();
 
-  if (unnormalise) {
-    // map back from [-1, +1] to [min, max] in SI units
-    reading *= s_.palm_sensor.normalise;
-  }
+//   if (unnormalise) {
+//     // map back from [-1, +1] to [min, max] in SI units
+//     reading *= s_.palm_sensor.normalise;
+//   }
 
-  return reading;
-}
+//   return reading;
+// }
 
-luke::gfloat MjClass::get_wrist_reading(bool unnormalise = false)
-{
-  /* get the last wrist Z reading */
+// luke::gfloat MjClass::get_wrist_reading(bool unnormalise = false)
+// {
+//   /* get the last wrist Z reading */
 
-  luke::gfloat reading = wrist_Z_sensor.read_element();
+//   luke::gfloat reading = wrist_Z_sensor.read_element();
 
-  if (unnormalise) {
-    // map back from [-1, +1] to [min, max] in SI units
-    reading *= s_.wrist_sensor_Z.normalise;
-  }
+//   if (unnormalise) {
+//     // map back from [-1, +1] to [min, max] in SI units
+//     reading *= s_.wrist_sensor_Z.normalise;
+//   }
 
-  return reading;
-}
+//   return reading;
+// }
 
-std::vector<luke::gfloat> MjClass::get_state_readings(bool unnormalise = false)
-{
-  /* get a vector [gripperx, grippery, gripperz, basez] */
+// std::vector<luke::gfloat> MjClass::get_state_readings(bool unnormalise = false)
+// {
+//   /* get a vector [gripperx, grippery, gripperz, basez] */
 
-  std::vector<luke::gfloat> readings(4);
+//   std::vector<luke::gfloat> readings(4);
 
-  readings[0] = x_motor_position.read_element();
-  readings[1] = y_motor_position.read_element();
-  readings[2] = z_motor_position.read_element();
-  readings[3] = z_base_position.read_element();
+//   readings[0] = x_motor_position.read_element();
+//   readings[1] = y_motor_position.read_element();
+//   readings[2] = z_motor_position.read_element();
+//   readings[3] = z_base_position.read_element();
 
-  if (unnormalise) {
-    // map back from [-1, +1] to [min, max] in SI units
-    readings[0] = unnormalise_from(
-      readings[0], luke::Gripper::xy_min, luke::Gripper::xy_max); 
-    readings[1] = unnormalise_from(
-      readings[1], luke::Gripper::xy_min, luke::Gripper::xy_max);
-    readings[2] = unnormalise_from(
-      readings[2], luke::Gripper::z_min, luke::Gripper::z_max);
-    readings[3] = unnormalise_from(
-      readings[3], luke::Target::base_z_min, luke::Target::base_z_max);
-  }
+//   if (unnormalise) {
+//     // map back from [-1, +1] to [min, max] in SI units
+//     readings[0] = unnormalise_from(
+//       readings[0], luke::Gripper::xy_min, luke::Gripper::xy_max); 
+//     readings[1] = unnormalise_from(
+//       readings[1], luke::Gripper::xy_min, luke::Gripper::xy_max);
+//     readings[2] = unnormalise_from(
+//       readings[2], luke::Gripper::z_min, luke::Gripper::z_max);
+//     readings[3] = unnormalise_from(
+//       readings[3], luke::Target::base_z_min, luke::Target::base_z_max);
+//   }
 
-  return readings;
-}
+//   return readings;
+// }
 
 luke::gfloat MjClass::get_finger_angle()
 {
@@ -1602,41 +1597,28 @@ void MjClass::calibrate_real_sensors()
   and zero-ing done at runtime, therefore this function sets a flag to reset offsets */
 
   // initialise a clean set of calibrations
-  MjType::RealSensors real_sensors;
+  MjType::RealCalibrations real_calibrations;
 
   // select calibrations suitable for the fingers in use
   double width = luke::get_finger_width();
   double thickness = luke::get_finger_thickness();
-  sensor_calibrations_.g1 = real_sensors.get_gauge_calibration(1, thickness, width);
-  sensor_calibrations_.g2 = real_sensors.get_gauge_calibration(2, thickness, width);
-  sensor_calibrations_.g3 = real_sensors.get_gauge_calibration(3, thickness, width);
+  real_sensors_.g1 = real_calibrations.get_gauge_calibration(1, thickness, width);
+  real_sensors_.g2 = real_calibrations.get_gauge_calibration(2, thickness, width);
+  real_sensors_.g3 = real_calibrations.get_gauge_calibration(3, thickness, width);
 
   // get wrist and palm calibrations
-  sensor_calibrations_.palm = real_sensors.palm;
-  sensor_calibrations_.wrist_Z = real_sensors.wrist_Z;
+  real_sensors_.palm = real_calibrations.palm;
+  real_sensors_.wrist_Z = real_calibrations.wrist_Z;
 
   // apply normalisation to all sensors
-  sensor_calibrations_.g1.norm = s_.bending_gauge.normalise;
-  sensor_calibrations_.g2.norm = s_.bending_gauge.normalise;
-  sensor_calibrations_.g3.norm = s_.bending_gauge.normalise;
-  sensor_calibrations_.palm.norm = s_.palm_sensor.normalise;
-  sensor_calibrations_.wrist_Z.norm = s_.wrist_sensor_Z.normalise;
+  real_sensors_.g1.norm = s_.bending_gauge.normalise;
+  real_sensors_.g2.norm = s_.bending_gauge.normalise;
+  real_sensors_.g3.norm = s_.bending_gauge.normalise;
+  real_sensors_.palm.norm = s_.palm_sensor.normalise;
+  real_sensors_.wrist_Z.norm = s_.wrist_sensor_Z.normalise;
 
-  // set flag to re-zero all sensors (wipes offset setting)
-  sensor_calibrations_.recalibrate_offset_flag = true;
-}
-
-std::vector<float> MjClass::get_finger_gauge_data()
-{
-  /* report the most recent gauge data in a vector { f1, f2, f3 } */
-
-  std::vector<float> out;
-
-  out.push_back(finger1_gauge.read_element());
-  out.push_back(finger2_gauge.read_element());
-  out.push_back(finger3_gauge.read_element());
-
-  return out;
+  // re-zero all sensors, recalculate their offsets, wipe all saved real data
+  real_sensors_.reset();
 }
 
 std::vector<float> MjClass::input_real_data(std::vector<float> state_data, 
@@ -1644,28 +1626,12 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
 {
   /* insert real data */
 
-  // flag to ensure we configure before running with real data
-  static bool configured = false;
-  if (not configured) {
+  // safety check to ensure we configure and calibrate before running with real data
+  static bool first_call = true;
+  if (first_call) {
     configure_settings();
-    configured = true;
-  }
-
-  constexpr int calibration_samples = 20; // 10Hz so 2sec calibration time
-  static std::vector<float> f1_calibration;
-  static std::vector<float> f2_calibration;
-  static std::vector<float> f3_calibration;
-  static std::vector<float> palm_calibration;
-  static std::vector<float> wrist_Z_calibration;
-
-  // check if we should automatically calibrate offsets
-  if (sensor_calibrations_.recalibrate_offset_flag) {
-    f1_calibration.clear();
-    f2_calibration.clear();
-    f3_calibration.clear();
-    palm_calibration.clear();
-    wrist_Z_calibration.clear();
-    sensor_calibrations_.recalibrate_offset_flag = false;
+    calibrate_real_sensors();
+    first_call = false;
   }
 
   // vector which outputs all the freshly normalised values
@@ -1684,37 +1650,45 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
   if (s_.motor_state_sensor.in_use) {
 
     // normalise and save state data
+    real_sensors_.raw.x_motor_position.add(state_data[i]);
+    real_sensors_.SI.x_motor_position.add(state_data[i]);
     state_data[i] = normalise_between(
       state_data[i], luke::Gripper::xy_min, luke::Gripper::xy_max);
     state_data[i] = s_.motor_state_sensor.apply_noise(state_data[i], uniform_dist);
-    x_motor_position.add(state_data[i]); 
+    real_sensors_.normalised.x_motor_position.add(state_data[i]);
     output.push_back(state_data[i]);
     ++i; 
 
+    real_sensors_.raw.y_motor_position.add(state_data[i]);
+    real_sensors_.SI.y_motor_position.add(state_data[i]);
     state_data[i] = normalise_between(
       state_data[i], luke::Gripper::xy_min, luke::Gripper::xy_max);
     state_data[i] = s_.motor_state_sensor.apply_noise(state_data[i], uniform_dist);
-    y_motor_position.add(state_data[i]); 
+    real_sensors_.normalised.y_motor_position.add(state_data[i]);
     output.push_back(state_data[i]);
     ++i; 
 
+    real_sensors_.raw.z_motor_position.add(state_data[i]);
+    real_sensors_.SI.z_motor_position.add(state_data[i]);
     state_data[i] = normalise_between(
       state_data[i], luke::Gripper::z_min, luke::Gripper::z_max);
     state_data[i] = s_.motor_state_sensor.apply_noise(state_data[i], uniform_dist);
-    z_motor_position.add(state_data[i]); 
+    real_sensors_.normalised.z_motor_position.add(state_data[i]);
     output.push_back(state_data[i]);
     ++i; 
   }
   
   if (s_.base_state_sensor.in_use) {
 
-    // for testing
-    float start = state_data[i];
+    // // for testing
+    // float start = state_data[i];
 
+    real_sensors_.raw.z_base_position.add(state_data[i]);
+    real_sensors_.SI.z_base_position.add(state_data[i]);
     state_data[i] = normalise_between(
       state_data[i], luke::Target::base_z_min, luke::Target::base_z_max);
     state_data[i] = s_.base_state_sensor.apply_noise(state_data[i], uniform_dist);
-    z_base_position.add(state_data[i]);
+    real_sensors_.normalised.z_base_position.add(state_data[i]);
     output.push_back(state_data[i]);
     ++i; 
 
@@ -1729,51 +1703,60 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
   if (s_.bending_gauge.in_use) {
 
     // calibrate the finger 1 sensor
-    if (f1_calibration.size() < calibration_samples) {
-      f1_calibration.push_back(sensor_data[j]);
-      sensor_calibrations_.g1.offset = 0;
-      for (int k = 0; k < f1_calibration.size(); k++) {
-        sensor_calibrations_.g1.offset += f1_calibration[k];
+    if (real_sensors_.f1_calibration.size() < real_sensors_.calibration_samples) {
+      real_sensors_.f1_calibration.push_back(sensor_data[j]);
+      real_sensors_.g1.offset = 0;
+      for (int k = 0; k < real_sensors_.f1_calibration.size(); k++) {
+        real_sensors_.g1.offset += real_sensors_.f1_calibration[k];
       }
-      sensor_calibrations_.g1.offset /= (float) f1_calibration.size();
+      real_sensors_.g1.offset /= (float) real_sensors_.f1_calibration.size();
     }
 
     // scale, normalise, and save gauge data
-    sensor_data[j] = sensor_calibrations_.g1.apply_calibration(sensor_data[j]);
+    real_sensors_.raw.finger1_gauge.add(sensor_data[j]);
+    sensor_data[j] = real_sensors_.g1.apply_calibration(sensor_data[j]);
+    real_sensors_.SI.finger1_gauge.add(sensor_data[j]);
+    sensor_data[j] = real_sensors_.g1.apply_normalisation(sensor_data[j]);
     sensor_data[j] = s_.bending_gauge.apply_noise(sensor_data[j], uniform_dist);
-    finger1_gauge.add(sensor_data[j]); 
+    real_sensors_.normalised.finger1_gauge.add(sensor_data[j]);
     output.push_back(sensor_data[j]);
     ++j;
 
     // calibrate the finger 2 sensor
-    if (f2_calibration.size() < calibration_samples) {
-      f2_calibration.push_back(sensor_data[j]);
-      sensor_calibrations_.g2.offset = 0;
-      for (int k = 0; k < f2_calibration.size(); k++) {
-        sensor_calibrations_.g2.offset += f2_calibration[k];
+    if (real_sensors_.f2_calibration.size() < real_sensors_.calibration_samples) {
+      real_sensors_.f2_calibration.push_back(sensor_data[j]);
+      real_sensors_.g2.offset = 0;
+      for (int k = 0; k < real_sensors_.f2_calibration.size(); k++) {
+        real_sensors_.g2.offset += real_sensors_.f2_calibration[k];
       }
-      sensor_calibrations_.g2.offset /= (float) f2_calibration.size();
+      real_sensors_.g2.offset /= (float) real_sensors_.f2_calibration.size();
     }
 
-    sensor_data[j] = sensor_calibrations_.g2.apply_calibration(sensor_data[j]);
+    real_sensors_.raw.finger2_gauge.add(sensor_data[j]);
+    sensor_data[j] = real_sensors_.g2.apply_calibration(sensor_data[j]);
+    real_sensors_.SI.finger2_gauge.add(sensor_data[j]);
+    sensor_data[j] = real_sensors_.g2.apply_normalisation(sensor_data[j]);
     sensor_data[j] = s_.bending_gauge.apply_noise(sensor_data[j], uniform_dist);
-    finger2_gauge.add(sensor_data[j]); 
+    real_sensors_.normalised.finger2_gauge.add(sensor_data[j]);
     output.push_back(sensor_data[j]);
     ++j;
 
     // calibrate the finger 3 sensor
-    if (f3_calibration.size() < calibration_samples) {
-      f3_calibration.push_back(sensor_data[j]);
-      sensor_calibrations_.g3.offset = 0;
-      for (int k = 0; k < f3_calibration.size(); k++) {
-        sensor_calibrations_.g3.offset += f3_calibration[k];
+    if (real_sensors_.f3_calibration.size() < real_sensors_.calibration_samples) {
+      real_sensors_.f3_calibration.push_back(sensor_data[j]);
+      real_sensors_.g3.offset = 0;
+      for (int k = 0; k < real_sensors_.f3_calibration.size(); k++) {
+        real_sensors_.g3.offset += real_sensors_.f3_calibration[k];
       }
-      sensor_calibrations_.g3.offset /= (float) f3_calibration.size();
+      real_sensors_.g3.offset /= (float) real_sensors_.f3_calibration.size();
     }
   
-    sensor_data[j] = sensor_calibrations_.g3.apply_calibration(sensor_data[j]);
+    real_sensors_.raw.finger3_gauge.add(sensor_data[j]);
+    sensor_data[j] = real_sensors_.g3.apply_calibration(sensor_data[j]);
+    real_sensors_.SI.finger3_gauge.add(sensor_data[j]);
+    sensor_data[j] = real_sensors_.g3.apply_normalisation(sensor_data[j]);
     sensor_data[j] = s_.bending_gauge.apply_noise(sensor_data[j], uniform_dist);
-    finger3_gauge.add(sensor_data[j]); 
+    real_sensors_.normalised.finger3_gauge.add(sensor_data[j]);
     output.push_back(sensor_data[j]);
     ++j;
 
@@ -1782,19 +1765,22 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
   if (s_.palm_sensor.in_use) {
 
     // calibrate the palm sensor
-    if (palm_calibration.size() < calibration_samples) {
-      palm_calibration.push_back(sensor_data[j]);
-      sensor_calibrations_.palm.offset = 0;
-      for (int k = 0; k < palm_calibration.size(); k++) {
-        sensor_calibrations_.palm.offset += palm_calibration[k];
+    if (real_sensors_.palm_calibration.size() < real_sensors_.calibration_samples) {
+      real_sensors_.palm_calibration.push_back(sensor_data[j]);
+      real_sensors_.palm.offset = 0;
+      for (int k = 0; k < real_sensors_.palm_calibration.size(); k++) {
+        real_sensors_.palm.offset += real_sensors_.palm_calibration[k];
       }
-      sensor_calibrations_.palm.offset /= (float) palm_calibration.size();
+      real_sensors_.palm.offset /= (float) real_sensors_.palm_calibration.size();
     }
 
     // scale, normalise, and save gauge data
-    sensor_data[j] = sensor_calibrations_.palm.apply_calibration(sensor_data[j]);
-    sensor_data[j] = s_.palm_sensor.apply_noise(sensor_data[j], uniform_dist);
-    palm_sensor.add(sensor_data[j]);  
+    real_sensors_.raw.palm_sensor.add(sensor_data[j]);
+    sensor_data[j] = real_sensors_.palm.apply_calibration(sensor_data[j]);
+    real_sensors_.SI.palm_sensor.add(sensor_data[j]);
+    sensor_data[j] = real_sensors_.palm.apply_normalisation(sensor_data[j]);
+    sensor_data[j] = s_.bending_gauge.apply_noise(sensor_data[j], uniform_dist);
+    real_sensors_.normalised.palm_sensor.add(sensor_data[j]); 
     output.push_back(sensor_data[j]);
     ++j;
     
@@ -1809,31 +1795,34 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     float target_wrist_value = 0; // was 23.3
 
     // calibrate the wrist sensor
-    if (wrist_Z_calibration.size() < calibration_samples) {
+    if (real_sensors_.wrist_Z_calibration.size() < real_sensors_.calibration_samples) {
 
       // known error: wrist sensor initially gives out (0,0,0,0,0,0)
       constexpr float tol = 1e-5;
       if (abs(sensor_data[j]) > tol) {
 
         // add the data to calibration vector, tally up and calculate
-        wrist_Z_calibration.push_back(sensor_data[j]);
-        sensor_calibrations_.wrist_Z.offset = 0;
-        for (int k = 0; k < wrist_Z_calibration.size(); k++) {
-          sensor_calibrations_.wrist_Z.offset += wrist_Z_calibration[k]  - target_wrist_value;
+        real_sensors_.wrist_Z_calibration.push_back(sensor_data[j]);
+        real_sensors_.wrist_Z.offset = 0;
+        for (int k = 0; k < real_sensors_.wrist_Z_calibration.size(); k++) {
+          real_sensors_.wrist_Z.offset += real_sensors_.wrist_Z_calibration[k]  - target_wrist_value;
         }
-        sensor_calibrations_.wrist_Z.offset /= (float) wrist_Z_calibration.size();
+        real_sensors_.wrist_Z.offset /= (float) real_sensors_.wrist_Z_calibration.size();
       }
     }
 
     // scale, normalise, and save wrist data
-    sensor_data[j] = sensor_calibrations_.wrist_Z.apply_calibration(sensor_data[j]);
-    sensor_data[j] = s_.wrist_sensor_Z.apply_noise(sensor_data[j], uniform_dist);
-    wrist_Z_sensor.add(sensor_data[j]);  
+    real_sensors_.raw.wrist_Z_sensor.add(sensor_data[j]);
+    sensor_data[j] = real_sensors_.wrist_Z.apply_calibration(sensor_data[j]);
+    real_sensors_.SI.wrist_Z_sensor.add(sensor_data[j]);
+    sensor_data[j] = real_sensors_.wrist_Z.apply_normalisation(sensor_data[j]);
+    sensor_data[j] = s_.bending_gauge.apply_noise(sensor_data[j], uniform_dist);
+    real_sensors_.normalised.wrist_Z_sensor.add(sensor_data[j]); 
     output.push_back(sensor_data[j]);
     ++j;
 
     if (debug_wrist_Z) {
-      float post_cal = (pre_cal - sensor_calibrations_.wrist_Z.offset) * sensor_calibrations_.wrist_Z.scale;
+      float post_cal = (pre_cal - real_sensors_.wrist_Z.offset) * real_sensors_.wrist_Z.scale;
       std::cout << "Wrist sensor data raw " << pre_cal << ", after scaling "
         << post_cal << ", normalised " << sensor_data[j-1] << '\n';
     }
@@ -1860,7 +1849,71 @@ std::vector<float> MjClass::get_real_observation()
   // reset as we are about to return an observation
   samples_since_last_obs = 0;
 
-  return get_observation();
+  return get_observation(real_sensors_.normalised);
+}
+
+std::vector<float> MjClass::get_simple_state_vector(MjType::SensorData sensor)
+{
+  /* return a simple state vector - that is with only the most recent reading
+  from each sensor. So with 5 sensors and 4 state then the simple state is 9 elements.
+  Make sure the ordering of the vector in this function is the same as in
+  get_observation() */
+
+  // use for printing detailed observation debug information
+  constexpr bool debug_obs = false;
+
+  std::vector<luke::gfloat> simple_state;
+
+  // get bending strain gauge sensor output
+  if (s_.bending_gauge.in_use) {
+
+    simple_state.push_back(sensor.read_finger1_gauge());
+    simple_state.push_back(sensor.read_finger2_gauge());
+    simple_state.push_back(sensor.read_finger3_gauge());
+  }
+
+  // get axial strain gauge sensor output
+  if (s_.axial_gauge.in_use) {
+
+    simple_state.push_back(sensor.read_finger1_axial_gauge());
+    simple_state.push_back(sensor.read_finger2_axial_gauge());
+    simple_state.push_back(sensor.read_finger3_axial_gauge());
+  }
+
+  // get palm sensor output
+  if (s_.palm_sensor.in_use) {
+
+    simple_state.push_back(sensor.read_palm_sensor());
+  }
+
+  // get wrist sensor XY output
+  if (s_.wrist_sensor_XY.in_use) {
+
+    simple_state.push_back(sensor.read_wrist_X_sensor());
+    simple_state.push_back(sensor.read_wrist_Y_sensor());
+  }
+
+  // get wrist sensor Z output
+  if (s_.wrist_sensor_Z.in_use) {
+    
+    simple_state.push_back(sensor.read_wrist_Z_sensor());
+  }
+
+  // get motor state output
+  if (s_.motor_state_sensor.in_use) {
+
+    simple_state.push_back(sensor.read_x_motor_position());
+    simple_state.push_back(sensor.read_y_motor_position());
+    simple_state.push_back(sensor.read_z_motor_position());
+  }
+
+  // get base state
+  if (s_.base_state_sensor.in_use) {
+
+    simple_state.push_back(sensor.read_z_base_position());
+  }
+  
+  return simple_state;
 }
 
 /* ----- misc ----- */
@@ -2079,7 +2132,7 @@ MjType::CurveFitData MjClass::curve_validation_regime(bool print, int force_styl
 
     // // for testing
     // readings[i - 1] = luke::read_armadillo_gauge(data, 0);
-    // norms[i - 1] = finger1_gauge.read_element();
+    // norms[i - 1] = sim_sensors_.finger1_gauge.read_element();
   }
 
   // // for testing
@@ -2557,7 +2610,7 @@ void MjClass::calibrate_simulated_sensors(float bend_gauge_normalise)
   float settle_time = 0.3; // must exceed read rate (0.1s) to ensure a sensor reading
   int steps_for_settle = settle_time / s_.mujoco_timestep;
   for (int i = 0; i < steps_for_settle; i++) step();
-  s_.wrist_sensor_Z.raw_value_offset = wrist_Z_sensor.read_element();
+  s_.wrist_sensor_Z.raw_value_offset = sim_sensors_.wrist_Z_sensor.read_element();
   s_.wrist_sensor_Z.use_normalisation = original_norm;
   s_.wrist_sensor_Z.use_noise = original_noise;
 
