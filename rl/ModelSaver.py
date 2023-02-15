@@ -38,7 +38,7 @@ class ModelSaver:
       self.root = os.path.dirname(os.path.abspath(__file__)) + "/"
       use_root = False
     else:
-      if self.root[-1] != '/': self.root += '/'
+      if root[-1] != '/': root += '/'
       self.root = root
       use_root = True
 
@@ -69,9 +69,10 @@ class ModelSaver:
     Get the path that modelsaver is currently using
     """
 
-    path = self.root + self.path
+    path = self.path
+    if path[-1] != "/": path += "/"
     if self.in_folder: path += self.folder
-    if path[-1] != '/': path += '/'
+    if path[-1] != "/": path += "/"
 
     return path
 
@@ -87,14 +88,21 @@ class ModelSaver:
     num_len = len(self.file_num.format(0))
     return int(file[-num_len:])
 
-  def get_recent_file(self, path, id=None):
+  def get_recent_file(self, path=None, name=None, id=None):
     """
     Get the path to the highest index save in the path, or return None if empty,
     for example, if we have file_001, file_002, file_004, we return file_004
     """
 
+    # if not given a path, use the current path as default
+    if path is None: path = self.get_current_path()
+
     # get all files with pickle extension in the target directory
     pkl_files = [x for x in os.listdir(path) if x.endswith(self.file_ext)]
+
+    # if given a name to check for, remove any files that don't match the name
+    if name is not None:
+      pkl_files = [x for x in pkl_files if x.startswith(name)]
 
     # if there are no candidate files
     if len(pkl_files) == 0: return None
@@ -320,7 +328,7 @@ class ModelSaver:
     # enter the folder
     self.enter_folder(folder_name)
 
-  def enter_folder(self, foldername, folderpath=None):
+  def enter_folder(self, foldername, folderpath=None, forcecreate=None):
     """
     Enter a folder for future saving and loading
     """
@@ -328,17 +336,16 @@ class ModelSaver:
     if folderpath != None:
       self.path = folderpath
 
-    if os.path.exists(self.path + foldername):
+    if not os.path.exists(self.path + foldername):
+      if forcecreate:
+        self.new_folder(name=foldername)
+      else:
+        raise RuntimeError("folder name does not exist")
 
-      if self.in_folder: self.exit_folder()
-
-      if foldername[-1] != '/': foldername += '/'
-
-      self.in_folder = True
-      self.folder = foldername
-
-    else:
-      raise RuntimeError("folder name does not exist")
+    if self.in_folder: self.exit_folder()
+    if foldername[-1] != '/': foldername += '/'
+    self.in_folder = True
+    self.folder = foldername
 
   def exit_folder(self):
     """
@@ -348,7 +355,8 @@ class ModelSaver:
     self.in_folder = False
     self.folder = ""
 
-  def save(self, name, pyobj=None, txtstr=None, txtonly=None, txtlabel=None):
+  def save(self, name, pyobj=None, txtstr=None, txtonly=None, txtlabel=None,
+           suffix_numbering=True):
     """
     Save the given object using pickle
     """
@@ -366,14 +374,17 @@ class ModelSaver:
       return savepath + savename
   
     # find out what the most recent file number in the savepath was
-    most_recent = self.get_recent_file(savepath)
+    if suffix_numbering:
+      most_recent = self.get_recent_file(savepath, name=name)
 
-    if most_recent == None: save_id = self.default_num
-    else:
-      save_id = 1 + self.get_file_num(most_recent)
+      if most_recent == None: save_id = self.default_num
+      else:
+        save_id = 1 + self.get_file_num(most_recent)
 
-    # create the file name
-    savename = name + '_' + self.file_num.format(save_id) + self.file_ext
+      # create the file name
+      savename = name + '_' + self.file_num.format(save_id) + self.file_ext
+    
+    else: savename = name + self.file_ext
 
     # save
     print(f"Saving file {savepath + savename} with pickle ... ", end="", flush=True)
@@ -417,7 +428,8 @@ class ModelSaver:
 
     return self.path
 
-  def load(self, folderpath=None, foldername=None, id=None):
+  def load(self, filenamestarts=None, folderpath=None, foldername=None, id=None,
+           suffix_numbering=True, fullfilepath=None):
     """
     Load a model, by default loads the most recent in the current folder
     """
@@ -429,11 +441,18 @@ class ModelSaver:
     if folderpath != None:
       loadpath = folderpath
 
-    # if the file name is specified
+    # if the folder name is specified
     if foldername != None:
       loadpath += foldername
       if loadpath[-1] != '/': loadpath += '/'
-      loadpath = self.get_recent_file(loadpath, id)
+      if suffix_numbering:
+        loadpath = self.get_recent_file(loadpath, id=id, name=filenamestarts)
+      else:
+        loadpath += filenamestarts + self.file_ext
+      
+    # if the fullfilename is specified, override and use this
+    if fullfilepath is not None:
+      loadpath = fullfilepath
 
     else:
       # default: find file in current folder folder
@@ -442,12 +461,13 @@ class ModelSaver:
       if self.in_folder: 
         loadpath += self.folder
 
-      new_loadpath = self.get_recent_file(loadpath, id)
-
-      if new_loadpath == None:
-        print(f"No model found at path {loadpath} with id {id}")
+      if suffix_numbering:
+        loadpath = self.get_recent_file(loadpath, id=id, name=filenamestarts)
       else:
-        loadpath = new_loadpath
+        loadpath += filenamestarts + self.file_ext
+
+      if loadpath == None:
+        print(f"No model found at path {loadpath} with id {id}")
 
     print(f"Loading file {loadpath} with pickle ... ", end="", flush=True)
     if use_compression:

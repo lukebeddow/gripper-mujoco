@@ -1651,7 +1651,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     configured = true;
   }
 
-  constexpr int calibration_samples = 20;
+  constexpr int calibration_samples = 20; // 10Hz so 2sec calibration time
   static std::vector<float> f1_calibration;
   static std::vector<float> f2_calibration;
   static std::vector<float> f3_calibration;
@@ -1664,6 +1664,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     f2_calibration.clear();
     f3_calibration.clear();
     palm_calibration.clear();
+    wrist_Z_calibration.clear();
     sensor_calibrations_.recalibrate_offset_flag = false;
   }
 
