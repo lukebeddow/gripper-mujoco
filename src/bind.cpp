@@ -16,6 +16,7 @@ PYBIND11_MODULE(bind, m) {
   m.def("goal_rewards", &goal_rewards);
   m.def("score_goal", static_cast<MjType::Goal (*)(MjType::Goal, std::vector<float>, MjType::Settings)>(&score_goal));
   m.def("score_goal", static_cast<MjType::Goal (*)(MjType::Goal, MjType::EventTrack, MjType::Settings)>(&score_goal));
+  m.def("normalise_between", &normalise_between)
 
   // main module class
   {py::class_<MjClass>(m, "MjClass")

@@ -1699,7 +1699,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     ++i; 
 
     state_data[i] = normalise_between(
-      state_data[i], luke::Gripper::xy_min, luke::Gripper::xy_max);
+      state_data[i], luke::Gripper::z_min, luke::Gripper::z_max);
     state_data[i] = s_.motor_state_sensor.apply_noise(state_data[i], uniform_dist);
     z_motor_position.add(state_data[i]); 
     output.push_back(state_data[i]);
