@@ -601,6 +601,14 @@ static double last_step_time_ = 0.0;
 // turn on/off debug mode for this file only
 constexpr static bool debug_ = false; 
 
+// TESTING global variable to prevent table impacts
+bool TEST_prevent_table_impacts = false; // default should always be false
+float TEST_prevent_table_impacts_value = -12.5e-3; // metres depth below starting position to prevent further motion
+void prevent_table_impacts(bool set_as) {
+  TEST_prevent_table_impacts = set_as;
+}
+// END TESTING - see move_base_m(...) function and header file
+
 /* ----- initialising, setup, and utilities ----- */
 
 void init(mjModel* model, mjData* data)
@@ -2414,6 +2422,30 @@ bool set_gripper_target_m_rad(double x, double th, double z)
   return target_.end.set_xyz_m(x, th, z);
 }
 
+bool set_base_target_m(double x, double y, double z)
+{
+  /* specify an x,y,z base target */
+
+  target_.last_robot = Target::Robot::panda;
+
+  /* only z motion currently implemented */
+  target_.base[0] = z;
+
+  // check limits, currently only z movements supported
+  double z_min = luke::Target::base_z_min;
+  double z_max = luke::Target::base_z_max;
+
+  // check if we have gone outside the limits
+  if (target_.base[0] > z_max) {
+    target_.base[0] = z_max;
+    return false;
+  }
+  if (target_.base[0] < z_min) {
+    target_.base[0] = z_min;
+    return false;
+  }
+}
+
 bool move_gripper_target_step(int x, int y, int z)
 {
   /* adjust the gripper target by the indicated number of steps */
@@ -2470,6 +2502,21 @@ bool move_base_target_m(double x, double y, double z)
     return false;
   }
 
+  // TESTING prevent table impacts
+  /* in future, make a 'base' class to handle all base movements, like the gripper class */
+  if (TEST_prevent_table_impacts) {
+    // if the action is to go lower (+ve means go lower)
+    if (z > 0) {
+      // if the fingertips are below our threshold height
+      if (luke::get_fingertip_z_height() < TEST_prevent_table_impacts_value) {
+        target_.base[0] -= z; // undo the previous addition of the action
+        // std::cout << "\n\n--------------------------- table impact prevented ----------------------\n\n";
+        return false;
+      }
+    }
+  }
+  // END TESTING
+
   return true;
 }
 
@@ -2482,6 +2529,27 @@ void print_target()
 void update_target()
 {
   target_.end.update();
+}
+
+void set_base_to_max_height(mjData* data)
+{
+  /* moves the base position to maximum height, should only ber used for specific
+  tests and not during any grasping */
+
+  // confusingly, for the base down is +ve and up is -ve
+  float max_height = Target::base_z_min;
+
+  // set the base target to maximum
+  set_base_target_m(0, 0, max_height);
+
+  // override qpos for the base to snap model to maximum
+
+  /* ONLY Z MOTION SUPPORTED */
+  if (j_.num.base > 1) {
+    throw std::runtime_error("only z motion supported in set_base_to_max_height(...)");
+  }
+
+  (*j_.to_qpos.base[0]) = max_height; 
 }
 
 /* ----- sensing ------ */
@@ -3077,6 +3145,18 @@ float get_finger_thickness()
   return j_.dim.finger_thickness;
 }
 
+float get_finger_width()
+{
+  return j_.dim.finger_width;
+}
+
+float get_finger_length()
+{
+  /* return the current finger length */
+
+  return j_.dim.finger_length;
+}
+
 std::vector<luke::gfloat> get_stiffnesses()
 {
   return j_.dim.joint_stiffness;
@@ -3101,8 +3181,10 @@ float calc_yield_point_load()
 
 float get_fingertip_z_height()
 {
-  /* return the distance from the fingertip to the ground in mm. A negative value
-  means the fingertips hit the ground */
+  /* returns the current fingertip height with 0 being the starting value before
+  any actions, and negative values meaning the fingertips are going down. Since
+  the gripper starts usually at 10mm height, a value of -10e-3 indicates the tips
+  have hit the ground */
 
   float straight_finger_distance = -Target::base_z_min - target_.base[0];
   float tip_lift = j_.dim.finger_length * (1 - std::cos(target_.end.get_th_rad()));

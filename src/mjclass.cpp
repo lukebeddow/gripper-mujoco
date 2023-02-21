@@ -103,36 +103,6 @@ void MjClass::configure_settings()
     return;
   }
 
-  /* --- start of real calibration hardcoding --- */
-
-  // recalibrate offsets automatically upon any reset
-  calibrate_.recalibrate_offset_flag = true;
-
-  calibrate_.offset.g1 = 6.75e5;
-  calibrate_.offset.g2 = -3.07e5;
-  calibrate_.offset.g3 = 9.60e5;
-
-  // WRIST: -0.832 -> -23.3
-
-  calibrate_.scale.g1 = (-1.0 / 7.52e5);
-  calibrate_.scale.g2 = (-1.0 / 7.61e5);
-  calibrate_.scale.g3 = (-1.0 / 7.18e5);
-
-  // these should be the same as bend_gauge.normalise
-  // calibrate_.norm.g1 = calibrate_.norm.g2 = calibrate_.norm.g3 = 5;
-  calibrate_.norm.g1 = calibrate_.norm.g2 = calibrate_.norm.g3 = s_.bending_gauge.normalise;
-
-  // calibrate_.offset.palm = 3.31e5;  // overriden at runtime, auto calibrated
-  calibrate_.scale.palm = (1.0 / 1.34e4);
-  calibrate_.norm.palm = 8.0;       // should be same as palm_sensor.normalise
-
-  // calibrate_.offset.wrist_Z = 0;    // overriden at runtime, auto calibrated
-  calibrate_.scale.wrist_Z = -1;    // already SI units (voltage x2??)
-  // calibrate_.norm.wrist_Z = 28.0;   // should be same as wrist_Z_sensor.normalise
-  calibrate_.norm.wrist_Z = s_.wrist_sensor_Z.normalise;
-
-  /* --- end of real calibration hardcoding --- */
-
   /* check what actions are set */
   action_options.clear();
   action_options.resize(MjType::Action::count, -1);
@@ -1032,18 +1002,29 @@ std::vector<float> MjClass::set_action(int action)
     wl = false;
   }
 
-  if (s_.debug)
-    std::cout << ", within_limits = " << wl << '\n';
+  if (s_.debug) std::cout << ", within_limits = " << wl << '\n';
 
   // // for testing only, delete later
   // std::cout << "fingertip z height is " << luke::get_fingertip_z_height() * 1e3
   //     << ", minimum allowed is " << s_.fingertip_min_mm << "\n";
 
+  // update whether this action was within limits or not
   env_.cnt.exceed_limits.value = not wl;
 
   // get the target state and return it
   return luke::get_target_state();
 }
+
+// TESTING prevent table impacts
+void MjClass::prevent_table_impacts(bool set_as)
+{
+  /* TEST function toggle a switch to prevent table impacts */
+
+  luke::prevent_table_impacts(set_as);
+
+  std::cout << "\n\nPREVENTING TABLE IMPACTS SET TO " << set_as << "\n\n";
+}
+// END TESTING - see header file and bind.cpp
 
 bool MjClass::is_done()
 {
@@ -1615,6 +1596,36 @@ luke::gfloat MjClass::get_finger_angle()
 
 /* ----- real gripper functions ----- */
 
+void MjClass::calibrate_real_sensors()
+{
+  /* configure the calibration of real sensors. Running this function will wipe
+  and zero-ing done at runtime, therefore this function sets a flag to reset offsets */
+
+  // initialise a clean set of calibrations
+  MjType::RealSensors real_sensors;
+
+  // select calibrations suitable for the fingers in use
+  double width = luke::get_finger_width();
+  double thickness = luke::get_finger_thickness();
+  sensor_calibrations_.g1 = real_sensors.get_gauge_calibration(1, thickness, width);
+  sensor_calibrations_.g2 = real_sensors.get_gauge_calibration(2, thickness, width);
+  sensor_calibrations_.g3 = real_sensors.get_gauge_calibration(3, thickness, width);
+
+  // get wrist and palm calibrations
+  sensor_calibrations_.palm = real_sensors.palm;
+  sensor_calibrations_.wrist_Z = real_sensors.wrist_Z;
+
+  // apply normalisation to all sensors
+  sensor_calibrations_.g1.norm = s_.bending_gauge.normalise;
+  sensor_calibrations_.g2.norm = s_.bending_gauge.normalise;
+  sensor_calibrations_.g3.norm = s_.bending_gauge.normalise;
+  sensor_calibrations_.palm.norm = s_.palm_sensor.normalise;
+  sensor_calibrations_.wrist_Z.norm = s_.wrist_sensor_Z.normalise;
+
+  // set flag to re-zero all sensors (wipes offset setting)
+  sensor_calibrations_.recalibrate_offset_flag = true;
+}
+
 std::vector<float> MjClass::get_finger_gauge_data()
 {
   /* report the most recent gauge data in a vector { f1, f2, f3 } */
@@ -1629,7 +1640,7 @@ std::vector<float> MjClass::get_finger_gauge_data()
 }
 
 std::vector<float> MjClass::input_real_data(std::vector<float> state_data, 
-  std::vector<float> sensor_data, float timestamp)
+  std::vector<float> sensor_data)
 {
   /* insert real data */
 
@@ -1640,7 +1651,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     configured = true;
   }
 
-  constexpr int calibration_samples = 20;
+  constexpr int calibration_samples = 20; // 10Hz so 2sec calibration time
   static std::vector<float> f1_calibration;
   static std::vector<float> f2_calibration;
   static std::vector<float> f3_calibration;
@@ -1648,12 +1659,13 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
   static std::vector<float> wrist_Z_calibration;
 
   // check if we should automatically calibrate offsets
-  if (calibrate_.recalibrate_offset_flag) {
+  if (sensor_calibrations_.recalibrate_offset_flag) {
     f1_calibration.clear();
     f2_calibration.clear();
     f3_calibration.clear();
     palm_calibration.clear();
-    calibrate_.recalibrate_offset_flag = false;
+    wrist_Z_calibration.clear();
+    sensor_calibrations_.recalibrate_offset_flag = false;
   }
 
   // vector which outputs all the freshly normalised values
@@ -1665,23 +1677,30 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
   // add state data
   int i = 0;
 
+  // uncomment for debugging
+  // std::cout << "Adding state noise of " << s_.motor_state_sensor.noise_std << '\n';
+  // std::cout << "Adding sensor noise of " << s_.bending_gauge.noise_std << '\n';
+
   if (s_.motor_state_sensor.in_use) {
 
     // normalise and save state data
     state_data[i] = normalise_between(
       state_data[i], luke::Gripper::xy_min, luke::Gripper::xy_max);
+    state_data[i] = s_.motor_state_sensor.apply_noise(state_data[i], uniform_dist);
     x_motor_position.add(state_data[i]); 
     output.push_back(state_data[i]);
     ++i; 
 
     state_data[i] = normalise_between(
       state_data[i], luke::Gripper::xy_min, luke::Gripper::xy_max);
+    state_data[i] = s_.motor_state_sensor.apply_noise(state_data[i], uniform_dist);
     y_motor_position.add(state_data[i]); 
     output.push_back(state_data[i]);
     ++i; 
 
     state_data[i] = normalise_between(
-      state_data[i], luke::Gripper::xy_min, luke::Gripper::xy_max);
+      state_data[i], luke::Gripper::z_min, luke::Gripper::z_max);
+    state_data[i] = s_.motor_state_sensor.apply_noise(state_data[i], uniform_dist);
     z_motor_position.add(state_data[i]); 
     output.push_back(state_data[i]);
     ++i; 
@@ -1694,6 +1713,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
 
     state_data[i] = normalise_between(
       state_data[i], luke::Target::base_z_min, luke::Target::base_z_max);
+    state_data[i] = s_.base_state_sensor.apply_noise(state_data[i], uniform_dist);
     z_base_position.add(state_data[i]);
     output.push_back(state_data[i]);
     ++i; 
@@ -1711,17 +1731,16 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     // calibrate the finger 1 sensor
     if (f1_calibration.size() < calibration_samples) {
       f1_calibration.push_back(sensor_data[j]);
-      calibrate_.offset.g1 = 0;
+      sensor_calibrations_.g1.offset = 0;
       for (int k = 0; k < f1_calibration.size(); k++) {
-        calibrate_.offset.g1 += f1_calibration[k];
+        sensor_calibrations_.g1.offset += f1_calibration[k];
       }
-      calibrate_.offset.g1 /= (float) f1_calibration.size();
+      sensor_calibrations_.g1.offset /= (float) f1_calibration.size();
     }
 
     // scale, normalise, and save gauge data
-    sensor_data[j] = (sensor_data[j] - calibrate_.offset.g1) * calibrate_.scale.g1;
-    sensor_data[j] = normalise_between(
-      sensor_data[j], -calibrate_.norm.g1, calibrate_.norm.g1);
+    sensor_data[j] = sensor_calibrations_.g1.apply_calibration(sensor_data[j]);
+    sensor_data[j] = s_.bending_gauge.apply_noise(sensor_data[j], uniform_dist);
     finger1_gauge.add(sensor_data[j]); 
     output.push_back(sensor_data[j]);
     ++j;
@@ -1729,16 +1748,15 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     // calibrate the finger 2 sensor
     if (f2_calibration.size() < calibration_samples) {
       f2_calibration.push_back(sensor_data[j]);
-      calibrate_.offset.g2 = 0;
+      sensor_calibrations_.g2.offset = 0;
       for (int k = 0; k < f2_calibration.size(); k++) {
-        calibrate_.offset.g2 += f2_calibration[k];
+        sensor_calibrations_.g2.offset += f2_calibration[k];
       }
-      calibrate_.offset.g2 /= (float) f2_calibration.size();
+      sensor_calibrations_.g2.offset /= (float) f2_calibration.size();
     }
 
-    sensor_data[j] = (sensor_data[j] - calibrate_.offset.g2) * calibrate_.scale.g2;
-    sensor_data[j] = normalise_between(
-      sensor_data[j], -calibrate_.norm.g2, calibrate_.norm.g2);
+    sensor_data[j] = sensor_calibrations_.g2.apply_calibration(sensor_data[j]);
+    sensor_data[j] = s_.bending_gauge.apply_noise(sensor_data[j], uniform_dist);
     finger2_gauge.add(sensor_data[j]); 
     output.push_back(sensor_data[j]);
     ++j;
@@ -1746,16 +1764,15 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     // calibrate the finger 3 sensor
     if (f3_calibration.size() < calibration_samples) {
       f3_calibration.push_back(sensor_data[j]);
-      calibrate_.offset.g3 = 0;
+      sensor_calibrations_.g3.offset = 0;
       for (int k = 0; k < f3_calibration.size(); k++) {
-        calibrate_.offset.g3 += f3_calibration[k];
+        sensor_calibrations_.g3.offset += f3_calibration[k];
       }
-      calibrate_.offset.g3 /= (float) f3_calibration.size();
+      sensor_calibrations_.g3.offset /= (float) f3_calibration.size();
     }
   
-    sensor_data[j] = (sensor_data[j] - calibrate_.offset.g3) * calibrate_.scale.g3;
-    sensor_data[j] = normalise_between(
-      sensor_data[j], -calibrate_.norm.g3, calibrate_.norm.g3);
+    sensor_data[j] = sensor_calibrations_.g3.apply_calibration(sensor_data[j]);
+    sensor_data[j] = s_.bending_gauge.apply_noise(sensor_data[j], uniform_dist);
     finger3_gauge.add(sensor_data[j]); 
     output.push_back(sensor_data[j]);
     ++j;
@@ -1767,17 +1784,16 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     // calibrate the palm sensor
     if (palm_calibration.size() < calibration_samples) {
       palm_calibration.push_back(sensor_data[j]);
-      calibrate_.offset.palm = 0;
+      sensor_calibrations_.palm.offset = 0;
       for (int k = 0; k < palm_calibration.size(); k++) {
-        calibrate_.offset.palm += palm_calibration[k];
+        sensor_calibrations_.palm.offset += palm_calibration[k];
       }
-      calibrate_.offset.palm /= (float) palm_calibration.size();
+      sensor_calibrations_.palm.offset /= (float) palm_calibration.size();
     }
 
     // scale, normalise, and save gauge data
-    sensor_data[j] = (sensor_data[j] - calibrate_.offset.palm) * calibrate_.scale.palm;
-    sensor_data[j] = normalise_between(
-      sensor_data[j], -calibrate_.norm.palm, calibrate_.norm.palm);
+    sensor_data[j] = sensor_calibrations_.palm.apply_calibration(sensor_data[j]);
+    sensor_data[j] = s_.palm_sensor.apply_noise(sensor_data[j], uniform_dist);
     palm_sensor.add(sensor_data[j]);  
     output.push_back(sensor_data[j]);
     ++j;
@@ -1787,7 +1803,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
   if (s_.wrist_sensor_Z.in_use) {
 
     constexpr bool debug_wrist_Z = false;
-    float pre_cal = sensor_data[j];
+    float pre_cal = sensor_data[j]; // for debugging only
 
     // hardcoded from mujoco: wrist sensor starts at -0.832, *28=23.3
     float target_wrist_value = 0; // was 23.3
@@ -1801,33 +1817,31 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
 
         // add the data to calibration vector, tally up and calculate
         wrist_Z_calibration.push_back(sensor_data[j]);
-        calibrate_.offset.wrist_Z = 0;
+        sensor_calibrations_.wrist_Z.offset = 0;
         for (int k = 0; k < wrist_Z_calibration.size(); k++) {
-          calibrate_.offset.wrist_Z += wrist_Z_calibration[k]  - target_wrist_value;
+          sensor_calibrations_.wrist_Z.offset += wrist_Z_calibration[k]  - target_wrist_value;
         }
-        calibrate_.offset.wrist_Z /= (float) wrist_Z_calibration.size();
+        sensor_calibrations_.wrist_Z.offset /= (float) wrist_Z_calibration.size();
       }
     }
 
     // scale, normalise, and save wrist data
-    sensor_data[j] = (sensor_data[j] - calibrate_.offset.wrist_Z) * calibrate_.scale.wrist_Z;
-    
-    float post_cal = sensor_data[j];
-    
-    sensor_data[j] = normalise_between(
-      sensor_data[j], -calibrate_.norm.wrist_Z, calibrate_.norm.wrist_Z);
+    sensor_data[j] = sensor_calibrations_.wrist_Z.apply_calibration(sensor_data[j]);
+    sensor_data[j] = s_.wrist_sensor_Z.apply_noise(sensor_data[j], uniform_dist);
     wrist_Z_sensor.add(sensor_data[j]);  
     output.push_back(sensor_data[j]);
     ++j;
 
-    if (debug_wrist_Z)
+    if (debug_wrist_Z) {
+      float post_cal = (pre_cal - sensor_calibrations_.wrist_Z.offset) * sensor_calibrations_.wrist_Z.scale;
       std::cout << "Wrist sensor data raw " << pre_cal << ", after scaling "
         << post_cal << ", normalised " << sensor_data[j-1] << '\n';
+    }
   }
 
-  // add timestamp data - not used currently
-  gauge_timestamps.add(timestamp);
-  palm_timestamps.add(timestamp);
+  // // add timestamp data - not used currently
+  // gauge_timestamps.add(timestamp);
+  // palm_timestamps.add(timestamp);
 
   return output;
 }
@@ -1971,7 +1985,7 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force, 
   s_.tip_force_applied = force;
 
   // step the simulation to allow the forces to settle
-  float time_to_settle = 20;
+  float time_to_settle = 30; // have tried up to 100
   int steps_to_make = time_to_settle / s_.mujoco_timestep;
   // std::cout << "Stepping for " << steps_to_make << " steps to allow settling\n";
 
@@ -2030,18 +2044,29 @@ MjType::CurveFitData MjClass::curve_validation_regime(bool print, int force_styl
 
   s_.debug = false;
 
+  // move base to maximum to ensure finger hooks could never touch the ground
+  if (force_style == 2) {
+    // this has only been observed an issue with end moments applied
+    luke::set_base_to_max_height(data);
+  }
+  
   // NOTE: not forces in newtons, these are 100/200/300/400g (ie 0.981*1/2/3/4)
   std::vector<float> forces { 1 * 0.981, 2 * 0.981, 3 * 0.981, 4 * 0.981 };
 
-  // testing: triple the forces for a UDL to get comparable deflection values
+  // scale forces to get equal theoretical tip deflection
+  float L = luke::get_finger_length();
   if (force_style == 1) {
     for (int i = 0; i < forces.size(); i++) {
-      forces[i] *= 11.3475;
+      // W = 8F / 3L
+      // forces[i] *= 11.3475;
+      forces[i] *= 8.0 / (3*L);
     }
   }
   else if (force_style == 2) {
     for (int i = 0; i < forces.size(); i++) {
-      forces[i] *= 0.15667;
+      // M = 2LF / 3
+      // forces[i] *= 0.15667;
+      forces[i] *= (2*L) / 3.0;
     }
   }
 
@@ -2644,22 +2669,29 @@ float MjClass::find_highest_stable_timestep()
 
   constexpr bool debug = true;
 
-  float increment = 50e-6;     // 0.05 milliseconds
-  float start_value = 5.0e-3;  // 5 millseconds
-  float test_time = 1.0;       // 0.5 seconds
+  float coarse_increment = 0.5e-3;          // 1 millisecond
+  float fine_increment = 50e-6;             // 0.05 milliseconds
+  float start_value = 1.0e-3;               // 1 millseconds
+  float test_time = 1.0;                    // 1.0 seconds
+  float max_allowable_timestep = 50.0e-3;   // 50 milliseconds
 
-  float tune_param = 1.0;       // should be 1.0, reduce to make timestep shorter
+  float tune_param = 1.0;           // should be 1.0, reduce to make timestep shorter
 
   float next_timestep = start_value;
   bool unstable = false;
 
-  // find stable timestep
-  while (next_timestep > increment) {
+  // are we making coarse or fine increments
+  bool coarse_pass = true;
 
+  // find stable timestep
+  while (true) {
+
+    // prepare and set the new timestep
     int num_steps = (test_time / next_timestep) + 1;
     s_.mujoco_timestep = next_timestep;
     reset();
 
+    // loop and determine if the simulation becomes unstable
     for (int i = 0; i < num_steps; i++) {
 
       step();
@@ -2674,13 +2706,33 @@ float MjClass::find_highest_stable_timestep()
       }
     }
 
+    // if there is instability, propose a new timestep, otherwise break
     if (unstable) {
-      next_timestep -= increment;
+
+      if (coarse_pass) coarse_pass = false;
+
+      // comb down in fine steps
+      next_timestep -= fine_increment;
       unstable = false;
-      continue;
+
     }
     else {
-      break;
+
+      if (coarse_pass) {
+        // search up in coarse steps
+        next_timestep += coarse_increment;
+      }
+      else break; // we are finished
+
+    }
+
+    // check that the next timestep does not violate end conditions
+    if (next_timestep < fine_increment) {
+      throw std::runtime_error("no stable timestep found for the simulation\n");
+    }
+    if (next_timestep > max_allowable_timestep) {
+      next_timestep = max_allowable_timestep;
+      coarse_pass = false;
     }
   }
 
@@ -2689,12 +2741,16 @@ float MjClass::find_highest_stable_timestep()
             next_timestep * 1000, test_time);
   }
 
+  // hand tuned conversions as 1.0 is not long enough to be sure of stability and accuracy
   float factor;
-  if (next_timestep > 3.0e-3) {
+  if (next_timestep <= 3.0e-3) {
+    factor = tune_param * 0.8;
+  }
+  else if (next_timestep > 3.0e-3) {
     factor = tune_param * 0.75;
   }
-  else {
-    factor = tune_param * 0.8; // used to be 0.9
+  else if (next_timestep > 5.0e-3) {
+    factor = tune_param * 0.65;
   }
 
   // for safety, reduce timestep by 10 percent

@@ -16,6 +16,7 @@ PYBIND11_MODULE(bind, m) {
   m.def("goal_rewards", &goal_rewards);
   m.def("score_goal", static_cast<MjType::Goal (*)(MjType::Goal, std::vector<float>, MjType::Settings)>(&score_goal));
   m.def("score_goal", static_cast<MjType::Goal (*)(MjType::Goal, MjType::EventTrack, MjType::Settings)>(&score_goal));
+  m.def("normalise_between", &normalise_between)
 
   // main module class
   {py::class_<MjClass>(m, "MjClass")
@@ -35,6 +36,9 @@ PYBIND11_MODULE(bind, m) {
 
     // sensing
     // none atm
+
+    // TESTING prevent table impacts
+    .def("prevent_table_impacts", &MjClass::prevent_table_impacts)
 
     // control
     .def("set_joint_target", &MjClass::set_joint_target)
@@ -77,6 +81,7 @@ PYBIND11_MODULE(bind, m) {
     .def("get_finger_angle", &MjClass::get_finger_angle)
 
     // real life gripper functions
+    .def("calibrate_real_sensors", &MjClass::calibrate_real_sensors)
     .def("get_finger_gauge_data", &MjClass::get_finger_gauge_data)
     .def("input_real_data", &MjClass::input_real_data)
     .def("get_real_observation", &MjClass::get_real_observation)
@@ -446,7 +451,7 @@ PYBIND11_MODULE(bind, m) {
       [](py::tuple t) { // __setstate__
 
         // size == 3 is old and can be later deleted
-        if (t.size() != 3 or t.size() != 9)
+        if (t.size() != 3 and t.size() != 9)
           throw std::runtime_error("MjType::Sensor py::pickle got invalid state");
 
         // create new c++ instance with old data

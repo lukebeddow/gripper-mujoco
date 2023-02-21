@@ -66,6 +66,7 @@ machine=luke-PC
 timestamp="$(date +%d-%m-%y-%H:%M)"
 FAKETTY=faketty
 LOGGING='Y'
+PRINT_RESULTS='N'
 
 PY_ARGS=() # arguments passed directly into python without parsing
 
@@ -82,6 +83,7 @@ do
     -f | --no-faketty ) FAKETTY=; echo faketty disabled ;;
     -d | --debug ) LOGGING='N'; DEBUG="--no-wandb"; echo Debug mode on, terminal logging, no wandb ;;
     --print ) LOGGING='N'; PRINT="--print --no-wandb"; echo Printing mode on, no training ;;
+    --print-results ) LOGGING='N'; PRINT="--print-results --no-wandb --no-delay"; PRINT_RESULTS='Y'; STAGGER=1; echo Print results mode, no training, stagger is 1 ;;
     -h | --help ) helpFunction ;;
     # everything else passed directly to python
     * ) PY_ARGS+=( ${!i} ) ;;
@@ -121,8 +123,23 @@ trap 'trap - SIGINT && kill 0' SIGINT
 echo -e "\nSubmitting jobs now"
 echo Saving logs to $LOG_FOLDER/
 
+# special case for printing a results table, not running a training
+if [ $PRINT_RESULTS = 'Y' ]
+then
+    echo Preparing to delete a results table
+    python3 array_training_DQN.py \
+        -j "1" \
+        -t $timestamp \
+        $MACHINE \
+        ${PY_ARGS[@]} \
+        --delete-results \
+        $DEBUG
+    echo Results table successfully wiped
+fi
+
 IND=0
 
+# loop through the jobs we have been assigned
 for I in ${ARRAY_INDEXES[@]}
 do
 
@@ -171,3 +188,19 @@ echo Waiting for submitted jobs to complete...
 wait 
 
 echo ...finished all jobs
+
+# special case for printing a results table, not running a training
+if [ $PRINT_RESULTS = 'Y' ]
+then
+    echo -e "\nNow printing final results table\n"
+
+    python3 array_training_DQN.py \
+        -j "1" \
+        -t $timestamp \
+        $MACHINE \
+        ${PY_ARGS[@]} \
+        --results \
+        $DEBUG
+
+    echo -e "\nResults table complete"
+fi

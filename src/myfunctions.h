@@ -116,10 +116,12 @@ void update_constraints(mjModel* model, mjData* data);
 bool set_gripper_target_m(double x, double y, double z);
 bool set_gripper_target_m_rad(double x, double th, double z);
 bool set_gripper_target_step(int x, int y, int z);
+bool set_base_target_m(double x, double y, double z);
 bool move_gripper_target_m(double x, double y, double z);
 bool move_gripper_target_m_rad(double x, double th, double z);
 bool move_gripper_target_step(int x, int y, int z);
 bool move_base_target_m(double x, double y, double z);
+void set_base_to_max_height(mjData* data);
 void print_target();
 void update_target();
 
@@ -165,10 +167,15 @@ int last_action_robot();
 bool is_sim_unstable(mjModel* model, mjData* data);
 int get_N();
 float get_finger_thickness();
+float get_finger_width();
+float get_finger_length();
 float calc_yield_point_load();
 float get_fingertip_z_height();
 std::vector<luke::gfloat> get_stiffnesses();
 void print_stiffnesses();
+
+// TESTING prevent table impacts
+void prevent_table_impacts(bool set_as);
 
 } // namespace luke
 
