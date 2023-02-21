@@ -528,12 +528,14 @@ bool MjClass::render()
     while (window_open and std::chrono::duration_cast<std::chrono::milliseconds>
       (time_::now() - start_time).count() < s_.render_delay * 1000) { 
       
-      window_open = render::render(model, data);
+      // window_open = render::render(model, data);
+      window_open = render::render(*this);
     }
   }
   else {
     // just render once
-    window_open = render::render(model, data);
+    // window_open = render::render(model, data);
+    window_open = render::render(*this);
   }
 
   // if the window has been closed

@@ -2120,21 +2120,18 @@ if __name__ == "__main__":
   # ----- load ----- #
 
   # load
-  # folder = "mymujoco"
-  # group = "05-12-22"
-  # run = "luke-PC_11:39_A1"
   folder = "mymujoco"
-  group = "06-01-23"
-  run = "luke-PC_14:44_A48"
+  group = "paper_baseline_2/31-01-23"
+  run = "luke-PC_10_54_A117"
   folderpath = f"/home/luke/{folder}/rl/models/dqn/{group}/"
-  # model.set_device("cuda")
+  model.set_device("cuda")
   model.load(id=None, folderpath=folderpath, foldername=run, best_id=True)
 
   # ----- train ----- #
 
   # train
   # net = networks.DQN_3L60
-  # model.env.disable_rendering = True
+  # model.env.disable_rendering = False
   # model.env.mj.set.debug = False
   # model.num_segments = 8
   # model.finger_thickness = 0.8e-3
