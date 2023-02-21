@@ -435,7 +435,7 @@ class ModelSaver:
     """
 
     # default is loading from the main path
-    loadpath = self.path
+    loadpath = self.get_current_path()
 
     # if a different path to a file is specified
     if folderpath != None:
@@ -451,15 +451,10 @@ class ModelSaver:
         loadpath += filenamestarts + self.file_ext
       
     # if the fullfilename is specified, override and use this
-    if fullfilepath is not None:
+    elif fullfilepath is not None:
       loadpath = fullfilepath
 
     else:
-      # default: find file in current folder folder
-      loadpath = self.path
-
-      if self.in_folder: 
-        loadpath += self.folder
 
       if suffix_numbering:
         loadpath = self.get_recent_file(loadpath, id=id, name=filenamestarts)

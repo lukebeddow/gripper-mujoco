@@ -56,10 +56,11 @@ namespace MjType
   // what are the possible sampling methods to get observation data
   struct Sample {
     enum {
-      raw = 0,
-      change,
-      average,
-      median
+      raw = 0,    // return raw values
+      change,     // add the change between values ie (a, b-a, b)
+      average,    // add the average between values ie (a, (a+b)/2, b)
+      median,     // add the median between values ie (a, med(a...b), b)
+      sign        // add the sign of the change ie (a, sign(b-a), b) where sign() outputs -1,0,+1
     };
   };
 
@@ -76,7 +77,7 @@ namespace MjType
     bool use_noise = true;              // are we adding synthetic noise
     float raw_value_offset = 0.0;       // value to subract from the sensor raw value (only used for wrist Z sensor)
     float noise_mag = 0;                // magnitude of added noise
-    float noise_mu = 0;                 // mean of noise (ie zero error)
+    float noise_mu = 0;                 // mean of noise (>0 uniformly randomly set)
     float noise_std = -1;               // std deviation of noise (< 0 means flat)
 
     // internal variables set via functions, do not touch
@@ -84,6 +85,12 @@ namespace MjType
     int prev_steps = 1;                 // back how many previous steps do we read
     int readings_per_step = 1;          // how many readings during action execution
     int total_readings = 1;             // how many samples back do we start reading
+    bool noise_overriden = false;       // noise settings have been manually set, should not be changed
+    
+    // random mu values for use in multiple sensing streams
+    float rand_mu_1 = 0;
+    float rand_mu_2 = 0;
+    float rand_mu_3 = 0;
 
     Sensor(bool in_use, float normalise, float read_rate)
       : in_use(in_use), normalise(normalise), read_rate(read_rate)
@@ -93,6 +100,34 @@ namespace MjType
 
     void set(bool in_use_, float normalise_, float read_rate_) {
       in_use = in_use_; normalise = normalise_; read_rate = read_rate_;
+    }
+
+    void set_gaussian_noise(float mu, float stddev) {
+      noise_mag = 0;
+      noise_mu = mu;
+      noise_std = stddev;
+      noise_overriden = true;
+    }
+
+    void set_uniform_noise(float mag) {
+      noise_mag = mag;
+      noise_mu = 0;
+      noise_std = -1;
+      noise_overriden = true;
+    }
+
+    void randomise_mu(std::uniform_real_distribution<float>& uniform_dist) {
+      // if mu is non-zero, select a uniform random mu
+      rand_mu_1 = noise_mu * (2 * uniform_dist(*MjType::generator) - 1);
+      rand_mu_2 = noise_mu * (2 * uniform_dist(*MjType::generator) - 1);
+      rand_mu_3 = noise_mu * (2 * uniform_dist(*MjType::generator) - 1);
+    }
+
+    void wipe_noise() {
+      noise_mag = 0;
+      noise_mu = 0;
+      noise_std = -1;
+      noise_overriden = false;
     }
 
     void reset() {
@@ -126,7 +161,7 @@ namespace MjType
       }
     }
 
-    float apply_noise(float value, std::uniform_real_distribution<float>& uniform_dist)
+    float apply_noise(float value, std::uniform_real_distribution<float>& uniform_dist, int i = 1)
     {
       /* add noise to a reading */
 
@@ -135,9 +170,18 @@ namespace MjType
       constexpr float two_pi = 2.0 * M_PI;
       constexpr float epsilon = std::numeric_limits<float>::epsilon();
 
+      // which noise mean to choose, 1,2,3 can be used for gauge1,2,3 etc
+      float mu_to_use;
+      if (i == 1) mu_to_use = rand_mu_1;
+      else if (i == 2) mu_to_use = rand_mu_2;
+      else if (i == 3) mu_to_use = rand_mu_3;
+      else {
+        throw std::runtime_error("Sensor::apply_noise() got i not equal 1,2,3");
+      }
+
       // calculate a uniform random noise
       if (noise_std < epsilon) {
-        float noise = noise_mu + noise_mag * (2 * uniform_dist(*MjType::generator) - 1);
+        float noise = mu_to_use + noise_mag * (2 * uniform_dist(*MjType::generator) - 1);
         value += noise;
       }
       // use the box mueller transform to calculate normal noise
@@ -153,8 +197,8 @@ namespace MjType
 
         // compute z0 and z1
         float mag = noise_std * std::sqrt(-2.0 * std::log(u1));
-        float z0 = mag * std::cos(two_pi * u2) + noise_mu;
-        // float z1 = mag * std::sin(two_pi * u2) + noise_mu; // not needed
+        float z0 = mag * std::cos(two_pi * u2) + mu_to_use;
+        // float z1 = mag * std::sin(two_pi * u2) + mu_to_use; // not needed
   
         value += z0;
       }
@@ -314,6 +358,37 @@ namespace MjType
 
         // save the result
         result[i * 2 + 1] = med;
+      }
+
+      return result;
+    }
+
+    std::vector<luke::gfloat> sign_sample(luke::SlidingWindow<luke::gfloat> data)
+    {
+      /* sample the first and last reading as well as the sign of the change 
+      [x0, sign(dx), x1]. Sign outputs either +1, -1, or 0 */
+
+      static constexpr luke::gfloat tol = 1e-6;
+
+      // make the return vector, first element is furthest back reading
+      std::vector<luke::gfloat> result(2 * prev_steps + 1);
+      result[0] = data.read_element(total_readings - 1); // read_element is 0 indexed
+
+      // loop through steps to add in elements
+      for (int i = 0; i < prev_steps; i++) {
+        int first_sample = total_readings - 1 - i * readings_per_step;
+        result[i * 2 + 2] = data.read_element(first_sample - readings_per_step);
+        
+        luke::gfloat change = result[i * 2 + 2] - result[i * 2];
+        if (change > tol) {
+          result[i * 2 + 1] = 1.0;
+        }
+        else if (change < -tol) {
+          result[i * 2 + 1] = -1.0;
+        }
+        else {
+          result[i * 2 + 1] = 0.0;
+        }
       }
 
       return result;
@@ -522,7 +597,7 @@ namespace MjType
     void set_use_noise(bool set_as);
     void set_sensor_prev_steps_to(int prev_steps);
     void update_sensor_settings(double time_since_last_sample);
-    void apply_noise_params();
+    void apply_noise_params(std::uniform_real_distribution<float>& uniform_dist);
   };
 
   // data on the simulated objects and environment
@@ -1095,6 +1170,7 @@ public:
   void init();
   void init(mjModel* m, mjData* d);
   void configure_settings();
+  std::string file_from_from_command_line(int argc, char **argv);
 
   // core functionality
   void load(std::string file_path);
@@ -1198,5 +1274,49 @@ MjType::Goal score_goal(MjType::Goal const goal, std::vector<float> event_vec,
   MjType::Settings settings);
 MjType::Goal score_goal(MjType::Goal const goal, MjType::EventTrack event, 
   MjType::Settings settings);
+
+// simple command line argument parsing class for mysimulate and test binaries
+// from: https://stackoverflow.com/questions/865668/parsing-command-line-arguments-in-c
+class MjClassInputParser {
+  public:
+    MjClassInputParser (int &argc, char **argv){
+      for (int i=1; i < argc; ++i)
+        this->tokens.push_back(std::string(argv[i]));
+    }
+    /// @author iain
+    std::string getCmdOption(std::string option) {
+      std::vector<std::string>::const_iterator itr;
+      itr =  std::find(this->tokens.begin(), this->tokens.end(), option);
+      if (itr != this->tokens.end() && ++itr != this->tokens.end()) {
+        return *itr;
+      }
+      std::string empty_string("");
+      return empty_string;
+    }
+    /// @author iain
+    bool cmdOptionExists(std::string option) {
+      return std::find(this->tokens.begin(), this->tokens.end(), option)
+        != this->tokens.end();
+    }
+    /// @author luke
+    std::string getCmdFromList(std::string a, std::string b) {
+      std::vector<std::string> v { a, b };
+      return getCmdFromList(v);
+    }
+    std::string getCmdFromList(std::vector<std::string> options) {
+      std::string output;
+      for (std::string s : options) {
+        output = getCmdOption(s);
+        if (not output.empty()) {
+          return output;
+        }
+      }
+      return output;
+    }
+
+
+  private:
+    std::vector <std::string> tokens;
+};
 
 #endif // MJCLASS_H_

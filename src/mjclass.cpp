@@ -155,6 +155,10 @@ void MjClass::configure_settings()
       sampleFcnPtr = &MjType::Sensor::median_sample;
       break;
     }
+    case MjType::Sample::sign: {
+      sampleFcnPtr = &MjType::Sensor::sign_sample;
+      break;
+    }
     default: {
       throw std::runtime_error("s_.sensor_sample_mode not set to legal value");
     }
@@ -176,6 +180,10 @@ void MjClass::configure_settings()
     }
     case MjType::Sample::median: {
       stateFcnPtr = &MjType::Sensor::median_sample;
+      break;
+    }
+    case MjType::Sample::sign: {
+      stateFcnPtr = &MjType::Sensor::sign_sample;
       break;
     }
     default: {
@@ -270,7 +278,59 @@ void MjClass::configure_settings()
 
   // update the sensor number of readings based on time per step
   double time_per_step = model->opt.timestep * s_.sim_steps_per_action;
+  s_.apply_noise_params(uniform_dist); // if sensor mu>0, randomises mu
   s_.update_sensor_settings(time_per_step);
+}
+
+std::string MjClass::file_from_from_command_line(int argc, char **argv)
+{
+  /* load a model based on command line arguments and flags. Valid flags are:
+        -g, --gripper [gripper],          eg gripper_N8_28
+        -N, --segments [segments],        eg -N 8 = use 8 segments
+        -w, --width [width in mm],        eg -w 28 = use 28mm width
+        -o, --object-set [object set],    eg -o set6_fullset_800_50i
+        -t, --task [task number],         eg -t 2 = use task 2
+        -p, --path [path to object set],  eg -p /home/luke/mymujoco/mjcf
+  */
+
+  MjClassInputParser input(argc, argv);
+
+  std::string gripper = input.getCmdFromList("-g", "--gripper");
+  std::string segments = input.getCmdFromList("-N", "--segments");
+  std::string width = input.getCmdFromList("-w", "--width");
+  std::string object_set = input.getCmdFromList("-o", "--object-set");
+  std::string task = input.getCmdFromList("-t", "--task");
+  std::string path = input.getCmdFromList("-p", "--path");
+
+  // debug information
+  std::cout << "MjClass::load_from_command_line(...) recieved the following:\n";
+  if (not gripper.empty())    std::cout << "    -> gripper     " << gripper << '\n';
+  if (not segments.empty())   std::cout << "    -> segments    " << segments << '\n';
+  if (not width.empty())      std::cout << "    -> width       " << width << '\n';
+  if (not object_set.empty()) std::cout << "    -> object_set  " << object_set << '\n';
+  if (not task.empty())       std::cout << "    -> task        " << task << '\n';
+  if (not path.empty())       std::cout << "    -> path        " << path << '\n';
+  if (not gripper.empty() and (not width.empty() or not segments.empty())) {
+    std::cout << "Warning: gripper overrides values of width and segments\n";
+  }
+
+  // apply defaults on empty fields (gripper overrides width and segments)
+  if (segments.empty()) { segments = "8"; };
+  if (width.empty()) { width = "28"; };
+  if (gripper.empty()) { gripper = "gripper_N" + segments + "_" + width; };
+  if (object_set.empty()) { object_set = "set6_fullset_800_50i"; };
+  if (task.empty()) { task = "0"; };
+  if (path.empty()) { path = "/home/luke/mymujoco/mjcf/"; };
+
+  // use default templates to assemble filepath
+  if (path.back() != '/') { path += '/'; };
+  if (object_set.back() != '/') { object_set += '/'; };
+  if (gripper.back() != '/') { gripper += '/'; };
+  task = "gripper_task_" + task + ".xml";
+  std::string fullpath = path + object_set + gripper + task;
+
+  std::cout << "Full filepath: " << fullpath << '\n';
+  return fullpath;
 }
 
 /* ----- core functionality ----- */
@@ -515,9 +575,9 @@ void MjClass::monitor_sensors()
     gauges[2] = s_.bending_gauge.apply_normalisation(gauges[2]);
 
     // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
-    gauges[0] = s_.bending_gauge.apply_noise(gauges[0], uniform_dist);
-    gauges[1] = s_.bending_gauge.apply_noise(gauges[1], uniform_dist);
-    gauges[2] = s_.bending_gauge.apply_noise(gauges[2], uniform_dist);
+    gauges[0] = s_.bending_gauge.apply_noise(gauges[0], uniform_dist, 1);
+    gauges[1] = s_.bending_gauge.apply_noise(gauges[1], uniform_dist, 2);
+    gauges[2] = s_.bending_gauge.apply_noise(gauges[2], uniform_dist, 3);
 
     // save
     finger1_gauge.add(gauges[0]);
@@ -549,9 +609,9 @@ void MjClass::monitor_sensors()
     axial_gauges[2] = s_.axial_gauge.apply_normalisation(axial_gauges[2]);
 
     // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
-    axial_gauges[0] = s_.axial_gauge.apply_noise(axial_gauges[0], uniform_dist);
-    axial_gauges[1] = s_.axial_gauge.apply_noise(axial_gauges[1], uniform_dist);
-    axial_gauges[2] = s_.axial_gauge.apply_noise(axial_gauges[2], uniform_dist);
+    axial_gauges[0] = s_.axial_gauge.apply_noise(axial_gauges[0], uniform_dist, 1);
+    axial_gauges[1] = s_.axial_gauge.apply_noise(axial_gauges[1], uniform_dist, 2);
+    axial_gauges[2] = s_.axial_gauge.apply_noise(axial_gauges[2], uniform_dist, 3);
 
     // save
     finger1_axial_gauge.add(axial_gauges[0]);
@@ -598,8 +658,8 @@ void MjClass::monitor_sensors()
     y = s_.wrist_sensor_XY.apply_normalisation(y);
 
     // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
-    x = s_.wrist_sensor_XY.apply_noise(x, uniform_dist);
-    y = s_.wrist_sensor_XY.apply_noise(y, uniform_dist);
+    x = s_.wrist_sensor_XY.apply_noise(x, uniform_dist, 1);
+    y = s_.wrist_sensor_XY.apply_noise(y, uniform_dist, 2);
 
     // save
     wrist_X_sensor.add(x);
@@ -650,9 +710,9 @@ void MjClass::sense_gripper_state()
     state_vec[3], luke::Target::base_z_min, luke::Target::base_z_max);
 
   // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
-  state_vec[0] = s_.motor_state_sensor.apply_noise(state_vec[0], uniform_dist);
-  state_vec[1] = s_.motor_state_sensor.apply_noise(state_vec[1], uniform_dist);
-  state_vec[2] = s_.motor_state_sensor.apply_noise(state_vec[2], uniform_dist);
+  state_vec[0] = s_.motor_state_sensor.apply_noise(state_vec[0], uniform_dist, 1);
+  state_vec[1] = s_.motor_state_sensor.apply_noise(state_vec[1], uniform_dist, 2);
+  state_vec[2] = s_.motor_state_sensor.apply_noise(state_vec[2], uniform_dist, 3);
   state_vec[3] = s_.base_state_sensor.apply_noise(state_vec[3], uniform_dist);
 
   // save reading
@@ -1102,6 +1162,13 @@ std::vector<luke::gfloat> MjClass::get_observation()
   //   << s_.motor_state_sensor.noise_std << ", "
   //   << s_.base_state_sensor.noise_std << ", "
   //   << s_.wrist_sensor_Z.noise_std << "\n";
+
+  // std::cout << "Mu value is "
+  //   << s_.bending_gauge.noise_mu << ", "
+  //   << s_.palm_sensor.noise_mu << ", "
+  //   << s_.motor_state_sensor.noise_mu << ", "
+  //   << s_.base_state_sensor.noise_mu << ", "
+  //   << s_.wrist_sensor_Z.noise_mu << "\n";
 
   // std::cout << "Use normalisation is "
   //   << s_.bending_gauge.use_normalisation << ", "
@@ -1686,21 +1753,21 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     // normalise and save state data
     state_data[i] = normalise_between(
       state_data[i], luke::Gripper::xy_min, luke::Gripper::xy_max);
-    state_data[i] = s_.motor_state_sensor.apply_noise(state_data[i], uniform_dist);
+    state_data[i] = s_.motor_state_sensor.apply_noise(state_data[i], uniform_dist, 1);
     x_motor_position.add(state_data[i]); 
     output.push_back(state_data[i]);
     ++i; 
 
     state_data[i] = normalise_between(
       state_data[i], luke::Gripper::xy_min, luke::Gripper::xy_max);
-    state_data[i] = s_.motor_state_sensor.apply_noise(state_data[i], uniform_dist);
+    state_data[i] = s_.motor_state_sensor.apply_noise(state_data[i], uniform_dist, 2);
     y_motor_position.add(state_data[i]); 
     output.push_back(state_data[i]);
     ++i; 
 
     state_data[i] = normalise_between(
       state_data[i], luke::Gripper::z_min, luke::Gripper::z_max);
-    state_data[i] = s_.motor_state_sensor.apply_noise(state_data[i], uniform_dist);
+    state_data[i] = s_.motor_state_sensor.apply_noise(state_data[i], uniform_dist, 3);
     z_motor_position.add(state_data[i]); 
     output.push_back(state_data[i]);
     ++i; 
@@ -1740,7 +1807,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
 
     // scale, normalise, and save gauge data
     sensor_data[j] = sensor_calibrations_.g1.apply_calibration(sensor_data[j]);
-    sensor_data[j] = s_.bending_gauge.apply_noise(sensor_data[j], uniform_dist);
+    sensor_data[j] = s_.bending_gauge.apply_noise(sensor_data[j], uniform_dist, 1);
     finger1_gauge.add(sensor_data[j]); 
     output.push_back(sensor_data[j]);
     ++j;
@@ -1756,7 +1823,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     }
 
     sensor_data[j] = sensor_calibrations_.g2.apply_calibration(sensor_data[j]);
-    sensor_data[j] = s_.bending_gauge.apply_noise(sensor_data[j], uniform_dist);
+    sensor_data[j] = s_.bending_gauge.apply_noise(sensor_data[j], uniform_dist, 2);
     finger2_gauge.add(sensor_data[j]); 
     output.push_back(sensor_data[j]);
     ++j;
@@ -1772,7 +1839,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     }
   
     sensor_data[j] = sensor_calibrations_.g3.apply_calibration(sensor_data[j]);
-    sensor_data[j] = s_.bending_gauge.apply_noise(sensor_data[j], uniform_dist);
+    sensor_data[j] = s_.bending_gauge.apply_noise(sensor_data[j], uniform_dist, 3);
     finger3_gauge.add(sensor_data[j]); 
     output.push_back(sensor_data[j]);
     ++j;
@@ -2902,6 +2969,15 @@ std::string MjType::Settings::get_settings()
             str += pad + val_str + ", ";\
             val_str.clear(); val_str += std::to_string((float)NAME.read_rate);\
             pad.clear(); pad.resize(val_chars + float_bonus - val_str.size(), ' ');\
+            str += pad + val_str + ", ";\
+            val_str.clear(); val_str += std::to_string((float)NAME.noise_mu * NAME.use_noise);\
+            pad.clear(); pad.resize(val_chars + float_bonus - val_str.size(), ' ');\
+            str += pad + val_str + ", ";\
+            val_str.clear(); val_str += std::to_string((float)NAME.noise_std * NAME.use_noise);\
+            pad.clear(); pad.resize(val_chars + float_bonus - val_str.size(), ' ');\
+            str += pad + val_str + ", ";\
+            val_str.clear(); val_str += std::to_string(NAME.noise_overriden);\
+            pad.clear(); pad.resize(val_chars - val_str.size(), ' ');\
             str += pad + val_str + " }\n";\
             /* add to output */\
             output_str += str;
@@ -3045,9 +3121,6 @@ void MjType::Settings::update_sensor_settings(double time_since_last_sample)
   /* updates the number of readings each sensor is taking based on time between
   samples and read rate */
 
-  // apply noise settings
-  apply_noise_params(); // currently prevents customising sensors differently
-
   // set the number of previous steps to sample back for all sensors
   set_sensor_prev_steps_to(sensor_n_prev_steps);
 
@@ -3114,17 +3187,22 @@ void MjType::Settings::set_use_noise(bool set_as)
   #undef LR
 }
 
-void MjType::Settings::apply_noise_params()
+void MjType::Settings::apply_noise_params(std::uniform_real_distribution<float>& uniform_dist)
 {
   /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
 
   #define XX(NAME, TYPE, VALUE)
 
-  #define SS(NAME, IN_USE, NORM, READRATE)       \
-            NAME.noise_mag = sensor_noise_mag;   \
-            NAME.noise_std = sensor_noise_std;   \
-            NAME.noise_mu = sensor_noise_mu;
+  // set the noise to default UNLESS it has been overriden
+  // mu is randomly chosen between [-noise_mu, noise_mu]
+  #define SS(NAME, DONTUSE1, DONTUSE2, DONTUSE3)   \
+            if (not NAME.noise_overriden) {        \
+              NAME.noise_mag = sensor_noise_mag;   \
+              NAME.noise_std = sensor_noise_std;   \
+              NAME.noise_mu = sensor_noise_mu;     \
+            }                                      \
+            NAME.randomise_mu(uniform_dist);                 
 
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
@@ -3138,12 +3216,20 @@ void MjType::Settings::apply_noise_params()
   #undef LR
 
   // manually override the state sensors
-  motor_state_sensor.noise_mag = state_noise_mag;
-  motor_state_sensor.noise_mu = state_noise_mu;
-  motor_state_sensor.noise_std = state_noise_std;
-  base_state_sensor.noise_mag = state_noise_mag;
-  base_state_sensor.noise_mu = state_noise_mu;
-  base_state_sensor.noise_std = state_noise_std;
+  if (not motor_state_sensor.noise_overriden) {
+    motor_state_sensor.noise_mag = state_noise_mag;
+    motor_state_sensor.noise_mu = state_noise_mu;
+    motor_state_sensor.noise_std = state_noise_std;
+  }
+  if (not base_state_sensor.noise_overriden) {
+    base_state_sensor.noise_mag = state_noise_mag;
+    base_state_sensor.noise_mu = state_noise_mu;
+    base_state_sensor.noise_std = state_noise_std;
+  }
+
+  // there should be no need to do this
+  motor_state_sensor.randomise_mu(uniform_dist);
+  base_state_sensor.randomise_mu(uniform_dist);
 }
 
 void MjType::Settings::scale_rewards(float scale)
