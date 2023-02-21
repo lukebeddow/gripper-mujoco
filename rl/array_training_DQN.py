@@ -239,8 +239,9 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
 
   return model
 
-def add_sensors(model, num=None, sensor_mode=None, state_mode=None, sensor_steps=None,
-  state_steps=None, noise_std=None, z_state=None):
+def add_sensors(model, num=None, sensor_mode=1, state_mode=0, sensor_steps=1,
+  state_steps=2, sensor_noise_std=0.025, state_noise_std=0.025, sensor_noise_mu=0.0,
+  state_noise_mu=0.0, z_state=None):
   """
   Add a number of sensors
   """
@@ -250,7 +251,6 @@ def add_sensors(model, num=None, sensor_mode=None, state_mode=None, sensor_steps
   # define defaults that can be overriden by function inputs
   if sensor_mode is None: sensor_mode = 1
   if state_mode is None: state_mode = 0
-  if noise_std is None: noise_std = 0.05
   if sensor_steps is None: sensor_steps = 1
   if state_steps is None: state_steps = 2
 
@@ -262,8 +262,10 @@ def add_sensors(model, num=None, sensor_mode=None, state_mode=None, sensor_steps
   model.env.mj.set.state_sample_mode = state_mode
 
   # set the same noise to regular sensors and state sensors
-  model.env.mj.set.sensor_noise_std = noise_std
-  model.env.mj.set.state_noise_std = noise_std
+  model.env.mj.set.sensor_noise_std = sensor_noise_std
+  model.env.mj.set.sensor_noise_mu = sensor_noise_mu
+  model.env.mj.set.state_noise_std = state_noise_std
+  model.env.mj.set.state_noise_mu = state_noise_mu
 
   # set the number of steps in the past we use for observations
   model.env.mj.set.sensor_n_prev_steps = sensor_steps
@@ -290,8 +292,10 @@ def add_sensors(model, num=None, sensor_mode=None, state_mode=None, sensor_steps
   if num >= 5 or z_state is True: model.env.mj.set.base_state_sensor.in_use = True
 
   model.wandb_note += (
-    f"Num sensors: {num}, state mode: {state_mode}, sensor mode: {sensor_mode}" +
-    f", state steps: {state_steps}, sensor steps: {sensor_steps}, sensor noise std: {noise_std}\n"
+    f"Num sensors: {num}, state mode: {state_mode}, sensor mode: {sensor_mode}"
+    + f", state steps: {state_steps}, sensor steps: {sensor_steps}"
+    + f", sensor noise std: {sensor_noise_std}, state noise std: {state_noise_std}"
+    + f", sensor_noise mu: {sensor_noise_mu}, state noise mu: {state_noise_mu}\n"
   )
 
   return model
@@ -482,11 +486,12 @@ def logging_job(model, run_name, group_name):
 
 def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 100, 50], 
                       memory=50_000, state_steps=1, sensor_steps=1, z_state=True, sensor_mode=2,
-                      state_mode=1, sensor_noise=0.025, reward_style="mixed_v3", reward_options=[], 
+                      state_mode=1, sensor_noise=0.025, state_noise=0.025, sensor_mu=0.0,
+                      state_mu=0.0, reward_style="mixed_v3", reward_options=[], 
                       scale_rewards=2.5, scale_penalties=1.0, penalty_termination=False,
                       finger_stiffness=-7.5, num_segments=8, finger_thickness=0.9e-3, finger_width=28e-3,
                       max_episode_steps=250, XYZ_mm_rad=[1.0, 0.01, 2.0],
-                      exceed_lims_multiplier=2.0):
+                      exceed_lims_multiplier=2.0, eval_me=None):
 
   """
   Runs a baseline training on the model
@@ -531,12 +536,16 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 1
                                  exceed_lims_multiplier=exceed_lims_multiplier)
   model = add_sensors(model, num=sensors, sensor_mode=sensor_mode, state_mode=state_mode,
                       state_steps=state_steps, sensor_steps=sensor_steps,
-                      z_state=z_state, noise_std=sensor_noise)
+                      z_state=z_state, sensor_noise_std=sensor_noise, sensor_noise_mu=sensor_mu,
+                      state_noise_std=state_noise, state_noise_mu=state_mu)
   model = setup_HER(model, use=False)
 
   # finish initialisation of model
   if network is not None:
     model.init(network)
+
+  # can perform special operations here
+  if eval_me is not None: eval(eval_me)
 
   return model
 
@@ -612,9 +621,7 @@ def vary_all_inputs(raw_inputarg=None, param_1=None, param_2=None, param_3=None,
     else:
       list_1 = [param_1]
     len_list_1 = len(list_1)
-  else:
-    raise RuntimeError("param_1 must be specified in vary_all_inputs()")
-    len_list_1 = 1
+  else: return None, None, None
 
   if param_2 is not None:
     if isinstance(param_2, list):
@@ -706,7 +713,7 @@ def test(model, heuristic=False, trials_per_obj=5, render=False, pause=False):
 
   return model
 
-def print_results(model, filename="results.txt"):
+def print_results(model, filename="results.txt", savefile="table.txt"):
   """
   Create a results table, presumes a file called 'results.txt' which is the terminal
   output from running './pc_job -j "X:Y" -t DD-MM-YY-HR:MN --program xxxxx --print
@@ -720,6 +727,8 @@ def print_results(model, filename="results.txt"):
     text = f.readlines()
 
   # print("the text is:\n\n", text)
+
+  print_str = """"""
 
   first_elem = True
   done_first_elem = False
@@ -786,15 +795,24 @@ def print_results(model, filename="results.txt"):
   heading_str = heading_str.format(*heading_formatters)
   row_str = row_str.format(*row_formatters)
 
-  # print the table
-  print(heading_str.format(*headings))
+  # assemble the table text
+  print_str += heading_str.format(*headings) + "\n"
+  # print(heading_str.format(*headings))
   for i in range(len(table)):
     # check if entry is incomplete
     while len(table[i]) < len(headings): table[i] += ["N/F"]
-    for elem in table[i]:
+    for j, elem in enumerate(table[i]):
       if isinstance(elem, float):
-        elem = "{:.4f}".format(elem)
-    print(row_str.format(*table[i]))
+        table[i][j] = "{:.4f}".format(elem)
+    # print(row_str.format(*table[i]))
+    print_str += row_str.format(*table[i]) + "\n"
+
+  # print and save the table
+  print()
+  print(print_str)
+  savepath = model.savedir + model.group_name + "/" + savefile
+  with open(savepath, 'w') as f:
+    f.write(print_str)
 
 if __name__ == "__main__":
 
@@ -1380,6 +1398,81 @@ if __name__ == "__main__":
 
     # run long trainings
     model.params.num_episodes = 100_000
+
+    # run slightly longer tests
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
+  elif training_type == "avoid_overfit":
+
+    vary_1 = [1, 3, 5, 7]
+    vary_2 = None
+    vary_3 = None
+    repeats = 5
+    param_1_name = "state steps"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "finger_thickness" : 0.9e-3,
+      "finger_width" : 28e-3,
+      "sensors" : 3,
+      "sensor_noise" : 0.025,
+      "sensor_steps" : 1,
+      "state_steps" : param_1,
+    }
+
+    # don't run long trainings
+    model.params.num_episodes = 48_000
+
+    # run slightly longer tests
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
+  elif training_type == "new_sensor_styles":
+
+    vary_1 = [
+      (1, 3),
+      (1, 5),
+      (1, 7),
+      (3, 3) # as baseline
+    ]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    param_1_name = "sensor/state steps"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    wrist_mu = 0.01             # large chance of zero error with the wrist
+    wrist_std = 0.075           # wrist has a lot of noise, this is 15% coverage +-2stdevs
+
+    baseline_args = {
+      "finger_thickness" : 0.9e-3,
+      "finger_width" : 28e-3,
+      "sensors" : 3,
+      "sensor_noise" : 0.025,   # medium noise on sensor readings
+      "state_noise" : 0.0,      # no noise on state readings, this is required for sign mode
+      "sensor_mu" : 0.05,       # can be +- 5% from 0
+      "state_mu" : 0.025,       # just a gentle zero error noise on state readings
+      "sensor_steps" : param_1[0],       
+      "state_steps" : param_1[1],
+      "sensor_mode" : 2,        # average sample, leave as before
+      "state_mode" : 4,         # state sign mode, -1,0,+1 for motor state change
+      "eval_me" : f"model.env.mj.set.wrist_sensor_Z.set_gaussian_noise({wrist_mu}, {wrist_std})"
+    }
+
+    # don't run long trainings
+    model.params.num_episodes = 48_000
 
     # run slightly longer tests
     model.env.params.test_trials_per_object = 3

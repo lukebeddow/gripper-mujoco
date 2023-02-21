@@ -16,7 +16,6 @@ PYBIND11_MODULE(bind, m) {
   m.def("goal_rewards", &goal_rewards);
   m.def("score_goal", static_cast<MjType::Goal (*)(MjType::Goal, std::vector<float>, MjType::Settings)>(&score_goal));
   m.def("score_goal", static_cast<MjType::Goal (*)(MjType::Goal, MjType::EventTrack, MjType::Settings)>(&score_goal));
-  m.def("normalise_between", &normalise_between);
 
   // main module class
   {py::class_<MjClass>(m, "MjClass")
@@ -424,6 +423,8 @@ PYBIND11_MODULE(bind, m) {
 
     .def(py::init<bool, float, float>())
     .def("set", &MjType::Sensor::set)
+    .def("set_gaussian_noise", &MjType::Sensor::set_gaussian_noise)
+    .def("set_uniform_noise", &MjType::Sensor::set_uniform_noise)
 
     .def_readwrite("in_use", &MjType::Sensor::in_use)
     .def_readwrite("normalise", &MjType::Sensor::normalise)
@@ -449,25 +450,31 @@ PYBIND11_MODULE(bind, m) {
           r.raw_value_offset,
           r.noise_mag,
           r.noise_mu,
-          r.noise_std
+          r.noise_std,
+          r.noise_overriden
         );
       },
       [](py::tuple t) { // __setstate__
 
         // size == 3 is old and can be later deleted
-        if (t.size() != 3 and t.size() != 9)
+        if (t.size() != 3 and t.size() != 9 and t.size() != 10)
           throw std::runtime_error("MjType::Sensor py::pickle got invalid state");
 
         // create new c++ instance with old data
         MjType::Sensor out(t[0].cast<bool>(), t[1].cast<float>(), t[2].cast<float>());
 
-        if (t.size() == 9) {
+        if (t.size() >= 9) {
           out.use_normalisation = t[3].cast<bool>();
           out.use_noise = t[4].cast<bool>();
           out.raw_value_offset = t[5].cast<float>();
           out.noise_mag = t[6].cast<float>();
           out.noise_mu = t[7].cast<float>();
           out.noise_std = t[8].cast<float>();
+        }
+
+        // newest changes
+        if (t.size() >= 10) {
+          out.noise_overriden = t[9].cast<bool>();
         }
         
         return out;

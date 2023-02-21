@@ -156,10 +156,12 @@ int main(int argc, char** argv)
 
   /* ----- load the gripper, generic testing ----- */
 
-  std::string relpath = "gripper_N10/gripper_task_0.xml";
+  // std::string relpath = "gripper_N10/gripper_task_0.xml";
+  // mjObj.load_relative(relpath);
 
   MjClass mjObj;
-  mjObj.load_relative(relpath);
+  std::string filepath = mjObj.file_from_from_command_line(argc, argv);
+  mjObj.load(filepath);
 
   // change settings
   mjObj.s_.mujoco_timestep = 1.8e-3;
