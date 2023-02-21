@@ -33,6 +33,7 @@ PYBIND11_MODULE(bind, m) {
     .def("hard_reset", &MjClass::hard_reset)
     .def("step", &MjClass::step)
     .def("render", &MjClass::render)
+    .def("close_render", &MjClass::close_render)
 
     // sensing
     // none atm

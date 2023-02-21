@@ -1191,6 +1191,7 @@ public:
   void hard_reset();
   void step();
   bool render();
+  void close_render();
 
   // sensing
   void monitor_sensors();

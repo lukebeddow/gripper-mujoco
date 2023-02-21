@@ -427,6 +427,12 @@ bool MjClass::render()
   return false;
 }
 
+void MjClass::close_render()
+{
+  std::cout << "Close rendering disabled on cluster\n";
+  return false;
+}
+
 #else
 
 bool MjClass::render()
@@ -478,6 +484,14 @@ bool MjClass::render()
   }
   
   return window_open;
+}
+
+void MjClass::close_render()
+{
+  /* close the rendering window */
+
+  if (render_init) render::finish();
+  render_init = false;
 }
 
 #endif
