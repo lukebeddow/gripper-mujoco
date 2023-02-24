@@ -447,7 +447,7 @@ def continue_training(model, run_name, group_name, object_set=None, new_endpoint
   # new_endpoint = 100_010
   # model.wandb_note += f"Continuing training until new endpoint of {new_endpoint} episodes\n"
 
-  extra_episodes = 40_000
+  extra_episodes = 48_000
   model.wandb_note += f"Continuing training with an extra {extra_episodes} episodes\n"
   
   model.continue_training(run_name, model.savedir + group_name + "/",
@@ -1469,6 +1469,105 @@ if __name__ == "__main__":
       "sensor_mode" : 2,        # average sample, leave as before
       "state_mode" : 4,         # state sign mode, -1,0,+1 for motor state change
       "eval_me" : f"model.env.mj.set.wrist_sensor_Z.set_gaussian_noise({wrist_mu}, {wrist_std})"
+    }
+
+    # don't run long trainings
+    model.params.num_episodes = 48_000
+
+    # run slightly longer tests
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
+  elif training_type == "new_sensor_styles_continued":
+
+    print("Continuing training in group:", model.group_name)
+    print("Continuing training of run:", model.run_name)
+
+    # set up the object set
+    model.env.mj.model_folder_path = "/home/luke/mymujoco/mjcf"
+
+    extra_episodes = 48_000
+    model.wandb_note += f"Continuing training with an extra {extra_episodes} episodes\n"
+
+    folderpath = model.savedir + model.group_name + "/"
+    foldername = model.run_name
+
+    from ModelSaver import ModelSaver
+    model.run_name = foldername + "_continued"
+    model.modelsaver = ModelSaver(folderpath)
+
+    # load the most recent model in the given folder
+    model.load(foldername=foldername, folderpath=folderpath)
+    model.modelsaver.enter_folder(foldername, folderpath=folderpath)
+
+    # add extra episodes on to what has already been done
+    model.params.num_episodes = model.params.num_episodes + extra_episodes
+
+    # NOW SCALE UP THE PENALTIES
+    model.env.mj.set.exceed_limits.reward = 2.5 * model.env.mj.set.exceed_limits.reward
+    model.env.mj.set.exceed_axial.reward = 2.5 * model.env.mj.set.exceed_axial.reward
+    model.env.mj.set.exceed_lateral.reward = 2.5 * model.env.mj.set.exceed_lateral.reward
+    model.env.mj.set.exceed_palm.reward = 2.5 * model.env.mj.set.exceed_palm.reward
+
+    # begin the training at the given starting point (always uses most recent pickle)
+    model.train(i_start=model.track.episodes_done)
+
+    # test
+    model = test(model, trials_per_obj=10, heuristic=args.heuristic)
+
+    # finishing time, how long did everything take
+    finishing_time = datetime.now()
+    time_taken = finishing_time - starting_time
+    d = divmod(time_taken.total_seconds(), 86400)
+    h = divmod(d[1], 3600)
+    m = divmod(h[1], 60)
+    s = m[1]
+    print("\nStarted at:", starting_time.strftime(datestr))
+    print("Finished at:", datetime.now().strftime(datestr))
+    print(f"Time taken was {d[0]:.0f} days {h[0]:.0f} hrs {m[0]:.0f} mins {s:.0f} secs\n")
+
+    # skip train/test below
+    args.print = True
+
+  elif training_type == "new_sensor_styles_extended":
+
+    vary_1 = [
+      (1, 3),
+      (1, 5)
+    ]
+    vary_2 = [
+      (2.5, 1.0), # baseline
+      (2.5, 2.5),
+    ]
+    vary_3 = None
+    repeats = 10
+    param_1_name = "sensor/state steps"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    wrist_mu = 0.01             # large chance of zero error with the wrist
+    wrist_std = 0.075           # wrist has a lot of noise, this is 15% coverage +-2stdevs
+
+    baseline_args = {
+      "finger_thickness" : 0.9e-3,
+      "finger_width" : 28e-3,
+      "sensors" : 3,
+      "sensor_noise" : 0.025,   # medium noise on sensor readings
+      "state_noise" : 0.0,      # no noise on state readings, this is required for sign mode
+      "sensor_mu" : 0.05,       # can be +- 5% from 0
+      "state_mu" : 0.025,       # just a gentle zero error noise on state readings
+      "sensor_steps" : param_1[0],       
+      "state_steps" : param_1[1],
+      "sensor_mode" : 2,        # average sample, leave as before
+      "state_mode" : 4,         # state sign mode, -1,0,+1 for motor state change
+      "eval_me" : f"model.env.mj.set.wrist_sensor_Z.set_gaussian_noise({wrist_mu}, {wrist_std})",
+      "scale_rewards" : param_2[0],
+      "scale_penalties" : param_2[1],
     }
 
     # don't run long trainings
