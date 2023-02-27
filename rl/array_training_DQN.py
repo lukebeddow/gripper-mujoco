@@ -890,6 +890,7 @@ if __name__ == "__main__":
   parser.add_argument("-p", "--plot",         action="store_true") # plot to wandb job
   parser.add_argument("-n", "--no-wandb",     action="store_true") # no wandb logging
   parser.add_argument("-H", "--heuristic",    action="store_true") # run a test using heuristic actions
+  parser.add_argument("-r", "--render",    action="store_true") # render window during training
   parser.add_argument("--program",            default=None)        # program name to select from if..else if
   parser.add_argument("--device",             default=None)        # override device
   parser.add_argument("--savedir",            default=None)        # override save/load directory
@@ -963,6 +964,9 @@ if __name__ == "__main__":
   if args.savedir is not None:
     if log_level > 0: print(f" -> Savedir override of '{args.savedir}'")
     model.savedir = args.savedir
+
+  # are we rendering
+  if args.render is True: model.env.disable_rendering = False
 
   if log_level > 0:
     print(" -> Run group is:", model.group_name)

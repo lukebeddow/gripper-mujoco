@@ -13,6 +13,11 @@
 #include <mutex>
 #include <chrono>
 #include <iostream>
+#include <vector>
+#include <string>
+
+#include "mjclass.h"
+class MjClass;
 
 namespace render
 {
@@ -22,9 +27,14 @@ void mouse_button(GLFWwindow* window, int button, int act, int mods);
 void mouse_move(GLFWwindow* window, double xpos, double ypos);
 void scroll(GLFWwindow* window, double xoffset, double yoffset);
 void init(mjModel* model, mjData* data);
+void uiLayout(mjuiState* state);
 void reload_for_rendering(mjModel* model, mjData* data);
-bool render(mjModel* model, mjData* data);
+bool render(MjClass& myMjClass);
 void finish();
+
+void lukesensorfigsinit();
+void lukesensorfigsupdate(MjClass& myMjClass);
+void lukesensorfigshow(mjrRect rect);
 
 }
 
