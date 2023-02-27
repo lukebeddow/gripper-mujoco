@@ -685,7 +685,29 @@ def get_best_performance(model):
 
   return output
 
-def test(model, heuristic=False, trials_per_obj=5, render=False, pause=False):
+def test_and_load(model, demo=False, render=False, pause=False, id=None, best_id=None):
+  """
+  Test overload where we load a specific model
+  """
+
+  # set up the object set
+  model.env.mj.model_folder_path = "/home/luke/mymujoco/mjcf"
+
+  folderpath = model.savedir + model.group_name + "/"
+  foldername = model.run_name
+
+  # from ModelSaver import ModelSaver
+  # model.run_name = foldername
+  # model.modelsaver = ModelSaver(folderpath)
+
+  # load the most recent model in the given folder
+  model.load(foldername=foldername, folderpath=folderpath, id=id, best_id=best_id)
+  # model.modelsaver.enter_folder(foldername, folderpath=folderpath)
+
+  return test(model, demo=demo, render=render, pause=pause, load=False)
+
+def test(model, heuristic=False, trials_per_obj=5, render=False, pause=False, demo=False, id=None,
+         load=True):
   """
   Perform a thorough test on the model, including loading the best performing network
   """
@@ -693,10 +715,16 @@ def test(model, heuristic=False, trials_per_obj=5, render=False, pause=False):
   print("\nPreparing to perform a model test, heuristic =", heuristic)
 
   # load the best performing network
-  if not heuristic: model.load(best_id=True)
+  if load and not heuristic: 
+    if id is None: model.load(best_id=True)
+    else: model.load(id=id)
 
   # adjust settings
-  model.env.params.test_trials_per_object = trials_per_obj
+  if demo:
+    model.env.params.test_trials_per_object = 1
+    model.env.params.test_objects = 30
+  else:
+    model.env.params.test_trials_per_object = trials_per_obj
   if render: model.env.disable_rendering = False
 
   # perform the test
@@ -707,6 +735,7 @@ def test(model, heuristic=False, trials_per_obj=5, render=False, pause=False):
   savetxt = f"array_training_DQN.test(...) final success rate = {model.last_test_success_rate}\n"
   savetxt += "\n" + test_report
   if heuristic: savename = "heuristic_test_"
+  elif demo: savename = "demo_test_"
   else: savename = "full_test_"
   currenttime = datetime.now().strftime(datestr)
   model.modelsaver.save(savename + currenttime, txtonly=True, txtstr=savetxt)
@@ -870,6 +899,7 @@ if __name__ == "__main__":
   parser.add_argument("--override-lib",       action="store_true") # override bind.so library with loaded data
   parser.add_argument("--no-delay",           action="store_true") # prevent a sleep(...) to seperate processes
   parser.add_argument("--test",               action="store_true") # run a thorough test on existing model
+  parser.add_argument("--demo",               action="store_true") # run a demo test on model, can specify id number
   parser.add_argument("--results",            action="store_true") # print a table of results.txt
   parser.add_argument("--print-results",      action="store_true") # prepare and print all results
   parser.add_argument("--delete-results",     action="store_true") # delete any results.txt data
@@ -974,7 +1004,14 @@ if __name__ == "__main__":
       print("No results table found")
     exit()
 
-
+  if args.test or args.demo:
+    if log_level > 0: print("Running a test")
+    # first load the model
+    if args.test:
+      test_and_load(model, best_id=True)
+    elif args.demo:
+      test_and_load(model, demo=True, render=True, pause=False, best_id=True)
+    exit()
 
   # ----- BEGIN TRAININGS ----- #
 
