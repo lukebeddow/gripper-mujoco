@@ -1621,6 +1621,52 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
+  elif training_type == "paper_baseline_3":
+
+    vary_1 = [
+      (0.9e-3, 28e-3),
+      (1.0e-3, 24e-3),
+      (1.0e-3, 28e-3),
+    ]
+    vary_2 = [0, 1, 2, 3]
+    vary_3 = None
+    repeats = 10
+    param_1_name = "thickness, width"
+    param_2_name = "num sensors"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    wrist_mu = 0.01             # large chance of zero error with the wrist
+    wrist_std = 0.075           # wrist has a lot of noise, this is 15% coverage +-2stdevs
+
+    baseline_args = {
+      "finger_thickness" : param_1[0],
+      "finger_width" : param_1[1],
+      "sensors" : param_2,
+      "sensor_noise" : 0.025,   # medium noise on sensor readings
+      "state_noise" : 0.0,      # no noise on state readings, this is required for sign mode
+      "sensor_mu" : 0.05,       # can be +- 5% from 0
+      "state_mu" : 0.025,       # just a gentle zero error noise on state readings
+      "sensor_steps" : 1,       # limit this since sensor data is unreliable
+      "state_steps" : 5,        # this data stream is clean, so take a lot of it
+      "sensor_mode" : 2,        # average sample, leave as before
+      "state_mode" : 4,         # state sign mode, -1,0,+1 for motor state change
+      "eval_me" : f"model.env.mj.set.wrist_sensor_Z.set_gaussian_noise({wrist_mu}, {wrist_std})",
+      "scale_rewards" : 2.5,    # stronger reward signal aids training
+      "scale_penalties" : 2.5,  # we do want to discourage dangerous actions
+    }
+
+    # don't run long trainings
+    model.params.num_episodes = 60_000
+
+    # run slightly longer tests
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
   elif training_type == "test_exceed_limits_termination":
 
     param_1 = None
