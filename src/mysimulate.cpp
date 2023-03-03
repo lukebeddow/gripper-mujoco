@@ -202,9 +202,12 @@ const mjuiDef defOption[] =
     {mjITEM_CHECKINT,  "Motor sensor",  2, &settings.statesensor,   " #405"}, // added by luke
     {mjITEM_CHECKINT,  "All sensors",   2, &settings.allsensors,    " #406"}, // added by luke
     {mjITEM_CHECKINT,  "Use noise",     2, &settings.all_sensors_use_noise, " #407"},  // added by luke
-    {mjITEM_SLIDERNUM, "Noise mag",     2, &myMjClass.s_.sensor_noise_mag,   "0.0 1.0"},   // added by luke
-    {mjITEM_SLIDERNUM, "Noise mean",    2, &myMjClass.s_.sensor_noise_mu,    "-1.0 1.0"},  // added by luke
-    {mjITEM_SLIDERNUM, "Noise std",     2, &myMjClass.s_.sensor_noise_std,   "-0.1 1.0"},  // added by luke
+    {mjITEM_SLIDERNUM, "sensor mag",    2, &myMjClass.s_.sensor_noise_mag,   "0.0 1.0"},   // added by luke
+    {mjITEM_SLIDERNUM, "sensor mean",   2, &myMjClass.s_.sensor_noise_mu,    "0 1.0"},  // added by luke
+    {mjITEM_SLIDERNUM, "sensor std",    2, &myMjClass.s_.sensor_noise_std,   "-0.1 1.0"},  // added by luke
+    {mjITEM_SLIDERNUM, "state mag",     2, &myMjClass.s_.state_noise_mag,   "0.0 1.0"},   // added by luke
+    {mjITEM_SLIDERNUM, "state mean",    2, &myMjClass.s_.state_noise_mu,    "0 1.0"},  // added by luke
+    {mjITEM_SLIDERNUM, "state std",     2, &myMjClass.s_.state_noise_std,   "-0.1 1.0"},  // added by luke
     {mjITEM_CHECKINT,  "x stepper",     2, &settings.xstepfig,      " #408"}, // added by luke
     {mjITEM_CHECKINT,  "y stepper",     2, &settings.ystepfig,      " #409"}, // added by luke
     {mjITEM_CHECKINT,  "z stepper",     2, &settings.zstepfig,      " #410"}, // added by luke
@@ -698,20 +701,20 @@ void lukesensorfigsupdate(void)
     }
 
     // read the data    
-    std::vector<luke::gfloat> b1data = myMjClass.finger1_gauge.read(gnum);
-    std::vector<luke::gfloat> b2data = myMjClass.finger2_gauge.read(gnum);
-    std::vector<luke::gfloat> b3data = myMjClass.finger3_gauge.read(gnum);
-    std::vector<luke::gfloat> p1data = myMjClass.palm_sensor.read(gnum);
-    std::vector<luke::gfloat> a1data = myMjClass.finger1_axial_gauge.read(gnum);
-    std::vector<luke::gfloat> a2data = myMjClass.finger2_axial_gauge.read(gnum);
-    std::vector<luke::gfloat> a3data = myMjClass.finger3_axial_gauge.read(gnum);
-    std::vector<luke::gfloat> wXdata = myMjClass.wrist_X_sensor.read(gnum);
-    std::vector<luke::gfloat> wYdata = myMjClass.wrist_Y_sensor.read(gnum);
-    std::vector<luke::gfloat> wZdata = myMjClass.wrist_Z_sensor.read(gnum);
-    std::vector<luke::gfloat> mXdata = myMjClass.x_motor_position.read(gnum);
-    std::vector<luke::gfloat> mYdata = myMjClass.y_motor_position.read(gnum);
-    std::vector<luke::gfloat> mZdata = myMjClass.z_motor_position.read(gnum);
-    std::vector<luke::gfloat> mHdata = myMjClass.z_base_position.read(gnum);
+    std::vector<luke::gfloat> b1data = myMjClass.sim_sensors_.finger1_gauge.read(gnum);
+    std::vector<luke::gfloat> b2data = myMjClass.sim_sensors_.finger2_gauge.read(gnum);
+    std::vector<luke::gfloat> b3data = myMjClass.sim_sensors_.finger3_gauge.read(gnum);
+    std::vector<luke::gfloat> p1data = myMjClass.sim_sensors_.palm_sensor.read(gnum);
+    std::vector<luke::gfloat> a1data = myMjClass.sim_sensors_.finger1_axial_gauge.read(gnum);
+    std::vector<luke::gfloat> a2data = myMjClass.sim_sensors_.finger2_axial_gauge.read(gnum);
+    std::vector<luke::gfloat> a3data = myMjClass.sim_sensors_.finger3_axial_gauge.read(gnum);
+    std::vector<luke::gfloat> wXdata = myMjClass.sim_sensors_.wrist_X_sensor.read(gnum);
+    std::vector<luke::gfloat> wYdata = myMjClass.sim_sensors_.wrist_Y_sensor.read(gnum);
+    std::vector<luke::gfloat> wZdata = myMjClass.sim_sensors_.wrist_Z_sensor.read(gnum);
+    std::vector<luke::gfloat> mXdata = myMjClass.sim_sensors_.x_motor_position.read(gnum);
+    std::vector<luke::gfloat> mYdata = myMjClass.sim_sensors_.y_motor_position.read(gnum);
+    std::vector<luke::gfloat> mZdata = myMjClass.sim_sensors_.z_motor_position.read(gnum);
+    std::vector<luke::gfloat> mHdata = myMjClass.sim_sensors_.z_base_position.read(gnum);
 
     // get the corresponding timestamps
     std::vector<float> btdata = myMjClass.gauge_timestamps.read(gnum);
@@ -1439,6 +1442,10 @@ void makeSettingsUI(int oldstate)
         {mjITEM_CHECKINT, "randomise_colours", 2, &myMjClass.s_.randomise_colours, " #602"},
         {mjITEM_SLIDERNUM,"finger_thickness",  2, &settings.finger_thickness,  "0.5 1.5"},
         {mjITEM_BUTTON,   "apply thickness",   2, NULL,                            " #602"},
+        {mjITEM_SLIDERINT,"state_prev_n",      2, &myMjClass.s_.state_n_prev_steps,  "0 5"},
+        {mjITEM_SLIDERINT,"sensor_prev_n",     2, &myMjClass.s_.sensor_n_prev_steps, "0 5"},
+        {mjITEM_SLIDERINT,"state_mode",        2, &myMjClass.s_.state_sample_mode,   "0 5"},
+        {mjITEM_SLIDERINT,"sensor_mode",       2, &myMjClass.s_.sensor_sample_mode,  "0 5"},
         {mjITEM_END}
     };
 
@@ -2020,12 +2027,8 @@ void uiEvent(mjuiState* state)
                 // while (myMjClass.tock() < 1) {};
                 // throw std::runtime_error("");
                 // std::cout << it->itemid << '\n';
-
-                myMjClass.s_.state_noise_mag = myMjClass.s_.sensor_noise_mag;
-                myMjClass.s_.state_noise_mu = myMjClass.s_.sensor_noise_mu;
-                myMjClass.s_.state_noise_std = myMjClass.s_.sensor_noise_std;
                 myMjClass.s_.set_use_noise(settings.all_sensors_use_noise);
-                myMjClass.s_.apply_noise_params();
+                myMjClass.s_.apply_noise_params(myMjClass.uniform_dist);
                 break;
 
             //     // do nothing
@@ -2990,9 +2993,8 @@ void init(void)
     uiModify(window, &ui1, &uistate, &con);
 }
 
-
 // run event loop
-int main(int argc, const char** argv)
+int main(int argc, char** argv)
 {
 
     printf("Started\n");
@@ -3000,60 +3002,9 @@ int main(int argc, const char** argv)
     // initialize everything
     init();
 
-    // defaults
-    std::string default_path = "/home/luke/mymujoco/mjcf/";
-    std::string object_set = "set2_nocuboid_525";
-    std::string gripper_file = "/gripper_mujoco.xml";
-    std::string panda_file = "/panda_mujoco.xml";
-    std::string both_file = "/panda_and_gripper_mujoco.xml";
-    std::string task_file = "/gripper_task.xml";
-
-    // have defaults been overidden with globals?
-    #if defined(LUKE_MJCF_PATH)
-        default_path = LUKE_MJCF_PATH;
-        default_path += '/';
-    #endif
-
-    #if defined(LUKE_DEFAULTOBJECTS)
-        object_set = LUKE_DEFAULTOBJECTS;
-    #endif
-
-    // default configuration
-    std::string filepath = default_path + object_set + "/task/gripper_task_0.xml";
-
-    // if we receive command line arguments
-    if (argc > 1) {
-        if (not strcmp(argv[1], "gripper")) {
-        filepath = default_path + object_set + gripper_file;
-        }
-        else if (not strcmp(argv[1], "panda")) {
-            filepath = default_path + object_set + panda_file;
-        }
-        else if (not strcmp(argv[1], "both")) {
-            filepath = default_path + object_set + both_file;
-        }
-        else {//(not strcmp(argv[1], "task")) {
-
-            std::string task_folder = argv[1];
-
-            filepath = default_path + object_set + task_file;
-
-            if (argc > 2) {
-                filepath = default_path + object_set + "/" + task_folder + "/gripper_task_" + argv[2] + ".xml";
-            }
-
-            if (argc > 3) {
-                filepath = default_path + argv[3] + "/" + task_folder + "/gripper_task_" + argv[2] + ".xml";
-            }
-
-        }
-        // else {
-        //     printf("Command line argument not valid, ignored\n");
-        // }
-    }
-    else {
-        printf("No command line arguments detected, using default model\n");
-    }
+    // temporary mjclass object to parse command line
+    MjClass temp;
+    std::string filepath = temp.file_from_from_command_line(argc, argv);
 
     // echo file input
     printf("mysimulate loading mjcf from: %s\n", filepath.c_str());

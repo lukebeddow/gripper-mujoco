@@ -1953,26 +1953,36 @@ class TrainDQN():
 
     return 
 
-  def read_best_performance_from_text(self, silence=False, fulltest=False):
+  def read_best_performance_from_text(self, silence=False, fulltest=False, heuristic=False):
     """
     Read a text file to get the best model performance. This function contains
     hardcoding
     """
 
-    readpath = self.savedir + self.group_name + "/" + self.run_name + "/"
+    print("entered the function")
+
+    readroot = self.savedir + self.group_name + "/"
+
+    if heuristic: 
+      readroot += "heuristic/"
+      fulltest_str = "heuristic_test"
+    else:
+      fulltest_str = "full_test"
+
+    readpath = readroot + self.run_name + "/"
 
     try:
 
       # special case, get fulltest information
       if fulltest:
 
-        test_files = [x for x in os.listdir(readpath) if x.startswith("full_test") and x.endswith(".txt")]
+        test_files = [x for x in os.listdir(readpath) if x.startswith(fulltest_str) and x.endswith(".txt")]
         
         if len(test_files) == 0: return None, None
         
         elif len(test_files) > 1: 
 
-          print("Multiple 'full_test.txt' files found in read_best_performance_from_text(...)")
+          print(f"Multiple '{fulltest_str}.txt' files found in read_best_performance_from_text(...)")
 
           # hardcoded date string
           datestr = "%d-%m-%y-%H:%M"
@@ -2120,21 +2130,18 @@ if __name__ == "__main__":
   # ----- load ----- #
 
   # load
-  # folder = "mymujoco"
-  # group = "05-12-22"
-  # run = "luke-PC_11:39_A1"
   folder = "mymujoco"
-  group = "06-01-23"
-  run = "luke-PC_14:44_A48"
+  group = "paper_baseline_2/31-01-23"
+  run = "luke-PC_10_54_A117"
   folderpath = f"/home/luke/{folder}/rl/models/dqn/{group}/"
-  # model.set_device("cuda")
+  model.set_device("cuda")
   model.load(id=None, folderpath=folderpath, foldername=run, best_id=True)
 
   # ----- train ----- #
 
   # train
   # net = networks.DQN_3L60
-  # model.env.disable_rendering = True
+  # model.env.disable_rendering = False
   # model.env.mj.set.debug = False
   # model.num_segments = 8
   # model.finger_thickness = 0.8e-3

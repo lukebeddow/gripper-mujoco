@@ -56,10 +56,11 @@ namespace MjType
   // what are the possible sampling methods to get observation data
   struct Sample {
     enum {
-      raw = 0,
-      change,
-      average,
-      median
+      raw = 0,    // return raw values
+      change,     // add the change between values ie (a, b-a, b)
+      average,    // add the average between values ie (a, (a+b)/2, b)
+      median,     // add the median between values ie (a, med(a...b), b)
+      sign        // add the sign of the change ie (a, sign(b-a), b) where sign() outputs -1,0,+1
     };
   };
 
@@ -76,7 +77,7 @@ namespace MjType
     bool use_noise = true;              // are we adding synthetic noise
     float raw_value_offset = 0.0;       // value to subract from the sensor raw value (only used for wrist Z sensor)
     float noise_mag = 0;                // magnitude of added noise
-    float noise_mu = 0;                 // mean of noise (ie zero error)
+    float noise_mu = 0;                 // mean of noise (>0 uniformly randomly set)
     float noise_std = -1;               // std deviation of noise (< 0 means flat)
 
     // internal variables set via functions, do not touch
@@ -84,6 +85,12 @@ namespace MjType
     int prev_steps = 1;                 // back how many previous steps do we read
     int readings_per_step = 1;          // how many readings during action execution
     int total_readings = 1;             // how many samples back do we start reading
+    bool noise_overriden = false;       // noise settings have been manually set, should not be changed
+    
+    // random mu values for use in multiple sensing streams
+    float rand_mu_1 = 0;
+    float rand_mu_2 = 0;
+    float rand_mu_3 = 0;
 
     Sensor(bool in_use, float normalise, float read_rate)
       : in_use(in_use), normalise(normalise), read_rate(read_rate)
@@ -93,6 +100,34 @@ namespace MjType
 
     void set(bool in_use_, float normalise_, float read_rate_) {
       in_use = in_use_; normalise = normalise_; read_rate = read_rate_;
+    }
+
+    void set_gaussian_noise(float mu, float stddev) {
+      noise_mag = 0;
+      noise_mu = mu;
+      noise_std = stddev;
+      noise_overriden = true;
+    }
+
+    void set_uniform_noise(float mag) {
+      noise_mag = mag;
+      noise_mu = 0;
+      noise_std = -1;
+      noise_overriden = true;
+    }
+
+    void randomise_mu(std::uniform_real_distribution<float>& uniform_dist) {
+      // if mu is non-zero, select a uniform random mu
+      rand_mu_1 = noise_mu * (2 * uniform_dist(*MjType::generator) - 1);
+      rand_mu_2 = noise_mu * (2 * uniform_dist(*MjType::generator) - 1);
+      rand_mu_3 = noise_mu * (2 * uniform_dist(*MjType::generator) - 1);
+    }
+
+    void wipe_noise() {
+      noise_mag = 0;
+      noise_mu = 0;
+      noise_std = -1;
+      noise_overriden = false;
     }
 
     void reset() {
@@ -126,7 +161,7 @@ namespace MjType
       }
     }
 
-    float apply_noise(float value, std::uniform_real_distribution<float>& uniform_dist)
+    float apply_noise(float value, std::uniform_real_distribution<float>& uniform_dist, int i = 1)
     {
       /* add noise to a reading */
 
@@ -135,9 +170,18 @@ namespace MjType
       constexpr float two_pi = 2.0 * M_PI;
       constexpr float epsilon = std::numeric_limits<float>::epsilon();
 
+      // which noise mean to choose, 1,2,3 can be used for gauge1,2,3 etc
+      float mu_to_use;
+      if (i == 1) mu_to_use = rand_mu_1;
+      else if (i == 2) mu_to_use = rand_mu_2;
+      else if (i == 3) mu_to_use = rand_mu_3;
+      else {
+        throw std::runtime_error("Sensor::apply_noise() got i not equal 1,2,3");
+      }
+
       // calculate a uniform random noise
       if (noise_std < epsilon) {
-        float noise = noise_mu + noise_mag * (2 * uniform_dist(*MjType::generator) - 1);
+        float noise = mu_to_use + noise_mag * (2 * uniform_dist(*MjType::generator) - 1);
         value += noise;
       }
       // use the box mueller transform to calculate normal noise
@@ -153,8 +197,8 @@ namespace MjType
 
         // compute z0 and z1
         float mag = noise_std * std::sqrt(-2.0 * std::log(u1));
-        float z0 = mag * std::cos(two_pi * u2) + noise_mu;
-        // float z1 = mag * std::sin(two_pi * u2) + noise_mu; // not needed
+        float z0 = mag * std::cos(two_pi * u2) + mu_to_use;
+        // float z1 = mag * std::sin(two_pi * u2) + mu_to_use; // not needed
   
         value += z0;
       }
@@ -314,6 +358,37 @@ namespace MjType
 
         // save the result
         result[i * 2 + 1] = med;
+      }
+
+      return result;
+    }
+
+    std::vector<luke::gfloat> sign_sample(luke::SlidingWindow<luke::gfloat> data)
+    {
+      /* sample the first and last reading as well as the sign of the change 
+      [x0, sign(dx), x1]. Sign outputs either +1, -1, or 0 */
+
+      static constexpr luke::gfloat tol = 1e-6;
+
+      // make the return vector, first element is furthest back reading
+      std::vector<luke::gfloat> result(2 * prev_steps + 1);
+      result[0] = data.read_element(total_readings - 1); // read_element is 0 indexed
+
+      // loop through steps to add in elements
+      for (int i = 0; i < prev_steps; i++) {
+        int first_sample = total_readings - 1 - i * readings_per_step;
+        result[i * 2 + 2] = data.read_element(first_sample - readings_per_step);
+        
+        luke::gfloat change = result[i * 2 + 2] - result[i * 2];
+        if (change > tol) {
+          result[i * 2 + 1] = 1.0;
+        }
+        else if (change < -tol) {
+          result[i * 2 + 1] = -1.0;
+        }
+        else {
+          result[i * 2 + 1] = 0.0;
+        }
       }
 
       return result;
@@ -522,7 +597,7 @@ namespace MjType
     void set_use_noise(bool set_as);
     void set_sensor_prev_steps_to(int prev_steps);
     void update_sensor_settings(double time_since_last_sample);
-    void apply_noise_params();
+    void apply_noise_params(std::uniform_real_distribution<float>& uniform_dist);
   };
 
   // data on the simulated objects and environment
@@ -845,23 +920,80 @@ namespace MjType
     }
   };
 
-  // calibration constants for gauge data
-  struct RealGaugeCalibrations {
+  // // calibration constants for gauge data
+  // struct RealGaugeCalibrations {
 
-    /* applied as follows: g_out = (g_raw + offset) * scale */
-    struct RealSensors { float g1 {}, g2 {}, g3 {}, palm {}, wrist_Z {}; };
+  //   /* applied as follows: g_out = (g_raw + offset) * scale */
+  //   struct RealSensors { float g1 {}, g2 {}, g3 {}, palm {}, wrist_Z {}; };
 
-    RealSensors offset;
-    RealSensors scale;
-    RealSensors norm;
+  //   RealSensors offset;
+  //   RealSensors scale;
+  //   RealSensors norm;
 
-    // when true, automatically detect the offset
-    bool recalibrate_offset_flag = false;
+  //   // when true, automatically detect the offset
+  //   bool recalibrate_offset_flag = false;
 
+  // };
+
+  // data containers for all of the possible sensors
+  struct SensorData {
+
+    static constexpr int buffer_size = 50;
+
+    // storage containers for state data
+    luke::SlidingWindow<luke::gfloat> x_motor_position { buffer_size };
+    luke::SlidingWindow<luke::gfloat> y_motor_position { buffer_size };
+    luke::SlidingWindow<luke::gfloat> z_motor_position { buffer_size };
+    luke::SlidingWindow<luke::gfloat> z_base_position { buffer_size };
+
+    // create storage containers for sensor data
+    luke::SlidingWindow<luke::gfloat> finger1_gauge { buffer_size };
+    luke::SlidingWindow<luke::gfloat> finger2_gauge { buffer_size };
+    luke::SlidingWindow<luke::gfloat> finger3_gauge { buffer_size };
+    luke::SlidingWindow<luke::gfloat> palm_sensor { buffer_size };
+    luke::SlidingWindow<luke::gfloat> finger1_axial_gauge { buffer_size };
+    luke::SlidingWindow<luke::gfloat> finger2_axial_gauge { buffer_size };
+    luke::SlidingWindow<luke::gfloat> finger3_axial_gauge { buffer_size };
+    luke::SlidingWindow<luke::gfloat> wrist_X_sensor { buffer_size };
+    luke::SlidingWindow<luke::gfloat> wrist_Y_sensor { buffer_size };
+    luke::SlidingWindow<luke::gfloat> wrist_Z_sensor { buffer_size };
+
+    void reset() {
+      x_motor_position.reset();
+      y_motor_position.reset();
+      z_motor_position.reset();
+      z_base_position.reset();
+      finger1_gauge.reset();
+      finger2_gauge.reset();
+      finger3_gauge.reset();
+      palm_sensor.reset();
+      finger1_axial_gauge.reset();
+      finger2_axial_gauge.reset();
+      finger3_axial_gauge.reset();
+      wrist_X_sensor.reset();
+      wrist_Y_sensor.reset();
+      wrist_Z_sensor.reset();
+    }
+
+    // getters to read the most recent element for each sensor, exposed to python
+    luke::gfloat read_x_motor_position() { return x_motor_position.read_element(); }
+    luke::gfloat read_y_motor_position() { return y_motor_position.read_element(); }
+    luke::gfloat read_z_motor_position() { return z_motor_position.read_element(); }
+    luke::gfloat read_z_base_position() { return z_base_position.read_element(); }
+    luke::gfloat read_finger1_gauge() { return finger1_gauge.read_element(); }
+    luke::gfloat read_finger2_gauge() { return finger2_gauge.read_element(); }
+    luke::gfloat read_finger3_gauge() { return finger3_gauge.read_element(); }
+    luke::gfloat read_palm_sensor() { return palm_sensor.read_element(); }
+    luke::gfloat read_finger1_axial_gauge() { return finger1_axial_gauge.read_element(); }
+    luke::gfloat read_finger2_axial_gauge() { return finger2_axial_gauge.read_element(); }
+    luke::gfloat read_finger3_axial_gauge() { return finger3_axial_gauge.read_element(); }
+    luke::gfloat read_wrist_X_sensor() { return wrist_X_sensor.read_element(); }
+    luke::gfloat read_wrist_Y_sensor() { return wrist_Y_sensor.read_element(); }
+    luke::gfloat read_wrist_Z_sensor() { return wrist_Z_sensor.read_element(); }
   };
 
-
-  struct RealSensors {
+  // real sensor calibration data structure
+  struct RealCalibrations {
 
     struct Calibration {
 
@@ -874,12 +1006,11 @@ namespace MjType
         : scale(scale), offset(offset), norm(0) {}
 
       double apply_calibration(double value) {
-        // std::cout << "value=" << value << ", ";
-        double linearly_shifted = (value - offset) * scale;
-        // std::cout << "linear=(" << value << "-" << offset << ")*" << scale << ", ";
-        double normalised = normalise_between(linearly_shifted, -norm, norm);
-        // std::cout << "output=" << normalised << " normalised between +-" << norm << '\n';
-        return normalised;
+        return (value - offset) * scale;
+      }
+
+      double apply_normalisation(double value) {
+        return normalise_between(value, -norm, norm);
       }
 
     };
@@ -952,6 +1083,50 @@ namespace MjType
     }
 
   };
+
+  // data structure for storing real sensor data
+  struct RealSensorData {
+
+    MjType::RealCalibrations::Calibration g1;      // PCB gauge 1
+    MjType::RealCalibrations::Calibration g2;      // PCB gauge 2
+    MjType::RealCalibrations::Calibration g3;      // PCB gauge 3
+    MjType::RealCalibrations::Calibration palm;    // PCB gauge 4
+    MjType::RealCalibrations::Calibration wrist_Z; // force/torque wrist sensor
+
+    // autocalibration vectors
+    int calibration_samples = 20; // 10Hz so 20=2sec calibration time
+    std::vector<float> f1_calibration;
+    std::vector<float> f2_calibration;
+    std::vector<float> f3_calibration;
+    std::vector<float> palm_calibration;
+    std::vector<float> wrist_Z_calibration;
+
+    MjType::SensorData raw;          // raw sensor values
+    MjType::SensorData SI;           // calibrated and scaled to SI units
+    MjType::SensorData normalised;   // normalised [-1,+1] for neural network
+
+    // flag which indicates if we should re-zero sensors
+    bool recalibrate_offset_flag = false;
+
+    void reset() {
+
+      recalibrate_offset_flag = true;
+
+      // wipe calibration, causes sensors to re-zero
+      f1_calibration.clear();
+      f2_calibration.clear();
+      f3_calibration.clear();
+      palm_calibration.clear();
+      wrist_Z_calibration.clear();
+
+      // wipe all saved real data
+      raw.reset();
+      SI.reset();
+      normalised.reset();
+    }
+
+  };
+
 }
 
 class MjClass
@@ -1014,20 +1189,6 @@ public:
   // reward goal (if using)
   MjType::Goal goal_;
 
-  // calibrations for real sensors
-  struct SensorCalibrations {
-
-    MjType::RealSensors::Calibration g1;      // PCB gauge 1
-    MjType::RealSensors::Calibration g2;      // PCB gauge 2
-    MjType::RealSensors::Calibration g3;      // PCB gauge 3
-    MjType::RealSensors::Calibration palm;    // PCB gauge 4
-    MjType::RealSensors::Calibration wrist_Z;
-
-    // flag which indicates if we should re-zero sensors
-    bool recalibrate_offset_flag = false;
-
-  } sensor_calibrations_;
-
   // these flags are only reset with hard_reset()
   struct ResetFlags {
 
@@ -1050,33 +1211,35 @@ public:
   int n_actions;                      // number of possible actions
   std::vector<int> action_options;    // possible action codes
 
-  // storage containers for state data
-  luke::SlidingWindow<luke::gfloat> x_motor_position { gauge_buffer_size };
-  luke::SlidingWindow<luke::gfloat> y_motor_position { gauge_buffer_size };
-  luke::SlidingWindow<luke::gfloat> z_motor_position { gauge_buffer_size };
-  luke::SlidingWindow<luke::gfloat> z_base_position { gauge_buffer_size };
+  // // storage containers for state data
+  // luke::SlidingWindow<luke::gfloat> x_motor_position { gauge_buffer_size };
+  // luke::SlidingWindow<luke::gfloat> y_motor_position { gauge_buffer_size };
+  // luke::SlidingWindow<luke::gfloat> z_motor_position { gauge_buffer_size };
+  // luke::SlidingWindow<luke::gfloat> z_base_position { gauge_buffer_size };
   
-  // create storage containers for sensor data
-  luke::SlidingWindow<luke::gfloat> finger1_gauge { gauge_buffer_size };
-  luke::SlidingWindow<luke::gfloat> finger2_gauge { gauge_buffer_size };
-  luke::SlidingWindow<luke::gfloat> finger3_gauge { gauge_buffer_size };
-  luke::SlidingWindow<luke::gfloat> palm_sensor { gauge_buffer_size };
-  luke::SlidingWindow<luke::gfloat> finger1_axial_gauge { gauge_buffer_size };
-  luke::SlidingWindow<luke::gfloat> finger2_axial_gauge { gauge_buffer_size };
-  luke::SlidingWindow<luke::gfloat> finger3_axial_gauge { gauge_buffer_size };
-  luke::SlidingWindow<luke::gfloat> wrist_X_sensor { gauge_buffer_size };
-  luke::SlidingWindow<luke::gfloat> wrist_Y_sensor { gauge_buffer_size };
-  luke::SlidingWindow<luke::gfloat> wrist_Z_sensor { gauge_buffer_size };
+  // // create storage containers for sensor data
+  // luke::SlidingWindow<luke::gfloat> finger1_gauge { gauge_buffer_size };
+  // luke::SlidingWindow<luke::gfloat> finger2_gauge { gauge_buffer_size };
+  // luke::SlidingWindow<luke::gfloat> finger3_gauge { gauge_buffer_size };
+  // luke::SlidingWindow<luke::gfloat> palm_sensor { gauge_buffer_size };
+  // luke::SlidingWindow<luke::gfloat> finger1_axial_gauge { gauge_buffer_size };
+  // luke::SlidingWindow<luke::gfloat> finger2_axial_gauge { gauge_buffer_size };
+  // luke::SlidingWindow<luke::gfloat> finger3_axial_gauge { gauge_buffer_size };
+  // luke::SlidingWindow<luke::gfloat> wrist_X_sensor { gauge_buffer_size };
+  // luke::SlidingWindow<luke::gfloat> wrist_Y_sensor { gauge_buffer_size };
+  // luke::SlidingWindow<luke::gfloat> wrist_Z_sensor { gauge_buffer_size };
 
   // track the timestamps of sensor updates, this is for plotting in mysimlulate.cpp
-  luke::SlidingWindow<float> step_timestamps { gauge_buffer_size };
-  luke::SlidingWindow<float> gauge_timestamps { gauge_buffer_size };
-  luke::SlidingWindow<float> axial_timestamps { gauge_buffer_size };
-  luke::SlidingWindow<float> palm_timestamps { gauge_buffer_size };
-  luke::SlidingWindow<float> wristXY_timestamps { gauge_buffer_size };
-  luke::SlidingWindow<float> wristZ_timestamps { gauge_buffer_size };
+  luke::SlidingWindow<float> step_timestamps { MjType::SensorData::buffer_size };
+  luke::SlidingWindow<float> gauge_timestamps { MjType::SensorData::buffer_size };
+  luke::SlidingWindow<float> axial_timestamps { MjType::SensorData::buffer_size };
+  luke::SlidingWindow<float> palm_timestamps { MjType::SensorData::buffer_size };
+  luke::SlidingWindow<float> wristXY_timestamps { MjType::SensorData::buffer_size };
+  luke::SlidingWindow<float> wristZ_timestamps { MjType::SensorData::buffer_size };
 
   // data structures
+  MjType::SensorData sim_sensors_;
+  MjType::RealSensorData real_sensors_;
   MjType::Env env_;
   MjType::TestReport testReport_;
   MjType::CurveFitData curve_validation_data_;
@@ -1095,6 +1258,7 @@ public:
   void init();
   void init(mjModel* m, mjData* d);
   void configure_settings();
+  std::string file_from_from_command_line(int argc, char **argv);
 
   // core functionality
   void load(std::string file_path);
@@ -1103,9 +1267,9 @@ public:
   void hard_reset();
   void step();
   bool render();
+  void close_render();
 
   // sensing
-  std::vector<float> get_finger_gauge_data();
   void monitor_sensors();
   void sense_gripper_state();
   void update_env();
@@ -1129,6 +1293,7 @@ public:
   void randomise_finger_colours();
   bool is_done();
   std::vector<luke::gfloat> get_observation();
+  std::vector<luke::gfloat> get_observation(MjType::SensorData sensors);
   std::vector<float> get_event_state();
   std::vector<float> get_goal();
   std::vector<float> assess_goal();
@@ -1142,10 +1307,14 @@ public:
   std::vector<luke::gfloat> get_finger_stiffnesses();
 
   // sensor getters
-  std::vector<luke::gfloat> get_bend_gauge_readings(bool unnormalise);
-  luke::gfloat get_palm_reading(bool unnormalise);
-  luke::gfloat get_wrist_reading(bool unnormalise);
-  std::vector<luke::gfloat> get_state_readings(bool unnormalise);
+  // std::vector<luke::gfloat> get_bend_gauge_readings(bool unnormalise);
+  // luke::gfloat get_palm_reading(bool unnormalise);
+  // luke::gfloat get_wrist_reading(bool unnormalise);
+  // std::vector<luke::gfloat> get_state_readings(bool unnormalise);
+  std::vector<luke::gfloat> get_finger_forces(bool realworld);
+  luke::gfloat get_palm_force(bool realworld);
+  luke::gfloat get_wrist_force(bool realworld);
+  std::vector<luke::gfloat> get_state_metres(bool realworld);
   luke::gfloat get_finger_angle();
 
   // real world gripper functions
@@ -1153,6 +1322,7 @@ public:
   std::vector<float> input_real_data(std::vector<float> state_data, 
     std::vector<float> sensor_data);
   std::vector<float> get_real_observation();
+  std::vector<float> get_simple_state_vector(MjType::SensorData sensor);
 
   // misc
   void forward() { mj_forward(model, data); }
@@ -1198,5 +1368,49 @@ MjType::Goal score_goal(MjType::Goal const goal, std::vector<float> event_vec,
   MjType::Settings settings);
 MjType::Goal score_goal(MjType::Goal const goal, MjType::EventTrack event, 
   MjType::Settings settings);
+
+// simple command line argument parsing class for mysimulate and test binaries
+// from: https://stackoverflow.com/questions/865668/parsing-command-line-arguments-in-c
+class MjClassInputParser {
+  public:
+    MjClassInputParser (int &argc, char **argv){
+      for (int i=1; i < argc; ++i)
+        this->tokens.push_back(std::string(argv[i]));
+    }
+    /// @author iain
+    std::string getCmdOption(std::string option) {
+      std::vector<std::string>::const_iterator itr;
+      itr =  std::find(this->tokens.begin(), this->tokens.end(), option);
+      if (itr != this->tokens.end() && ++itr != this->tokens.end()) {
+        return *itr;
+      }
+      std::string empty_string("");
+      return empty_string;
+    }
+    /// @author iain
+    bool cmdOptionExists(std::string option) {
+      return std::find(this->tokens.begin(), this->tokens.end(), option)
+        != this->tokens.end();
+    }
+    /// @author luke
+    std::string getCmdFromList(std::string a, std::string b) {
+      std::vector<std::string> v { a, b };
+      return getCmdFromList(v);
+    }
+    std::string getCmdFromList(std::vector<std::string> options) {
+      std::string output;
+      for (std::string s : options) {
+        output = getCmdOption(s);
+        if (not output.empty()) {
+          return output;
+        }
+      }
+      return output;
+    }
+
+
+  private:
+    std::vector <std::string> tokens;
+};
 
 #endif // MJCLASS_H_

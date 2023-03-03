@@ -16,7 +16,6 @@ PYBIND11_MODULE(bind, m) {
   m.def("goal_rewards", &goal_rewards);
   m.def("score_goal", static_cast<MjType::Goal (*)(MjType::Goal, std::vector<float>, MjType::Settings)>(&score_goal));
   m.def("score_goal", static_cast<MjType::Goal (*)(MjType::Goal, MjType::EventTrack, MjType::Settings)>(&score_goal));
-  m.def("normalise_between", &normalise_between)
 
   // main module class
   {py::class_<MjClass>(m, "MjClass")
@@ -33,6 +32,7 @@ PYBIND11_MODULE(bind, m) {
     .def("hard_reset", &MjClass::hard_reset)
     .def("step", &MjClass::step)
     .def("render", &MjClass::render)
+    .def("close_render", &MjClass::close_render)
 
     // sensing
     // none atm
@@ -58,7 +58,8 @@ PYBIND11_MODULE(bind, m) {
     .def("randomise_ground_colour", &MjClass::randomise_ground_colour)
     .def("randomise_finger_colours", &MjClass::randomise_finger_colours)
     .def("is_done", &MjClass::is_done)
-    .def("get_observation", &MjClass::get_observation)
+    .def("get_observation", static_cast<std::vector<luke::gfloat> (MjClass::*)()>(&MjClass::get_observation))
+    .def("get_observation", static_cast<std::vector<luke::gfloat> (MjClass::*)(MjType::SensorData)>(&MjClass::get_observation))
     .def("get_event_state", &MjClass::get_event_state)
     .def("get_goal", &MjClass::get_goal)
     .def("assess_goal", static_cast<std::vector<float> (MjClass::*)()>(&MjClass::assess_goal))
@@ -74,17 +75,17 @@ PYBIND11_MODULE(bind, m) {
     .def("get_finger_stiffnesses", &MjClass::get_finger_stiffnesses)
 
     // sensor getters (set a default argument for 'unnormalise' to be false)
-    .def("get_bend_gauge_readings", &MjClass::get_bend_gauge_readings, py::arg("unnormalise") = false)
-    .def("get_palm_reading", &MjClass::get_palm_reading, py::arg("unnormalise") = false)
-    .def("get_wrist_reading", &MjClass::get_wrist_reading, py::arg("unnormalise") = false)
-    .def("get_state_readings", &MjClass::get_state_readings, py::arg("unnormalise") = false)
+    .def("get_finger_forces", &MjClass::get_finger_forces)
+    .def("get_palm_force", &MjClass::get_palm_force)
+    .def("get_wrist_force", &MjClass::get_wrist_force)
+    .def("get_state_metres", &MjClass::get_state_metres)
     .def("get_finger_angle", &MjClass::get_finger_angle)
 
     // real life gripper functions
     .def("calibrate_real_sensors", &MjClass::calibrate_real_sensors)
-    .def("get_finger_gauge_data", &MjClass::get_finger_gauge_data)
     .def("input_real_data", &MjClass::input_real_data)
     .def("get_real_observation", &MjClass::get_real_observation)
+    .def("get_simple_state_vector", &MjClass::get_simple_state_vector)
 
     // misc
     .def("tick", &MjClass::tick)
@@ -116,6 +117,8 @@ PYBIND11_MODULE(bind, m) {
     .def_readonly("machine", &MjClass::machine)
     .def_readonly("current_load_path", &MjClass::current_load_path)
     .def_readwrite("curve_validation_data", &MjClass::curve_validation_data_)
+    .def_readwrite("real_sensors", &MjClass::real_sensors_)
+    .def_readwrite("sim_sensors", &MjClass::sim_sensors_)
 
     // pickle support
     .def(py::pickle(
@@ -420,6 +423,8 @@ PYBIND11_MODULE(bind, m) {
 
     .def(py::init<bool, float, float>())
     .def("set", &MjType::Sensor::set)
+    .def("set_gaussian_noise", &MjType::Sensor::set_gaussian_noise)
+    .def("set_uniform_noise", &MjType::Sensor::set_uniform_noise)
 
     .def_readwrite("in_use", &MjType::Sensor::in_use)
     .def_readwrite("normalise", &MjType::Sensor::normalise)
@@ -445,25 +450,31 @@ PYBIND11_MODULE(bind, m) {
           r.raw_value_offset,
           r.noise_mag,
           r.noise_mu,
-          r.noise_std
+          r.noise_std,
+          r.noise_overriden
         );
       },
       [](py::tuple t) { // __setstate__
 
         // size == 3 is old and can be later deleted
-        if (t.size() != 3 and t.size() != 9)
+        if (t.size() != 3 and t.size() != 9 and t.size() != 10)
           throw std::runtime_error("MjType::Sensor py::pickle got invalid state");
 
         // create new c++ instance with old data
         MjType::Sensor out(t[0].cast<bool>(), t[1].cast<float>(), t[2].cast<float>());
 
-        if (t.size() == 9) {
+        if (t.size() >= 9) {
           out.use_normalisation = t[3].cast<bool>();
           out.use_noise = t[4].cast<bool>();
           out.raw_value_offset = t[5].cast<float>();
           out.noise_mag = t[6].cast<float>();
           out.noise_mu = t[7].cast<float>();
           out.noise_std = t[8].cast<float>();
+        }
+
+        // newest changes
+        if (t.size() >= 10) {
+          out.noise_overriden = t[9].cast<bool>();
         }
         
         return out;
@@ -907,20 +918,49 @@ PYBIND11_MODULE(bind, m) {
     ;
   }
 
-  // classes to set gauge calibration
-  {py::class_<MjType::RealGaugeCalibrations::RealSensors>(m, "RealSensors")
+  // // classes to set gauge calibration
+  // {py::class_<MjType::RealGaugeCalibrations::RealSensors>(m, "RealSensors")
+  //   .def(py::init<>())
+  //   .def_readwrite("g1", &MjType::RealGaugeCalibrations::RealSensors::g1)
+  //   .def_readwrite("g2", &MjType::RealGaugeCalibrations::RealSensors::g2)
+  //   .def_readwrite("g3", &MjType::RealGaugeCalibrations::RealSensors::g3)
+  //   .def_readwrite("palm", &MjType::RealGaugeCalibrations::RealSensors::palm)
+  //   ;
+  // }
+
+  // {py::class_<MjType::RealGaugeCalibrations>(m, "RealGaugeCalibrations")
+  //   .def_readwrite("offset", &MjType::RealGaugeCalibrations::offset)
+  //   .def_readwrite("scale", &MjType::RealGaugeCalibrations::scale)
+  //   .def_readwrite("norm", &MjType::RealGaugeCalibrations::norm)
+  //   ;
+  // }
+
+  // sensor data storage class
+  {py::class_<MjType::SensorData>(m, "SensorData")
     .def(py::init<>())
-    .def_readwrite("g1", &MjType::RealGaugeCalibrations::RealSensors::g1)
-    .def_readwrite("g2", &MjType::RealGaugeCalibrations::RealSensors::g2)
-    .def_readwrite("g3", &MjType::RealGaugeCalibrations::RealSensors::g3)
-    .def_readwrite("palm", &MjType::RealGaugeCalibrations::RealSensors::palm)
+    .def("reset", &MjType::SensorData::reset)
+    .def("read_x_motor_position", &MjType::SensorData::read_x_motor_position)
+    .def("read_y_motor_position", &MjType::SensorData::read_y_motor_position)
+    .def("read_z_motor_position", &MjType::SensorData::read_z_motor_position)
+    .def("read_z_base_position", &MjType::SensorData::read_z_base_position)
+    .def("read_finger1_gauge", &MjType::SensorData::read_finger1_gauge)
+    .def("read_finger2_gauge", &MjType::SensorData::read_finger2_gauge)
+    .def("read_finger3_gauge", &MjType::SensorData::read_finger3_gauge)
+    .def("read_palm_sensor", &MjType::SensorData::read_palm_sensor)
+    .def("read_finger1_axial_gauge", &MjType::SensorData::read_finger1_axial_gauge)
+    .def("read_finger2_axial_gauge", &MjType::SensorData::read_finger2_axial_gauge)
+    .def("read_finger3_axial_gauge", &MjType::SensorData::read_finger3_axial_gauge)
+    .def("read_wrist_X_sensor", &MjType::SensorData::read_wrist_X_sensor)
+    .def("read_wrist_Y_sensor", &MjType::SensorData::read_wrist_Y_sensor)
+    .def("read_wrist_Z_sensor", &MjType::SensorData::read_wrist_Z_sensor)
     ;
   }
 
-  {py::class_<MjType::RealGaugeCalibrations>(m, "RealGaugeCalibrations")
-    .def_readwrite("offset", &MjType::RealGaugeCalibrations::offset)
-    .def_readwrite("scale", &MjType::RealGaugeCalibrations::scale)
-    .def_readwrite("norm", &MjType::RealGaugeCalibrations::norm)
+  {py::class_<MjType::RealSensorData>(m, "RealSensorData")
+    .def("reset", &MjType::RealSensorData::reset)
+    .def_readwrite("raw", &MjType::RealSensorData::raw)
+    .def_readwrite("SI", &MjType::RealSensorData::SI)
+    .def_readwrite("normalised", &MjType::RealSensorData::normalised)
     ;
   }
 

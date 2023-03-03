@@ -31,14 +31,10 @@ OUTCPP := bin
 OUTPY := rl/env/mjpy
 
 # default object set name
-DEFAULT_OBJECTSET = set4_fullset_795
+DEFAULT_OBJECTSET = set6_fullset_800_50i
 
 # do we want to prevent any rendering libraries from compiling (1=True, 0=false)
 PREVENT_RENDERING = 0
-
-# # for generating models, non-essential feature
-# MODELBASH := generate_models.sh
-# MODELDIR := /home/luke/gripper_repo_ws/src/gripper_v2/gripper_description/urdf/mujoco
 
 # ----- conditional compilation with user defined options ----- #
 
@@ -50,6 +46,7 @@ OPTIM = -O2
 endif
 
 # define library locations - this file contains user specified options
+PREVENT_BOOST = 1 # always disable boost, in future remove boost files from repo
 include buildsettings.mk
 
 # ----- compilation settings ----- #
@@ -154,16 +151,6 @@ $(BUILDDEP)/%.d: $(SOURCEDIR)/%.cpp
 		sed 's,\($*\)\.o[ :]*,$(BUILDDIR)/\1.o $(BUILDCPP)/\1.o $(BUILDPY)/\1.o $@ : ,g' \
 			< $@.$$$$ > $@;
 		rm -f $@.*
-
-# # run the bash script that re-generates the model files
-# .PHONY: models
-# models:
-# 	./$(MODELBASH)
-
-# # run the bash script, but only recompile mjcf
-# .PHONY: xml
-# xml:
-# 	$(MAKE) -C $(MODELDIR)
 
 clean:
 	rm -f $(BUILDDIR)/*.o 

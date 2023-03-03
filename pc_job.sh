@@ -81,7 +81,7 @@ do
     -s | --stagger ) (( i++ )); STAGGER=${!i}; echo stagger is $STAGGER ;;
     # without arguments
     -f | --no-faketty ) FAKETTY=; echo faketty disabled ;;
-    -d | --debug ) LOGGING='N'; DEBUG="--no-wandb"; echo Debug mode on, terminal logging, no wandb ;;
+    -d | --debug ) LOGGING='N'; DEBUG="--no-wandb --no-delay"; echo Debug mode on, terminal logging, no wandb ;;
     --print ) LOGGING='N'; PRINT="--print --no-wandb"; echo Printing mode on, no training ;;
     --print-results ) LOGGING='N'; PRINT="--print-results --no-wandb --no-delay"; PRINT_RESULTS='Y'; STAGGER=1; echo Print results mode, no training, stagger is 1 ;;
     -h | --help ) helpFunction ;;

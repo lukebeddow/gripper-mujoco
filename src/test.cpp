@@ -156,10 +156,12 @@ int main(int argc, char** argv)
 
   /* ----- load the gripper, generic testing ----- */
 
-  std::string relpath = "gripper_N10/gripper_task_0.xml";
+  // std::string relpath = "gripper_N10/gripper_task_0.xml";
+  // mjObj.load_relative(relpath);
 
   MjClass mjObj;
-  mjObj.load_relative(relpath);
+  std::string filepath = mjObj.file_from_from_command_line(argc, argv);
+  mjObj.load(filepath);
 
   // change settings
   mjObj.s_.mujoco_timestep = 1.8e-3;
@@ -221,7 +223,7 @@ int main(int argc, char** argv)
       std::printf("Time is: %.1f ms, ", (mjObj.data->time - start_time ) * 1000);
       std::cout << "printing finger 1 sensor: ";
       // mjObj.wrist_Z_sensor.print(10);
-      mjObj.finger1_gauge.print(10);
+      mjObj.sim_sensors_.finger1_gauge.print(10);
 
       
     }
