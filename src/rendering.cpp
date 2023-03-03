@@ -11,7 +11,11 @@ mjvOption opt;                      // visualization options
 mjvScene scn;                       // abstract scene
 mjrContext con;                     // custom GPU context
 
+// mjclass for plotting sensor data
+MjClass* MjPtr = NULL;
+
 // for plotting
+bool plot_sensors = true;
 mjvFigure figgauges;
 mjvFigure figbendgauge;
 mjvFigure figaxialgauge;
@@ -87,18 +91,20 @@ void scroll(GLFWwindow* window, double xoffset, double yoffset)
 }
 
 // initialise window
-void init(mjModel* model, mjData* data)
+void init(MjClass& myMjClass)
 {
+    MjPtr = &myMjClass;
+
     // update our global m/d to this most recent update
-    m = model;
-    d = data;
+    m = MjPtr->model;
+    d = MjPtr->data;
 
     // init GLFW
     if( !glfwInit() )
         mju_error("Could not initialize GLFW");
 
     // create window, make OpenGL context current, request v-sync
-    window = glfwCreateWindow(1200, 900, "Demo", NULL, NULL);
+    window = glfwCreateWindow(1200, 900, "luke-gripper-mujoco", NULL, NULL);
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
 
@@ -129,7 +135,7 @@ void init(mjModel* model, mjData* data)
 
     uiLayout(&uistate);
 
-    lukesensorfigsinit();
+    if (plot_sensors) lukesensorfigsinit();
 }
 
 // set window layout
@@ -164,15 +170,18 @@ void uiLayout(mjuiState* state)
     rect[3].height = rect[0].height;
 }
 
-void reload_for_rendering(mjModel* model, mjData* data)
+void reload_for_rendering(MjClass& myMjClass)
 {
     /* reload the scene after the model and data have changed */
 
-    m = model;
-    d = data;
+    MjPtr = &myMjClass;
+
+    m = MjPtr->model;
+    d = MjPtr->data;
 
     // re-create scene and context
-    mjv_makeScene(m, &scn, 2000);
+    int maxgeom = 5000;
+    mjv_makeScene(m, &scn, maxgeom);
     mjr_makeContext(m, &con, mjFONTSCALE_150);
 
     // // re-render
@@ -180,38 +189,59 @@ void reload_for_rendering(mjModel* model, mjData* data)
 }
 
 // render the scene
-bool render(MjClass& myMjClass)
+bool render()
 {
+    std::cout << "4.1\n";
+
     if (not m or not d) {
         mju_error_s("Error: %s", "Render has been called without first running init");
     }
 
-    // update our global m/d to this most recent update
-    m = myMjClass.model;
-    d = myMjClass.data;
+    // // update our global m/d to this most recent update
+    // m = myMjClass.model;
+    // d = myMjClass.data;
 
 
     if (!glfwWindowShouldClose(window)) {
+
+        std::cout << "4.2\n";
 
         // get framebuffer viewport
         mjrRect viewport = {0, 0, 0, 0};
         glfwGetFramebufferSize(window, &viewport.width, &viewport.height);
 
+        std::cout << "4.3\n";
+
         // update scene and render
         mjv_updateScene(m, d, &opt, NULL, &cam, mjCAT_ALL, &scn);
+
+        // this stops a crash, but nothing new renders on screen
+        // // swap OpenGL buffers (blocking call due to v-sync)
+        // glfwSwapBuffers(window);
+
+        std::cout << "before crash\n";
         mjr_render(viewport, &scn, &con);
+        std::cout << "after crash\n";
 
         // added - render UIs
-        mjrRect rect = uistate.rect[3];
-        mjui_render(&ui0, &uistate, &con);
-        lukesensorfigsupdate(myMjClass);
-        lukesensorfigshow(rect);
+        if (plot_sensors) {
+            mjrRect rect = uistate.rect[3];
+            mjui_render(&ui0, &uistate, &con);
+            lukesensorfigsupdate();
+            lukesensorfigshow(rect);
+        }
+        
+        std::cout << "4.6\n";
 
         // swap OpenGL buffers (blocking call due to v-sync)
         glfwSwapBuffers(window);
 
+        std::cout << "4.7\n";
+
         // process pending GUI events, call GLFW callbacks
         glfwPollEvents();
+
+        std::cout << "4.8\n";
 
         return true;
     }
@@ -290,10 +320,13 @@ void lukesensorfigsinit(void)
     strcpy(figmotors.linename[3], "H");
 }
 
-void lukesensorfigsupdate(MjClass& myMjClass)
+void lukesensorfigsupdate()
 {
+    if (not MjPtr) 
+        throw std::runtime_error("lukesensorfigsupdate called with MjPtr=NULL");
+
     // amount of data we extract for each sensor
-    int gnum = myMjClass.gauge_buffer_size;
+    int gnum = MjPtr->gauge_buffer_size;
 
     // check we can plot this amount of data
     if (gnum > mjMAXLINEPNT) {
@@ -302,27 +335,27 @@ void lukesensorfigsupdate(MjClass& myMjClass)
     }
 
     // read the data    
-    std::vector<luke::gfloat> b1data = myMjClass.sim_sensors_.finger1_gauge.read(gnum);
-    std::vector<luke::gfloat> b2data = myMjClass.sim_sensors_.finger2_gauge.read(gnum);
-    std::vector<luke::gfloat> b3data = myMjClass.sim_sensors_.finger3_gauge.read(gnum);
-    std::vector<luke::gfloat> p1data = myMjClass.sim_sensors_.palm_sensor.read(gnum);
-    std::vector<luke::gfloat> a1data = myMjClass.sim_sensors_.finger1_axial_gauge.read(gnum);
-    std::vector<luke::gfloat> a2data = myMjClass.sim_sensors_.finger2_axial_gauge.read(gnum);
-    std::vector<luke::gfloat> a3data = myMjClass.sim_sensors_.finger3_axial_gauge.read(gnum);
-    std::vector<luke::gfloat> wXdata = myMjClass.sim_sensors_.wrist_X_sensor.read(gnum);
-    std::vector<luke::gfloat> wYdata = myMjClass.sim_sensors_.wrist_Y_sensor.read(gnum);
-    std::vector<luke::gfloat> wZdata = myMjClass.sim_sensors_.wrist_Z_sensor.read(gnum);
-    std::vector<luke::gfloat> mXdata = myMjClass.sim_sensors_.x_motor_position.read(gnum);
-    std::vector<luke::gfloat> mYdata = myMjClass.sim_sensors_.y_motor_position.read(gnum);
-    std::vector<luke::gfloat> mZdata = myMjClass.sim_sensors_.z_motor_position.read(gnum);
-    std::vector<luke::gfloat> mHdata = myMjClass.sim_sensors_.z_base_position.read(gnum);
+    std::vector<luke::gfloat> b1data = MjPtr->sim_sensors_.finger1_gauge.read(gnum);
+    std::vector<luke::gfloat> b2data = MjPtr->sim_sensors_.finger2_gauge.read(gnum);
+    std::vector<luke::gfloat> b3data = MjPtr->sim_sensors_.finger3_gauge.read(gnum);
+    std::vector<luke::gfloat> p1data = MjPtr->sim_sensors_.palm_sensor.read(gnum);
+    std::vector<luke::gfloat> a1data = MjPtr->sim_sensors_.finger1_axial_gauge.read(gnum);
+    std::vector<luke::gfloat> a2data = MjPtr->sim_sensors_.finger2_axial_gauge.read(gnum);
+    std::vector<luke::gfloat> a3data = MjPtr->sim_sensors_.finger3_axial_gauge.read(gnum);
+    std::vector<luke::gfloat> wXdata = MjPtr->sim_sensors_.wrist_X_sensor.read(gnum);
+    std::vector<luke::gfloat> wYdata = MjPtr->sim_sensors_.wrist_Y_sensor.read(gnum);
+    std::vector<luke::gfloat> wZdata = MjPtr->sim_sensors_.wrist_Z_sensor.read(gnum);
+    std::vector<luke::gfloat> mXdata = MjPtr->sim_sensors_.x_motor_position.read(gnum);
+    std::vector<luke::gfloat> mYdata = MjPtr->sim_sensors_.y_motor_position.read(gnum);
+    std::vector<luke::gfloat> mZdata = MjPtr->sim_sensors_.z_motor_position.read(gnum);
+    std::vector<luke::gfloat> mHdata = MjPtr->sim_sensors_.z_base_position.read(gnum);
 
     // get the corresponding timestamps
-    std::vector<float> btdata = myMjClass.gauge_timestamps.read(gnum);
-    std::vector<float> atdata = myMjClass.axial_timestamps.read(gnum);
-    std::vector<float> ptdata = myMjClass.palm_timestamps.read(gnum);
-    std::vector<float> wtdata = myMjClass.wristZ_timestamps.read(gnum);
-    std::vector<float> mtdata = myMjClass.step_timestamps.read(gnum);
+    std::vector<float> btdata = MjPtr->gauge_timestamps.read(gnum);
+    std::vector<float> atdata = MjPtr->axial_timestamps.read(gnum);
+    std::vector<float> ptdata = MjPtr->palm_timestamps.read(gnum);
+    std::vector<float> wtdata = MjPtr->wristZ_timestamps.read(gnum);
+    std::vector<float> mtdata = MjPtr->step_timestamps.read(gnum);
 
     // package sensor data pointers in iterable vectors
     std::vector<std::vector<luke::gfloat>*> bdata {

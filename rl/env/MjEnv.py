@@ -852,7 +852,7 @@ class MjEnv():
     self.track = MjEnv.Track()
 
     # there is a small chance we reload a new random task
-    if not self.test_in_progress:
+    if not self.test_in_progress and not realworld:
       if (random_train.random() < self.params.task_reload_chance
           or self.reload_flag):
         self._load_xml()
@@ -866,7 +866,8 @@ class MjEnv():
     if realworld is True: self.mj.calibrate_real_sensors() # re-zero sensors
     
     # spawn a new random object
-    self._spawn_object()
+    if not realworld:
+      self._spawn_object()
 
     return self._next_observation()
 
