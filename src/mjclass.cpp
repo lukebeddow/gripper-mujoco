@@ -1600,6 +1600,91 @@ std::vector<luke::gfloat> MjClass::get_finger_stiffnesses()
 
 /* ----- sensor functions ----- */
 
+std::vector<luke::gfloat> MjClass::get_finger_forces(bool realworld)
+{
+  /* return a vector [g1, g2, g3] of the three bend gauges last reading */
+
+  /* WARNING: in simulation raw unnormalised bend gauge readings are NOT SI */
+
+  std::vector<luke::gfloat> readings(3);
+
+  if (realworld) {
+    // return calibrated values in SI units
+    readings[0] = real_sensors_.SI.read_finger1_gauge();
+    readings[1] = real_sensors_.SI.read_finger2_gauge();
+    readings[2] = real_sensors_.SI.read_finger3_gauge();
+  }
+  else {
+    // map back from [-1, +1] to [min, max] in SI units
+    readings[0] = sim_sensors_.read_finger1_gauge() * s_.bending_gauge.normalise;
+    readings[1] = sim_sensors_.read_finger2_gauge() * s_.bending_gauge.normalise;
+    readings[2] = sim_sensors_.read_finger3_gauge() * s_.bending_gauge.normalise;
+  }
+
+  return readings;
+}
+
+luke::gfloat MjClass::get_palm_force(bool realworld)
+{
+  /* get the last palm reading */
+
+  luke::gfloat reading;
+  
+  if (realworld) {
+    reading = real_sensors_.SI.read_palm_sensor();
+  }
+  else {
+    // map back from [-1, +1] to [min, max] in SI units
+    reading = sim_sensors_.read_palm_sensor() * s_.palm_sensor.normalise;
+  }
+
+  return reading;
+}
+
+luke::gfloat MjClass::get_wrist_force(bool realworld)
+{
+  /* get the last wrist Z reading */
+
+  luke::gfloat reading;
+  
+  if (realworld) {
+    reading = real_sensors_.SI.read_wrist_Z_sensor();
+  }
+  else {
+    // map back from [-1, +1] to [min, max] in SI units
+    reading = sim_sensors_.read_wrist_Z_sensor() * s_.wrist_sensor_Z.normalise;
+  }
+
+  return reading;
+}
+
+std::vector<luke::gfloat> MjClass::get_state_metres(bool realworld)
+{
+  /* get a vector [gripperx, grippery, gripperz, basez] */
+
+  std::vector<luke::gfloat> readings(4);
+
+  if (realworld) {
+    readings[0] = real_sensors_.SI.read_x_motor_position();
+    readings[1] = real_sensors_.SI.read_y_motor_position();
+    readings[2] = real_sensors_.SI.read_z_motor_position();
+    readings[3] = real_sensors_.SI.read_z_base_position();
+  }
+  else {
+    // map back from [-1, +1] to [min, max] in SI units
+    readings[0] = unnormalise_from(
+      sim_sensors_.read_x_motor_position(), luke::Gripper::xy_min, luke::Gripper::xy_max); 
+    readings[1] = unnormalise_from(
+      sim_sensors_.read_y_motor_position(), luke::Gripper::xy_min, luke::Gripper::xy_max);
+    readings[2] = unnormalise_from(
+      sim_sensors_.read_z_motor_position(), luke::Gripper::z_min, luke::Gripper::z_max);
+    readings[3] = unnormalise_from(
+      sim_sensors_.read_z_base_position(), luke::Target::base_z_min, luke::Target::base_z_max);
+  }
+
+  return readings;
+}
+
 luke::gfloat MjClass::get_finger_angle()
 {
   /* return in radians the finger angle */

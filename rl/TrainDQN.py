@@ -1953,26 +1953,36 @@ class TrainDQN():
 
     return 
 
-  def read_best_performance_from_text(self, silence=False, fulltest=False):
+  def read_best_performance_from_text(self, silence=False, fulltest=False, heuristic=False):
     """
     Read a text file to get the best model performance. This function contains
     hardcoding
     """
 
-    readpath = self.savedir + self.group_name + "/" + self.run_name + "/"
+    print("entered the function")
+
+    readroot = self.savedir + self.group_name + "/"
+
+    if heuristic: 
+      readroot += "heuristic/"
+      fulltest_str = "heuristic_test"
+    else:
+      fulltest_str = "full_test"
+
+    readpath = readroot + self.run_name + "/"
 
     try:
 
       # special case, get fulltest information
       if fulltest:
 
-        test_files = [x for x in os.listdir(readpath) if x.startswith("full_test") and x.endswith(".txt")]
+        test_files = [x for x in os.listdir(readpath) if x.startswith(fulltest_str) and x.endswith(".txt")]
         
         if len(test_files) == 0: return None, None
         
         elif len(test_files) > 1: 
 
-          print("Multiple 'full_test.txt' files found in read_best_performance_from_text(...)")
+          print(f"Multiple '{fulltest_str}.txt' files found in read_best_performance_from_text(...)")
 
           # hardcoded date string
           datestr = "%d-%m-%y-%H:%M"

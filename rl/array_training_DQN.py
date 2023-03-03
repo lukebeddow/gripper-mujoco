@@ -444,11 +444,11 @@ def continue_training(model, run_name, group_name, object_set=None, new_endpoint
   # set up the object set
   model.env.mj.model_folder_path = "/home/luke/mymujoco/mjcf"
 
-  # new_endpoint = 100_010
-  # model.wandb_note += f"Continuing training until new endpoint of {new_endpoint} episodes\n"
+  new_endpoint = 60_000
+  model.wandb_note += f"Continuing training until new endpoint of {new_endpoint} episodes\n"
 
-  extra_episodes = 40_000
-  model.wandb_note += f"Continuing training with an extra {extra_episodes} episodes\n"
+  # extra_episodes = 48_000
+  # model.wandb_note += f"Continuing training with an extra {extra_episodes} episodes\n"
   
   model.continue_training(run_name, model.savedir + group_name + "/",
                           new_endpoint=new_endpoint, extra_episodes=extra_episodes,
@@ -551,26 +551,48 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 1
 
 def heuristic_test(model, inputarg=None, render=False):
   """
+  THIS FUNCTION IS NEVER CALLED ANYWHERE AND NEVER USED
+
   Do a heuristic test with baseline settings. Most of these settings are irrelevant
   (RL hyperparameters) but matter, like sensor setup. Best to be safe
   """
 
   # # temporary override!
-  # model.env.params.test_objects = 5
+  model.env.params.test_objects = 3
+  model.env.params.test_trials_per_object = 3
 
-  vary_1 = [0, 1, 2, 3]
-  vary_2 = [0.9e-3]
-  vary_3 = [8]
+  vary_1 = [
+    (0.9e-3, 28e-3),
+    (1.0e-3, 24e-3),
+    (1.0e-3, 28e-3),
+  ]
+  vary_2 = [0, 1, 2, 3]
+  vary_3 = None
   repeats = 5
-  param_1_name = "Num sensors"
-  param_2_name = "Finger thickness"
-  param_3_name = "Num segments"
+  param_1_name = "thickness, width"
+  param_2_name = "num sensors"
+  param_3_name = None
   param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
                                               param_3=vary_3, repeats=repeats)
+
+  wrist_mu = 0.01             # large chance of zero error with the wrist
+  wrist_std = 0.075           # wrist has a lot of noise, this is 15% coverage +-2stdevs
+
   baseline_args = {
-    "sensors" : param_1,
-    "finger_thickness" : param_2,
-    "num_segments" : param_3
+    "finger_thickness" : param_1[0],
+    "finger_width" : param_1[1],
+    "sensors" : param_2,
+    "sensor_noise" : 0.025,   # medium noise on sensor readings
+    "state_noise" : 0.0,      # no noise on state readings, this is required for sign mode
+    "sensor_mu" : 0.05,       # can be +- 5% from 0
+    "state_mu" : 0.025,       # just a gentle zero error noise on state readings
+    "sensor_steps" : 1,       # limit this since sensor data is unreliable
+    "state_steps" : 5,        # this data stream is clean, so take a lot of it
+    "sensor_mode" : 2,        # average sample, leave as before
+    "state_mode" : 4,         # state sign mode, -1,0,+1 for motor state change
+    "eval_me" : f"model.env.mj.set.wrist_sensor_Z.set_gaussian_noise({wrist_mu}, {wrist_std})",
+    "scale_rewards" : 2.5,    # stronger reward signal aids training
+    "scale_penalties" : 2.5,  # we do want to discourage dangerous actions
   }
 
   # note and printing information
@@ -591,7 +613,7 @@ def heuristic_test(model, inputarg=None, render=False):
   model = baseline_settings(model, **baseline_args)
 
   # perform the test
-  if render: model.env.disable_rendering = False
+  if True or render: model.env.disable_rendering = False
   model.test_heuristic_baseline()
 
   print(f"Finished heurisitc test with sensors = {param_1} and thickness = {param_2} and num segments = {param_3}")
@@ -685,7 +707,29 @@ def get_best_performance(model):
 
   return output
 
-def test(model, heuristic=False, trials_per_obj=5, render=False, pause=False):
+def test_and_load(model, demo=False, render=False, pause=False, id=None, best_id=None):
+  """
+  Test overload where we load a specific model
+  """
+
+  # set up the object set
+  model.env.mj.model_folder_path = "/home/luke/mymujoco/mjcf"
+
+  folderpath = model.savedir + model.group_name + "/"
+  foldername = model.run_name
+
+  # from ModelSaver import ModelSaver
+  # model.run_name = foldername
+  # model.modelsaver = ModelSaver(folderpath)
+
+  # load the most recent model in the given folder
+  model.load(foldername=foldername, folderpath=folderpath, id=id, best_id=best_id)
+  # model.modelsaver.enter_folder(foldername, folderpath=folderpath)
+
+  return test(model, demo=demo, render=render, pause=pause, load=False)
+
+def test(model, heuristic=False, trials_per_obj=5, render=False, pause=False, demo=False, id=None,
+         load=True):
   """
   Perform a thorough test on the model, including loading the best performing network
   """
@@ -693,10 +737,16 @@ def test(model, heuristic=False, trials_per_obj=5, render=False, pause=False):
   print("\nPreparing to perform a model test, heuristic =", heuristic)
 
   # load the best performing network
-  if not heuristic: model.load(best_id=True)
+  if load and not heuristic: 
+    if id is None: model.load(best_id=True)
+    else: model.load(id=id)
 
   # adjust settings
-  model.env.params.test_trials_per_object = trials_per_obj
+  if demo:
+    model.env.params.test_trials_per_object = 1
+    model.env.params.test_objects = 30
+  else:
+    model.env.params.test_trials_per_object = trials_per_obj
   if render: model.env.disable_rendering = False
 
   # perform the test
@@ -707,6 +757,7 @@ def test(model, heuristic=False, trials_per_obj=5, render=False, pause=False):
   savetxt = f"array_training_DQN.test(...) final success rate = {model.last_test_success_rate}\n"
   savetxt += "\n" + test_report
   if heuristic: savename = "heuristic_test_"
+  elif demo: savename = "demo_test_"
   else: savename = "full_test_"
   currenttime = datetime.now().strftime(datestr)
   model.modelsaver.save(savename + currenttime, txtonly=True, txtstr=savetxt)
@@ -719,7 +770,11 @@ def print_results(model, filename="results.txt", savefile="table.txt"):
   output from running './pc_job -j "X:Y" -t DD-MM-YY-HR:MN --program xxxxx --print
   """
 
-  filepath = model.savedir + model.group_name + "/" + filename
+  # filepath = model.savedir + model.group_name + "/" + filename
+
+  fileroot = model.savedir + model.group_name
+  if args.heuristic: fileroot += "/heuristic"
+  filepath = fileroot + "/" + filename
 
   table = []
 
@@ -810,7 +865,7 @@ def print_results(model, filename="results.txt", savefile="table.txt"):
   # print and save the table
   print()
   print(print_str)
-  savepath = model.savedir + model.group_name + "/" + savefile
+  savepath = fileroot + "/" + savefile
   with open(savepath, 'w') as f:
     f.write(print_str)
 
@@ -861,7 +916,7 @@ if __name__ == "__main__":
   parser.add_argument("-p", "--plot",         action="store_true") # plot to wandb job
   parser.add_argument("-n", "--no-wandb",     action="store_true") # no wandb logging
   parser.add_argument("-H", "--heuristic",    action="store_true") # run a test using heuristic actions
-  parser.add_argument("-r", "--render",    action="store_true") # render window during training
+  parser.add_argument("-r", "--render",       action="store_true") # render window during training
   parser.add_argument("--program",            default=None)        # program name to select from if..else if
   parser.add_argument("--device",             default=None)        # override device
   parser.add_argument("--savedir",            default=None)        # override save/load directory
@@ -871,6 +926,7 @@ if __name__ == "__main__":
   parser.add_argument("--override-lib",       action="store_true") # override bind.so library with loaded data
   parser.add_argument("--no-delay",           action="store_true") # prevent a sleep(...) to seperate processes
   parser.add_argument("--test",               action="store_true") # run a thorough test on existing model
+  parser.add_argument("--demo",               action="store_true") # run a demo test on model, can specify id number
   parser.add_argument("--results",            action="store_true") # print a table of results.txt
   parser.add_argument("--print-results",      action="store_true") # prepare and print all results
   parser.add_argument("--delete-results",     action="store_true") # delete any results.txt data
@@ -971,14 +1027,23 @@ if __name__ == "__main__":
   if args.delete_results:
     try:
       if log_level > 0: print("Deleting a results table")
-      filepath = model.savedir + model.group_name + "/results.txt"
+      fileroot = model.savedir + model.group_name
+      if args.heuristic: fileroot += "/heuristic"
+      filepath = fileroot + "/results.txt"
       with open(filepath, 'w') as f:
         f.write("")
     except FileNotFoundError as e:
       print("No results table found")
     exit()
 
-
+  if args.test or args.demo and not args.heuristic:
+    if log_level > 0: print("Running a test")
+    # first load the model
+    if args.test:
+      test_and_load(model, best_id=True)
+    elif args.demo:
+      test_and_load(model, demo=True, render=True, pause=False, best_id=True)
+    exit()
 
   # ----- BEGIN TRAININGS ----- #
 
@@ -1485,6 +1550,246 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
+  elif training_type == "new_sensor_styles_continued":
+
+    print("Continuing training in group:", model.group_name)
+    print("Continuing training of run:", model.run_name)
+
+    # set up the object set
+    model.env.mj.model_folder_path = "/home/luke/mymujoco/mjcf"
+
+    extra_episodes = 48_000
+    model.wandb_note += f"Continuing training with an extra {extra_episodes} episodes\n"
+
+    folderpath = model.savedir + model.group_name + "/"
+    foldername = model.run_name
+
+    from ModelSaver import ModelSaver
+    model.run_name = foldername + "_continued"
+    model.modelsaver = ModelSaver(folderpath)
+
+    # load the most recent model in the given folder
+    model.load(foldername=foldername, folderpath=folderpath)
+    model.modelsaver.enter_folder(foldername, folderpath=folderpath)
+
+    # add extra episodes on to what has already been done
+    model.params.num_episodes = model.params.num_episodes + extra_episodes
+
+    # NOW SCALE UP THE PENALTIES
+    model.env.mj.set.exceed_limits.reward = 2.5 * model.env.mj.set.exceed_limits.reward
+    model.env.mj.set.exceed_axial.reward = 2.5 * model.env.mj.set.exceed_axial.reward
+    model.env.mj.set.exceed_lateral.reward = 2.5 * model.env.mj.set.exceed_lateral.reward
+    model.env.mj.set.exceed_palm.reward = 2.5 * model.env.mj.set.exceed_palm.reward
+
+    # begin the training at the given starting point (always uses most recent pickle)
+    model.train(i_start=model.track.episodes_done)
+
+    # test
+    model = test(model, trials_per_obj=10, heuristic=args.heuristic)
+
+    # finishing time, how long did everything take
+    finishing_time = datetime.now()
+    time_taken = finishing_time - starting_time
+    d = divmod(time_taken.total_seconds(), 86400)
+    h = divmod(d[1], 3600)
+    m = divmod(h[1], 60)
+    s = m[1]
+    print("\nStarted at:", starting_time.strftime(datestr))
+    print("Finished at:", datetime.now().strftime(datestr))
+    print(f"Time taken was {d[0]:.0f} days {h[0]:.0f} hrs {m[0]:.0f} mins {s:.0f} secs\n")
+
+    # skip train/test below
+    args.print = True
+
+  elif training_type == "new_sensor_styles_extended":
+
+    vary_1 = [
+      (1, 3),
+      (1, 5)
+    ]
+    vary_2 = [
+      (2.5, 1.0), # baseline
+      (2.5, 2.5),
+    ]
+    vary_3 = None
+    repeats = 10
+    param_1_name = "sensor/state steps"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    wrist_mu = 0.01             # large chance of zero error with the wrist
+    wrist_std = 0.075           # wrist has a lot of noise, this is 15% coverage +-2stdevs
+
+    baseline_args = {
+      "finger_thickness" : 0.9e-3,
+      "finger_width" : 28e-3,
+      "sensors" : 3,
+      "sensor_noise" : 0.025,   # medium noise on sensor readings
+      "state_noise" : 0.0,      # no noise on state readings, this is required for sign mode
+      "sensor_mu" : 0.05,       # can be +- 5% from 0
+      "state_mu" : 0.025,       # just a gentle zero error noise on state readings
+      "sensor_steps" : param_1[0],       
+      "state_steps" : param_1[1],
+      "sensor_mode" : 2,        # average sample, leave as before
+      "state_mode" : 4,         # state sign mode, -1,0,+1 for motor state change
+      "eval_me" : f"model.env.mj.set.wrist_sensor_Z.set_gaussian_noise({wrist_mu}, {wrist_std})",
+      "scale_rewards" : param_2[0],
+      "scale_penalties" : param_2[1],
+    }
+
+    # don't run long trainings
+    model.params.num_episodes = 48_000
+
+    # run slightly longer tests
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
+  elif training_type == "paper_baseline_3":
+
+    vary_1 = [
+      (0.9e-3, 28e-3),
+      (1.0e-3, 24e-3),
+      (1.0e-3, 28e-3),
+    ]
+    vary_2 = [0, 1, 2, 3]
+    vary_3 = None
+    repeats = 10
+    param_1_name = "thickness, width"
+    param_2_name = "num sensors"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    wrist_mu = 0.01             # large chance of zero error with the wrist
+    wrist_std = 0.075           # wrist has a lot of noise, this is 15% coverage +-2stdevs
+
+    baseline_args = {
+      "finger_thickness" : param_1[0],
+      "finger_width" : param_1[1],
+      "sensors" : param_2,
+      "sensor_noise" : 0.025,   # medium noise on sensor readings
+      "state_noise" : 0.0,      # no noise on state readings, this is required for sign mode
+      "sensor_mu" : 0.05,       # can be +- 5% from 0
+      "state_mu" : 0.025,       # just a gentle zero error noise on state readings
+      "sensor_steps" : 1,       # limit this since sensor data is unreliable
+      "state_steps" : 5,        # this data stream is clean, so take a lot of it
+      "sensor_mode" : 2,        # average sample, leave as before
+      "state_mode" : 4,         # state sign mode, -1,0,+1 for motor state change
+      "eval_me" : f"model.env.mj.set.wrist_sensor_Z.set_gaussian_noise({wrist_mu}, {wrist_std})",
+      "scale_rewards" : 2.5,    # stronger reward signal aids training
+      "scale_penalties" : 2.5,  # we do want to discourage dangerous actions
+    }
+
+    # don't run long trainings
+    model.params.num_episodes = 60_000
+
+    # run slightly longer tests
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
+  # only change is to go from 10 repeats to 20 repeats
+  # EI:1, Sensors:0 = 1:20        <- test this
+  # EI:2, Sensors:0 = 21:40
+  # EI:3, Sensors:0 = 41:60
+  # EI:1, Sensors:1 = 61:80       <- test this
+  # EI:2, Sensors:1 = 81:100
+  # EI:3, Sensors:1 = 101:120
+  # EI:1, Sensors:2 = 121:140     <- test this
+  # EI:2, Sensors:2 = 141:160
+  # EI:3, Sensors:2 = 161:180
+  # EI:1, Sensors:3 = 181:200     <- test this, done x20
+  # EI:2, Sensors:3 = 201:220     <- test this, done x10, running x10
+  # EI:3, Sensors:3 = 221:240     <- test this, done x10, running x10
+  elif training_type == "paper_baseline_3.1":
+
+    vary_1 = [
+      (0.9e-3, 28e-3),
+      (1.0e-3, 24e-3),
+      (1.0e-3, 28e-3),
+    ]
+    vary_2 = [0, 1, 2, 3]
+    vary_3 = None
+    repeats = 20
+    param_1_name = "thickness, width"
+    param_2_name = "num sensors"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    wrist_mu = 0.01             # large chance of zero error with the wrist
+    wrist_std = 0.075           # wrist has a lot of noise, this is 15% coverage +-2stdevs
+
+    baseline_args = {
+      "finger_thickness" : param_1[0],
+      "finger_width" : param_1[1],
+      "sensors" : param_2,
+      "sensor_noise" : 0.025,   # medium noise on sensor readings
+      "state_noise" : 0.0,      # no noise on state readings, this is required for sign mode
+      "sensor_mu" : 0.05,       # can be +- 5% from 0
+      "state_mu" : 0.025,       # just a gentle zero error noise on state readings
+      "sensor_steps" : 1,       # limit this since sensor data is unreliable
+      "state_steps" : 5,        # this data stream is clean, so take a lot of it
+      "sensor_mode" : 2,        # average sample, leave as before
+      "state_mode" : 4,         # state sign mode, -1,0,+1 for motor state change
+      "eval_me" : f"model.env.mj.set.wrist_sensor_Z.set_gaussian_noise({wrist_mu}, {wrist_std})",
+      "scale_rewards" : 2.5,    # stronger reward signal aids training
+      "scale_penalties" : 2.5,  # we do want to discourage dangerous actions
+    }
+
+    # don't run long trainings
+    model.params.num_episodes = 60_000
+
+    # run slightly longer tests
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
+  elif training_type == "paper_baseline_3.1_heuristic":
+
+    vary_1 = [
+      (0.9e-3, 28e-3),
+      (1.0e-3, 24e-3),
+      (1.0e-3, 28e-3),
+    ]
+    vary_2 = [0, 1, 2, 3]
+    vary_3 = None
+    repeats = 5
+    param_1_name = "thickness, width"
+    param_2_name = "num sensors"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    wrist_mu = 0.01             # large chance of zero error with the wrist
+    wrist_std = 0.075           # wrist has a lot of noise, this is 15% coverage +-2stdevs
+
+    baseline_args = {
+      "finger_thickness" : param_1[0],
+      "finger_width" : param_1[1],
+      "sensors" : param_2,
+      "sensor_noise" : 0.025,   # medium noise on sensor readings
+      "state_noise" : 0.0,      # no noise on state readings, this is required for sign mode
+      "sensor_mu" : 0.05,       # can be +- 5% from 0
+      "state_mu" : 0.025,       # just a gentle zero error noise on state readings
+      "sensor_steps" : 1,       # limit this since sensor data is unreliable
+      "state_steps" : 5,        # this data stream is clean, so take a lot of it
+      "sensor_mode" : 2,        # average sample, leave as before
+      "state_mode" : 4,         # state sign mode, -1,0,+1 for motor state change
+      "eval_me" : f"model.env.mj.set.wrist_sensor_Z.set_gaussian_noise({wrist_mu}, {wrist_std})",
+      "scale_rewards" : 2.5,    # stronger reward signal aids training
+      "scale_penalties" : 2.5,  # we do want to discourage dangerous actions
+    }
+
   elif training_type == "test_exceed_limits_termination":
 
     param_1 = None
@@ -1571,9 +1876,12 @@ if __name__ == "__main__":
 
     # train
     if not args.heuristic: model.train()
+    else:
+      model.modelsaver.new_folder(name="heuristic/" + model.run_name, notimestamp=True)
+      model.save_hyperparameters()
 
     # test
-    model = test(model, trials_per_obj=10, heuristic=args.heuristic)
+    model = test(model, trials_per_obj=10, heuristic=args.heuristic, demo=args.demo)
 
     # finishing time, how long did everything take
     finishing_time = datetime.now()
@@ -1590,13 +1898,15 @@ if __name__ == "__main__":
   best_sr, best_ep = model.read_best_performance_from_text(silence=True)
   if best_sr is not None:
     extra_info_string += f"\tTraining time best success rate = {best_sr} at episode = {best_ep}\n"
-  full_sr, _ = model.read_best_performance_from_text(silence=True, fulltest=True)
+  full_sr, _ = model.read_best_performance_from_text(silence=True, fulltest=True, heuristic=args.heuristic)
   if full_sr is not None:
     extra_info_string += f"\tFinal full test success rate = {full_sr}\n"
 
   if args.print_results:
 
-    filepath = model.savedir + model.group_name + "/results.txt"
+    fileroot = model.savedir + model.group_name
+    if args.heuristic: fileroot += "/heuristic"
+    filepath = fileroot + "/results.txt"
     new_file_text = f"Input arg {args.job}\n"
     new_file_text += param_1_string
     new_file_text += param_2_string
