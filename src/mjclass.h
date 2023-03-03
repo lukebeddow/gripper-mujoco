@@ -1311,6 +1311,10 @@ public:
   // luke::gfloat get_palm_reading(bool unnormalise);
   // luke::gfloat get_wrist_reading(bool unnormalise);
   // std::vector<luke::gfloat> get_state_readings(bool unnormalise);
+  std::vector<luke::gfloat> get_finger_forces(bool realworld);
+  luke::gfloat get_palm_force(bool realworld);
+  luke::gfloat get_wrist_force(bool realworld);
+  std::vector<luke::gfloat> get_state_metres(bool realworld);
   luke::gfloat get_finger_angle();
 
   // real world gripper functions
