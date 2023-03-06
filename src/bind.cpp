@@ -75,10 +75,10 @@ PYBIND11_MODULE(bind, m) {
     .def("get_finger_stiffnesses", &MjClass::get_finger_stiffnesses)
 
     // sensor getters (set a default argument for 'unnormalise' to be false)
-    // .def("get_bend_gauge_readings", &MjClass::get_bend_gauge_readings, py::arg("unnormalise") = false)
-    // .def("get_palm_reading", &MjClass::get_palm_reading, py::arg("unnormalise") = false)
-    // .def("get_wrist_reading", &MjClass::get_wrist_reading, py::arg("unnormalise") = false)
-    // .def("get_state_readings", &MjClass::get_state_readings, py::arg("unnormalise") = false)
+    .def("get_finger_forces", &MjClass::get_finger_forces)
+    .def("get_palm_force", &MjClass::get_palm_force)
+    .def("get_wrist_force", &MjClass::get_wrist_force)
+    .def("get_state_metres", &MjClass::get_state_metres)
     .def("get_finger_angle", &MjClass::get_finger_angle)
 
     // real life gripper functions

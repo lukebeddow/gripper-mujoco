@@ -499,20 +499,26 @@ bool MjClass::render()
 {
   /* Render a frame of the simulation to the screen */
 
+  std::cout << "1\n";
+
   // safety catch, we are unable to close the window properly
   static bool window_closed = false;
   if (window_closed) {
     return false;
   }
 
+  std::cout << "2\n";
+
   // if the render window has not yet been initialised
   if (not render_init) {
-    render::init(model, data);
+    render::init(*this);
     render_init = true;
   }
   else if (render_reload) {
-    render::reload_for_rendering(model, data);
+    render::reload_for_rendering(*this);
   }
+
+  std::cout << "3\n";
 
   // init and reload perform the same job, so we no longer need to reload
   render_reload = false;
@@ -529,14 +535,17 @@ bool MjClass::render()
       (time_::now() - start_time).count() < s_.render_delay * 1000) { 
       
       // window_open = render::render(model, data);
-      window_open = render::render(*this);
+      window_open = render::render();
     }
   }
   else {
     // just render once
-    // window_open = render::render(model, data);
-    window_open = render::render(*this);
+    std::cout << "4\n";
+
+    window_open = render::render();
   }
+
+  std::cout << "5\n";
 
   // if the window has been closed
   if (not window_open) {
@@ -544,6 +553,8 @@ bool MjClass::render()
     render_init = false;
     window_closed = true;
   }
+
+  std::cout << "6\n";
   
   return window_open;
 }
@@ -1589,81 +1600,90 @@ std::vector<luke::gfloat> MjClass::get_finger_stiffnesses()
 
 /* ----- sensor functions ----- */
 
-// std::vector<luke::gfloat> MjClass::get_bend_gauge_readings(bool unnormalise = false)
-// {
-//   /* return a vector [g1, g2, g3] of the three bend gauges last reading */
+std::vector<luke::gfloat> MjClass::get_finger_forces(bool realworld)
+{
+  /* return a vector [g1, g2, g3] of the three bend gauges last reading */
 
-//   /* WARNING: in simulation raw unnormalised bend gauge readings are NOT SI */
+  /* WARNING: in simulation raw unnormalised bend gauge readings are NOT SI */
 
-//   std::vector<luke::gfloat> readings(3);
+  std::vector<luke::gfloat> readings(3);
 
-//   readings[0] = finger1_gauge.read_element();
-//   readings[1] = finger2_gauge.read_element();
-//   readings[2] = finger3_gauge.read_element();
+  if (realworld) {
+    // return calibrated values in SI units
+    readings[0] = real_sensors_.SI.read_finger1_gauge();
+    readings[1] = real_sensors_.SI.read_finger2_gauge();
+    readings[2] = real_sensors_.SI.read_finger3_gauge();
+  }
+  else {
+    // map back from [-1, +1] to [min, max] in SI units
+    readings[0] = sim_sensors_.read_finger1_gauge() * s_.bending_gauge.normalise;
+    readings[1] = sim_sensors_.read_finger2_gauge() * s_.bending_gauge.normalise;
+    readings[2] = sim_sensors_.read_finger3_gauge() * s_.bending_gauge.normalise;
+  }
 
-//   if (unnormalise) {
-//     // map back from [-1, +1] to [min, max] in SI units
-//     readings[0] *= s_.bending_gauge.normalise;
-//     readings[1] *= s_.bending_gauge.normalise;
-//     readings[2] *= s_.bending_gauge.normalise;
-//   }
+  return readings;
+}
 
-//   return readings;
-// }
+luke::gfloat MjClass::get_palm_force(bool realworld)
+{
+  /* get the last palm reading */
 
-// luke::gfloat MjClass::get_palm_reading(bool unnormalise = false)
-// {
-//   /* get the last palm reading */
+  luke::gfloat reading;
+  
+  if (realworld) {
+    reading = real_sensors_.SI.read_palm_sensor();
+  }
+  else {
+    // map back from [-1, +1] to [min, max] in SI units
+    reading = sim_sensors_.read_palm_sensor() * s_.palm_sensor.normalise;
+  }
 
-//   luke::gfloat reading = palm_sensor.read_element();
+  return reading;
+}
 
-//   if (unnormalise) {
-//     // map back from [-1, +1] to [min, max] in SI units
-//     reading *= s_.palm_sensor.normalise;
-//   }
+luke::gfloat MjClass::get_wrist_force(bool realworld)
+{
+  /* get the last wrist Z reading */
 
-//   return reading;
-// }
+  luke::gfloat reading;
+  
+  if (realworld) {
+    reading = real_sensors_.SI.read_wrist_Z_sensor();
+  }
+  else {
+    // map back from [-1, +1] to [min, max] in SI units
+    reading = sim_sensors_.read_wrist_Z_sensor() * s_.wrist_sensor_Z.normalise;
+  }
 
-// luke::gfloat MjClass::get_wrist_reading(bool unnormalise = false)
-// {
-//   /* get the last wrist Z reading */
+  return reading;
+}
 
-//   luke::gfloat reading = wrist_Z_sensor.read_element();
+std::vector<luke::gfloat> MjClass::get_state_metres(bool realworld)
+{
+  /* get a vector [gripperx, grippery, gripperz, basez] */
 
-//   if (unnormalise) {
-//     // map back from [-1, +1] to [min, max] in SI units
-//     reading *= s_.wrist_sensor_Z.normalise;
-//   }
+  std::vector<luke::gfloat> readings(4);
 
-//   return reading;
-// }
+  if (realworld) {
+    readings[0] = real_sensors_.SI.read_x_motor_position();
+    readings[1] = real_sensors_.SI.read_y_motor_position();
+    readings[2] = real_sensors_.SI.read_z_motor_position();
+    readings[3] = real_sensors_.SI.read_z_base_position();
+  }
+  else {
+    // map back from [-1, +1] to [min, max] in SI units
+    readings[0] = unnormalise_from(
+      sim_sensors_.read_x_motor_position(), luke::Gripper::xy_min, luke::Gripper::xy_max); 
+    readings[1] = unnormalise_from(
+      sim_sensors_.read_y_motor_position(), luke::Gripper::xy_min, luke::Gripper::xy_max);
+    readings[2] = unnormalise_from(
+      sim_sensors_.read_z_motor_position(), luke::Gripper::z_min, luke::Gripper::z_max);
+    readings[3] = unnormalise_from(
+      sim_sensors_.read_z_base_position(), luke::Target::base_z_min, luke::Target::base_z_max);
+  }
 
-// std::vector<luke::gfloat> MjClass::get_state_readings(bool unnormalise = false)
-// {
-//   /* get a vector [gripperx, grippery, gripperz, basez] */
-
-//   std::vector<luke::gfloat> readings(4);
-
-//   readings[0] = x_motor_position.read_element();
-//   readings[1] = y_motor_position.read_element();
-//   readings[2] = z_motor_position.read_element();
-//   readings[3] = z_base_position.read_element();
-
-//   if (unnormalise) {
-//     // map back from [-1, +1] to [min, max] in SI units
-//     readings[0] = unnormalise_from(
-//       readings[0], luke::Gripper::xy_min, luke::Gripper::xy_max); 
-//     readings[1] = unnormalise_from(
-//       readings[1], luke::Gripper::xy_min, luke::Gripper::xy_max);
-//     readings[2] = unnormalise_from(
-//       readings[2], luke::Gripper::z_min, luke::Gripper::z_max);
-//     readings[3] = unnormalise_from(
-//       readings[3], luke::Target::base_z_min, luke::Target::base_z_max);
-//   }
-
-//   return readings;
-// }
+  return readings;
+}
 
 luke::gfloat MjClass::get_finger_angle()
 {

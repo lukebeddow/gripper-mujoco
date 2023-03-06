@@ -439,13 +439,14 @@ class MjEnv():
 
   # ----- public functions ----- #
 
-  def start_heuristic_grasping(self):
+  def start_heuristic_grasping(self, realworld=False):
     """
     Prepare to begin a heuristic grasping procedure.
     """
 
     self.grasp_phase = 0
     self.gauge_read_history = np.array([])
+    self.heuristic_real_world = realworld
 
     # for help debugging
     print_on = False
@@ -552,12 +553,12 @@ class MjEnv():
     target_angle_deg = 15
     target_wrist_force_N = 1
     min_x_value_m = 55e-3
-    target_x_constrict_m = 100e-3
-    target_palm_bend_increase_percentage = 15
+    target_x_constrict_m = 110e-3
+    target_palm_bend_increase_percentage = 10
     target_z_position_m = 80e-3
     bend_history_length = 6 # how many historical bending values to save
     bend_update_length = 3  # how many values in history do we consider 'new'
-    initial_z_height_target_m = 10e-3
+    initial_z_height_target_m = 5e-3
     final_z_height_target_m = -20e-3
     initial_bend_target_N = 1
     initial_palm_target_N = 2
@@ -575,18 +576,14 @@ class MjEnv():
     H_up = 7
 
     # get sensor output if we can
-    unnormalise_state = True
-    state_readings = self.mj.get_state_readings(unnormalise_state)
+    state_readings = self.mj.get_state_metres(self.heuristic_real_world)
     if bending:
-      unnormalise_bend = True
-      bending_readings = self.mj.get_bend_gauge_readings(unnormalise_bend)
+      bending_readings = self.mj.get_finger_forces(self.heuristic_real_world)
       avg_bend = (bending_readings[0] + bending_readings[1] + bending_readings[2]) / 3.
     if palm:
-      unnormalise_palm = True
-      palm_reading = self.mj.get_palm_reading(unnormalise_palm)
+      palm_reading = self.mj.get_palm_force(self.heuristic_real_world)
     if wrist:
-      unnormalise_wrist = True
-      wrist_reading = self.mj.get_wrist_reading(unnormalise_wrist)
+      wrist_reading = self.mj.get_wrist_force(self.heuristic_real_world)
 
     action = None
 
@@ -681,14 +678,17 @@ class MjEnv():
 
       # if no sensors, choose random action
       if not bending and not palm and not wrist:
-        choice = random_train.integers(0, 3)
-        options = [
-          (X_close, "finger X close"),
-          (Z_plus, "palm forward"),
-          (H_up, "height up")
-        ]
-        action = options[choice][0]
-        action_name = options[choice][1]
+        # choice = random_train.integers(0, 3)
+        # options = [
+        #   (X_close, "finger X close"),
+        #   (Z_plus, "palm forward"),
+        #   (H_up, "height up")
+        # ]
+        # action = options[choice][0]
+        # action_name = options[choice][1]
+
+        action = H_up
+        action_name = "height up"
 
       if print_on:
         print("Grasp phase 5: action is", action_name)
@@ -852,7 +852,7 @@ class MjEnv():
     self.track = MjEnv.Track()
 
     # there is a small chance we reload a new random task
-    if not self.test_in_progress:
+    if not self.test_in_progress and not realworld:
       if (random_train.random() < self.params.task_reload_chance
           or self.reload_flag):
         self._load_xml()
@@ -866,7 +866,8 @@ class MjEnv():
     if realworld is True: self.mj.calibrate_real_sensors() # re-zero sensors
     
     # spawn a new random object
-    self._spawn_object()
+    if not realworld:
+      self._spawn_object()
 
     return self._next_observation()
 

@@ -16,6 +16,7 @@
 #include <vector>
 #include <string>
 
+// forward declaration to prevent circular dependency
 #include "mjclass.h"
 class MjClass;
 
@@ -26,14 +27,14 @@ namespace render
 void mouse_button(GLFWwindow* window, int button, int act, int mods);
 void mouse_move(GLFWwindow* window, double xpos, double ypos);
 void scroll(GLFWwindow* window, double xoffset, double yoffset);
-void init(mjModel* model, mjData* data);
+void init(MjClass& myMjClass);
 void uiLayout(mjuiState* state);
-void reload_for_rendering(mjModel* model, mjData* data);
-bool render(MjClass& myMjClass);
+void reload_for_rendering(MjClass& myMjClass);
+bool render();
 void finish();
 
 void lukesensorfigsinit();
-void lukesensorfigsupdate(MjClass& myMjClass);
+void lukesensorfigsupdate();
 void lukesensorfigshow(mjrRect rect);
 
 }
