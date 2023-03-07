@@ -1714,9 +1714,16 @@ void MjClass::calibrate_real_sensors()
   real_sensors_.wrist_Z = real_calibrations.wrist_Z;
 
   // apply normalisation to all sensors
-  real_sensors_.g1.norm = s_.bending_gauge.normalise;
-  real_sensors_.g2.norm = s_.bending_gauge.normalise;
-  real_sensors_.g3.norm = s_.bending_gauge.normalise;
+  /* we CANT use s_.bending_gauge.normalise as this is NOT an SI value. For the other
+  sensors this is a force in newtons, but for the simulated gauges this is actually
+  an arbritrary scaling factor to go from our 'strain' measurement to SI. This value
+  is calibrated based on a known SI force in 'calibrate_simulated_sensors()'. Instead
+  we should use the value of this known SI force - as this is the actual saturation/
+  normalisation value. The expression for this value is:
+    s_.saturation_yield_factor * yield_load() */
+  real_sensors_.g1.norm = s_.saturation_yield_factor * yield_load();
+  real_sensors_.g2.norm = s_.saturation_yield_factor * yield_load();
+  real_sensors_.g3.norm = s_.saturation_yield_factor * yield_load();
   real_sensors_.palm.norm = s_.palm_sensor.normalise;
   real_sensors_.wrist_Z.norm = s_.wrist_sensor_Z.normalise;
 
