@@ -46,6 +46,7 @@ class MjEnv():
     # key class parameters with default values
     max_episode_steps: int = 250
     object_position_noise_mm: int = 10
+    object_rotation_noise_deg: int = 5
     test_obj_per_file: int = 20
     task_reload_chance: float = 1.0 / float(test_obj_per_file)
     test_trials_per_object: int = 1
@@ -347,6 +348,12 @@ class MjEnv():
     Spawn an object into the simulation randomly
     """
 
+    # OLD CODE COMPATIBLE: added 6/3/23, can delete in future
+    # if there is no angular noise parameter, set it to zero
+    if not hasattr(self.params, "object_rotation_noise_deg"):
+      print("OLD CODE: no angular position noise setting, creating one with 0deg")
+      self.params.object_rotation_noise_deg = 0
+
     global random_test
     global random_train
 
@@ -364,14 +371,16 @@ class MjEnv():
       obj_idx = generator.integers(0, self.num_objects)
 
     # randomly generate the object (x, y) position
-    noise = self.params.object_position_noise_mm
-    x_pos_mm = generator.integers(-noise, noise + 1)
-    y_pos_mm = generator.integers(-noise, noise + 1)
+    xy_noise = self.params.object_position_noise_mm
+    x_pos_mm = generator.integers(-xy_noise, xy_noise + 1)
+    y_pos_mm = generator.integers(-xy_noise, xy_noise + 1)
 
     # randomly choose a z rotation
     angle_options = [0, 60, 120]
+    th_noise = self.params.object_rotation_noise_deg
+    angle_noise_deg = generator.integers(-th_noise, th_noise + 1)
     rand_index = generator.integers(0, len(angle_options))
-    z_rot_rad = angle_options[rand_index] * (np.pi / 180.0)
+    z_rot_rad = (angle_options[rand_index] + angle_noise_deg) * (np.pi / 180.0)
 
     # spawn in the object
     self.mj.spawn_object(obj_idx, x_pos_mm * 1e-3, y_pos_mm * 1e-3, z_rot_rad)

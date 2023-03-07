@@ -2129,23 +2129,24 @@ if __name__ == "__main__":
 
   # ----- load ----- #
 
-  # load
-  folder = "mymujoco"
-  group = "paper_baseline_2/31-01-23"
-  run = "luke-PC_10_54_A117"
-  folderpath = f"/home/luke/{folder}/rl/models/dqn/{group}/"
-  model.set_device("cuda")
-  model.load(id=None, folderpath=folderpath, foldername=run, best_id=True)
+  # # load
+  # folder = "mymujoco"
+  # group = "paper_baseline_2/31-01-23"
+  # run = "luke-PC_10_54_A117"
+  # folderpath = f"/home/luke/{folder}/rl/models/dqn/{group}/"
+  # model.set_device("cuda")
+  # model.load(id=None, folderpath=folderpath, foldername=run, best_id=True)
 
   # ----- train ----- #
 
   # train
-  # net = networks.DQN_3L60
-  # model.env.disable_rendering = False
-  # model.env.mj.set.debug = False
-  # model.num_segments = 8
-  # model.finger_thickness = 0.8e-3
-  # model.train(network=net)
+  net = networks.DQN_3L60
+  model.env.disable_rendering = True
+  model.env.mj.set.debug = False
+  model.num_segments = 8
+  model.finger_thickness = 0.9e-3
+  model.params.num_episodes = 100
+  model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
@@ -2185,17 +2186,18 @@ if __name__ == "__main__":
   # test
   model.log_level = 2
   model.env.mj.set.debug = False
-  model.env.disable_rendering = False
+  model.env.disable_rendering = True
   # model.env.params.test_trials_per_object = 5
-  model.env.params.test_objects = 20
+  # model.env.params.test_objects = 20
   # model.env.params.test_obj_per_file = 5
-  # model.env.params.max_episode_steps = 20
+  model.env.params.max_episode_steps = 1
 
   # model.env.mj.set.step_num.set          (0,      70,     1)
   # model.env.mj.set.exceed_limits.set     (-0.005, True,   10)
   # model.env.mj.set.exceed_axial.set      (-0.005, True,   10,    3.0,  6.0,  -1)
   # model.env.mj.set.exceed_lateral.set    (-0.005, True,   10,    4.0,  6.0,  -1)
-  input("Press enter to begin")
+  model.load_object_set("set_fullset_1500")
+  # input("Press enter to begin")
   test_data = model.test(pause_each_episode=False)
 
   # save results

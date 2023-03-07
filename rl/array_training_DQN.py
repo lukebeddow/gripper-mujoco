@@ -540,12 +540,16 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 1
                       state_noise_std=state_noise, state_noise_mu=state_mu)
   model = setup_HER(model, use=False)
 
+  # can perform special operations here
+  if eval_me is not None: 
+    if isinstance(eval_me, list):
+      for eval_str in eval_me:
+        exec(eval_str)
+    else: exec(eval_me)
+
   # finish initialisation of model
   if network is not None:
     model.init(network)
-
-  # can perform special operations here
-  if eval_me is not None: eval(eval_me)
 
   return model
 
@@ -1058,7 +1062,6 @@ if __name__ == "__main__":
   if args.program is None:
     # cannot have whitespace
     raise RuntimeError("must specify the program to run with '--program xxxxxxx'")
-    training_type = "vary_xmas"
   else:
     training_type = args.program
 
@@ -1696,18 +1699,18 @@ if __name__ == "__main__":
     model.params.save_freq = 4000
 
   # only change is to go from 10 repeats to 20 repeats
-  # EI:1, Sensors:0 = 1:20        <- test this
+  # EI:1, Sensors:0 = 1:20        <- test this, runniong x20
   # EI:2, Sensors:0 = 21:40
   # EI:3, Sensors:0 = 41:60
-  # EI:1, Sensors:1 = 61:80       <- test this
+  # EI:1, Sensors:1 = 61:80       <- test this, done x20
   # EI:2, Sensors:1 = 81:100
   # EI:3, Sensors:1 = 101:120
-  # EI:1, Sensors:2 = 121:140     <- test this
+  # EI:1, Sensors:2 = 121:140     <- test this, done x20
   # EI:2, Sensors:2 = 141:160
   # EI:3, Sensors:2 = 161:180
   # EI:1, Sensors:3 = 181:200     <- test this, done x20
-  # EI:2, Sensors:3 = 201:220     <- test this, done x10, running x10
-  # EI:3, Sensors:3 = 221:240     <- test this, done x10, running x10
+  # EI:2, Sensors:3 = 201:220     <- test this, done x20
+  # EI:3, Sensors:3 = 221:240     <- test this, done x20
   elif training_type == "paper_baseline_3.1":
 
     vary_1 = [
@@ -1789,6 +1792,65 @@ if __name__ == "__main__":
       "scale_rewards" : 2.5,    # stronger reward signal aids training
       "scale_penalties" : 2.5,  # we do want to discourage dangerous actions
     }
+
+  elif training_type == "pb4_testing":
+
+    # vary_1 = [
+    #   (0.9e-3, 28e-3),
+    #   (1.0e-3, 24e-3),
+    #   (1.0e-3, 28e-3),
+    # ]
+    # vary_2 = [0, 1, 2, 3]
+    vary_1 = [4000, 8000]
+    vary_2 = [1.0, 2.5]
+    vary_3 = None
+    repeats = 10
+    param_1_name = "eps decay"
+    param_2_name = "rew/pen scaling"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    eval_me = []
+
+    wrist_mu = 0.01             # large chance of zero error with the wrist
+    wrist_std = 0.075           # wrist has a lot of noise, this is 15% coverage +-2stdevs
+    eval_me.append(f"model.env.mj.set.wrist_sensor_Z.set_gaussian_noise({wrist_mu}, {wrist_std})")
+
+    exceed_lat_max_factor = 1.0 # penalty reaches maximum at this factor of yield load
+    eval_me.append(f"model.env.mj.set.exceed_lat_max_factor = {exceed_lat_max_factor}")
+
+    baseline_args = {
+      "finger_thickness" : 0.9e-3,
+      "finger_width" : 28e-3,
+      "sensors" : 3,
+      "sensor_noise" : 0.025,         # medium noise on sensor readings
+      "state_noise" : 0.0,            # no noise on state readings, this is required for sign mode
+      "sensor_mu" : 0.05,             # can be +- 5% from 0
+      "state_mu" : 0.025,             # just a gentle zero error noise on state readings
+      "sensor_steps" : 1,             # limit this since sensor data is unreliable
+      "state_steps" : 5,              # this data stream is clean, so take a lot of it
+      "sensor_mode" : 2,              # average sample, leave as before
+      "state_mode" : 4,               # state sign mode, -1,0,+1 for motor state change
+      "eval_me" : eval_me,            # extra settings tweaks
+      "scale_rewards" : param_2,          # stronger reward signal aids training
+      "scale_penalties" : param_2,        # we do want to discourage dangerous actions
+      "exceed_lims_multiplier" : 1.0, # disable extra attention to avoiding the table
+      "eps_decay" : param_1,             # add extra exploration -> 10k=29%, 20k=8%, 30k=2%, 40k=0.7%
+    }
+
+    # use the new object set
+    model.params.object_set = "set7_fullset_1500_50i"
+
+    # run medium length trainings
+    model.params.num_episodes = 60_000
+
+    # run slightly longer tests during training
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
 
   elif training_type == "test_exceed_limits_termination":
 
