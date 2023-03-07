@@ -167,6 +167,7 @@ PYBIND11_MODULE(bind, m) {
     .def("scale_rewards", &MjType::Settings::scale_rewards)
     .def("set_use_normalisation", &MjType::Settings::set_use_normalisation)
     .def("set_sensor_prev_steps_to", &MjType::Settings::set_sensor_prev_steps_to)
+    .def("set_use_noise", &MjType::Settings::set_use_noise)
 
     // use a macro to create code snippets for all of the settings
     #define XX(name, type, value) .def_readwrite(#name, &MjType::Settings::name)
@@ -918,22 +919,13 @@ PYBIND11_MODULE(bind, m) {
     ;
   }
 
-  // // classes to set gauge calibration
-  // {py::class_<MjType::RealGaugeCalibrations::RealSensors>(m, "RealSensors")
-  //   .def(py::init<>())
-  //   .def_readwrite("g1", &MjType::RealGaugeCalibrations::RealSensors::g1)
-  //   .def_readwrite("g2", &MjType::RealGaugeCalibrations::RealSensors::g2)
-  //   .def_readwrite("g3", &MjType::RealGaugeCalibrations::RealSensors::g3)
-  //   .def_readwrite("palm", &MjType::RealGaugeCalibrations::RealSensors::palm)
-  //   ;
-  // }
-
-  // {py::class_<MjType::RealGaugeCalibrations>(m, "RealGaugeCalibrations")
-  //   .def_readwrite("offset", &MjType::RealGaugeCalibrations::offset)
-  //   .def_readwrite("scale", &MjType::RealGaugeCalibrations::scale)
-  //   .def_readwrite("norm", &MjType::RealGaugeCalibrations::norm)
-  //   ;
-  // }
+  // sensor calibration profile
+  {py::class_<MjType::RealCalibrations::Calibration>(m, "Calibration")
+    .def_readwrite("offset", &MjType::RealCalibrations::Calibration::offset)
+    .def_readwrite("scale", &MjType::RealCalibrations::Calibration::scale)
+    .def_readwrite("norm", &MjType::RealCalibrations::Calibration::norm)
+    ;
+  }
 
   // sensor data storage class
   {py::class_<MjType::SensorData>(m, "SensorData")
@@ -961,6 +953,11 @@ PYBIND11_MODULE(bind, m) {
     .def_readwrite("raw", &MjType::RealSensorData::raw)
     .def_readwrite("SI", &MjType::RealSensorData::SI)
     .def_readwrite("normalised", &MjType::RealSensorData::normalised)
+    .def_readwrite("g1", &MjType::RealSensorData::g1)
+    .def_readwrite("g2", &MjType::RealSensorData::g2)
+    .def_readwrite("g3", &MjType::RealSensorData::g3)
+    .def_readwrite("palm", &MjType::RealSensorData::palm)
+    .def_readwrite("wrist_Z", &MjType::RealSensorData::wrist_Z)
     ;
   }
 

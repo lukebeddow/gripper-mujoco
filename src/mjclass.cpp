@@ -499,20 +499,26 @@ bool MjClass::render()
 {
   /* Render a frame of the simulation to the screen */
 
+  std::cout << "1\n";
+
   // safety catch, we are unable to close the window properly
   static bool window_closed = false;
   if (window_closed) {
     return false;
   }
 
+  std::cout << "2\n";
+
   // if the render window has not yet been initialised
   if (not render_init) {
-    render::init(model, data);
+    render::init(*this);
     render_init = true;
   }
   else if (render_reload) {
-    render::reload_for_rendering(model, data);
+    render::reload_for_rendering(*this);
   }
+
+  std::cout << "3\n";
 
   // init and reload perform the same job, so we no longer need to reload
   render_reload = false;
@@ -529,14 +535,17 @@ bool MjClass::render()
       (time_::now() - start_time).count() < s_.render_delay * 1000) { 
       
       // window_open = render::render(model, data);
-      window_open = render::render(*this);
+      window_open = render::render();
     }
   }
   else {
     // just render once
-    // window_open = render::render(model, data);
-    window_open = render::render(*this);
+    std::cout << "4\n";
+
+    window_open = render::render();
   }
+
+  std::cout << "5\n";
 
   // if the window has been closed
   if (not window_open) {
@@ -544,6 +553,8 @@ bool MjClass::render()
     render_init = false;
     window_closed = true;
   }
+
+  std::cout << "6\n";
   
   return window_open;
 }
@@ -1878,7 +1889,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     sensor_data[j] = real_sensors_.palm.apply_calibration(sensor_data[j]);
     real_sensors_.SI.palm_sensor.add(sensor_data[j]);
     sensor_data[j] = real_sensors_.palm.apply_normalisation(sensor_data[j]);
-    sensor_data[j] = s_.bending_gauge.apply_noise(sensor_data[j], uniform_dist);
+    sensor_data[j] = s_.palm_sensor.apply_noise(sensor_data[j], uniform_dist);
     real_sensors_.normalised.palm_sensor.add(sensor_data[j]); 
     output.push_back(sensor_data[j]);
     ++j;
@@ -1915,7 +1926,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     sensor_data[j] = real_sensors_.wrist_Z.apply_calibration(sensor_data[j]);
     real_sensors_.SI.wrist_Z_sensor.add(sensor_data[j]);
     sensor_data[j] = real_sensors_.wrist_Z.apply_normalisation(sensor_data[j]);
-    sensor_data[j] = s_.bending_gauge.apply_noise(sensor_data[j], uniform_dist);
+    sensor_data[j] = s_.wrist_sensor_Z.apply_noise(sensor_data[j], uniform_dist);
     real_sensors_.normalised.wrist_Z_sensor.add(sensor_data[j]); 
     output.push_back(sensor_data[j]);
     ++j;
@@ -1940,8 +1951,9 @@ std::vector<float> MjClass::get_real_observation()
   so if before we had [0,1,2] and now we have [0,1,2,3,4,5] then n=3 */
 
   // manually set reading settings to ensure correctness
-  s_.bending_gauge.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
+  s_.motor_state_sensor.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
   s_.base_state_sensor.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
+  s_.bending_gauge.update_n_readings(samples_since_last_obs, s_.sensor_n_prev_steps);
   s_.palm_sensor.update_n_readings(samples_since_last_obs, s_.sensor_n_prev_steps);
   s_.wrist_sensor_Z.update_n_readings(samples_since_last_obs, s_.sensor_n_prev_steps);
 
@@ -3279,7 +3291,7 @@ void MjType::Settings::apply_noise_params(std::uniform_real_distribution<float>&
 
   #define XX(NAME, TYPE, VALUE)
 
-  // set the noise to default UNLESS it has been overriden
+  // set the noise to default UNLESS it has been overriden for ALL sensors
   // mu is randomly chosen between [-noise_mu, noise_mu]
   #define SS(NAME, DONTUSE1, DONTUSE2, DONTUSE3)   \
             if (not NAME.noise_overriden) {        \
@@ -3300,7 +3312,7 @@ void MjType::Settings::apply_noise_params(std::uniform_real_distribution<float>&
   #undef BR
   #undef LR
 
-  // manually override the state sensors
+  // then manually override the state sensors (we want state_noise not sensor_noise)
   if (not motor_state_sensor.noise_overriden) {
     motor_state_sensor.noise_mag = state_noise_mag;
     motor_state_sensor.noise_mu = state_noise_mu;
@@ -3312,7 +3324,7 @@ void MjType::Settings::apply_noise_params(std::uniform_real_distribution<float>&
     base_state_sensor.noise_std = state_noise_std;
   }
 
-  // there should be no need to do this
+  // randomise seed for state
   motor_state_sensor.randomise_mu(uniform_dist);
   base_state_sensor.randomise_mu(uniform_dist);
 }
