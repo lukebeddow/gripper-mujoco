@@ -82,14 +82,21 @@ make debug   # build targets in debug mode
 
 ## Run
 
-To run the c++ part of the code and visualise MuJoCo in a GUI, you can use the the executable ```bin/mysimulate```. You will need to run it with command line arguments to specify which object set and gripper configuration you want:
+To run the c++ part of the code and visualise MuJoCo in a GUI, you can use the the executable ```bin/mysimulate```. There are optional command line arguments to specify additional parameters:
 
-```bash
-bin/mysimulate gripper_N<num_segments> <task_number> <object_set_name>
-bin/mysimulate gripper_N8 0 set4_fullset_795
+```
+bin/mysimulate
+
+Command line syntax:
+  [-g, --gripper] gripper_file      choose a specific gripper file eg gripper_N8_28
+  [-N, --segments] number           how many finger segments, default: 8. Note this is overriden by [-g, --gripper]
+  [-w, --width] number              what finger width to use, default: 28. Note this is overriden by [-g, --gripper]
+  [-o, --object-set] set_name       which object set to use, default: set6_fullset_800_50i
+  [-t, --task] number               which task file number to use, default: 0
+  [-p, --path] path                 path to object set, default: /home/luke/mymujoco/mjcf
 ```
 
-To run the python training, have a look at ```rl/TrainDQN.py``` and ```array_training_DQN.py```.
+To run the python training, have a look at ```rl/TrainDQN.py``` and ```rl/array_training_DQN.py```.
 
 To run multiple trainings concurrently look at ```pc_job.sh``` or to run in queues look at ```queue_job.sh```.
 
