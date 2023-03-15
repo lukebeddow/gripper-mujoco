@@ -96,6 +96,8 @@ Command line syntax:
   [-p, --path] path                 path to object set, default: /home/luke/mymujoco/mjcf
 ```
 
+Warning: to run you need an object set (for example default above is 'set6_fullset_800_50i'). This object set includes all of the gripper urdf files. This repository does NOT contain these files, you should get them from the ```luke-gripper-description``` repository.
+
 To run the python training, have a look at ```rl/TrainDQN.py``` and ```rl/array_training_DQN.py```.
 
 To run multiple trainings concurrently look at ```pc_job.sh``` or to run in queues look at ```queue_job.sh```.
