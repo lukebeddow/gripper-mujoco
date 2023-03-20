@@ -776,6 +776,8 @@ def print_results(model, filename="results.txt", savefile="table.txt"):
 
   # filepath = model.savedir + model.group_name + "/" + filename
 
+  use_timestamp = True
+
   fileroot = model.savedir + model.group_name
   if args.heuristic: fileroot += "/heuristic"
   filepath = fileroot + "/" + filename
@@ -804,6 +806,13 @@ def print_results(model, filename="results.txt", savefile="table.txt"):
         if len(temp_headings) > len(headings): headings = temp_headings[:]
         temp_headings = []
         new_elem = []
+
+      # if we are using timestamps, extract this first
+      if use_timestamp:
+        two_parts = line.split(";")
+        line = two_parts[0]
+        temp_headings.append("Timestamp    ") # 4 spaces to ensure the string is long enough
+        new_elem.append("'" + two_parts[1].split("=")[-1].strip("\n")) # ' for excel import
 
       splits = line.split(" ")
       # int(...) drops the newline character
@@ -902,7 +911,7 @@ if __name__ == "__main__":
   starting_time = datetime.now()
 
   # key default settings
-  use_wandb = True
+  use_wandb = False
   no_plot = True
   datestr = "%d-%m-%y-%H:%M" # all date inputs must follow this format
 
@@ -918,7 +927,8 @@ if __name__ == "__main__":
   parser.add_argument("-c", "--continue",     action="store_true", dest="resume") # continue training
   parser.add_argument("-l", "--log-wandb",    action="store_true") # log to wandb job
   parser.add_argument("-p", "--plot",         action="store_true") # plot to wandb job
-  parser.add_argument("-n", "--no-wandb",     action="store_true") # no wandb logging
+  parser.add_argument("-w", "--wandb",        action="store_true") # use wandb logging
+  parser.add_argument("-n", "--no-wandb",     action="store_true") # prevent wandb logging
   parser.add_argument("-H", "--heuristic",    action="store_true") # run a test using heuristic actions
   parser.add_argument("-r", "--render",       action="store_true") # render window during training
   parser.add_argument("--program",            default=None)        # program name to select from if..else if
@@ -943,6 +953,7 @@ if __name__ == "__main__":
   # extract primary inputs
   inputarg = args.job
   timestamp = args.timestamp if args.timestamp else datetime.now().strftime(datestr)
+  if args.wandb: use_wandb = True
   if args.no_wandb: use_wandb = False
 
   log_level = args.log_level
@@ -1908,6 +1919,62 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
+  elif training_type == "paper_baseline_4.1_test":
+
+    vary_1 = [
+      (0.9e-3, 28e-3),
+      (1.0e-3, 24e-3),
+      (1.0e-3, 28e-3),
+    ]
+    vary_2 = [0, 1, 2, 3]
+    vary_3 = None
+    repeats = 20
+    param_1_name = "finger thickness/width"
+    param_2_name = "num sensors"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    eval_me = []
+
+    wrist_mu = 0.01             # large chance of zero error with the wrist
+    wrist_std = 0.075           # wrist has a lot of noise, this is 15% coverage +-2stdevs
+    eval_me.append(f"model.env.mj.set.wrist_sensor_Z.set_gaussian_noise({wrist_mu}, {wrist_std})")
+
+    exceed_lat_max_factor = 1.1 # penalty reaches maximum at this factor of yield load
+    eval_me.append(f"model.env.mj.set.exceed_lat_max_factor = {exceed_lat_max_factor}")
+
+    baseline_args = {
+      "finger_thickness" : param_1[0],
+      "finger_width" : param_1[1],
+      "sensors" : param_2,
+      "sensor_noise" : 0.025,         # medium noise on sensor readings
+      "state_noise" : 0.0,            # no noise on state readings, this is required for sign mode
+      "sensor_mu" : 0.05,             # can be +- 5% from 0
+      "state_mu" : 0.025,             # just a gentle zero error noise on state readings
+      "sensor_steps" : 1,             # limit this since sensor data is unreliable
+      "state_steps" : 5,              # this data stream is clean, so take a lot of it
+      "sensor_mode" : 2,              # average sample, leave as before
+      "state_mode" : 4,               # state sign mode, -1,0,+1 for motor state change
+      "eval_me" : eval_me,            # extra settings tweaks
+      "scale_rewards" : 2.5,          # stronger reward signal aids training
+      "scale_penalties" : 2.5,        # we do want to discourage dangerous actions
+      "exceed_lims_multiplier" : 1.0, # disable extra attention to avoiding the table
+    }
+
+    # use the new object set
+    model.params.object_set = "set7_fullset_1500_50i"
+
+    # run medium length trainings
+    model.params.num_episodes = 60_000
+
+    # run slightly longer tests during training
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
   elif training_type == "test_exceed_limits_termination":
 
     param_1 = None
@@ -2025,7 +2092,7 @@ if __name__ == "__main__":
     fileroot = model.savedir + model.group_name
     if args.heuristic: fileroot += "/heuristic"
     filepath = fileroot + "/results.txt"
-    new_file_text = f"Input arg {args.job}\n"
+    new_file_text = f"Input arg {args.job}; timestamp={timestamp}\n"
     new_file_text += param_1_string
     new_file_text += param_2_string
     new_file_text += param_3_string
