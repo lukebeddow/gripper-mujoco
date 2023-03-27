@@ -1710,7 +1710,7 @@ if __name__ == "__main__":
     model.params.save_freq = 4000
 
   # only change is to go from 10 repeats to 20 repeats
-  # EI:1, Sensors:0 = 1:20        <- test this, runniong x20
+  # EI:1, Sensors:0 = 1:20        <- test this, running x20
   # EI:2, Sensors:0 = 21:40
   # EI:3, Sensors:0 = 41:60
   # EI:1, Sensors:1 = 61:80       <- test this, done x20
