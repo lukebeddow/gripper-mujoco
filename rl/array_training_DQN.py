@@ -956,6 +956,9 @@ if __name__ == "__main__":
   if args.wandb: use_wandb = True
   if args.no_wandb: use_wandb = False
 
+  if args.heuristic and args.program is None:
+    args.program = "heuristic"
+
   log_level = args.log_level
 
   if args.best_performance: 
@@ -1318,22 +1321,39 @@ if __name__ == "__main__":
 
   elif training_type == "heuristic":
 
-    # special case: block terminal logging
-    model.log_level = 0
+    # # special case: block terminal logging
+    # model.log_level = 0
 
-    vary_1 = [0, 1, 2, 3]
-    vary_2 = [0.9e-3]
-    vary_3 = [8]
-    repeats = 1
-    param_1_name = "Num sensors"
-    param_2_name = "Finger thickness"
-    param_3_name = "Num segments"
+    # EI:1, Sensors:0 = 1:5
+    # EI:2, Sensors:0 = 6:10
+    # EI:3, Sensors:0 = 11:15
+    # EI:1, Sensors:1 = 16:20
+    # EI:2, Sensors:1 = 21:25
+    # EI:3, Sensors:1 = 26:30
+    # EI:1, Sensors:2 = 31:35
+    # EI:2, Sensors:2 = 36:40
+    # EI:3, Sensors:2 = 41:45
+    # EI:1, Sensors:3 = 46:50
+    # EI:2, Sensors:3 = 51:55
+    # EI:3, Sensors:3 = 56:60
+    vary_1 = [
+      (0.9e-3, 28e-3),
+      (1.0e-3, 24e-3),
+      (1.0e-3, 28e-3),
+    ]
+    vary_2 = [0, 1, 2, 3]
+    vary_3 = None
+    repeats = 5
+    param_1_name = "finger thickness/width"
+    param_2_name = "num sensors"
+    param_3_name = None
     param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
                                                 param_3=vary_3, repeats=repeats)
     baseline_args = {
-      "sensors" : param_1,
-      "finger_thickness" : param_2,
-      "num_segments" : param_3
+      "finger_thickness" : param_1[0],
+      "finger_width" : param_1[1],
+      "sensors" : param_2,
+      "num_segments" : 8
     }
 
   elif training_type == "vary_sensor_steps":
