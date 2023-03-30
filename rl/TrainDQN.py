@@ -715,7 +715,7 @@ class TrainDQN():
     self.track = TrainDQN.Tracker()
 
     # define some hardcoded class variables
-    self.log_rate_for_episodes = 25
+    self.log_rate_for_episodes = 100
     self.last_test_data = None
     self.best_performance_txt_file_name = "best_performance"
     self.best_performance_template = "Best success rate = {0}\nOccured at episode = {1}"
