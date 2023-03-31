@@ -258,6 +258,8 @@ void MjClass::configure_settings()
     to different loading (point load in theory but 4/5th length loading in practice) */
     float bend_gauge_normalise = s_.saturation_yield_factor * yield_load();
     calibrate_simulated_sensors(bend_gauge_normalise);
+    // save the calibration ratio to estimate SI outputs from the gauges
+    sim_gauge_raw_to_N_factor = bend_gauge_normalise / s_.bending_gauge.normalise;
     if (echo_auto_changes) {
       std::cout << "MjClass auto-setting: Bending gauge normalisation set to: " 
         << s_.bending_gauge.normalise << ", based on saturation load of " << bend_gauge_normalise <<'\n';
@@ -401,6 +403,7 @@ void MjClass::reset()
   
   // reset sensor saved data
   sim_sensors_.reset();
+  sim_sensors_SI_.reset();
   real_sensors_.reset();
 
   // reset timestamps for sensor readings
@@ -584,6 +587,11 @@ void MjClass::monitor_sensors()
     // read
     std::vector<luke::gfloat> gauges = luke::get_gauge_data(model, data);
 
+    // save SI (for gauges our raw data is NOT SI so we best approximate with calibration)
+    sim_sensors_SI_.finger1_gauge.add(gauges[0] * sim_gauge_raw_to_N_factor);
+    sim_sensors_SI_.finger2_gauge.add(gauges[1] * sim_gauge_raw_to_N_factor);
+    sim_sensors_SI_.finger3_gauge.add(gauges[2] * sim_gauge_raw_to_N_factor);
+
     // normalise
     gauges[0] = s_.bending_gauge.apply_normalisation(gauges[0]);
     gauges[1] = s_.bending_gauge.apply_normalisation(gauges[1]);
@@ -618,6 +626,11 @@ void MjClass::monitor_sensors()
       (luke::gfloat)forces.all.finger3_local[0]
     };
 
+    // save SI
+    sim_sensors_SI_.finger1_axial_gauge.add(axial_gauges[0]);
+    sim_sensors_SI_.finger2_axial_gauge.add(axial_gauges[1]);
+    sim_sensors_SI_.finger3_axial_gauge.add(axial_gauges[2]);
+
     // normalise
     axial_gauges[0] = s_.axial_gauge.apply_normalisation(axial_gauges[0]);
     axial_gauges[1] = s_.axial_gauge.apply_normalisation(axial_gauges[1]);
@@ -648,6 +661,9 @@ void MjClass::monitor_sensors()
     // read
     luke::gfloat palm_reading = forces.all.palm_local[0];
 
+    // save SI
+    sim_sensors_SI_.palm_sensor.add(palm_reading);
+
     // normalise
     palm_reading = s_.palm_sensor.apply_normalisation(palm_reading);
 
@@ -667,6 +683,10 @@ void MjClass::monitor_sensors()
     // read
     luke::gfloat x = data->userdata[0];
     luke::gfloat y = data->userdata[1];
+
+    // save SI
+    sim_sensors_SI_.wrist_X_sensor.add(x);
+    sim_sensors_SI_.wrist_Y_sensor.add(y);
 
     // normalise
     x = s_.wrist_sensor_XY.apply_normalisation(x);
@@ -689,6 +709,9 @@ void MjClass::monitor_sensors()
 
     // read
     luke::gfloat z = data->userdata[2];
+
+    // save SI
+    sim_sensors_SI_.wrist_Z_sensor.add(z);
 
     // zero the reading (this step is unique to wrist Z sensor)
     z -= s_.wrist_sensor_Z.raw_value_offset;
@@ -810,6 +833,16 @@ void MjClass::update_env()
     forces.obj.finger1_local[1], forces.obj.finger2_local[1], forces.obj.finger3_local[1]
   });
 
+  // get information directly from the sensors
+  luke::gfloat last_g1 = sim_sensors_SI_.read_finger1_gauge();
+  luke::gfloat last_g2 = sim_sensors_SI_.read_finger2_gauge();
+  luke::gfloat last_g3 = sim_sensors_SI_.read_finger3_gauge();
+  luke::gfloat last_palm_N = sim_sensors_SI_.read_palm_sensor();
+  luke::gfloat last_wrist_N = sim_sensors_SI_.read_wrist_Z_sensor();
+  luke::gfloat max_gauge_force = std::max(last_g1, last_g2);
+  max_gauge_force = std::max(max_gauge_force, last_g3);
+  luke::gfloat avg_gauge_force = (1.0/3.0) * (last_g1 + last_g2 + last_g3);
+
   /* ----- detect state of binary events (EDIT here to add a binary event) ----- */
 
   // another step has been made
@@ -863,7 +896,12 @@ void MjClass::update_env()
   if (finger1_force_mag > s_.stable_finger_force and
       finger2_force_mag > s_.stable_finger_force and
       finger3_force_mag > s_.stable_finger_force and
-      palm_force_mag > s_.stable_palm_force and env_.cnt.lifted.value)
+      finger1_force_mag < s_.stable_finger_force_lim and
+      finger2_force_mag < s_.stable_finger_force_lim and
+      finger3_force_mag < s_.stable_finger_force_lim and
+      palm_force_mag > s_.stable_palm_force and
+      palm_force_mag < s_.stable_palm_force_lim and 
+      env_.cnt.lifted.value)
     env_.cnt.object_stable.value = true;
 
   // if stable and lifted to target (need env_.cnt.object_stable and target_height set)
@@ -883,6 +921,16 @@ void MjClass::update_env()
   env_.cnt.finger2_force.value = finger2_force_mag;
   env_.cnt.finger3_force.value = finger3_force_mag;
   env_.cnt.ground_force.value = ground_force_mag;
+
+  // new: direct sensor rewards, based on measured sensor values from SIMULATED sensors
+  env_.cnt.good_bend_sensor.value = avg_gauge_force;
+  env_.cnt.exceed_bend_sensor.value = max_gauge_force;
+  env_.cnt.dangerous_bend_sensor.value = max_gauge_force;
+  env_.cnt.good_palm_sensor.value = last_palm_N;
+  env_.cnt.exceed_palm_sensor.value = last_palm_N;
+  env_.cnt.dangerous_palm_sensor.value = last_palm_N;
+  env_.cnt.exceed_wrist_sensor.value = last_wrist_N;
+  env_.cnt.dangerous_wrist_sensor.value = last_wrist_N;
 
   /* ----- resolve linear events and update counts of all events (no editing needed) ----- */
 

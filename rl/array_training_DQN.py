@@ -367,6 +367,8 @@ def apply_to_all_models(model):
   model.env.mj.set.done_height = 15e-3
   model.env.mj.set.stable_finger_force = 1.0
   model.env.mj.set.stable_palm_force = 1.0
+  model.env.mj.set.stable_finger_force_lim = 100.0
+  model.env.mj.set.stable_palm_force_lim = 100.0
 
   # what actions are we using
   model.env.mj.set.paired_motor_X_step = True

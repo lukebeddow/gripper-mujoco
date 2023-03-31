@@ -1158,6 +1158,7 @@ public:
   std::chrono::time_point<time_> start_time_;   // time from tick() call
   bool render_init = false;                     // have we initialised the render window
   bool render_reload = false;                   // have we reloaded and need to update rendering
+  double sim_gauge_raw_to_N_factor = 1.0;       // calibration factor, set by auto_calibrate
 
   // function pointers for sampling functions
   std::vector<luke::gfloat> (MjType::Sensor::*sampleFcnPtr)
@@ -1239,6 +1240,7 @@ public:
 
   // data structures
   MjType::SensorData sim_sensors_;
+  MjType::SensorData sim_sensors_SI_;
   MjType::RealSensorData real_sensors_;
   MjType::Env env_;
   MjType::TestReport testReport_;
