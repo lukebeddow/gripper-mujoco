@@ -444,7 +444,7 @@ def continue_training(model, run_name, group_name, object_set=None, new_endpoint
   # set up the object set
   model.env.mj.model_folder_path = "/home/luke/mymujoco/mjcf"
 
-  new_endpoint = 60_000
+  new_endpoint = 100_000
   model.wandb_note += f"Continuing training until new endpoint of {new_endpoint} episodes\n"
 
   # extra_episodes = 48_000

@@ -589,6 +589,8 @@ class MjEnv():
     if bending:
       bending_readings = self.mj.get_finger_forces(self.heuristic_real_world)
       avg_bend = (bending_readings[0] + bending_readings[1] + bending_readings[2]) / 3.
+      # max_bend = max(bending_readings)
+      # avg_bend = max_bend
     if palm:
       palm_reading = self.mj.get_palm_force(self.heuristic_real_world)
     if wrist:
