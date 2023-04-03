@@ -204,24 +204,16 @@ bool render()
 
     if (!glfwWindowShouldClose(window)) {
 
-        std::cout << "4.2\n";
-
         // get framebuffer viewport
         mjrRect viewport = {0, 0, 0, 0};
         glfwGetFramebufferSize(window, &viewport.width, &viewport.height);
 
-        std::cout << "4.3\n";
-
         // update scene and render
         mjv_updateScene(m, d, &opt, NULL, &cam, mjCAT_ALL, &scn);
 
-        // this stops a crash, but nothing new renders on screen
-        // // swap OpenGL buffers (blocking call due to v-sync)
-        // glfwSwapBuffers(window);
-
-        std::cout << "before crash\n";
+        // std::cout << "before crash\n";
         mjr_render(viewport, &scn, &con);
-        std::cout << "after crash\n";
+        // std::cout << "after crash\n";
 
         // added - render UIs
         if (plot_sensors) {
@@ -230,18 +222,12 @@ bool render()
             lukesensorfigsupdate();
             lukesensorfigshow(rect);
         }
-        
-        std::cout << "4.6\n";
 
         // swap OpenGL buffers (blocking call due to v-sync)
         glfwSwapBuffers(window);
 
-        std::cout << "4.7\n";
-
         // process pending GUI events, call GLFW callbacks
         glfwPollEvents();
-
-        std::cout << "4.8\n";
 
         return true;
     }

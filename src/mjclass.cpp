@@ -502,15 +502,11 @@ bool MjClass::render()
 {
   /* Render a frame of the simulation to the screen */
 
-  std::cout << "1\n";
-
   // safety catch, we are unable to close the window properly
   static bool window_closed = false;
   if (window_closed) {
     return false;
   }
-
-  std::cout << "2\n";
 
   // if the render window has not yet been initialised
   if (not render_init) {
@@ -520,8 +516,6 @@ bool MjClass::render()
   else if (render_reload) {
     render::reload_for_rendering(*this);
   }
-
-  std::cout << "3\n";
 
   // init and reload perform the same job, so we no longer need to reload
   render_reload = false;
@@ -542,13 +536,11 @@ bool MjClass::render()
     }
   }
   else {
+
     // just render once
-    std::cout << "4\n";
-
     window_open = render::render();
-  }
 
-  std::cout << "5\n";
+  }
 
   // if the window has been closed
   if (not window_open) {
@@ -557,8 +549,6 @@ bool MjClass::render()
     window_closed = true;
   }
 
-  std::cout << "6\n";
-  
   return window_open;
 }
 
