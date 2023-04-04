@@ -115,6 +115,7 @@ struct
     int zstepfig = 0;              // added by luke
     int zbasefig = 0;              // added by luke
     int allactuators = 0;          // added by luke
+    int use_SI_sensors = 0;        // added by luke
 
     float sensor_mag = 0;
     float sensor_mu = 0;
@@ -213,6 +214,7 @@ const mjuiDef defOption[] =
     {mjITEM_CHECKINT,  "z stepper",     2, &settings.zstepfig,      " #410"}, // added by luke
     {mjITEM_CHECKINT,  "z base",        2, &settings.zbasefig,      " #411"}, // added by luke
     {mjITEM_CHECKINT,  "all actuators", 2, &settings.allactuators,  " #412"}, // added by luke
+    {mjITEM_CHECKINT,  "SI values",     2, &settings.use_SI_sensors," #413"}, // added by luke
     {mjITEM_END}
 };
 
@@ -700,21 +702,30 @@ void lukesensorfigsupdate(void)
         gnum = mjMAXLINEPNT;
     }
 
+    MjType::SensorData* data_ptr;
+
+    if (settings.use_SI_sensors) {
+        data_ptr = &myMjClass.sim_sensors_SI_;
+    }
+    else {
+        data_ptr = &myMjClass.sim_sensors_;
+    }
+
     // read the data    
-    std::vector<luke::gfloat> b1data = myMjClass.sim_sensors_.finger1_gauge.read(gnum);
-    std::vector<luke::gfloat> b2data = myMjClass.sim_sensors_.finger2_gauge.read(gnum);
-    std::vector<luke::gfloat> b3data = myMjClass.sim_sensors_.finger3_gauge.read(gnum);
-    std::vector<luke::gfloat> p1data = myMjClass.sim_sensors_.palm_sensor.read(gnum);
-    std::vector<luke::gfloat> a1data = myMjClass.sim_sensors_.finger1_axial_gauge.read(gnum);
-    std::vector<luke::gfloat> a2data = myMjClass.sim_sensors_.finger2_axial_gauge.read(gnum);
-    std::vector<luke::gfloat> a3data = myMjClass.sim_sensors_.finger3_axial_gauge.read(gnum);
-    std::vector<luke::gfloat> wXdata = myMjClass.sim_sensors_.wrist_X_sensor.read(gnum);
-    std::vector<luke::gfloat> wYdata = myMjClass.sim_sensors_.wrist_Y_sensor.read(gnum);
-    std::vector<luke::gfloat> wZdata = myMjClass.sim_sensors_.wrist_Z_sensor.read(gnum);
-    std::vector<luke::gfloat> mXdata = myMjClass.sim_sensors_.x_motor_position.read(gnum);
-    std::vector<luke::gfloat> mYdata = myMjClass.sim_sensors_.y_motor_position.read(gnum);
-    std::vector<luke::gfloat> mZdata = myMjClass.sim_sensors_.z_motor_position.read(gnum);
-    std::vector<luke::gfloat> mHdata = myMjClass.sim_sensors_.z_base_position.read(gnum);
+    std::vector<luke::gfloat> b1data = data_ptr->finger1_gauge.read(gnum);
+    std::vector<luke::gfloat> b2data = data_ptr->finger2_gauge.read(gnum);
+    std::vector<luke::gfloat> b3data = data_ptr->finger3_gauge.read(gnum);
+    std::vector<luke::gfloat> p1data = data_ptr->palm_sensor.read(gnum);
+    std::vector<luke::gfloat> a1data = data_ptr->finger1_axial_gauge.read(gnum);
+    std::vector<luke::gfloat> a2data = data_ptr->finger2_axial_gauge.read(gnum);
+    std::vector<luke::gfloat> a3data = data_ptr->finger3_axial_gauge.read(gnum);
+    std::vector<luke::gfloat> wXdata = data_ptr->wrist_X_sensor.read(gnum);
+    std::vector<luke::gfloat> wYdata = data_ptr->wrist_Y_sensor.read(gnum);
+    std::vector<luke::gfloat> wZdata = data_ptr->wrist_Z_sensor.read(gnum);
+    std::vector<luke::gfloat> mXdata = data_ptr->x_motor_position.read(gnum);
+    std::vector<luke::gfloat> mYdata = data_ptr->y_motor_position.read(gnum);
+    std::vector<luke::gfloat> mZdata = data_ptr->z_motor_position.read(gnum);
+    std::vector<luke::gfloat> mHdata = data_ptr->z_base_position.read(gnum);
 
     // get the corresponding timestamps
     std::vector<float> btdata = myMjClass.gauge_timestamps.read(gnum);
