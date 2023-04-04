@@ -12,18 +12,13 @@ from random import random
 import networks
 import argparse
 
-def set_penalties(model, value, done=False, trigger=1, make_binary=None,
-                  exceed_lims_multiplier=1.0):
+def set_penalties(model, value, done=False, trigger=1, make_binary=None):
   """
   Set penalty rewards with given value, alongside defaults
   """
 
-  # TESTING: extra punishment for exceeding limits (touching table in particular we want to target)
-  print("TESTING: exceed_lims_multiplier is", exceed_lims_multiplier, "\n")
-  modval = value * exceed_lims_multiplier
-
   # penalties                            reward   done   trigger  min   max  overshoot
-  model.env.mj.set.exceed_limits.set     (modval, done,  trigger)
+  model.env.mj.set.exceed_limits.set     (value, done,  trigger)
   model.env.mj.set.exceed_axial.set      (value,  done,  trigger, 3.0,  6.0,  -1)
   model.env.mj.set.exceed_lateral.set    (value,  done,  trigger, 4.0,  6.0,  -1) # min and max currently overwritten with (1.0 and 1.5)*yield_load()
   model.env.mj.set.exceed_palm.set       (value,  done,  trigger, 6.0,  15.0, -1)
@@ -65,6 +60,44 @@ def set_bonuses(model, value, make_binary=None):
     tol = 1e-5 # just in case add a tiny tolerance
     model.env.mj.set.finger_force.max = model.env.mj.set.finger_force.min + tol
     model.env.mj.set.palm_force.max = model.env.mj.set.palm_force.min + tol
+
+  return model
+
+def set_penalties_2(model, value, done=False, trigger=1):
+  """
+  Set penalty rewards with given value, alongside defaults
+  """
+
+  # penalties                            reward   done   trigger  min   max  overshoot
+  model.env.mj.set.exceed_limits.set     (value, done,  trigger)
+  model.env.mj.set.exceed_axial.set      (value,  done,  trigger, 3.0,  6.0,  -1)
+  model.env.mj.set.exceed_lateral.set    (value,  done,  trigger, 4.0,  6.0,  -1) # min and max currently overwritten with (1.0 and 1.5)*yield_load()
+  model.env.mj.set.exceed_palm.set       (value,  done,  trigger, 6.0,  15.0, -1)
+
+  return model
+
+def set_bonuses_2(model, value):
+  """
+  Set bonus rewards with a given value
+  """
+
+  # binary rewards                       reward   done   trigger
+  model.env.mj.set.lifted.set            (value,  False,   1)
+  model.env.mj.set.target_height.set     (value,  False,   1)
+  model.env.mj.set.object_stable.set     (value,  False,   1)
+  
+  # # OLD: linear rewards                       reward   done   trigger min   max  overshoot
+  # model.env.mj.set.finger_force.set      (value,  False,   1,    0.2,  1.0,  -1)
+  # model.env.mj.set.palm_force.set        (value,  False,   1,    1.0,  6.0,  -1)
+
+  # NEW IDEA: choose reward ranges based on the desired stable force
+  min = 0.2
+  sbf = model.env.mj.set.stable_finger_force
+  sbp = model.env.mj.set.stable_palm_force
+
+  # linear rewards                       reward   done   trigger min   max  overshoot
+  model.env.mj.set.finger_force.set      (value,  False,   1,    min,  sbf,  -1)
+  model.env.mj.set.palm_force.set        (value,  False,   1,    min,  sbp,  -1)
 
   return model
 
@@ -122,7 +155,7 @@ def setup_HER(model, use=True, style="basic", mode="final", k=4):
   return model
 
 def create_reward_function(model, style="negative", options=[], scale_rewards=1, scale_penalties=1,
-                           penalty_termination=False, exceed_lims_multiplier=1.0):
+                           penalty_termination=False):
   """
   Set the reward structure for the learning, with different style options
   """
@@ -137,8 +170,7 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
     # penalties and bonuses
     model = set_bonuses(model, 0.002)
     model = set_penalties(model, -0.002,
-                          done=5 if "terminate_early" in options else False,
-                          exceed_lims_multiplier=exceed_lims_multiplier)
+                          done=5 if "terminate_early" in options else False)
     # scale based on steps allowed per episode
     model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
     # end criteria                         reward   done   trigger
@@ -152,8 +184,7 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
     # penalties and bonuses
     model = set_bonuses(model, 0.002)
     model = set_penalties(model, -0.005,  
-                          done=5 if "terminate_early" in options else False,
-                          exceed_lims_multiplier=exceed_lims_multiplier)
+                          done=5 if "terminate_early" in options else False)
     # scale based on steps allowed per episode
     model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
     # end criteria                         reward   done   trigger
@@ -168,8 +199,7 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
                         make_binary=True if "make_binary" in options else None)
     model = set_penalties(model, -0.002,  
                           done=5 if "terminate_early" in options else False,
-                          make_binary=True if "make_binary" in options else None,
-                          exceed_lims_multiplier=exceed_lims_multiplier)
+                          make_binary=True if "make_binary" in options else None)
     # scale based on steps allowed per episode
     model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
     # end criteria                         reward   done   trigger
@@ -184,8 +214,22 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
                         make_binary=True if "make_binary" in options else None)
     model = set_penalties(model, -0.002 * scale_penalties,  
                           done=penalty_termination,
-                          make_binary=True if "make_binary" in options else None,
-                          exceed_lims_multiplier=exceed_lims_multiplier)
+                          make_binary=True if "make_binary" in options else None)
+    # scale based on steps allowed per episode
+    model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
+    # end criteria                         reward   done   trigger
+    model.env.mj.set.stable_height.set     (1.0,    True,    1)
+    model.env.mj.set.oob.set               (-1.0,   True,    1)
+
+  elif style == "mixed_v4":
+    # reward each step                     reward   done   trigger
+    model.env.mj.set.step_num.set          (-0.01,  False,   1)
+    # penalties and bonuses
+    model = set_bonuses(model, 0.002 * scale_rewards,
+                        make_binary=True if "make_binary" in options else None)
+    model = set_penalties(model, -0.002 * scale_penalties,  
+                          done=penalty_termination,
+                          make_binary=True if "make_binary" in options else None)
     # scale based on steps allowed per episode
     model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
     # end criteria                         reward   done   trigger
@@ -198,8 +242,7 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
     # penalties and bonuses
     model = set_bonuses(model, 0.0)
     model = set_penalties(model, 0.0,  
-                          done=5 if "terminate_early" in options else False,
-                          exceed_lims_multiplier=exceed_lims_multiplier)
+                          done=5 if "terminate_early" in options else False)
     # scale based on steps allowed per episode
     model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
     # end criteria                         reward   done   trigger
@@ -212,8 +255,7 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
     # penalties and bonuses
     model = set_bonuses(model, 0.0)
     model = set_penalties(model, 0.0,  
-                          done=5 if "terminate_early" in options else False,
-                          exceed_lims_multiplier=exceed_lims_multiplier)
+                          done=5 if "terminate_early" in options else False)
     # scale based on steps allowed per episode
     model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
     # end criteria                         reward   done   trigger
@@ -492,9 +534,7 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 1
                       state_mu=0.0, reward_style="mixed_v3", reward_options=[], 
                       scale_rewards=2.5, scale_penalties=1.0, penalty_termination=False,
                       finger_stiffness=-7.5, num_segments=8, finger_thickness=0.9e-3, finger_width=28e-3,
-                      max_episode_steps=250, XYZ_mm_rad=[1.0, 0.01, 2.0],
-                      exceed_lims_multiplier=2.0, eval_me=None):
-
+                      max_episode_steps=250, XYZ_mm_rad=[1.0, 0.01, 2.0], eval_me=None):
   """
   Runs a baseline training on the model
   """
@@ -534,8 +574,7 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 1
   # configure rewards and sensors
   model = create_reward_function(model, style=reward_style, options=reward_options,
                                  scale_rewards=scale_rewards, scale_penalties=scale_penalties,
-                                 penalty_termination=penalty_termination,
-                                 exceed_lims_multiplier=exceed_lims_multiplier)
+                                 penalty_termination=penalty_termination)
   model = add_sensors(model, num=sensors, sensor_mode=sensor_mode, state_mode=state_mode,
                       state_steps=state_steps, sensor_steps=sensor_steps,
                       z_state=z_state, sensor_noise_std=sensor_noise, sensor_noise_mu=sensor_mu,
@@ -1868,7 +1907,6 @@ if __name__ == "__main__":
       "eval_me" : eval_me,            # extra settings tweaks
       "scale_rewards" : param_2,          # stronger reward signal aids training
       "scale_penalties" : param_2,        # we do want to discourage dangerous actions
-      "exceed_lims_multiplier" : 1.0, # disable extra attention to avoiding the table
       "eps_decay" : param_1,             # add extra exploration -> eps=8k gives 10k=29%, 20k=8%, 30k=2%, 40k=0.7%
     }
 
@@ -1925,7 +1963,6 @@ if __name__ == "__main__":
       "eval_me" : eval_me,            # extra settings tweaks
       "scale_rewards" : 1.0,          # stronger reward signal aids training
       "scale_penalties" : 1.0,        # we do want to discourage dangerous actions
-      "exceed_lims_multiplier" : 1.0, # disable extra attention to avoiding the table
     }
 
     # use the new object set
@@ -1981,7 +2018,6 @@ if __name__ == "__main__":
       "eval_me" : eval_me,            # extra settings tweaks
       "scale_rewards" : 2.5,          # stronger reward signal aids training
       "scale_penalties" : 2.5,        # we do want to discourage dangerous actions
-      "exceed_lims_multiplier" : 1.0, # disable extra attention to avoiding the table
     }
 
     # use the new object set
