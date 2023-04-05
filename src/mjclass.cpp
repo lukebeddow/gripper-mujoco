@@ -2805,6 +2805,13 @@ float MjClass::yield_load()
   return luke::calc_yield_point_load();
 }
 
+float MjClass::yield_load(float thickness, float width)
+{
+  /* return the yield force (end applied) for a given thickness and width */
+
+  return luke::calc_yield_point_load(thickness, width);
+}
+
 MjType::EventTrack MjClass::add_events(MjType::EventTrack& e1, MjType::EventTrack& e2)
 {
   /* add the absolute count and last value of two events, all else is ignored */

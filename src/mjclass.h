@@ -1344,6 +1344,7 @@ public:
   void set_finger_thickness(float thickness);
   void set_finger_width(float width);
   float yield_load();
+  float yield_load(float thickness, float width);
   void tick();
   float tock();
   MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2);

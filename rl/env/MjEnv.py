@@ -224,7 +224,7 @@ class MjEnv():
     self.training_xmls = len(xml_files) - self.testing_xmls
 
     if debug_fcn:
-      print("_load_object_set gives xml path:", self.xml_path)
+      print("_load_object_set() gives xml path:", self.xml_path)
       print(f"Training xmls: {self.training_xmls}, testing xmls: {self.testing_xmls}")
 
     if self.training_xmls < 1:
@@ -447,6 +447,23 @@ class MjEnv():
         self.current_test_trial.obj_idx = 0
 
   # ----- public functions ----- #
+
+  def yield_load(self):
+    """
+    Get the yield load of the current fingers, even if we have not fully loaded
+    them in yet
+    """
+
+    debug_fcn = False
+
+    loaded_yield = self.mj.yield_load()
+    if debug_fcn: print("The loaded yield is", loaded_yield)
+
+    to_load_yield = self.mj.yield_load(self.params.finger_thickness,
+                                       self.load_finger_width)
+    if debug_fcn: print("The to load yield is", to_load_yield)
+
+    return to_load_yield
 
   def start_heuristic_grasping(self, realworld=False):
     """

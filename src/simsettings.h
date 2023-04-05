@@ -102,7 +102,7 @@
   SS(  base_state_sensor,       true,     0,        -1)  /* base position state, normalise is ignored)*/\
   SS(  bending_gauge,           true,     20,       10)  /* strain gauge to measure finger bending */\
   SS(  axial_gauge,             true,     3.0,      10)  /* strain gauge to measure axial finger strain */\
-  SS(  palm_sensor,             true,     8.0,      10)  /* palm force sensor */\
+  SS(  palm_sensor,             true,     10.0,     10)  /* palm force sensor */\
   SS(  wrist_sensor_XY,         true,     5.0,      10)  /* force wrist sensor X and Y forces */\
   SS(  wrist_sensor_Z,          true,     10.0,     10)  /* force wrist sensor Z force */\
   /* 
@@ -140,7 +140,7 @@
   LR(  finger1_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 1 force */\
   LR(  finger2_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 2 force */\
   LR(  finger3_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 3 force */\
-  LR(  ground_force,            0.0,      false,    1,    0.0,   2.0, -1)     /* ground force on object */\
+  LR(  ground_force,            0.0,      false,    1,    0.0,  2.0,  -1)     /* ground force on object */\
   LR(  grasp_metric,            0.0,      false,    1,    0.0,  10.0, -1)     /* grasping metric score */\
 
 // end of user defined simulation settings

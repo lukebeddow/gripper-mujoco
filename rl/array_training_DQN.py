@@ -11,6 +11,7 @@ from time import sleep
 from random import random
 import networks
 import argparse
+from dataclasses import dataclass
 
 def set_penalties(model, value, done=False, trigger=1, make_binary=None):
   """
@@ -18,7 +19,7 @@ def set_penalties(model, value, done=False, trigger=1, make_binary=None):
   """
 
   # penalties                            reward   done   trigger  min   max  overshoot
-  model.env.mj.set.exceed_limits.set     (value, done,  trigger)
+  model.env.mj.set.exceed_limits.set     (value,  done,  trigger)
   model.env.mj.set.exceed_axial.set      (value,  done,  trigger, 3.0,  6.0,  -1)
   model.env.mj.set.exceed_lateral.set    (value,  done,  trigger, 4.0,  6.0,  -1) # min and max currently overwritten with (1.0 and 1.5)*yield_load()
   model.env.mj.set.exceed_palm.set       (value,  done,  trigger, 6.0,  15.0, -1)
@@ -63,41 +64,132 @@ def set_bonuses(model, value, make_binary=None):
 
   return model
 
-def set_penalties_2(model, value, done=False, trigger=1):
+def set_sensor_reward_thresholds(model, exceed_style=None, min_style=None):
   """
-  Set penalty rewards with given value, alongside defaults
+  Determine the reward thresholds
   """
 
-  # penalties                            reward   done   trigger  min   max  overshoot
-  model.env.mj.set.exceed_limits.set     (value, done,  trigger)
-  model.env.mj.set.exceed_axial.set      (value,  done,  trigger, 3.0,  6.0,  -1)
-  model.env.mj.set.exceed_lateral.set    (value,  done,  trigger, 4.0,  6.0,  -1) # min and max currently overwritten with (1.0 and 1.5)*yield_load()
-  model.env.mj.set.exceed_palm.set       (value,  done,  trigger, 6.0,  15.0, -1)
+  printout = True
 
-  return model
+  @dataclass
+  class RewardThresholds:
+    # m=minimum, g=good, x=exceed, d=dangerous
+    mBend = 0.0
+    gBend = model.env.mj.set.stable_finger_force
+    xBend = model.env.mj.set.stable_finger_force_lim
+    dBend = model.env.yield_load()
 
-def set_bonuses_2(model, value):
+    mPalm = 0.0
+    gPalm = model.env.mj.set.stable_palm_force
+    xPalm = model.env.mj.set.stable_palm_force_lim
+    dPalm = 30.0
+
+    xWrist = 5.0
+    dWrist = 10.0
+
+  global RT
+  RT = RewardThresholds()
+
+  # check if minimum handling is specified
+  if isinstance(min_style, float):
+    RT.mBend = min_style
+    RT.mPalm = min_style
+  elif isinstance(min_style, list) and len(min_style) == 2:
+    RT.mBend = min_style[0]
+    RT.mPalm = min_style[1]
+  elif min_style == "binary":
+    RT.mBend = RT.gBend
+    RT.mPalm = RT.gPalm
+  elif min_style == "middle":
+    RT.mBend = 0.5 * RT.gBend
+    RT.mPalm = 0.5 * RT.gPalm
+  elif min_style is not None: 
+    raise RuntimeError(f"set_sensor_reward_thresholds() got invalid 'min_style' of {min_style}")
+
+  # check if we are given how 'exceed bend' and 'exceed palm' should work
+  if isinstance(exceed_style, float):
+    RT.xBend = exceed_style
+    RT.xPalm = exceed_style
+  elif isinstance(exceed_style, list) and len(exceed_style) == 2:
+    RT.xBend = exceed_style[0]
+    RT.xPalm = exceed_style[1]
+  elif exceed_style == "dangerous":
+    RT.xBend = RT.dBend
+    RT.xPalm = RT.dPalm
+  elif exceed_style == "middle":
+    RT.xBend = RT.gBend + 0.5 * (RT.dBend - RT.gBend)
+    RT.xPalm = RT.gPalm + 0.5 * (RT.dPalm - RT.gPalm)
+  elif exceed_style == "factor_0.8":
+    RT.xBend = RT.gBend + 0.8 * (RT.dBend - RT.gBend)
+    RT.xPalm = RT.gPalm + 0.8 * (RT.dPalm - RT.gPalm)
+  elif exceed_style is not None: 
+    raise RuntimeError(f"set_sensor_reward_thresholds() got invalid 'exceed_style' of {exceed_style}")
+
+  # confirm that the thresholds make sense
+  if RT.mBend > RT.gBend:
+    raise RuntimeError(f"set_sensor_reward_thresholds() finds mBend > gBend, {RT.mBend:.3f} > {RT.gBend:.3f}")
+  if RT.mPalm > RT.gPalm:
+    raise RuntimeError(f"set_sensor_reward_thresholds() finds mPalm > gPalm, {RT.mPalm:.3f} > {RT.gPalm:.3f}")
+  if RT.gBend > RT.xBend:
+    raise RuntimeError(f"set_sensor_reward_thresholds() finds gBend > xBend, {RT.gBend:.3f} > {RT.xBend:.3f}")
+  if RT.gPalm > RT.xPalm:
+    raise RuntimeError(f"set_sensor_reward_thresholds() finds gPalm > xPalm, {RT.gPalm:.3f} > {RT.xPalm:.3f}")
+  if RT.xBend > RT.dBend:
+    raise RuntimeError(f"set_sensor_reward_thresholds() finds xBend > dBend, {RT.xBend:.3f} > {RT.dBend:.3f}")
+  if RT.xPalm > RT.dPalm:
+    raise RuntimeError(f"set_sensor_reward_thresholds() finds xPalm > dPalm, {RT.xPalm:.3f} > {RT.dPalm:.3f}")
+  if RT.xWrist > RT.dWrist:
+    raise RuntimeError(f"set_sensor_reward_thresholds() finds xWrist > dWrist, {RT.xWrist:.3f} > {RT.dWrist:.3f}")
+
+  if printout:
+    print("Reward Thresholds\n")
+    print(f"  -> mBend = {RT.mBend:.3f}")
+    print(f"  -> gBend = {RT.gBend:.3f}")
+    print(f"  -> xBend = {RT.xBend:.3f}")
+    print(f"  -> dBend = {RT.dBend:.3f}\n")
+    print(f"  -> mPalm = {RT.mPalm:.3f}")
+    print(f"  -> gPalm = {RT.gPalm:.3f}")
+    print(f"  -> xPalm = {RT.xPalm:.3f}")
+    print(f"  -> dPalm = {RT.dPalm:.3f}\n")
+    print(f"  -> xWrist = {RT.xWrist:.3f}")
+    print(f"  -> dWrist = {RT.dWrist:.3f}\n")
+
+def set_sensor_bonuses(model, value):
   """
   Set bonus rewards with a given value
   """
 
-  # binary rewards                       reward   done   trigger
-  model.env.mj.set.lifted.set            (value,  False,   1)
-  model.env.mj.set.target_height.set     (value,  False,   1)
-  model.env.mj.set.object_stable.set     (value,  False,   1)
-  
-  # # OLD: linear rewards                       reward   done   trigger min   max  overshoot
-  # model.env.mj.set.finger_force.set      (value,  False,   1,    0.2,  1.0,  -1)
-  # model.env.mj.set.palm_force.set        (value,  False,   1,    1.0,  6.0,  -1)
+  # rewards                             reward   done   trigger  min       max     overshoot
+  model.env.mj.set.lifted.set           (value,  False,   1)
+  model.env.mj.set.target_height.set    (value,  False,   1)
+  model.env.mj.set.object_stable.set    (value,  False,   1)
+  model.env.mj.set.good_bend_sensor.set (value,  False,   1,     RT.mBend, RT.gBend,  -1)
+  model.env.mj.set.good_palm_sensor.set (value,  False,   1,     RT.mPalm, RT.gPalm,  -1)
 
-  # NEW IDEA: choose reward ranges based on the desired stable force
-  min = 0.2
-  sbf = model.env.mj.set.stable_finger_force
-  sbp = model.env.mj.set.stable_palm_force
+  return model
 
-  # linear rewards                       reward   done   trigger min   max  overshoot
-  model.env.mj.set.finger_force.set      (value,  False,   1,    min,  sbf,  -1)
-  model.env.mj.set.palm_force.set        (value,  False,   1,    min,  sbp,  -1)
+def set_sensor_penalties(model, value):
+  """
+  Set penalty rewards with given value, alongside defaults
+  """
+
+  # penalties                              reward   done   trigger  min        max     overshoot
+  model.env.mj.set.exceed_limits.set       (value,  False,    1)
+  model.env.mj.set.exceed_bend_sensor.set  (value,  False,    1,    RT.xBend,  RT.dBend,  -1)
+  model.env.mj.set.exceed_palm_sensor.set  (value,  False,    1,    RT.xPalm,  RT.dPalm,  -1)
+  model.env.mj.set.exceed_wrist_sensor.set (value,  False,    1,    RT.xWrist, RT.dWrist, -1)
+
+  return model
+
+def set_sensor_terminations(model, value=-1.0, done=True, trigger=1):
+  """
+  Set terminations based on dangerous sensor readings
+  """
+
+  # terminations                              reward   done   trigger  min        max     overshoot
+  model.env.mj.set.dangerous_bend_sensor.set  (value,  done,  trigger, RT.dBend,  RT.dBend,  -1)
+  model.env.mj.set.dangerous_palm_sensor.set  (value,  done,  trigger, RT.dPalm,  RT.dPalm,  -1)
+  model.env.mj.set.dangerous_wrist_sensor.set (value,  done,  trigger, RT.dWrist, RT.dWrist, -1)
 
   return model
 
@@ -221,20 +313,24 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
     model.env.mj.set.stable_height.set     (1.0,    True,    1)
     model.env.mj.set.oob.set               (-1.0,   True,    1)
 
-  elif style == "mixed_v4":
+  elif style == "sensor_mixed":
+    # prepare reward thresholds
+    if model.env.mj.set.stable_finger_force_lim > 10.0:
+      exceed_style = [3.0, 10.0]
+    else: exceed_style = None
+    set_sensor_reward_thresholds(model, exceed_style=exceed_style,
+                                 min_style=None)
     # reward each step                     reward   done   trigger
     model.env.mj.set.step_num.set          (-0.01,  False,   1)
     # penalties and bonuses
-    model = set_bonuses(model, 0.002 * scale_rewards,
-                        make_binary=True if "make_binary" in options else None)
-    model = set_penalties(model, -0.002 * scale_penalties,  
-                          done=penalty_termination,
-                          make_binary=True if "make_binary" in options else None)
+    model = set_sensor_bonuses(model, 0.002 * scale_rewards)
+    model = set_sensor_penalties(model, -0.002 * scale_penalties)
     # scale based on steps allowed per episode
     model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
     # end criteria                         reward   done   trigger
     model.env.mj.set.stable_height.set     (1.0,    True,    1)
     model.env.mj.set.oob.set               (-1.0,   True,    1)
+    model = set_sensor_terminations(model)
 
   elif style == "sparse":
     # reward each step                     reward   done   trigger
@@ -283,18 +379,16 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
 
 def add_sensors(model, num=None, sensor_mode=1, state_mode=0, sensor_steps=1,
   state_steps=2, sensor_noise_std=0.025, state_noise_std=0.025, sensor_noise_mu=0.0,
-  state_noise_mu=0.0, z_state=None):
+  state_noise_mu=0.0, z_state=None, palm_norm=10.0, wrist_norm=10.0):
   """
   Add a number of sensors
   """
 
   if num is None: num = 10 # default, include all sensors
 
-  # define defaults that can be overriden by function inputs
-  if sensor_mode is None: sensor_mode = 1
-  if state_mode is None: state_mode = 0
-  if sensor_steps is None: sensor_steps = 1
-  if state_steps is None: state_steps = 2
+  # define the normalised range of palm and wrist (bend gauges are automatic)
+  model.env.mj.set.palm_sensor.normalise = palm_norm
+  model.env.mj.set.wrist_sensor_Z.normalise = wrist_norm
 
   # enable noise and normalisation for every sensor (should be enabled by default anyway)
   model.env.mj.set_sensor_noise_and_normalisation_to(True)
@@ -2103,6 +2197,66 @@ if __name__ == "__main__":
       "param_2_arg" : param_2,
       "param_3_arg" : param_3
     }
+
+  elif training_type == "new_sensor_rewards":
+
+    vary_1 = [
+      (0.9e-3, 28e-3),
+      (1.0e-3, 24e-3),
+      (1.0e-3, 28e-3),
+    ]
+    vary_2 = [0, 1, 2, 3]
+    vary_3 = None
+    repeats = 20
+    param_1_name = "finger thickness/width"
+    param_2_name = "num sensors"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    eval_me = []
+
+    wrist_mu = 0.01             # large chance of zero error with the wrist
+    wrist_std = 0.075           # wrist has a lot of noise, this is 15% coverage +-2stdevs
+    eval_me.append(f"model.env.mj.set.wrist_sensor_Z.set_gaussian_noise({wrist_mu}, {wrist_std})")
+
+    exceed_lat_max_factor = 1.1 # penalty reaches maximum at this factor of yield load
+    eval_me.append(f"model.env.mj.set.exceed_lat_max_factor = {exceed_lat_max_factor}")
+
+    baseline_args = {
+      "finger_thickness" : param_1[0],
+      "finger_width" : param_1[1],
+      "sensors" : param_2,
+      "sensor_noise" : 0.025,          # medium noise on sensor readings
+      "state_noise" : 0.0,             # no noise on state readings, this is required for sign mode
+      "sensor_mu" : 0.05,              # can be +- 5% from 0
+      "state_mu" : 0.025,              # just a gentle zero error noise on state readings
+      "sensor_steps" : 1,              # limit this since sensor data is unreliable
+      "state_steps" : 5,               # this data stream is clean, so take a lot of it
+      "sensor_mode" : 2,               # average sample, leave as before
+      "state_mode" : 4,                # state sign mode, -1,0,+1 for motor state change
+      "eval_me" : eval_me,             # extra settings tweaks
+      "scale_rewards" : 1.0,           # stronger reward signal aids training
+      "scale_penalties" : 1.0,         # we do want to discourage dangerous actions
+      "reward_style" : "sensor_mixed", # what reward function do we want
+
+
+      # FOR TESTING - delete before any proper trainings
+      "num_segments" : 5
+    }
+
+    # use the new object set
+    model.params.object_set = "set7_fullset_1500_50i"
+
+    # run medium length trainings
+    model.params.num_episodes = 60_000
+
+    # run slightly longer tests during training
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
 
   else: raise RuntimeError(f"array_training_DQN.py: training_type of '{training_type}' not recognised")
 
