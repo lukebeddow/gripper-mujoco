@@ -315,7 +315,8 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
 
   elif style == "sensor_mixed":
     # prepare reward thresholds
-    if model.env.mj.set.stable_finger_force_lim > 10.0:
+    if (model.env.mj.set.stable_finger_force_lim > 99.0 and
+        model.env.mj.set.stable_palm_force_lim > 99.0):
       exceed_style = [3.0, 10.0]
     else: exceed_style = None
     set_sensor_reward_thresholds(model, exceed_style=exceed_style,
@@ -330,7 +331,8 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
     # end criteria                         reward   done   trigger
     model.env.mj.set.stable_height.set     (1.0,    True,    1)
     model.env.mj.set.oob.set               (-1.0,   True,    1)
-    model = set_sensor_terminations(model)
+    if penalty_termination:
+      model = set_sensor_terminations(model)
 
   elif style == "sparse":
     # reward each step                     reward   done   trigger
@@ -2200,33 +2202,35 @@ if __name__ == "__main__":
 
   elif training_type == "new_sensor_rewards":
 
-    vary_1 = [
-      (0.9e-3, 28e-3),
-      (1.0e-3, 24e-3),
-      (1.0e-3, 28e-3),
-    ]
-    vary_2 = [0, 1, 2, 3]
+    vary_1 = [False, True]
+    vary_2 = [(100.0, 100), (3.0, 10.0)]
     vary_3 = None
-    repeats = 20
-    param_1_name = "finger thickness/width"
-    param_2_name = "num sensors"
+    repeats = 5
+    param_1_name = "penalty termination"
+    param_2_name = "stable force limit"
     param_3_name = None
     param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
                                                 param_3=vary_3, repeats=repeats)
 
     eval_me = []
 
-    wrist_mu = 0.01             # large chance of zero error with the wrist
-    wrist_std = 0.075           # wrist has a lot of noise, this is 15% coverage +-2stdevs
+    # half wrist noise as the normalisation has been doubled from 5 -> 10N
+    wrist_mu = 0.01 * 0.5            # large chance of zero error with the wrist
+    wrist_std = 0.075 * 0.5          # wrist has a lot of noise, this is 15% coverage +-2stdevs
     eval_me.append(f"model.env.mj.set.wrist_sensor_Z.set_gaussian_noise({wrist_mu}, {wrist_std})")
 
-    exceed_lat_max_factor = 1.1 # penalty reaches maximum at this factor of yield load
-    eval_me.append(f"model.env.mj.set.exceed_lat_max_factor = {exceed_lat_max_factor}")
+    # do we limit stable grasps to a maximum allowable force
+    model.env.mj.set.stable_finger_force_lim = param_2[0]
+    model.env.mj.set.stable_palm_force_lim = param_2[1]
 
     baseline_args = {
-      "finger_thickness" : param_1[0],
-      "finger_width" : param_1[1],
-      "sensors" : param_2,
+
+      "finger_thickness" : 0.9e-3,
+      "finger_width" : 28e-3,
+      "sensors" : 3,
+
+      "penalty_termination" : param_1, # do we end episodes on dangerous readings
+
       "sensor_noise" : 0.025,          # medium noise on sensor readings
       "state_noise" : 0.0,             # no noise on state readings, this is required for sign mode
       "sensor_mu" : 0.05,              # can be +- 5% from 0
