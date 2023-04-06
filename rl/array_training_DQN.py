@@ -1929,8 +1929,8 @@ if __name__ == "__main__":
     # use the new object set
     model.params.object_set = "set7_fullset_1500_50i"
 
-    # run medium length trainings
-    model.params.num_episodes = 60_000
+    # run long trainings
+    model.params.num_episodes = 100_000
 
     # run slightly longer tests during training
     model.env.params.test_trials_per_object = 3
