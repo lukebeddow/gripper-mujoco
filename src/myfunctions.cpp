@@ -974,6 +974,41 @@ bool change_finger_width(float width)
   return true;
 }
 
+bool change_youngs_modulus(float E)
+{
+  /* set a new E value */
+
+  constexpr bool local_debug = true; // debug_;
+
+  if (local_debug) {
+    std::cout << "About to change Youngs modulus from " << j_.dim.E
+      << " to " << E << '\n';
+  }
+
+  // check we have the right order of magnitude
+  if (E < 10e9 or E > 1000e9) {
+    std::cout << "Youngs modulus given, E = " << E << '\n';
+    throw std::runtime_error("change_youngs_modulus() got an E value not in the right magnitude range, should be E = 200e9");
+  }
+
+  constexpr float tol = 1e6;
+
+  if (abs(E - j_.dim.E) < tol) {
+    if (local_debug) std::cout << "Youngs modulus, E, is the same as current, not changing\n";
+    return false;
+  }
+
+  j_.dim.E = E;
+  j_.dim.EI = j_.dim.E * j_.dim.I;
+
+  if (local_debug) {
+    std::cout << "Youngs modulus changed, now is " << j_.dim.E
+      << ", EI is " << j_.dim.EI << '\n';
+  }
+
+  return true;
+}
+
 void set_finger_stiffness(mjModel* model, std::vector<luke::gfloat> stiffness)
 {
   /* set the finger stiffness to a vector sequence of values */

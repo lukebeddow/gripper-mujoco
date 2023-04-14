@@ -2760,6 +2760,16 @@ void MjClass::set_finger_width(float width)
   if (changed) resetFlags.finger_EI_changed = true;
 }
 
+void MjClass::set_finger_modulus(float E)
+{
+  /* set the youngs modulus for the finger */
+
+  bool changed = luke::change_youngs_modulus(E);
+
+  // changes are finished upon next call to reset()
+  if (changed) resetFlags.finger_EI_changed = true;
+}
+
 float MjClass::yield_load()
 {
   /* return the yield force (end applied) for the current finger thickness */

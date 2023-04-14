@@ -1341,6 +1341,7 @@ public:
   void calibrate_simulated_sensors(float bend_gauge_normalise);
   void set_finger_thickness(float thickness);
   void set_finger_width(float width);
+  void set_finger_modulus(float E);
   float yield_load();
   void tick();
   float tock();

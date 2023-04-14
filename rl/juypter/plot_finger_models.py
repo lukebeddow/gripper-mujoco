@@ -24,12 +24,13 @@ parser.add_argument("-w", "--width", type=float, default=28e-3)
 parser.add_argument("-f", "--force-style", type=int, default=0)
 parser.add_argument("-s", "--set", default="set6_testing")
 parser.add_argument("-e", "--end", default="")
+parser.add_argument("--no-tuned", action="store_true")
 
 args = parser.parse_args()
 
 # global variables
 max_force = 4
-set_name = args.set #"set6_testing"
+set_name = args.set # object set to use
 
 # create and prepare the mujoco instance
 mj = MjEnv(noload=True)
@@ -41,7 +42,7 @@ mj.params.finger_thickness = args.thickness
 mj.load_finger_width = args.width
 
 # specify which segments to test
-segments = list(range(5, 31))
+# segments = list(range(5, 31))
 # segments = [5, 6, 7, 8, 9, 10, 15, 20, 25, 30]
 # segments = [5, 6, 7, 8, 9, 10]
 # segments = [10]
@@ -57,66 +58,66 @@ print(f"Force style is {args.force_style}")
 
 # will we recalculate data
 get_data = True
-get_converged = True
+get_converged = False
 
 # take care with overwrites
 overwrite = True
 
-if not get_data or not get_converged:
+# if not get_data or not get_converged:
 
-  default_name_style = "pickle_thickness_{0:.1f}mm_width_{1:.0f}mm.pickle"
+#   default_name_style = "pickle_thickness_{0:.1f}mm_width_{1:.0f}mm.pickle"
 
-  with open(default_name_style.format(0.8, 28), "rb") as f:
-    [d_0p8_28_model_default, d_0p8_28_tuned_default] = pickle.load(f)
+#   with open(default_name_style.format(0.8, 28), "rb") as f:
+#     [d_0p8_28_model_default, d_0p8_28_tuned_default] = pickle.load(f)
 
-  with open(default_name_style.format(0.9, 24), "rb") as f:
-    [d_0p9_24_model_default, d_0p9_24_tuned_default] = pickle.load(f)
+#   with open(default_name_style.format(0.9, 24), "rb") as f:
+#     [d_0p9_24_model_default, d_0p9_24_tuned_default] = pickle.load(f)
 
-  with open(default_name_style.format(0.9, 28), "rb") as f:
-    [d_0p9_28_model_default, d_0p9_28_tuned_default] = pickle.load(f)
+#   with open(default_name_style.format(0.9, 28), "rb") as f:
+#     [d_0p9_28_model_default, d_0p9_28_tuned_default] = pickle.load(f)
 
-  with open(default_name_style.format(1.0, 24), "rb") as f:
-    [d_1p0_24_model_default, d_1p0_24_tuned_default] = pickle.load(f)
+#   with open(default_name_style.format(1.0, 24), "rb") as f:
+#     [d_1p0_24_model_default, d_1p0_24_tuned_default] = pickle.load(f)
 
-  with open(default_name_style.format(1.0, 28), "rb") as f:
-    [d_1p0_28_model_default, d_1p0_28_tuned_default] = pickle.load(f)
+#   with open(default_name_style.format(1.0, 28), "rb") as f:
+#     [d_1p0_28_model_default, d_1p0_28_tuned_default] = pickle.load(f)
 
-  # load some existing data defaults, can be overwritten
-  if (abs(mj.params.finger_thickness * 1000 - 0.8) < 1e-5 and
-     abs(mj.load_finger_width * 1000 - 28) < 1e-5):
-    data = d_0p8_28_model_default
-    data_converged = d_0p8_28_tuned_default
+#   # load some existing data defaults, can be overwritten
+#   if (abs(mj.params.finger_thickness * 1000 - 0.8) < 1e-5 and
+#      abs(mj.load_finger_width * 1000 - 28) < 1e-5):
+#     data = d_0p8_28_model_default
+#     data_converged = d_0p8_28_tuned_default
 
-  elif (abs(mj.params.finger_thickness * 1000 - 0.9) < 1e-5 and
-     abs(mj.load_finger_width * 1000 - 24) < 1e-5):
-    data = d_0p9_24_model_default
-    data_converged = d_0p9_24_tuned_default
+#   elif (abs(mj.params.finger_thickness * 1000 - 0.9) < 1e-5 and
+#      abs(mj.load_finger_width * 1000 - 24) < 1e-5):
+#     data = d_0p9_24_model_default
+#     data_converged = d_0p9_24_tuned_default
 
-  elif (abs(mj.params.finger_thickness * 1000 - 0.9) < 1e-5 and
-     abs(mj.load_finger_width * 1000 - 28) < 1e-5):
-    data = d_0p9_28_model_default
-    data_converged = d_0p9_28_tuned_default
+#   elif (abs(mj.params.finger_thickness * 1000 - 0.9) < 1e-5 and
+#      abs(mj.load_finger_width * 1000 - 28) < 1e-5):
+#     data = d_0p9_28_model_default
+#     data_converged = d_0p9_28_tuned_default
 
-  elif (abs(mj.params.finger_thickness * 1000 - 1.0) < 1e-5 and
-     abs(mj.load_finger_width * 1000 - 24) < 1e-5):
-    data = d_1p0_24_model_default
-    data_converged = d_1p0_24_tuned_default
+#   elif (abs(mj.params.finger_thickness * 1000 - 1.0) < 1e-5 and
+#      abs(mj.load_finger_width * 1000 - 24) < 1e-5):
+#     data = d_1p0_24_model_default
+#     data_converged = d_1p0_24_tuned_default
 
-  elif (abs(mj.params.finger_thickness * 1000 - 1.0) < 1e-5 and
-     abs(mj.load_finger_width * 1000 - 28) < 1e-5):
-    data = d_1p0_28_model_default
-    data_converged = d_1p0_28_tuned_default
+#   elif (abs(mj.params.finger_thickness * 1000 - 1.0) < 1e-5 and
+#      abs(mj.load_finger_width * 1000 - 28) < 1e-5):
+#     data = d_1p0_28_model_default
+#     data_converged = d_1p0_28_tuned_default
 
 
-  # elif abs(mj.params.finger_thickness * 1000 - 0.9) < 1e-5:
-  #   data = d_0p9_model_default
-  #   data_converged = d_0p9_tuned_default
-  # elif abs(mj.params.finger_thickness * 1000 - 1.0) < 1e-5:
-  #   data = d_1p0_model_default
-  #   data_converged = d_1p0_tuned_default
+#   # elif abs(mj.params.finger_thickness * 1000 - 0.9) < 1e-5:
+#   #   data = d_0p9_model_default
+#   #   data_converged = d_0p9_tuned_default
+#   # elif abs(mj.params.finger_thickness * 1000 - 1.0) < 1e-5:
+#   #   data = d_1p0_model_default
+#   #   data_converged = d_1p0_tuned_default
 
-  else:
-    raise RuntimeError("no finger thickness matches")
+#   else:
+#     raise RuntimeError("no finger thickness matches")
 
 # In[3]:
 
@@ -341,8 +342,8 @@ def plot_deflection(data, entries=None, pred=False, theory=True, FEA=None, real=
 
   fig.tight_layout()
 
-# now run the above function and plot the deflection curves
-plot_deflection(data, entries=None, pred=True, theory=True)
+# # now run the above function and plot the deflection curves
+# plot_deflection(data, entries=None, pred=True, theory=True)
 
 
 # In[8]:
@@ -498,12 +499,12 @@ def plot_errors(data, plot=None, y_vs_pred=True, y_vs_theory=True, pred_vs_theor
   return
 
 # run the above plotting function
-# plot_errors(data, plot="joints", y_vs_pred=False, y_vs_theory=True, pred_vs_theory=True, percent=False)
-# plot_errors(data, plot="joints", y_vs_pred=False, y_vs_theory=True, pred_vs_theory=True, percent=True)
-plot_errors(data, plot="tip", y_vs_pred=False, y_vs_theory=True, pred_vs_theory=True, percent=False)
-plot_errors(data, plot="tip", y_vs_pred=False, y_vs_theory=True, pred_vs_theory=True, percent=True, sharey=True)
+# # plot_errors(data, plot="joints", y_vs_pred=False, y_vs_theory=True, pred_vs_theory=True, percent=False)
+# # plot_errors(data, plot="joints", y_vs_pred=False, y_vs_theory=True, pred_vs_theory=True, percent=True)
+# plot_errors(data, plot="tip", y_vs_pred=False, y_vs_theory=True, pred_vs_theory=True, percent=False)
+# plot_errors(data, plot="tip", y_vs_pred=False, y_vs_theory=True, pred_vs_theory=True, percent=True, sharey=True)
 
-plot_errors(data, plot="joints", y_vs_pred=False, y_vs_theory=False, pred_vs_theory=False, j_vs_pred=True, percent=True)
+# plot_errors(data, plot="joints", y_vs_pred=False, y_vs_theory=False, pred_vs_theory=False, j_vs_pred=True, percent=True)
 
 
 # In[10]:
@@ -525,15 +526,17 @@ if get_converged:
   data_converged = run_curve_data(mj, segments, converge_to=converge_force, auto=auto_timestep, 
                                   stiffness=finger_stiffness,
                                   force_style=args.force_style)
+else:
+  data_converged = None
 
 
 # In[11]:
 
 
-# generate plots with converged data
-plot_deflection(data_converged, entries=None, pred=False, theory=True) #, FEA=FEA_xy2, real=REAL_xy)
-plot_errors(data_converged, plot="joints", y_vs_pred=False, y_vs_theory=True, pred_vs_theory=False, percent=True)
-plot_errors(data_converged, plot="tip", y_vs_pred=False, y_vs_theory=True, pred_vs_theory=False, percent=True)
+# # generate plots with converged data
+# plot_deflection(data_converged, entries=None, pred=False, theory=True) #, FEA=FEA_xy2, real=REAL_xy)
+# plot_errors(data_converged, plot="joints", y_vs_pred=False, y_vs_theory=True, pred_vs_theory=False, percent=True)
+# plot_errors(data_converged, plot="tip", y_vs_pred=False, y_vs_theory=True, pred_vs_theory=False, percent=True)
 
 
 # In[12]:
@@ -705,8 +708,8 @@ def plot_avg_errors(data_array, labels, titles=None, joint_plot=True, tip_plot=T
 avg_data = [data, data_converged]
 labels = ["model", "tuned"]
 
-plot_avg_errors(avg_data, labels, joint_percent=True, tip_percent=True)
-plot_avg_errors(avg_data, labels, joint_percent=False, tip_percent=False)
+# plot_avg_errors(avg_data, labels, joint_percent=True, tip_percent=True)
+# plot_avg_errors(avg_data, labels, joint_percent=False, tip_percent=False)
 
 
 # In[ ]:

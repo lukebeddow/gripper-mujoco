@@ -455,6 +455,20 @@ def continue_training(model, run_name, group_name, object_set=None, new_endpoint
                           object_set=object_set, overridelib=args.override_lib)
   test(model)
 
+  print("Continuing training has now finished")
+
+  # finishing time, how long did everything take
+  global starting_time
+  finishing_time = datetime.now()
+  time_taken = finishing_time - starting_time
+  d = divmod(time_taken.total_seconds(), 86400)
+  h = divmod(d[1], 3600)
+  m = divmod(h[1], 60)
+  s = m[1]
+  print("\nStarted at:", starting_time.strftime(datestr))
+  print("Finished at:", datetime.now().strftime(datestr))
+  print(f"Time taken was {d[0]:.0f} days {h[0]:.0f} hrs {m[0]:.0f} mins {s:.0f} secs\n")
+
 def logging_job(model, run_name, group_name):
   """
   Log training data, either to wandb or plot it to screen, or both
