@@ -2149,7 +2149,7 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force, 
   s_.tip_force_applied = force;
 
   // step the simulation to allow the forces to settle
-  float time_to_settle = 30; // have tried up to 100
+  float time_to_settle = 100; // 30; // have tried up to 100
   int steps_to_make = time_to_settle / s_.mujoco_timestep;
   // std::cout << "Stepping for " << steps_to_make << " steps to allow settling\n";
 
@@ -2703,6 +2703,24 @@ std::vector<float> MjClass::profile_error(std::vector<float> profile_X, std::vec
   }
 
   return errors;
+}
+
+float MjClass::curve_area(std::vector<float> X, std::vector<float> Y)
+{
+  /* find the area under a curve using the trapezium rule */
+
+  if (X.size() != Y.size()) {
+    throw std::runtime_error("MjClass::curve_area() vectors X and Y must have the same size");
+  }
+
+  float area = 0.0;
+  for (int i = 1; i < X.size(); i++) {
+    float h = X[i] - X[i - 1];       // Width of the trapezium
+    float sumOfY = Y[i] + Y[i - 1];  // Sum of the y-coordinates of the endpoints
+    area += 0.5 * h * sumOfY;         // Area of the trapezium
+  }
+
+  return area;
 }
 
 void MjClass::calibrate_simulated_sensors(float bend_gauge_normalise)
