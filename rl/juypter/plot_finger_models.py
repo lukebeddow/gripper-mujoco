@@ -24,6 +24,7 @@ parser.add_argument("-w", "--width", type=float, default=28e-3)
 parser.add_argument("-f", "--force-style", type=int, default=0)
 parser.add_argument("-s", "--set", default="set6_testing")
 parser.add_argument("-e", "--end", default="")
+parser.add_argument("-E", "--youngs-modulus", type=float, default=200e9)
 parser.add_argument("--no-tuned", action="store_true")
 
 args = parser.parse_args()
@@ -40,6 +41,9 @@ mj.task_reload_chance = -1
 # specify finger dimensions
 mj.params.finger_thickness = args.thickness
 mj.load_finger_width = args.width
+
+# NEW ADDITION
+mj.mj.set_finger_modulus(args.youngs_modulus)
 
 # specify which segments to test
 # segments = list(range(5, 31))
