@@ -191,8 +191,6 @@ void reload_for_rendering(MjClass& myMjClass)
 // render the scene
 bool render()
 {
-    std::cout << "4.1\n";
-
     if (not m or not d) {
         mju_error_s("Error: %s", "Render has been called without first running init");
     }
