@@ -471,6 +471,7 @@ struct JointSettings {
     std::vector<int> finger2;
     std::vector<int> finger3;
     std::vector<int> palm;
+    std::vector<int> main_body;
   } geom_idx;
 
   // segement matrix (3x3) orientations
@@ -582,6 +583,7 @@ struct JointSettings {
     print_vec(geom_idx.finger2, "finger2 geom idx");
     print_vec(geom_idx.finger3, "finger3 geom idx");
     print_vec(geom_idx.palm, "palm geom idx");
+    print_vec(geom_idx.main_body, "main body geom idx");
   }
   
 };
@@ -599,7 +601,7 @@ Target target_;
 static double last_step_time_ = 0.0;
 
 // turn on/off debug mode for this file only
-constexpr static bool debug_ = false; 
+constexpr static bool debug_ = true; 
 
 // TESTING global variable to prevent table impacts
 bool TEST_prevent_table_impacts = false; // default should always be false
@@ -809,6 +811,23 @@ void get_geom_indexes(mjModel* model)
 {
   /* get the indexes of the geoms for the fingers */
 
+  bool debug_geoms = false;
+
+  // do we have an object set where all the main body geoms are named
+  bool main_body_geoms_are_named = false;
+  auto x = mj_id2name(model, mjOBJ_GEOM, 0); // see if geom 0 is named
+  if (x != NULL) main_body_geoms_are_named = true;
+
+  std::vector<std::string> main_body_names {
+    "gripper_base_link_geom",
+    "finger_1_intermediate_geom",
+    "finger_1_geom",
+    "finger_2_intermediate_geom",
+    "finger_2_geom",
+    "finger_3_intermediate_geom",
+    "finger_3_geom",
+  };
+
   // each geom has both a 'collision' and 'visual' version, so we collect both
   std::vector<std::string> geom_suffixes { "collision", "visual" };
 
@@ -816,6 +835,20 @@ void get_geom_indexes(mjModel* model)
 
   for (std::string geom_tag : geom_suffixes) {
 
+    // loop over every single geom looking for the main body
+    if (main_body_geoms_are_named) {
+      for (int i = 0; i < model->ngeom; i++) {
+        std::string x = mj_id2name(model, mjOBJ_GEOM, i);
+        if (debug_geoms) std::cout << "Geom " << i << " has name " << x << '\n';
+        for (int j = 0; j < main_body_names.size(); j++) {
+          if (main_body_names[j] + "_" + geom_tag == x) {
+            j_.geom_idx.main_body.push_back(i);
+          }
+        }
+      }
+    }
+
+    // now search specifically for finger segment geoms
     for (int i = 0; i < j_.num.finger; i++) {
 
       std::string geom_name = "finger_" + std::to_string(i / j_.num.per_finger + 1)  // finger_X, X=1,2,3
@@ -1013,7 +1046,7 @@ void set_finger_stiffness(mjModel* model, std::vector<luke::gfloat> stiffness)
 {
   /* set the finger stiffness to a vector sequence of values */
 
-  constexpr bool local_debug = debug_;
+  constexpr bool local_debug = false;
   
   int N = j_.num.per_finger;
 
@@ -1094,7 +1127,7 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
                 }
 
   // start of function proper
-  constexpr bool local_debug = debug_;
+  constexpr bool local_debug = false;
 
   int N = j_.num.per_finger;
 
@@ -3333,6 +3366,13 @@ void set_ground_colour(mjModel* model, std::vector<float> rgba)
   oh_.set_ground_colour(model, rgba);
 }
 
+void set_all_objects_colour(mjModel* model, std::vector<float> rgba)
+{
+  /* set the colour of all the objects */
+
+  oh_.set_all_colours(model, rgba);
+}
+
 void randomise_all_colours(mjModel* model, std::shared_ptr<std::default_random_engine> generator)
 {
   /* randomise the colour of every object but not the ground*/
@@ -3375,6 +3415,23 @@ void set_finger_colour(mjModel* model, std::vector<float> rgba, int finger_num)
 
   // loop through the vector we assigned and update the colour
   for (int i : *fptr) {
+    model->geom_rgba[i * 4 + 0] = rgba[0];
+    model->geom_rgba[i * 4 + 1] = rgba[1];
+    model->geom_rgba[i * 4 + 2] = rgba[2];
+
+    // if an a value is given, set this too
+    if (rgba.size() == 4)
+      model->geom_rgba[i * 4 + 3] = rgba[3];
+  }
+}
+
+void set_main_body_colour(mjModel* model, std::vector<float> rgba)
+{
+  /* set the colour of the gripper main body. This only works if the main body
+  geoms are named (newer object sets), otherwise it has no effect */
+
+  // loop through the vector we assigned and update the colour
+  for (int i : j_.geom_idx.main_body) {
     model->geom_rgba[i * 4 + 0] = rgba[0];
     model->geom_rgba[i * 4 + 1] = rgba[1];
     model->geom_rgba[i * 4 + 2] = rgba[2];

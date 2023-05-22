@@ -146,10 +146,12 @@ QPos get_object_qpos(mjModel* model, mjData* data);
 Forces get_object_forces(const mjModel* model, mjData* data);
 Forces_faster get_object_forces_faster(const mjModel* model, mjData* data);
 void set_object_colour(mjModel* model, std::vector<float> rgba);
+void set_all_objects_colour(mjModel* model, std::vector<float> rgba);
 void set_ground_colour(mjModel* model, std::vector<float> rgba);
 void randomise_all_colours(mjModel* model, std::shared_ptr<std::default_random_engine> generator);
 void default_colours(mjModel* model);
 void set_finger_colour(mjModel* model, std::vector<float> rgba, int finger_num);
+void set_main_body_colour(mjModel* model, std::vector<float> rgba);
 
 // other
 gfloat verify_armadillo_gauge(const mjData* data, int finger,

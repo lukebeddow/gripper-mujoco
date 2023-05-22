@@ -1291,6 +1291,7 @@ public:
   void randomise_object_colour();
   void randomise_ground_colour();
   void randomise_finger_colours();
+  void set_neat_colours();
   bool is_done();
   std::vector<luke::gfloat> get_observation();
   std::vector<luke::gfloat> get_observation(MjType::SensorData sensors);

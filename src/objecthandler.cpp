@@ -967,6 +967,23 @@ void ObjectHandler::set_colour(mjModel* model, std::vector<float> rgba)
 
 }
 
+void ObjectHandler::set_all_colours(mjModel* model, std::vector<float> rgba)
+{
+  /* set all the objects to be one colour */
+
+  for (int i : geom_id) {
+
+    // set the colour parameters
+    model->geom_rgba[i * 4 + 0] = rgba[0];
+    model->geom_rgba[i * 4 + 1] = rgba[1];
+    model->geom_rgba[i * 4 + 2] = rgba[2];
+    
+    // if an a value is given, set this too
+    if (rgba.size() == 4)
+      model->geom_rgba[i * 4 + 3] = rgba[3];
+  }
+}
+
 void ObjectHandler::set_ground_colour(mjModel* model, std::vector<float> rgba)
 {
   if (rgba.size() != 3 and rgba.size() != 4) {

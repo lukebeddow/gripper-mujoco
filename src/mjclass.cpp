@@ -70,9 +70,12 @@ void MjClass::init()
   env_.object_names = luke::get_objects();
 
   // if we are randomising the colour of simulated objects
-  if (s_.randomise_colours) {
+  if (false and s_.randomise_colours) {
     luke::randomise_all_colours(model, MjType::generator);
     randomise_ground_colour();
+  }
+  else {
+    set_neat_colours();
   }
 }
 
@@ -499,15 +502,11 @@ bool MjClass::render()
 {
   /* Render a frame of the simulation to the screen */
 
-  std::cout << "1\n";
-
   // safety catch, we are unable to close the window properly
   static bool window_closed = false;
   if (window_closed) {
     return false;
   }
-
-  std::cout << "2\n";
 
   // if the render window has not yet been initialised
   if (not render_init) {
@@ -517,8 +516,6 @@ bool MjClass::render()
   else if (render_reload) {
     render::reload_for_rendering(*this);
   }
-
-  std::cout << "3\n";
 
   // init and reload perform the same job, so we no longer need to reload
   render_reload = false;
@@ -540,12 +537,8 @@ bool MjClass::render()
   }
   else {
     // just render once
-    std::cout << "4\n";
-
     window_open = render::render();
   }
-
-  std::cout << "5\n";
 
   // if the window has been closed
   if (not window_open) {
@@ -553,8 +546,6 @@ bool MjClass::render()
     render_init = false;
     window_closed = true;
   }
-
-  std::cout << "6\n";
   
   return window_open;
 }
@@ -1489,6 +1480,26 @@ void MjClass::randomise_finger_colours()
   luke::set_finger_colour(model, rgb, 4); // 4 means palm
 }
 
+void MjClass::set_neat_colours()
+{
+  /* set nice colours for the items/objects in the scene */
+
+  float x = 1.0 / 255.0;
+
+  std::vector<float> object_colour {50*x, 205*x, 50*x};
+  std::vector<float> gripper_colour {220*x, 220*x, 220*x};
+  std::vector<float> finger_colour {255*x, 140*x, 0*x};
+  std::vector<float> ground_colour {100*x, 100*x, 100*x};
+
+  luke::set_ground_colour(model, ground_colour);
+  luke::set_all_objects_colour(model, object_colour);
+  luke::set_main_body_colour(model, gripper_colour);
+
+  for (int i = 1; i < 5; i++) // 4 means palm
+    luke::set_finger_colour(model, finger_colour, i);
+
+}
+
 float MjClass::reward()
 {
   /* calculate the reward available at the current simulation state */
@@ -1736,6 +1747,9 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
 {
   /* insert real data */
 
+  // do we save ALL data even if we aren't using it
+  bool save_all = true;
+
   // safety check to ensure we configure and calibrate before running with real data
   static bool first_call = true;
   if (first_call) {
@@ -1757,7 +1771,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
   // std::cout << "Adding state noise of " << s_.motor_state_sensor.noise_std << '\n';
   // std::cout << "Adding sensor noise of " << s_.bending_gauge.noise_std << '\n';
 
-  if (s_.motor_state_sensor.in_use) {
+  if (save_all or s_.motor_state_sensor.in_use) {
 
     // normalise and save state data
     real_sensors_.raw.x_motor_position.add(state_data[i]);
@@ -1788,7 +1802,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     ++i; 
   }
   
-  if (s_.base_state_sensor.in_use) {
+  if (save_all or s_.base_state_sensor.in_use) {
 
     // // for testing
     // float start = state_data[i];
@@ -1810,7 +1824,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
   // add sensor data - pay attention to order! Input vector must be the same
   int j = 0;
 
-  if (s_.bending_gauge.in_use) {
+  if (save_all or s_.bending_gauge.in_use) {
 
     // calibrate the finger 1 sensor
     if (real_sensors_.f1_calibration.size() < real_sensors_.calibration_samples) {
@@ -1872,7 +1886,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
 
   }
 
-  if (s_.palm_sensor.in_use) {
+  if (save_all or s_.palm_sensor.in_use) {
 
     // calibrate the palm sensor
     if (real_sensors_.palm_calibration.size() < real_sensors_.calibration_samples) {
@@ -1896,7 +1910,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     
   }
 
-  if (s_.wrist_sensor_Z.in_use) {
+  if (save_all or s_.wrist_sensor_Z.in_use) {
 
     constexpr bool debug_wrist_Z = false;
     float pre_cal = sensor_data[j]; // for debugging only

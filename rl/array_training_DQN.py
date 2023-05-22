@@ -730,6 +730,8 @@ def test_and_load(model, demo=False, render=False, pause=False, id=None, best_id
   Test overload where we load a specific model
   """
 
+  print(f"RENDER is {render} at start of test_and_load()")
+
   # set up the object set
   model.env.mj.model_folder_path = "/home/luke/mymujoco/mjcf"
 
@@ -746,13 +748,15 @@ def test_and_load(model, demo=False, render=False, pause=False, id=None, best_id
 
   return test(model, demo=demo, render=render, pause=pause, load=False)
 
-def test(model, heuristic=False, trials_per_obj=5, render=False, pause=False, demo=False, id=None,
+def test(model, heuristic=False, trials_per_obj=10, render=False, pause=False, demo=False, id=None,
          load=True):
   """
   Perform a thorough test on the model, including loading the best performing network
   """
 
   print("\nPreparing to perform a model test, heuristic =", heuristic)
+
+  print(f"RENDER is {render} at start of test()")
 
   # load the best performing network
   if load and not heuristic: 
@@ -1074,12 +1078,11 @@ if __name__ == "__main__":
     if args.test:
       test_and_load(model, best_id=True)
     elif args.demo:
+      print("RENDER is TRUE when we call test_and_load()")
       test_and_load(model, demo=True, render=True, pause=False, best_id=True)
     exit()
 
   # ----- BEGIN TRAININGS ----- #
-
-
 
 
   # CONFIGURE KEY SETTINGS (take care that baseline_settings(...) does not overwrite)
@@ -1953,7 +1956,20 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  elif training_type == "paper_baseline_4.1_test":
+  # heuristic
+  # EI:1, Sensors:0 = 1:5
+  # EI:2, Sensors:0 = 6:10
+  # EI:3, Sensors:0 = 11:15
+  # EI:1, Sensors:1 = 16:20
+  # EI:2, Sensors:1 = 21:25
+  # EI:3, Sensors:1 = 26:30
+  # EI:1, Sensors:2 = 31:35
+  # EI:2, Sensors:2 = 36:40
+  # EI:3, Sensors:2 = 41:45
+  # EI:1, Sensors:3 = 46:50
+  # EI:2, Sensors:3 = 51:55
+  # EI:3, Sensors:3 = 56:60
+  elif training_type == "paper_baseline_4_heuristic":
 
     vary_1 = [
       (0.9e-3, 28e-3),
@@ -1962,7 +1978,7 @@ if __name__ == "__main__":
     ]
     vary_2 = [0, 1, 2, 3]
     vary_3 = None
-    repeats = 20
+    repeats = 5
     param_1_name = "finger thickness/width"
     param_2_name = "num sensors"
     param_3_name = None
@@ -1991,16 +2007,86 @@ if __name__ == "__main__":
       "sensor_mode" : 2,              # average sample, leave as before
       "state_mode" : 4,               # state sign mode, -1,0,+1 for motor state change
       "eval_me" : eval_me,            # extra settings tweaks
-      "scale_rewards" : 2.5,          # stronger reward signal aids training
-      "scale_penalties" : 2.5,        # we do want to discourage dangerous actions
+      "scale_rewards" : 1.0,          # stronger reward signal aids training
+      "scale_penalties" : 1.0,        # we do want to discourage dangerous actions
       "exceed_lims_multiplier" : 1.0, # disable extra attention to avoiding the table
     }
 
     # use the new object set
     model.params.object_set = "set7_fullset_1500_50i"
 
-    # run medium length trainings
-    model.params.num_episodes = 60_000
+    # run long trainings
+    model.params.num_episodes = 100_000
+
+    # run slightly longer tests during training
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
+  elif training_type == "heuristic_grid_search":
+
+    vary_1 = [False, True]
+    vary_2 = [
+      (1.5, 1.5),
+      (2, 2),
+      (2.5, 2.5),
+    ]
+    vary_3 = [
+      (10, True), 
+      (15, True), 
+      (20, True),
+      (None, False),
+    ]
+    repeats = 3
+    param_1_name = "final squeeze"
+    param_2_name = "force target"
+    param_3_name = "finger_angle"
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    eval_me = []
+
+    wrist_mu = 0.01             # large chance of zero error with the wrist
+    wrist_std = 0.075           # wrist has a lot of noise, this is 15% coverage +-2stdevs
+    eval_me.append(f"model.env.mj.set.wrist_sensor_Z.set_gaussian_noise({wrist_mu}, {wrist_std})")
+
+    exceed_lat_max_factor = 1.1 # penalty reaches maximum at this factor of yield load
+    eval_me.append(f"model.env.mj.set.exceed_lat_max_factor = {exceed_lat_max_factor}")
+
+    baseline_args = {
+      "finger_thickness" : 0.9e-3,
+      "finger_width" : 28e-3,
+      "sensors" : 3,
+      "sensor_noise" : 0.025,         # medium noise on sensor readings
+      "state_noise" : 0.0,            # no noise on state readings, this is required for sign mode
+      "sensor_mu" : 0.05,             # can be +- 5% from 0
+      "state_mu" : 0.025,             # just a gentle zero error noise on state readings
+      "sensor_steps" : 1,             # limit this since sensor data is unreliable
+      "state_steps" : 5,              # this data stream is clean, so take a lot of it
+      "sensor_mode" : 2,              # average sample, leave as before
+      "state_mode" : 4,               # state sign mode, -1,0,+1 for motor state change
+      "eval_me" : eval_me,            # extra settings tweaks
+      "scale_rewards" : 1.0,          # stronger reward signal aids training
+      "scale_penalties" : 1.0,        # we do want to discourage dangerous actions
+      "exceed_lims_multiplier" : 1.0, # disable extra attention to avoiding the table
+    }
+
+    # set the heuristic parameters
+    model.env.heuristic_params["final_squeeze"] = param_1
+    model.env.heuristic_params["initial_bend_target_N"] = param_2[0]
+    model.env.heuristic_params["initial_palm_target_N"] = param_2[1]
+    model.env.heuristic_params["final_bend_target_N"] = param_2[0]
+    model.env.heuristic_params["final_palm_target_N"] = param_2[1]
+    model.env.heuristic_params["target_angle_deg"] = param_3[0]
+    model.env.heuristic_params["fixed_angle"] = param_3[1]
+
+    # use the new object set
+    model.params.object_set = "set7_fullset_1500_50i"
+
+    # run long trainings
+    model.params.num_episodes = 100_000
 
     # run slightly longer tests during training
     model.env.params.test_trials_per_object = 3

@@ -191,7 +191,6 @@ void reload_for_rendering(MjClass& myMjClass)
 // render the scene
 bool render()
 {
-    std::cout << "4.1\n";
 
     if (not m or not d) {
         mju_error_s("Error: %s", "Render has been called without first running init");
@@ -201,16 +200,11 @@ bool render()
     // m = myMjClass.model;
     // d = myMjClass.data;
 
-
     if (!glfwWindowShouldClose(window)) {
-
-        std::cout << "4.2\n";
 
         // get framebuffer viewport
         mjrRect viewport = {0, 0, 0, 0};
         glfwGetFramebufferSize(window, &viewport.width, &viewport.height);
-
-        std::cout << "4.3\n";
 
         // update scene and render
         mjv_updateScene(m, d, &opt, NULL, &cam, mjCAT_ALL, &scn);
@@ -219,9 +213,7 @@ bool render()
         // // swap OpenGL buffers (blocking call due to v-sync)
         // glfwSwapBuffers(window);
 
-        std::cout << "before crash\n";
         mjr_render(viewport, &scn, &con);
-        std::cout << "after crash\n";
 
         // added - render UIs
         if (plot_sensors) {
@@ -230,18 +222,12 @@ bool render()
             lukesensorfigsupdate();
             lukesensorfigshow(rect);
         }
-        
-        std::cout << "4.6\n";
 
         // swap OpenGL buffers (blocking call due to v-sync)
         glfwSwapBuffers(window);
 
-        std::cout << "4.7\n";
-
         // process pending GUI events, call GLFW callbacks
         glfwPollEvents();
-
-        std::cout << "4.8\n";
 
         return true;
     }

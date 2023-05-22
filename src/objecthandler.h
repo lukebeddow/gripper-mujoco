@@ -152,6 +152,7 @@ struct ObjectHandler {
 
   // set object properties
   void set_colour(mjModel* model, std::vector<float> rgba);
+  void set_all_colours(mjModel* model, std::vector<float> rgba);
   void set_ground_colour(mjModel* model, std::vector<float> rgba);
   void set_friction(mjModel* model, mjtNum sliding_friction);
   void set_friction(mjModel* model, std::vector<mjtNum> friction_triple);
