@@ -103,6 +103,9 @@ class MjEnv():
     self.test = MjEnv.Test()
     self.prev_test = MjEnv.Test()
 
+    # initialise heuristic parameters
+    self._initialise_heuristic_parameters()
+
     return
 
   # ----- semi-private functions, advanced use ----- #
@@ -446,6 +449,31 @@ class MjEnv():
         self._load_xml(test=self.current_test_trial.xml_file)
         self.current_test_trial.obj_idx = 0
 
+  def _initialise_heuristic_parameters(self):
+    """
+    Get initial values for heuristic parameters
+    """
+
+    self.heuristic_params = {
+      "target_angle_deg" : 10,
+      "target_wrist_force_N" : 1,
+      "min_x_value_m" : 55e-3,
+      "target_x_constrict_m" : 110e-3,
+      "target_palm_bend_increase_percentage" : 10,
+      "target_z_position_m" : 80e-3,
+      "bend_history_length" : 6, # how many historical bending values to save
+      "bend_update_length" : 3,  # how many values in history do we consider 'new'
+      "initial_z_height_target_m" : 5e-3,
+      "final_z_height_target_m" : -20e-3,
+      "initial_bend_target_N" : 1.5,
+      "initial_palm_target_N" : 1.5,
+      "final_bend_target_N" : 1.5,
+      "final_palm_target_N" : 1.5,
+      "final_squeeze" : True,
+      "fixed_angle" : False,
+      # "palm_first" : True,
+    }
+
   # ----- public functions ----- #
 
   def start_heuristic_grasping(self, realworld=False):
@@ -454,6 +482,7 @@ class MjEnv():
     """
 
     self.grasp_phase = 0
+    self.palm_done = False
     self.gauge_read_history = np.array([])
     self.heuristic_real_world = realworld
 
@@ -477,10 +506,13 @@ class MjEnv():
       - 6. Loop squeezing actions to aim for specific grasp force
     """
 
-    def bend_to_force(target_force_N):
+    def bend_to_force(target_force_N, possible_action=None):
       """
       Try to bend the fingers to a certain force
       """
+
+      if possible_action is None:
+        possible_action = X_close
 
       action = None
 
@@ -490,7 +522,7 @@ class MjEnv():
         if print_on:
           print(f"target bending is {target_force_N}, actual is {avg_bend}")
         if avg_bend < target_force_N:
-          action = X_close
+          action = possible_action
           # if we have closed as much as we can
           if state_readings[0] < min_x_value_m:
             # halt as we have reached gripper limits
@@ -502,7 +534,7 @@ class MjEnv():
         if print_on:
           print(f"x constrict target: {target_x_constrict_m}, actual: {state_readings[0]}")
         if state_readings[0] > target_x_constrict_m:
-          action = X_close
+          action = possible_action
 
       return action
 
@@ -558,21 +590,24 @@ class MjEnv():
     palm = self.mj.set.palm_sensor.in_use
     wrist = self.mj.set.wrist_sensor_Z.in_use
 
-    # hardcoded 'globals' used in sub-functions
-    target_angle_deg = 15
-    target_wrist_force_N = 1
-    min_x_value_m = 55e-3
-    target_x_constrict_m = 110e-3
-    target_palm_bend_increase_percentage = 10
-    target_z_position_m = 80e-3
-    bend_history_length = 6 # how many historical bending values to save
-    bend_update_length = 3  # how many values in history do we consider 'new'
-    initial_z_height_target_m = 5e-3
-    final_z_height_target_m = -20e-3
-    initial_bend_target_N = 1
-    initial_palm_target_N = 2
-    final_bend_target_N = 2
-    final_palm_target_N = 2
+    # extract parameters from dictionary
+    target_angle_deg = self.heuristic_params["target_angle_deg"]
+    target_wrist_force_N = self.heuristic_params["target_wrist_force_N"]
+    min_x_value_m = self.heuristic_params["min_x_value_m"]
+    target_x_constrict_m = self.heuristic_params["target_x_constrict_m"]
+    target_palm_bend_increase_percentage = self.heuristic_params["target_palm_bend_increase_percentage"]
+    target_z_position_m = self.heuristic_params["target_z_position_m"]
+    bend_history_length = self.heuristic_params["bend_history_length"]
+    bend_update_length = self.heuristic_params["bend_update_length"]
+    initial_z_height_target_m = self.heuristic_params["initial_z_height_target_m"]
+    final_z_height_target_m = self.heuristic_params["final_z_height_target_m"]
+    initial_bend_target_N = self.heuristic_params["initial_bend_target_N"]
+    initial_palm_target_N = self.heuristic_params["initial_palm_target_N"]
+    final_bend_target_N = self.heuristic_params["final_bend_target_N"]
+    final_palm_target_N = self.heuristic_params["final_palm_target_N"]
+    final_squeeze = self.heuristic_params["final_squeeze"]
+    fixed_angle = self.heuristic_params["fixed_angle"]
+    # palm_first = self.heuristic_params["palm_first"]
 
     # hardcode action values
     X_close = 0
@@ -611,6 +646,9 @@ class MjEnv():
           if print_on:
             print("Grasp phase 0 completed")
           self.grasp_phase = 1
+          # new: lift a bit to avoid hitting the ground
+          action = H_up
+          return action
 
       else:
         # we aim for a z certain height
@@ -623,28 +661,45 @@ class MjEnv():
             print("Grasp phase 0 completed")
           self.grasp_phase = 1
 
+    # if self.grasp_phase == 1 and not self.palm_done and palm_first:
+    #   self.grasp_phase = 3
+
     # angle the fingers
     if self.grasp_phase == 1:
 
-      # we aim for a certain angle
-      if print_on:
-        print(f"target angle is {-target_angle_deg * (3.14159 / 180.0)}, actual is {self.mj.get_finger_angle()}")
-      if -1 * self.mj.get_finger_angle() < target_angle_deg * (3.14159 / 180.0):
-        action = Y_close
+      if fixed_angle:
+
+        # we aim for a certain angle
+        if print_on:
+          print(f"target angle is {-target_angle_deg * (3.14159 / 180.0)}, actual is {self.mj.get_finger_angle()}")
+        if -1 * self.mj.get_finger_angle() < target_angle_deg * (3.14159 / 180.0):
+          action = Y_close
+        else:
+          if print_on:
+            print("Grasp phase 1 completed")
+          self.grasp_phase = 2
+
       else:
         if print_on:
-          print("Grasp phase 1 completed")
+          print("Grasp phase 1 skipped, fixed angle is False")
         self.grasp_phase = 2
 
     # constrict until we feel the squeeze on the object
     if self.grasp_phase == 2:
 
-      action = bend_to_force(initial_bend_target_N)
+      # constrict the fingers either with X (fixed angle) or Y (changing angle)
+      if fixed_angle:
+        action = bend_to_force(initial_bend_target_N, possible_action=X_close)
+      else:
+        action = bend_to_force(initial_bend_target_N, possible_action=Y_close)
 
       if action is None:
         if print_on:
           print("Grasp phase 2 completed")
         self.grasp_phase = 3
+
+    # if self.palm_done and self.heuristic_params["palm_first"]:
+    #   self.grasp_phase = 4
 
     # advance palm to contact object
     if self.grasp_phase == 3:
@@ -655,6 +710,11 @@ class MjEnv():
         if print_on:
           print("Grasp phase 3 completed")
         self.grasp_phase = 4
+
+        # if palm_first:
+        #   self.grasp_phase = 1
+        #   self.palm_done = True
+        #   action = X_close
 
         self.gauge_read_history = np.array([])
 
@@ -673,14 +733,20 @@ class MjEnv():
     # squeeze grip further
     if self.grasp_phase == 5:
 
-      # squeeze fingers
-      action = bend_to_force(final_bend_target_N)
-      action_name = "finger X close"
+      if final_squeeze: 
 
-      # squeeze palm
-      if action is None:
-        action = palm_push_to_force(final_palm_target_N)
-        action_name = "palm forward"
+        # squeeze fingers
+        if fixed_angle:
+          action = bend_to_force(final_bend_target_N, possible_action=X_close)
+          action_name = "finger Y close"
+        else:
+          action = bend_to_force(final_bend_target_N, possible_action=Y_close)
+          action_name = "finger X close"
+
+        # squeeze palm
+        if action is None:
+          action = palm_push_to_force(final_palm_target_N)
+          action_name = "palm forward"
 
       # or just try to lift higher
       if action is None:
