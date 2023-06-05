@@ -2144,6 +2144,64 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
+  elif training_type == "heavy_test":
+
+    vary_1 = [1.0, 2.5]
+    vary_2 = [3, 5]
+    vary_3 = None
+    repeats = 15
+    param_1_name = "scale rewards"
+    param_2_name = "state steps"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    # do we limit stable grasps to a maximum allowable force
+    model.env.mj.set.stable_finger_force_lim = 100
+    model.env.mj.set.stable_palm_force_lim = 100
+
+    baseline_args = {
+
+      # key finger parameters
+      "finger_thickness" : 0.9e-3,
+      "finger_width" : 28e-3,
+      "sensors" : 3,
+      "num_segments" : 8,
+
+      # hyperparemeters
+      "memory_replay" : 50_000,
+      "target_update" : 25,
+
+      # reward features
+      "penalty_termination" : False, # do we end episodes on dangerous readings
+      "scale_rewards" : param_1,           # stronger reward signal aids training
+      # "scale_penalties" : 1.0,         # we do want to discourage dangerous actions
+      "reward_style" : "sensor_mixed", # what reward function do we want
+
+      # sensor details
+      "sensor_noise" : 0.025,          # medium noise on sensor readings
+      "state_noise" : 0.0,             # no noise on state readings, this is required for sign mode
+      "sensor_mu" : 0.05,              # can be +- 5% from 0
+      "state_mu" : 0.025,              # just a gentle zero error noise on state readings
+      "sensor_steps" : 3,              # limit this since sensor data is unreliable
+      "state_steps" : param_2,               # this data stream is clean, so take a lot of it
+      "sensor_mode" : 2,               # average sample, leave as before
+      "state_mode" : 4,                # state sign mode, -1,0,+1 for motor state change 
+    }
+
+    # use the new heavy object set
+    model.params.object_set = "set7_fullset_1500_heavy"
+
+    # run long length trainings
+    model.params.num_episodes = 100_000
+
+    # run slightly longer tests during training
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
   else: raise RuntimeError(f"array_training_DQN.py: training_type of '{training_type}' not recognised")
 
   # note and printing information

@@ -1382,8 +1382,6 @@ class TrainDQN():
     Implement a learning curriculum
     """
 
-    if not self.params.use_curriculum: return
-
     # if the curriculum has been applied, return (this disallows multi-stage curriculums)
     if self.curriculum_applied is not None and self.curriculum_applied > 0: return
 
@@ -1576,7 +1574,8 @@ class TrainDQN():
       self.run_episode(i_episode)
 
       # check if time to change curriculum
-      self.curriculum_fcn(i_episode)
+      if self.self.params.use_curriculum:
+        self.curriculum_fcn(i_episode)
 
       # update the target network every target_update episodes
       if i_episode % self.params.target_update == 0:
