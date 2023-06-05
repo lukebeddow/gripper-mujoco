@@ -191,7 +191,6 @@ void reload_for_rendering(MjClass& myMjClass)
 // render the scene
 bool render()
 {
-
     if (not m or not d) {
         mju_error_s("Error: %s", "Render has been called without first running init");
     }
@@ -212,8 +211,10 @@ bool render()
         // this stops a crash, but nothing new renders on screen
         // // swap OpenGL buffers (blocking call due to v-sync)
         // glfwSwapBuffers(window);
-
+  
+        // std::cout << "before crash\n";
         mjr_render(viewport, &scn, &con);
+        // std::cout << "after crash\n";
 
         // added - render UIs
         if (plot_sensors) {
