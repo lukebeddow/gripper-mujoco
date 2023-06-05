@@ -68,8 +68,6 @@
   XX(  done_height,             double,   15e-3)    /* the object AND the gripper must go up by this height from starting positions */\
   XX(  stable_finger_force,     double,   1.0)      /* finger force (N) on object to consider stable */\
   XX(  stable_palm_force,       double,   1.0)      /* palm force (N) on object to consider stable */\
-  XX(  stable_finger_force_lim, double,   5.0)      /* finger force (N) limit on the object to stop considering stable */\
-  XX(  stable_palm_force_lim,   double,   10.0)     /* palm force (N) limit on the object to stop considering stable*/\
   /* 
   is_done() settings */\
   XX(  quit_on_reward_below,    float,    -1.01)    /* done=true if reward drops below this value */\
@@ -102,9 +100,9 @@
   SS(  base_state_sensor,       true,     0,        -1)  /* base position state, normalise is ignored)*/\
   SS(  bending_gauge,           true,     20,       10)  /* strain gauge to measure finger bending */\
   SS(  axial_gauge,             true,     3.0,      10)  /* strain gauge to measure axial finger strain */\
-  SS(  palm_sensor,             true,     10.0,     10)  /* palm force sensor */\
+  SS(  palm_sensor,             true,     8.0,      10)  /* palm force sensor */\
   SS(  wrist_sensor_XY,         true,     5.0,      10)  /* force wrist sensor X and Y forces */\
-  SS(  wrist_sensor_Z,          true,     10.0,     10)  /* force wrist sensor Z force */\
+  SS(  wrist_sensor_Z,          true,     5.0,      10)  /* force wrist sensor Z force */\
   /* 
 
   3. Binary rewards
@@ -127,20 +125,11 @@
   LR(  exceed_axial,            -0.05,    false,    1,    2.0,  6.0,  -1)     /* exceed axial finger force limit */\
   LR(  exceed_lateral,          -0.05,    false,    1,    4.0,  6.0,  -1)     /* exceed lateral finger force limit */\
   LR(  exceed_palm,             -0.05,    false,    1,    6.0,  10.0, -1)     /* exceed palm force limit */\
-  /* new rewards based on direct sensor data */\
-  LR(  good_bend_sensor,        0.0,      false,    1,    0.2,  1.0,  -1)     /* encourage bending force, direct sensor reward */\
-  LR(  good_palm_sensor,        0.0,      false,    1,    0.2,  1.0,  -1)     /* encourage palm force, direct sensor reward */\
-  LR(  exceed_bend_sensor,      0.0,      false,    1,    5.0,  10.0, -1)     /* exceed bending force, direct sensor limit */\
-  LR(  exceed_wrist_sensor,     0.0,      false,    1,    5.0,  10.0, -1)     /* exceed wrist force, direct sensor limit */\
-  LR(  exceed_palm_sensor,      0.0,      false,    1,    10.0, 20.0, -1)     /* exceed palm force, direct sensor limit */\
-  LR(  dangerous_bend_sensor,   0.0,      true,     1,    10.0, 11.0, -1)     /* dangerous bending force, direct sensor limit */\
-  LR(  dangerous_wrist_sensor,  0.0,      true,     1,    12.0, 13.0, -1)     /* dangerous wrist force, direct sensor limit */\
-  LR(  dangerous_palm_sensor,   0.0,      true,     1,    20.0, 21.0, -1)     /* dangerous palm force, direct sensor limit */\
   /* testing extras for goals */\
   LR(  finger1_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 1 force */\
   LR(  finger2_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 2 force */\
   LR(  finger3_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 3 force */\
-  LR(  ground_force,            0.0,      false,    1,    0.0,  2.0,  -1)     /* ground force on object */\
+  LR(  ground_force,            0.0,      false,    1,    0.0,   2.0, -1)     /* ground force on object */\
   LR(  grasp_metric,            0.0,      false,    1,    0.0,  10.0, -1)     /* grasping metric score */\
 
 // end of user defined simulation settings

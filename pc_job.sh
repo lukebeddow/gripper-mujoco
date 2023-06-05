@@ -8,7 +8,7 @@
 #   
 
 # define key directory structure
-path_to_mymujoco=~/mujoco-devel
+path_to_mymujoco=~/mymujoco
 python_folder=rl
 mujoco_lib_path=~/mujoco-2.1.5/lib
 LOG_FOLDER=~/training_logs

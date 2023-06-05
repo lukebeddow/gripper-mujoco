@@ -173,7 +173,6 @@ float get_finger_thickness();
 float get_finger_width();
 float get_finger_length();
 float calc_yield_point_load();
-float calc_yield_point_load(float thickness, float width);
 float get_fingertip_z_height();
 std::vector<luke::gfloat> get_stiffnesses();
 void print_stiffnesses();

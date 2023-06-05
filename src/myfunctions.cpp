@@ -3247,17 +3247,6 @@ float calc_yield_point_load()
   return F_max;
 }
 
-float calc_yield_point_load(float thickness, float width)
-{
-  /* calculate the yield load given a particular thickness and width */
-
-  float I = (width * std::pow(thickness, 3)) / 12.0;
-  float M_max = (j_.dim.yield_stress * I) / (0.5 * thickness);
-  float F_max = M_max / j_.dim.finger_length;
-
-  return F_max;
-}
-
 float get_fingertip_z_height()
 {
   /* returns the current fingertip height with 0 being the starting value before

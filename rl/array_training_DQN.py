@@ -11,15 +11,19 @@ from time import sleep
 from random import random
 import networks
 import argparse
-from dataclasses import dataclass
 
-def set_penalties(model, value, done=False, trigger=1, make_binary=None):
+def set_penalties(model, value, done=False, trigger=1, make_binary=None,
+                  exceed_lims_multiplier=1.0):
   """
   Set penalty rewards with given value, alongside defaults
   """
 
+  # TESTING: extra punishment for exceeding limits (touching table in particular we want to target)
+  print("TESTING: exceed_lims_multiplier is", exceed_lims_multiplier, "\n")
+  modval = value * exceed_lims_multiplier
+
   # penalties                            reward   done   trigger  min   max  overshoot
-  model.env.mj.set.exceed_limits.set     (value,  done,  trigger)
+  model.env.mj.set.exceed_limits.set     (modval, done,  trigger)
   model.env.mj.set.exceed_axial.set      (value,  done,  trigger, 3.0,  6.0,  -1)
   model.env.mj.set.exceed_lateral.set    (value,  done,  trigger, 4.0,  6.0,  -1) # min and max currently overwritten with (1.0 and 1.5)*yield_load()
   model.env.mj.set.exceed_palm.set       (value,  done,  trigger, 6.0,  15.0, -1)
@@ -61,135 +65,6 @@ def set_bonuses(model, value, make_binary=None):
     tol = 1e-5 # just in case add a tiny tolerance
     model.env.mj.set.finger_force.max = model.env.mj.set.finger_force.min + tol
     model.env.mj.set.palm_force.max = model.env.mj.set.palm_force.min + tol
-
-  return model
-
-def set_sensor_reward_thresholds(model, exceed_style=None, min_style=None):
-  """
-  Determine the reward thresholds
-  """
-
-  printout = True
-
-  @dataclass
-  class RewardThresholds:
-    # m=minimum, g=good, x=exceed, d=dangerous
-    mBend = 0.0
-    gBend = model.env.mj.set.stable_finger_force
-    xBend = model.env.mj.set.stable_finger_force_lim
-    dBend = model.env.yield_load()
-
-    mPalm = 0.0
-    gPalm = model.env.mj.set.stable_palm_force
-    xPalm = model.env.mj.set.stable_palm_force_lim
-    dPalm = 30.0
-
-    xWrist = 5.0
-    dWrist = 10.0
-
-  global RT
-  RT = RewardThresholds()
-
-  # check if minimum handling is specified
-  if isinstance(min_style, float):
-    RT.mBend = min_style
-    RT.mPalm = min_style
-  elif isinstance(min_style, list) and len(min_style) == 2:
-    RT.mBend = min_style[0]
-    RT.mPalm = min_style[1]
-  elif min_style == "binary":
-    RT.mBend = RT.gBend
-    RT.mPalm = RT.gPalm
-  elif min_style == "middle":
-    RT.mBend = 0.5 * RT.gBend
-    RT.mPalm = 0.5 * RT.gPalm
-  elif min_style is not None: 
-    raise RuntimeError(f"set_sensor_reward_thresholds() got invalid 'min_style' of {min_style}")
-
-  # check if we are given how 'exceed bend' and 'exceed palm' should work
-  if isinstance(exceed_style, float):
-    RT.xBend = exceed_style
-    RT.xPalm = exceed_style
-  elif isinstance(exceed_style, list) and len(exceed_style) == 2:
-    RT.xBend = exceed_style[0]
-    RT.xPalm = exceed_style[1]
-  elif exceed_style == "dangerous":
-    RT.xBend = RT.dBend
-    RT.xPalm = RT.dPalm
-  elif exceed_style == "middle":
-    RT.xBend = RT.gBend + 0.5 * (RT.dBend - RT.gBend)
-    RT.xPalm = RT.gPalm + 0.5 * (RT.dPalm - RT.gPalm)
-  elif exceed_style == "factor_0.8":
-    RT.xBend = RT.gBend + 0.8 * (RT.dBend - RT.gBend)
-    RT.xPalm = RT.gPalm + 0.8 * (RT.dPalm - RT.gPalm)
-  elif exceed_style is not None: 
-    raise RuntimeError(f"set_sensor_reward_thresholds() got invalid 'exceed_style' of {exceed_style}")
-
-  # confirm that the thresholds make sense
-  if RT.mBend > RT.gBend:
-    raise RuntimeError(f"set_sensor_reward_thresholds() finds mBend > gBend, {RT.mBend:.3f} > {RT.gBend:.3f}")
-  if RT.mPalm > RT.gPalm:
-    raise RuntimeError(f"set_sensor_reward_thresholds() finds mPalm > gPalm, {RT.mPalm:.3f} > {RT.gPalm:.3f}")
-  if RT.gBend > RT.xBend:
-    raise RuntimeError(f"set_sensor_reward_thresholds() finds gBend > xBend, {RT.gBend:.3f} > {RT.xBend:.3f}")
-  if RT.gPalm > RT.xPalm:
-    raise RuntimeError(f"set_sensor_reward_thresholds() finds gPalm > xPalm, {RT.gPalm:.3f} > {RT.xPalm:.3f}")
-  if RT.xBend > RT.dBend:
-    raise RuntimeError(f"set_sensor_reward_thresholds() finds xBend > dBend, {RT.xBend:.3f} > {RT.dBend:.3f}")
-  if RT.xPalm > RT.dPalm:
-    raise RuntimeError(f"set_sensor_reward_thresholds() finds xPalm > dPalm, {RT.xPalm:.3f} > {RT.dPalm:.3f}")
-  if RT.xWrist > RT.dWrist:
-    raise RuntimeError(f"set_sensor_reward_thresholds() finds xWrist > dWrist, {RT.xWrist:.3f} > {RT.dWrist:.3f}")
-
-  if printout:
-    print("Reward Thresholds\n")
-    print(f"  -> mBend = {RT.mBend:.3f}")
-    print(f"  -> gBend = {RT.gBend:.3f}")
-    print(f"  -> xBend = {RT.xBend:.3f}")
-    print(f"  -> dBend = {RT.dBend:.3f}\n")
-    print(f"  -> mPalm = {RT.mPalm:.3f}")
-    print(f"  -> gPalm = {RT.gPalm:.3f}")
-    print(f"  -> xPalm = {RT.xPalm:.3f}")
-    print(f"  -> dPalm = {RT.dPalm:.3f}\n")
-    print(f"  -> xWrist = {RT.xWrist:.3f}")
-    print(f"  -> dWrist = {RT.dWrist:.3f}\n")
-
-def set_sensor_bonuses(model, value):
-  """
-  Set bonus rewards with a given value
-  """
-
-  # rewards                             reward   done   trigger  min       max     overshoot
-  model.env.mj.set.lifted.set           (value,  False,   1)
-  model.env.mj.set.target_height.set    (value,  False,   1)
-  model.env.mj.set.object_stable.set    (value,  False,   1)
-  model.env.mj.set.good_bend_sensor.set (value,  False,   1,     RT.mBend, RT.gBend,  -1)
-  model.env.mj.set.good_palm_sensor.set (value,  False,   1,     RT.mPalm, RT.gPalm,  -1)
-
-  return model
-
-def set_sensor_penalties(model, value):
-  """
-  Set penalty rewards with given value, alongside defaults
-  """
-
-  # penalties                              reward   done   trigger  min        max     overshoot
-  model.env.mj.set.exceed_limits.set       (value,  False,    1)
-  model.env.mj.set.exceed_bend_sensor.set  (value,  False,    1,    RT.xBend,  RT.dBend,  -1)
-  model.env.mj.set.exceed_palm_sensor.set  (value,  False,    1,    RT.xPalm,  RT.dPalm,  -1)
-  model.env.mj.set.exceed_wrist_sensor.set (value,  False,    1,    RT.xWrist, RT.dWrist, -1)
-
-  return model
-
-def set_sensor_terminations(model, value=-1.0, done=True, trigger=1):
-  """
-  Set terminations based on dangerous sensor readings
-  """
-
-  # terminations                              reward   done   trigger  min        max     overshoot
-  model.env.mj.set.dangerous_bend_sensor.set  (value,  done,  trigger, RT.dBend,  RT.dBend,  -1)
-  model.env.mj.set.dangerous_palm_sensor.set  (value,  done,  trigger, RT.dPalm,  RT.dPalm,  -1)
-  model.env.mj.set.dangerous_wrist_sensor.set (value,  done,  trigger, RT.dWrist, RT.dWrist, -1)
 
   return model
 
@@ -247,7 +122,7 @@ def setup_HER(model, use=True, style="basic", mode="final", k=4):
   return model
 
 def create_reward_function(model, style="negative", options=[], scale_rewards=1, scale_penalties=1,
-                           penalty_termination=False):
+                           penalty_termination=False, exceed_lims_multiplier=1.0):
   """
   Set the reward structure for the learning, with different style options
   """
@@ -262,7 +137,8 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
     # penalties and bonuses
     model = set_bonuses(model, 0.002)
     model = set_penalties(model, -0.002,
-                          done=5 if "terminate_early" in options else False)
+                          done=5 if "terminate_early" in options else False,
+                          exceed_lims_multiplier=exceed_lims_multiplier)
     # scale based on steps allowed per episode
     model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
     # end criteria                         reward   done   trigger
@@ -276,7 +152,8 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
     # penalties and bonuses
     model = set_bonuses(model, 0.002)
     model = set_penalties(model, -0.005,  
-                          done=5 if "terminate_early" in options else False)
+                          done=5 if "terminate_early" in options else False,
+                          exceed_lims_multiplier=exceed_lims_multiplier)
     # scale based on steps allowed per episode
     model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
     # end criteria                         reward   done   trigger
@@ -291,7 +168,8 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
                         make_binary=True if "make_binary" in options else None)
     model = set_penalties(model, -0.002,  
                           done=5 if "terminate_early" in options else False,
-                          make_binary=True if "make_binary" in options else None)
+                          make_binary=True if "make_binary" in options else None,
+                          exceed_lims_multiplier=exceed_lims_multiplier)
     # scale based on steps allowed per episode
     model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
     # end criteria                         reward   done   trigger
@@ -306,33 +184,13 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
                         make_binary=True if "make_binary" in options else None)
     model = set_penalties(model, -0.002 * scale_penalties,  
                           done=penalty_termination,
-                          make_binary=True if "make_binary" in options else None)
+                          make_binary=True if "make_binary" in options else None,
+                          exceed_lims_multiplier=exceed_lims_multiplier)
     # scale based on steps allowed per episode
     model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
     # end criteria                         reward   done   trigger
     model.env.mj.set.stable_height.set     (1.0,    True,    1)
     model.env.mj.set.oob.set               (-1.0,   True,    1)
-
-  elif style == "sensor_mixed":
-    # prepare reward thresholds
-    if (model.env.mj.set.stable_finger_force_lim > 99.0 and
-        model.env.mj.set.stable_palm_force_lim > 99.0):
-      exceed_style = [3.0, 10.0]
-    else: exceed_style = None
-    set_sensor_reward_thresholds(model, exceed_style=exceed_style,
-                                 min_style=None)
-    # reward each step                     reward   done   trigger
-    model.env.mj.set.step_num.set          (-0.01,  False,   1)
-    # penalties and bonuses
-    model = set_sensor_bonuses(model, 0.002 * scale_rewards)
-    model = set_sensor_penalties(model, -0.002 * scale_penalties)
-    # scale based on steps allowed per episode
-    model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
-    # end criteria                         reward   done   trigger
-    model.env.mj.set.stable_height.set     (1.0,    True,    1)
-    model.env.mj.set.oob.set               (-1.0,   True,    1)
-    if penalty_termination:
-      model = set_sensor_terminations(model)
 
   elif style == "sparse":
     # reward each step                     reward   done   trigger
@@ -340,7 +198,8 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
     # penalties and bonuses
     model = set_bonuses(model, 0.0)
     model = set_penalties(model, 0.0,  
-                          done=5 if "terminate_early" in options else False)
+                          done=5 if "terminate_early" in options else False,
+                          exceed_lims_multiplier=exceed_lims_multiplier)
     # scale based on steps allowed per episode
     model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
     # end criteria                         reward   done   trigger
@@ -353,7 +212,8 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
     # penalties and bonuses
     model = set_bonuses(model, 0.0)
     model = set_penalties(model, 0.0,  
-                          done=5 if "terminate_early" in options else False)
+                          done=5 if "terminate_early" in options else False,
+                          exceed_lims_multiplier=exceed_lims_multiplier)
     # scale based on steps allowed per episode
     model.env.mj.set.scale_rewards(100 / model.env.params.max_episode_steps)
     # end criteria                         reward   done   trigger
@@ -381,16 +241,18 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
 
 def add_sensors(model, num=None, sensor_mode=1, state_mode=0, sensor_steps=1,
   state_steps=2, sensor_noise_std=0.025, state_noise_std=0.025, sensor_noise_mu=0.0,
-  state_noise_mu=0.0, z_state=None, palm_norm=10.0, wrist_norm=10.0):
+  state_noise_mu=0.0, z_state=None):
   """
   Add a number of sensors
   """
 
   if num is None: num = 10 # default, include all sensors
 
-  # define the normalised range of palm and wrist (bend gauges are automatic)
-  model.env.mj.set.palm_sensor.normalise = palm_norm
-  model.env.mj.set.wrist_sensor_Z.normalise = wrist_norm
+  # define defaults that can be overriden by function inputs
+  if sensor_mode is None: sensor_mode = 1
+  if state_mode is None: state_mode = 0
+  if sensor_steps is None: sensor_steps = 1
+  if state_steps is None: state_steps = 2
 
   # enable noise and normalisation for every sensor (should be enabled by default anyway)
   model.env.mj.set_sensor_noise_and_normalisation_to(True)
@@ -505,8 +367,6 @@ def apply_to_all_models(model):
   model.env.mj.set.done_height = 15e-3
   model.env.mj.set.stable_finger_force = 1.0
   model.env.mj.set.stable_palm_force = 1.0
-  model.env.mj.set.stable_finger_force_lim = 100.0
-  model.env.mj.set.stable_palm_force_lim = 100.0
 
   # what actions are we using
   model.env.mj.set.paired_motor_X_step = True
@@ -593,7 +453,6 @@ def continue_training(model, run_name, group_name, object_set=None, new_endpoint
   model.continue_training(run_name, model.savedir + group_name + "/",
                           new_endpoint=new_endpoint, extra_episodes=extra_episodes,
                           object_set=object_set, overridelib=args.override_lib)
-  
   test(model)
 
   print("Continuing training has now finished")
@@ -639,13 +498,15 @@ def logging_job(model, run_name, group_name):
   model.log_wandb(force=True, end=True)
   model.plot(force=True, end=True, hang=True)
 
-def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 100, 50], target_update=100, 
-                      memory_replay=50_000, state_steps=1, sensor_steps=1, z_state=True, sensor_mode=2,
+def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 100, 50], 
+                      memory=50_000, state_steps=1, sensor_steps=1, z_state=True, sensor_mode=2,
                       state_mode=1, sensor_noise=0.025, state_noise=0.025, sensor_mu=0.0,
                       state_mu=0.0, reward_style="mixed_v3", reward_options=[], 
                       scale_rewards=2.5, scale_penalties=1.0, penalty_termination=False,
                       finger_stiffness=-7.5, num_segments=8, finger_thickness=0.9e-3, finger_width=28e-3,
-                      max_episode_steps=250, XYZ_mm_rad=[1.0, 0.01, 2.0], eval_me=None):
+                      max_episode_steps=250, XYZ_mm_rad=[1.0, 0.01, 2.0],
+                      exceed_lims_multiplier=2.0, eval_me=None):
+
   """
   Runs a baseline training on the model
   """
@@ -654,8 +515,7 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 1
   model.env.params.max_episode_steps = max_episode_steps
   model.params.learning_rate = lr
   model.params.eps_decay = eps_decay
-  model.params.memory_replay = memory_replay
-  model.params.target_update = target_update
+  model.params.memory_replay = memory
   model.env.mj.set.finger_stiffness = finger_stiffness # -7.5 is final derivation
   model.num_segments = num_segments                    # 6 gives fast training primarily
   model.env.params.finger_thickness = finger_thickness # options are 0.8e-3, 0.9e-3, 1.0e-3
@@ -686,7 +546,8 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 1
   # configure rewards and sensors
   model = create_reward_function(model, style=reward_style, options=reward_options,
                                  scale_rewards=scale_rewards, scale_penalties=scale_penalties,
-                                 penalty_termination=penalty_termination)
+                                 penalty_termination=penalty_termination,
+                                 exceed_lims_multiplier=exceed_lims_multiplier)
   model = add_sensors(model, num=sensors, sensor_mode=sensor_mode, state_mode=state_mode,
                       state_steps=state_steps, sensor_steps=sensor_steps,
                       z_state=z_state, sensor_noise_std=sensor_noise, sensor_noise_mu=sensor_mu,
@@ -1241,7 +1102,314 @@ if __name__ == "__main__":
 
   extra_info_string = ""
 
-  if training_type == "paper_baseline_1":
+  if training_type == "vary_sensors_and_thickness":
+
+    sensors_list = [
+      0, # no sensors, state only
+      1, # bending and z state
+      2, # + palm
+      3  # + wrist
+    ]
+    thickness_list = [
+      # 0.8e-3,
+      0.9e-3,
+      1.0e-3
+    ]
+    repeats = 4
+    param_1_name = "Sensors"
+    param_2_name = "Thickness"
+    param_3_name = None
+
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=sensors_list,
+                                                param_2=thickness_list, repeats=repeats)
+
+    this_sensor = param_1
+    this_thickness = param_2
+
+    baseline_args = {
+      "sensors" : this_sensor,
+      "finger_thickness" : this_thickness,
+      "sensor_noise" : this_noise,
+      "num_segments" : this_segments
+    }
+
+  elif training_type == "vary_sensors_only":
+
+    vary_1 = [
+      0, # no sensors, state only
+      1, # bending and z state
+      2, # + palm
+      3  # + wrist
+    ]
+    vary_2 = None
+    vary_3 = None
+    repeats = 5
+    param_1_name = "Sensors"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    this_sensor = param_1
+    this_thickness = 0.9e-3
+
+    baseline_args = {
+      "sensors" : this_sensor,
+      "finger_thickness" : this_thickness,
+      "sensor_noise" : this_noise,
+      "num_segments" : this_segments
+    }
+
+  elif training_type == "vary_sensors_and_noise":
+
+    vary_1 = [
+      0, # no sensors, state only
+      1, # bending and z state
+      2, # + palm
+      3  # + wrist
+    ]
+    vary_2 = [0, 0.025, 0.05]
+    vary_3 = None
+    repeats = 3
+    param_1_name = "Sensors"
+    param_2_name = "Noise std"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    this_sensor = param_1
+    this_thickness = 0.9e-3
+    this_noise = param_2
+
+    baseline_args = {
+      "sensors" : this_sensor,
+      "finger_thickness" : this_thickness,
+      "sensor_noise" : this_noise,
+      "num_segments" : this_segments
+    }
+
+  elif training_type == "vary_lr_and_eps":
+
+    vary_1 = [5e-6, 1e-5, 5e-5, 1e-4, 5e-4]
+    vary_2 = [1000, 2000, 4000, 6000]
+    vary_3 = None
+    repeats = None
+    param_1_name = "learning rate"
+    param_2_name = "eps decay"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    this_lr = param_1
+    this_eps_decay = param_2
+    this_three = param_3
+
+    baseline_args = {
+      "lr" : this_lr,
+      "eps_decay" : this_eps_decay,
+      "sensor_noise" : this_noise,
+      "num_segments" : this_segments
+    }
+
+  elif training_type == "vary_reward_and_network":
+
+    vary_1 = [
+      (1.5, 1.0),
+      (2.5, 1.0),
+      (2.5, 2.5),
+      (3.5, 1.0),
+      (3.5, 2.5)
+    ]
+    vary_2 = [networks.DQN_3L100, networks.DQN_5L100, networks.DQN_7L100]
+    vary_3 = None
+    repeats = 2
+    param_1_name = "reward/penalty scaling"
+    param_2_name = "network size"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    baseline_args = {
+      "scale_rewards" : param_1[0],
+      "scale_penalties" : param_1[1],
+      "network" : param_2,
+      "sensor_noise" : this_noise,
+      "num_segments" : this_segments
+    }
+
+  elif training_type == "vary_episode_length":
+
+    vary_1 = [200, 250, 300, 350]
+    vary_2 = None
+    vary_3 = None
+    repeats = 3
+    param_1_name = "max episode steps"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "max_episode_steps" : param_1,
+      "sensor_noise" : this_noise,
+      "num_segments" : this_segments
+    }
+
+  elif training_type == "network_architecture":
+
+    vary_1 = [
+      [100, 100, 100],
+      [82,  82,  82,  82,  82],
+      [74,  74,  74,  74,  74,  74,  74],
+      [150, 100, 50],
+      [150, 100, 50,  50,  50],
+      [150, 100, 50,  50,  50,  50,  50],
+      [128, 96,  64],
+      [128, 96,  64,  64,  64],
+      [128, 96,  64,  64,  64,  64,  64]
+    ]
+    vary_2 = None
+    vary_3 = None
+    repeats = 4
+    param_1_name = "hidden layer weights"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "network" : param_1,
+      "sensor_noise" : this_noise,
+      "num_segments" : this_segments
+    }
+
+  elif training_type == "vary_action_size":
+
+    vary_1 = [0.7, 1.0]
+    vary_2 = [0.01, 0.02]
+    vary_3 = [1.0, 2.0]
+    repeats = 4
+    param_1_name = "X_action_mm"
+    param_2_name = "Y_action_rad"
+    param_3_name = "Z_action_mm"
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "XYZ_mm_rad" : True,
+      "max_episode_steps" : 250, # default: scaled below
+      "sensor_noise" : this_noise,
+      "num_segments" : 8
+    }
+    model.env.mj.set.X_action_mm = param_1
+    model.env.mj.set.Y_action_rad = param_2
+    model.env.mj.set.Z_action_mm = param_3
+
+    # what is the scale change in our action workspace
+    scale = (0.67 * 0.02 * 1.22) / (param_1 * param_2 * param_3)
+
+    # adjust replay memory to have size based on actions
+    new_mem = int(((scale * model.params.memory_replay // 10000) + 1) * 10000)
+    if new_mem < model.params.memory_replay: new_mem = model.params.memory_replay # only increase size
+    model.params.memory_replay = new_mem
+
+    # adjust steps per episode based on actions size
+    new_steps = int(((scale * baseline_args['max_episode_steps'] // 50) + 1) * 50)
+    if new_steps < baseline_args['max_episode_steps']: new_steps = baseline_args['max_episode_steps']
+    baseline_args['max_episode_steps'] = new_steps
+
+    extra_info_string = f"\tNew replay memory size is: {model.params.memory_replay}"
+    extra_info_string += f"\n\tNew max episode steps is: {baseline_args['max_episode_steps']}"
+
+  elif training_type == "vary_xmas":
+ 
+    vary_1 = [1, 1.5, 2.0]    # exceed_lims multiplier
+    vary_2 = [0, 1, 2, 3]     # sensors
+    vary_3 = [0.9e-3, 1.0e-3] # thickness
+    repeats = 5               # 120 trainings total
+    param_1_name = "exceed limits multiplier"
+    param_2_name = "sensors"
+    param_3_name = "thickness"
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "XYZ_mm_rad" : [1.0, 0.01, 2.0],
+      "max_episode_steps" : 250, # default: scaled below
+      "sensor_noise" : this_noise,
+      "num_segments" : 8,
+      "exceed_lims_multiplier" : param_1,
+      "sensors" : param_2,
+      "finger_thickness" : param_3
+    }
+
+  elif training_type == "heuristic":
+
+    # # special case: block terminal logging
+    # model.log_level = 0
+
+    # EI:1, Sensors:0 = 1:5
+    # EI:2, Sensors:0 = 6:10
+    # EI:3, Sensors:0 = 11:15
+    # EI:1, Sensors:1 = 16:20
+    # EI:2, Sensors:1 = 21:25
+    # EI:3, Sensors:1 = 26:30
+    # EI:1, Sensors:2 = 31:35
+    # EI:2, Sensors:2 = 36:40
+    # EI:3, Sensors:2 = 41:45
+    # EI:1, Sensors:3 = 46:50
+    # EI:2, Sensors:3 = 51:55
+    # EI:3, Sensors:3 = 56:60
+    vary_1 = [
+      (0.9e-3, 28e-3),
+      (1.0e-3, 24e-3),
+      (1.0e-3, 28e-3),
+    ]
+    vary_2 = [0, 1, 2, 3]
+    vary_3 = None
+    repeats = 5
+    param_1_name = "finger thickness/width"
+    param_2_name = "num sensors"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "finger_thickness" : param_1[0],
+      "finger_width" : param_1[1],
+      "sensors" : param_2,
+      "num_segments" : 8
+    }
+
+  elif training_type == "vary_sensor_steps":
+
+    vary_1 = [1, 2, 3]
+    vary_2 = [1, 2, 3]
+    vary_3 = None
+    repeats = 5
+    param_1_name = "sensor steps"
+    param_2_name = "state steps"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "sensor_steps" : param_1,
+      "state_steps" : param_2
+    }
+
+  elif training_type == "ski_training":
+
+    vary_1 = [0.9e-3, 1.0e-3] # thickness
+    vary_2 = [(1, 1), (2, 2), (3, 3)]
+    vary_3 = None
+    repeats = 10
+    param_1_name = "finger thickness"
+    param_2_name = "sensor/state steps"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "finger_thickness" : param_1,
+      "sensor_steps" : param_2[0],
+      "state_steps" : param_2[1]
+    }
+
+    # run long trainings
+    model.params.num_episodes = 100_000
+
+  elif training_type == "paper_baseline_1":
 
     vary_1 = [0.9e-3, 1.0e-3] # thickness
     vary_2 = [0, 1, 2, 3]
@@ -1715,6 +1883,7 @@ if __name__ == "__main__":
       "eval_me" : eval_me,            # extra settings tweaks
       "scale_rewards" : param_2,          # stronger reward signal aids training
       "scale_penalties" : param_2,        # we do want to discourage dangerous actions
+      "exceed_lims_multiplier" : 1.0, # disable extra attention to avoiding the table
       "eps_decay" : param_1,             # add extra exploration -> eps=8k gives 10k=29%, 20k=8%, 30k=2%, 40k=0.7%
     }
 
@@ -1771,6 +1940,7 @@ if __name__ == "__main__":
       "eval_me" : eval_me,            # extra settings tweaks
       "scale_rewards" : 1.0,          # stronger reward signal aids training
       "scale_penalties" : 1.0,        # we do want to discourage dangerous actions
+      "exceed_lims_multiplier" : 1.0, # disable extra attention to avoiding the table
     }
 
     # use the new object set
@@ -1837,7 +2007,6 @@ if __name__ == "__main__":
       "sensor_mode" : 2,              # average sample, leave as before
       "state_mode" : 4,               # state sign mode, -1,0,+1 for motor state change
       "eval_me" : eval_me,            # extra settings tweaks
-
       "scale_rewards" : 1.0,          # stronger reward signal aids training
       "scale_penalties" : 1.0,        # we do want to discourage dangerous actions
       "exceed_lims_multiplier" : 1.0, # disable extra attention to avoiding the table
@@ -1996,299 +2165,6 @@ if __name__ == "__main__":
       "param_2_arg" : param_2,
       "param_3_arg" : param_3
     }
-
-  elif training_type == "new_sensor_rewards":
-
-    vary_1 = [False, True]
-    vary_2 = [(100.0, 100), (3.0, 10.0)]
-    vary_3 = None
-    repeats = 10
-    param_1_name = "penalty termination"
-    param_2_name = "stable force limit"
-    param_3_name = None
-    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
-                                                param_3=vary_3, repeats=repeats)
-
-    eval_me = []
-
-    # # half wrist noise as the normalisation has been doubled from 5 -> 10N
-    # wrist_mu = 0.01 * 0.5            # large chance of zero error with the wrist
-    # wrist_std = 0.075 * 0.5          # wrist has a lot of noise, this is 15% coverage +-2stdevs
-    # eval_me.append(f"model.env.mj.set.wrist_sensor_Z.set_gaussian_noise({wrist_mu}, {wrist_std})")
-
-    # do we limit stable grasps to a maximum allowable force
-    model.env.mj.set.stable_finger_force_lim = param_2[0]
-    model.env.mj.set.stable_palm_force_lim = param_2[1]
-
-    baseline_args = {
-
-      "finger_thickness" : 0.9e-3,
-      "finger_width" : 28e-3,
-      "sensors" : 3,
-
-      "penalty_termination" : param_1, # do we end episodes on dangerous readings
-
-      "sensor_noise" : 0.025,          # medium noise on sensor readings
-      "state_noise" : 0.0,             # no noise on state readings, this is required for sign mode
-      "sensor_mu" : 0.05,              # can be +- 5% from 0
-      "state_mu" : 0.025,              # just a gentle zero error noise on state readings
-      "sensor_steps" : 3,              # limit this since sensor data is unreliable
-      "state_steps" : 3,               # this data stream is clean, so take a lot of it
-      "sensor_mode" : 2,               # average sample, leave as before
-      "state_mode" : 4,                # state sign mode, -1,0,+1 for motor state change
-      "eval_me" : eval_me,             # extra settings tweaks
-      "scale_rewards" : 1.0,           # stronger reward signal aids training
-      "scale_penalties" : 1.0,         # we do want to discourage dangerous actions
-      "reward_style" : "sensor_mixed", # what reward function do we want
-
-
-      # FOR TESTING - delete before any proper trainings
-      "num_segments" : 8
-    }
-
-    # use the new object set
-    model.params.object_set = "set7_fullset_1500_50i"
-
-    # run medium length trainings
-    model.params.num_episodes = 60_000
-
-    # run slightly longer tests during training
-    model.env.params.test_trials_per_object = 3
-
-    # test less often
-    model.params.test_freq = 4000
-    model.params.save_freq = 4000
-
-  elif training_type == "new_sensor_hypers":
-
-    vary_1 = [1e-5, 5e-5, 10e-5]
-    vary_2 = [1.0, 2.5]
-    vary_3 = None
-    repeats = 8
-    param_1_name = "learning rate"
-    param_2_name = "reward scaling"
-    param_3_name = None
-    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
-                                                param_3=vary_3, repeats=repeats)
-
-    # do we limit stable grasps to a maximum allowable force
-    model.env.mj.set.stable_finger_force_lim = 100
-    model.env.mj.set.stable_palm_force_lim = 100
-
-    baseline_args = {
-
-      # key finger parameters
-      "finger_thickness" : 0.9e-3,
-      "finger_width" : 28e-3,
-      "sensors" : 3,
-      "num_segments" : 8, # dont forget to set to 8 for proper trainings
-
-      # hyperparemeters
-      "lr" : param_1,
-
-      # reward features
-      "penalty_termination" : False, # do we end episodes on dangerous readings
-      "scale_rewards" : param_2,           # stronger reward signal aids training
-      "scale_penalties" : 1.0,         # we do want to discourage dangerous actions
-      "reward_style" : "sensor_mixed", # what reward function do we want
-
-      # sensor details
-      "sensor_noise" : 0.025,          # medium noise on sensor readings
-      "state_noise" : 0.0,             # no noise on state readings, this is required for sign mode
-      "sensor_mu" : 0.05,              # can be +- 5% from 0
-      "state_mu" : 0.025,              # just a gentle zero error noise on state readings
-      "sensor_steps" : 3,              # limit this since sensor data is unreliable
-      "state_steps" : 3,               # this data stream is clean, so take a lot of it
-      "sensor_mode" : 2,               # average sample, leave as before
-      "state_mode" : 4,                # state sign mode, -1,0,+1 for motor state change 
-    }
-
-    # use the new object set
-    model.params.object_set = "set7_fullset_1500_50i"
-
-    # run medium length trainings
-    model.params.num_episodes = 60_000
-
-    # run slightly longer tests during training
-    model.env.params.test_trials_per_object = 3
-
-    # test less often
-    model.params.test_freq = 4000
-    model.params.save_freq = 4000
-
-  elif training_type == "new_sensor_hypers_2":
-
-    vary_1 = [25_000, 50_000, 75_000, 100_000]
-    vary_2 = [50, 100, 200, 500]
-    vary_3 = None
-    repeats = 8
-    param_1_name = "memory replay"
-    param_2_name = "target update"
-    param_3_name = None
-    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
-                                                param_3=vary_3, repeats=repeats)
-
-    # do we limit stable grasps to a maximum allowable force
-    model.env.mj.set.stable_finger_force_lim = 100
-    model.env.mj.set.stable_palm_force_lim = 100
-
-    baseline_args = {
-
-      # key finger parameters
-      "finger_thickness" : 0.9e-3,
-      "finger_width" : 28e-3,
-      "sensors" : 3,
-      "num_segments" : 8,
-
-      # hyperparemeters
-      "memory_replay" : param_1,
-      "target_update" : param_2,
-
-      # reward features
-      "penalty_termination" : False, # do we end episodes on dangerous readings
-      # "scale_rewards" : 1.0,           # stronger reward signal aids training
-      # "scale_penalties" : 1.0,         # we do want to discourage dangerous actions
-      "reward_style" : "sensor_mixed", # what reward function do we want
-
-      # sensor details
-      "sensor_noise" : 0.025,          # medium noise on sensor readings
-      "state_noise" : 0.0,             # no noise on state readings, this is required for sign mode
-      "sensor_mu" : 0.05,              # can be +- 5% from 0
-      "state_mu" : 0.025,              # just a gentle zero error noise on state readings
-      "sensor_steps" : 3,              # limit this since sensor data is unreliable
-      "state_steps" : 3,               # this data stream is clean, so take a lot of it
-      "sensor_mode" : 2,               # average sample, leave as before
-      "state_mode" : 4,                # state sign mode, -1,0,+1 for motor state change 
-    }
-
-    # use the new object set
-    model.params.object_set = "set7_fullset_1500_50i"
-
-    # run medium length trainings
-    model.params.num_episodes = 60_000
-
-    # run slightly longer tests during training
-    model.env.params.test_trials_per_object = 3
-
-    # test less often
-    model.params.test_freq = 4000
-    model.params.save_freq = 4000
-
-  elif training_type == "new_sensor_hypers_2_extended":
-
-    vary_1 = [25_000, 50_000, 75_000, 100_000]
-    vary_2 = [1, 25]
-    vary_3 = None
-    repeats = 8
-    param_1_name = "memory replay"
-    param_2_name = "target update"
-    param_3_name = None
-    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
-                                                param_3=vary_3, repeats=repeats)
-
-    # do we limit stable grasps to a maximum allowable force
-    model.env.mj.set.stable_finger_force_lim = 100
-    model.env.mj.set.stable_palm_force_lim = 100
-
-    baseline_args = {
-
-      # key finger parameters
-      "finger_thickness" : 0.9e-3,
-      "finger_width" : 28e-3,
-      "sensors" : 3,
-      "num_segments" : 8,
-
-      # hyperparemeters
-      "memory_replay" : param_1,
-      "target_update" : param_2,
-
-      # reward features
-      "penalty_termination" : False, # do we end episodes on dangerous readings
-      # "scale_rewards" : 1.0,           # stronger reward signal aids training
-      # "scale_penalties" : 1.0,         # we do want to discourage dangerous actions
-      "reward_style" : "sensor_mixed", # what reward function do we want
-
-      # sensor details
-      "sensor_noise" : 0.025,          # medium noise on sensor readings
-      "state_noise" : 0.0,             # no noise on state readings, this is required for sign mode
-      "sensor_mu" : 0.05,              # can be +- 5% from 0
-      "state_mu" : 0.025,              # just a gentle zero error noise on state readings
-      "sensor_steps" : 3,              # limit this since sensor data is unreliable
-      "state_steps" : 3,               # this data stream is clean, so take a lot of it
-      "sensor_mode" : 2,               # average sample, leave as before
-      "state_mode" : 4,                # state sign mode, -1,0,+1 for motor state change 
-    }
-
-    # use the new object set
-    model.params.object_set = "set7_fullset_1500_50i"
-
-    # run medium length trainings
-    model.params.num_episodes = 60_000
-
-    # run slightly longer tests during training
-    model.env.params.test_trials_per_object = 3
-
-    # test less often
-    model.params.test_freq = 4000
-    model.params.save_freq = 4000
-
-  elif training_type == "heavy_test":
-
-    vary_1 = [1.0, 2.5]
-    vary_2 = [3, 5]
-    vary_3 = None
-    repeats = 15
-    param_1_name = "scale rewards"
-    param_2_name = "state steps"
-    param_3_name = None
-    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
-                                                param_3=vary_3, repeats=repeats)
-
-    # do we limit stable grasps to a maximum allowable force
-    model.env.mj.set.stable_finger_force_lim = 100
-    model.env.mj.set.stable_palm_force_lim = 100
-
-    baseline_args = {
-
-      # key finger parameters
-      "finger_thickness" : 0.9e-3,
-      "finger_width" : 28e-3,
-      "sensors" : 3,
-      "num_segments" : 8,
-
-      # hyperparemeters
-      "memory_replay" : 50_000,
-      "target_update" : 25,
-
-      # reward features
-      "penalty_termination" : False, # do we end episodes on dangerous readings
-      "scale_rewards" : param_1,           # stronger reward signal aids training
-      # "scale_penalties" : 1.0,         # we do want to discourage dangerous actions
-      "reward_style" : "sensor_mixed", # what reward function do we want
-
-      # sensor details
-      "sensor_noise" : 0.025,          # medium noise on sensor readings
-      "state_noise" : 0.0,             # no noise on state readings, this is required for sign mode
-      "sensor_mu" : 0.05,              # can be +- 5% from 0
-      "state_mu" : 0.025,              # just a gentle zero error noise on state readings
-      "sensor_steps" : 3,              # limit this since sensor data is unreliable
-      "state_steps" : param_2,               # this data stream is clean, so take a lot of it
-      "sensor_mode" : 2,               # average sample, leave as before
-      "state_mode" : 4,                # state sign mode, -1,0,+1 for motor state change 
-    }
-
-    # use the new heavy object set
-    model.params.object_set = "set7_fullset_1500_heavy"
-
-    # run long length trainings
-    model.params.num_episodes = 100_000
-
-    # run slightly longer tests during training
-    model.env.params.test_trials_per_object = 3
-
-    # test less often
-    model.params.test_freq = 4000
-    model.params.save_freq = 4000
 
   else: raise RuntimeError(f"array_training_DQN.py: training_type of '{training_type}' not recognised")
 

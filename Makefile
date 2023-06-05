@@ -108,14 +108,14 @@ all: cpp py
 cpp: $(CPPTARGETS) $(DEPENDS)
 py: $(PYTARGETS) $(DEPENDS)
 
+.PHONY: everything
+everything: cpp py models
+
 .PHONY: debug
 debug: cpp
 
 .PHONY: cluster
 cluster: py $(OUTCPP)/test
-
-.PHONY: pc
-pc: cpp py lab
 
 # compile the uitools object file which is used by both cpp and python targets
 # ADDED -fPIC FOR CLUSTER TO WORK
