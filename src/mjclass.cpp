@@ -70,7 +70,7 @@ void MjClass::init()
   env_.object_names = luke::get_objects();
 
   // if we are randomising the colour of simulated objects
-  if (false and s_.randomise_colours) {
+  if (s_.randomise_colours) {
     luke::randomise_all_colours(model, MjType::generator);
     randomise_ground_colour();
   }
