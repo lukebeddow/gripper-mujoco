@@ -71,6 +71,7 @@ PYBIND11_MODULE(bind, m) {
     .def("get_N", &MjClass::get_N)
     .def("set_finger_thickness", &MjClass::set_finger_thickness)
     .def("set_finger_width", &MjClass::set_finger_width)
+    .def("set_finger_modulus", &MjClass::set_finger_modulus)
     .def("get_finger_thickness", &MjClass::get_finger_thickness)
     .def("get_finger_stiffnesses", &MjClass::get_finger_stiffnesses)
 
@@ -104,6 +105,7 @@ PYBIND11_MODULE(bind, m) {
     .def("last_action_panda", &MjClass::last_action_panda)
     .def("get_fingertip_z_height", &MjClass::get_fingertip_z_height)
     .def("profile_error", &MjClass::profile_error)
+    .def("curve_area", &MjClass::curve_area)
     .def("numerical_stiffness_converge", static_cast<std::string (MjClass::*)(float, float)>(&MjClass::numerical_stiffness_converge))
     .def("numerical_stiffness_converge", static_cast<std::string (MjClass::*)(float, float, std::vector<float>, std::vector<float>)>(&MjClass::numerical_stiffness_converge))
     .def("numerical_stiffness_converge_2", &MjClass::numerical_stiffness_converge_2)

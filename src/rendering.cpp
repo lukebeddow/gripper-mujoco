@@ -15,7 +15,7 @@ mjrContext con;                     // custom GPU context
 MjClass* MjPtr = NULL;
 
 // for plotting
-bool plot_sensors = true;
+bool plot_sensors = false;
 mjvFigure figgauges;
 mjvFigure figbendgauge;
 mjvFigure figaxialgauge;
@@ -199,7 +199,6 @@ bool render()
     // m = myMjClass.model;
     // d = myMjClass.data;
 
-
     if (!glfwWindowShouldClose(window)) {
 
         // get framebuffer viewport
@@ -209,6 +208,10 @@ bool render()
         // update scene and render
         mjv_updateScene(m, d, &opt, NULL, &cam, mjCAT_ALL, &scn);
 
+        // this stops a crash, but nothing new renders on screen
+        // // swap OpenGL buffers (blocking call due to v-sync)
+        // glfwSwapBuffers(window);
+  
         // std::cout << "before crash\n";
         mjr_render(viewport, &scn, &con);
         // std::cout << "after crash\n";

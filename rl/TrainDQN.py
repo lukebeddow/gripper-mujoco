@@ -1815,6 +1815,17 @@ class TrainDQN():
     self.modelsaver.save(self.best_performance_txt_file_name, txtonly=True, txtstr=best_txt)
 
     return savepath
+  
+  def save_policy_only(self, name_ext="policy_net", compressed=True):
+    """
+    Save only the policy
+    """
+
+    if not name_ext.startswith("_"): name_ext = "_" + name_ext
+
+    savepath = self.modelsaver.save(self.policy_net.name + name_ext, pyobj=self.policy_net,
+                                    prevent_compression=not compressed)
+    return savepath
 
   def load(self, id=None, folderpath=None, foldername=None, overridelib=False, best_id=None):
     """
@@ -2136,16 +2147,25 @@ if __name__ == "__main__":
   # model.set_device("cuda")
   # model.load(id=None, folderpath=folderpath, foldername=run, best_id=True)
 
+  # # save only the policy network
+  # folder = "mymujoco"
+  # group = "07-03-23"
+  # run = "luke-PC_13:37_A10"
+  # folderpath = f"/home/luke/{folder}/rl/models/paper_baseline_4/{group}/"
+  # model.set_device("cpu")
+  # model.load(id=None, folderpath=folderpath, foldername=run) #, best_id=True)
+  # model.save_policy_only(compressed=False)
+
   # ----- train ----- #
 
-  # train
-  net = networks.DQN_3L60
-  model.env.disable_rendering = True
-  model.env.mj.set.debug = False
-  model.num_segments = 8
-  model.finger_thickness = 0.9e-3
-  model.params.num_episodes = 100
-  model.train(network=net)
+  # # train
+  # net = networks.DQN_3L60
+  # model.env.disable_rendering = True
+  # model.env.mj.set.debug = False
+  # model.num_segments = 8
+  # model.finger_thickness = 0.9e-3
+  # model.params.num_episodes = 100
+  # model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
@@ -2183,24 +2203,24 @@ if __name__ == "__main__":
   # ----- test ----- #
 
   # test
-  model.log_level = 2
-  model.env.mj.set.debug = False
-  model.env.disable_rendering = True
+  # model.log_level = 2
+  # model.env.mj.set.debug = False
+  # model.env.disable_rendering = True
   # model.env.params.test_trials_per_object = 5
   # model.env.params.test_objects = 20
   # model.env.params.test_obj_per_file = 5
-  model.env.params.max_episode_steps = 1
+  # model.env.params.max_episode_steps = 1
 
   # model.env.mj.set.step_num.set          (0,      70,     1)
   # model.env.mj.set.exceed_limits.set     (-0.005, True,   10)
   # model.env.mj.set.exceed_axial.set      (-0.005, True,   10,    3.0,  6.0,  -1)
   # model.env.mj.set.exceed_lateral.set    (-0.005, True,   10,    4.0,  6.0,  -1)
-  model.load_object_set("set_fullset_1500")
+  # model.load_object_set("set_fullset_1500")
   # input("Press enter to begin")
-  test_data = model.test(pause_each_episode=False)
+  # test_data = model.test(pause_each_episode=False)
 
   # save results
-  test_report = model.create_test_report(test_data)
+  # test_report = model.create_test_report(test_data)
   # model.modelsaver.new_folder(label="DQN_testing")
   # model.save_hyperparameters(labelstr=f"Loaded model path: {model.modelsaver.last_loadpath}\n")
   # model.save(txtstring=test_report, txtlabel="test_results_demo")

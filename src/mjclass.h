@@ -1293,6 +1293,7 @@ public:
   void randomise_object_colour();
   void randomise_ground_colour();
   void randomise_finger_colours();
+  void set_neat_colours();
   bool is_done();
   std::vector<luke::gfloat> get_observation();
   std::vector<luke::gfloat> get_observation(MjType::SensorData sensors);
@@ -1339,10 +1340,12 @@ public:
     std::vector<float> X, std::vector<float> Y);
   std::string numerical_stiffness_converge_2(float target_accuracy);
   std::vector<float> profile_error(std::vector<float> profile_X, std::vector<float> profile_Y,
-  std::vector<float> truth_X, std::vector<float> truth_Y, bool relative);
+    std::vector<float> truth_X, std::vector<float> truth_Y, bool relative);
+  float curve_area(std::vector<float> X, std::vector<float> Y);
   void calibrate_simulated_sensors(float bend_gauge_normalise);
   void set_finger_thickness(float thickness);
   void set_finger_width(float width);
+  void set_finger_modulus(float E);
   float yield_load();
   float yield_load(float thickness, float width);
   void tick();

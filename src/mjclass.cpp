@@ -74,6 +74,9 @@ void MjClass::init()
     luke::randomise_all_colours(model, MjType::generator);
     randomise_ground_colour();
   }
+  else {
+    set_neat_colours();
+  }
 }
 
 void MjClass::init(mjModel* m, mjData* d)
@@ -320,7 +323,7 @@ std::string MjClass::file_from_from_command_line(int argc, char **argv)
   if (segments.empty()) { segments = "8"; };
   if (width.empty()) { width = "28"; };
   if (gripper.empty()) { gripper = "gripper_N" + segments + "_" + width; };
-  if (object_set.empty()) { object_set = "set6_fullset_800_50i"; };
+  if (object_set.empty()) { object_set = "set7_fullset_1500_50i"; };
   if (task.empty()) { task = "0"; };
   if (path.empty()) { path = "/home/luke/mymujoco/mjcf/"; };
 
@@ -536,10 +539,8 @@ bool MjClass::render()
     }
   }
   else {
-
     // just render once
     window_open = render::render();
-
   }
 
   // if the window has been closed
@@ -1527,6 +1528,26 @@ void MjClass::randomise_finger_colours()
   luke::set_finger_colour(model, rgb, 4); // 4 means palm
 }
 
+void MjClass::set_neat_colours()
+{
+  /* set nice colours for the items/objects in the scene */
+
+  float x = 1.0 / 255.0;
+
+  std::vector<float> object_colour  {50*x,  205*x, 50*x};
+  std::vector<float> gripper_colour {220*x, 220*x, 220*x};
+  std::vector<float> finger_colour  {255*x, 140*x, 0*x};
+  std::vector<float> ground_colour  {100*x, 100*x, 100*x};
+
+  luke::set_ground_colour(model, ground_colour);
+  luke::set_all_objects_colour(model, object_colour);
+  luke::set_main_body_colour(model, gripper_colour);
+
+  for (int i = 1; i < 5; i++) // 4 means palm
+    luke::set_finger_colour(model, finger_colour, i);
+
+}
+
 float MjClass::reward()
 {
   /* calculate the reward available at the current simulation state */
@@ -1774,6 +1795,9 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
 {
   /* insert real data */
 
+  // do we save ALL data even if we aren't using it
+  bool save_all = true;
+
   // safety check to ensure we configure and calibrate before running with real data
   static bool first_call = true;
   if (first_call) {
@@ -1795,7 +1819,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
   // std::cout << "Adding state noise of " << s_.motor_state_sensor.noise_std << '\n';
   // std::cout << "Adding sensor noise of " << s_.bending_gauge.noise_std << '\n';
 
-  if (s_.motor_state_sensor.in_use) {
+  if (save_all or s_.motor_state_sensor.in_use) {
 
     // normalise and save state data
     real_sensors_.raw.x_motor_position.add(state_data[i]);
@@ -1826,7 +1850,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     ++i; 
   }
   
-  if (s_.base_state_sensor.in_use) {
+  if (save_all or s_.base_state_sensor.in_use) {
 
     // // for testing
     // float start = state_data[i];
@@ -1848,7 +1872,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
   // add sensor data - pay attention to order! Input vector must be the same
   int j = 0;
 
-  if (s_.bending_gauge.in_use) {
+  if (save_all or s_.bending_gauge.in_use) {
 
     // calibrate the finger 1 sensor
     if (real_sensors_.f1_calibration.size() < real_sensors_.calibration_samples) {
@@ -1910,7 +1934,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
 
   }
 
-  if (s_.palm_sensor.in_use) {
+  if (save_all or s_.palm_sensor.in_use) {
 
     // calibrate the palm sensor
     if (real_sensors_.palm_calibration.size() < real_sensors_.calibration_samples) {
@@ -1934,7 +1958,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     
   }
 
-  if (s_.wrist_sensor_Z.in_use) {
+  if (save_all or s_.wrist_sensor_Z.in_use) {
 
     constexpr bool debug_wrist_Z = false;
     float pre_cal = sensor_data[j]; // for debugging only
@@ -2187,7 +2211,7 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force, 
   s_.tip_force_applied = force;
 
   // step the simulation to allow the forces to settle
-  float time_to_settle = 30; // have tried up to 100
+  float time_to_settle = 100; // 30; // have tried up to 100
   int steps_to_make = time_to_settle / s_.mujoco_timestep;
   // std::cout << "Stepping for " << steps_to_make << " steps to allow settling\n";
 
@@ -2743,6 +2767,24 @@ std::vector<float> MjClass::profile_error(std::vector<float> profile_X, std::vec
   return errors;
 }
 
+float MjClass::curve_area(std::vector<float> X, std::vector<float> Y)
+{
+  /* find the area under a curve using the trapezium rule */
+
+  if (X.size() != Y.size()) {
+    throw std::runtime_error("MjClass::curve_area() vectors X and Y must have the same size");
+  }
+
+  float area = 0.0;
+  for (int i = 1; i < X.size(); i++) {
+    float h = X[i] - X[i - 1];       // Width of the trapezium
+    float sumOfY = Y[i] + Y[i - 1];  // Sum of the y-coordinates of the endpoints
+    area += 0.5 * h * sumOfY;         // Area of the trapezium
+  }
+
+  return area;
+}
+
 void MjClass::calibrate_simulated_sensors(float bend_gauge_normalise)
 {
   /* run a calibration scheme to normalise gauge outputs for a set force and
@@ -2793,6 +2835,16 @@ void MjClass::set_finger_width(float width)
   is on then it recalibrates */
 
   bool changed = luke::change_finger_width(width);
+
+  // changes are finished upon next call to reset()
+  if (changed) resetFlags.finger_EI_changed = true;
+}
+
+void MjClass::set_finger_modulus(float E)
+{
+  /* set the youngs modulus for the finger */
+
+  bool changed = luke::change_youngs_modulus(E);
 
   // changes are finished upon next call to reset()
   if (changed) resetFlags.finger_EI_changed = true;
