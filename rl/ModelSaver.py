@@ -8,6 +8,7 @@ import shutil
 
 # global variable, do we compress saved files with bz2 library
 use_compression = True
+compressed_extension = ".pbz2"
 
 def compressed_pickle(title, data):
  with bz2.BZ2File(title, 'w') as f: 
@@ -27,7 +28,7 @@ class ModelSaver:
 
     # user set parameters 
     self.default_num = 1             # starting number for saving files with numbers
-    self.file_ext = ".pbz2" if use_compression else ".pickle" # saved file extension
+    self.file_ext = compressed_extension if use_compression else ".pickle" # saved file extension
     self.file_num = "{:03d}"         # digit format for saving files with numbers
     self.date_str = "%d-%m-%y-%H:%M" # date string, must be seperated by '-'
     self.folder_names = "train_{}/"  # default name of created folders, then formatted with date
@@ -356,10 +357,13 @@ class ModelSaver:
     self.folder = ""
 
   def save(self, name, pyobj=None, txtstr=None, txtonly=None, txtlabel=None,
-           suffix_numbering=True):
+           suffix_numbering=True, prevent_compression=False):
     """
     Save the given object using pickle
     """
+
+    if prevent_compression: old_ext = self.file_ext
+    self.file_ext = ".pickle"
 
     savepath = self.path
 
@@ -388,7 +392,7 @@ class ModelSaver:
 
     # save
     print(f"Saving file {savepath + savename} with pickle ... ", end="", flush=True)
-    if use_compression:
+    if use_compression and not prevent_compression:
       compressed_pickle(savepath + savename, pyobj)
     else:
       with open(savepath + savename, 'wb') as openfile:
@@ -403,6 +407,8 @@ class ModelSaver:
       with open(savepath + txtname, 'w') as openfile:
         openfile.write(txtstr)
         print(f"Saved also: {txtname}")
+
+    if prevent_compression: self.file_ext = old_ext
 
     return savepath + savename
 
@@ -465,7 +471,7 @@ class ModelSaver:
         print(f"No model found at path {loadpath} with id {id}")
 
     print(f"Loading file {loadpath} with pickle ... ", end="", flush=True)
-    if use_compression:
+    if use_compression and loadpath.endswith(compressed_extension):
       loaded_obj = decompress_pickle(loadpath)
     else:
       with open(loadpath, 'rb') as f:
