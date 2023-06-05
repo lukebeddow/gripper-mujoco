@@ -27,6 +27,7 @@ parseJobs()
 
 QUEUE_ARGS=() # arguments passed to sub scripts only in a queue scenario
 TIMESTAMP="$(date +%d-%m-%y-%H:%M)"
+RANDOMISE='N'
 
 # loop through input args
 for (( i = 1; i <= "$#"; i++ ));
@@ -37,6 +38,7 @@ case ${!i} in
     -q | --queue ) (( i++ )); QUEUE_NUM=${!i}; echo Queue mode selected, there will be $QUEUE_NUM queues ;;
     -s | --stagger ) (( i++ )); echo Stagger flag removed before running pc_job.sh ;;
     -t | --time-stamp ) (( i++ )); TIMESTAMP=${!i}; echo Timestamp given, this will be $TIMESTAMP ;;
+    --randomise ) (( i++ )); RANDOMISE='Y'; echo Queue order will be randomised ;;
     # everything else leave it unchanged to pass into pc_job.sh
     * ) QUEUE_ARGS+=( ${!i} ) ;;
 esac
@@ -73,7 +75,10 @@ do
     done
 
     # randomly shuffle the queue order
-    JOBS_IN_QUEUE=( $(shuf -e "${JOBS_IN_QUEUE[@]}"))
+    if [ $RANDOMISE = 'Y' ]
+    then
+        JOBS_IN_QUEUE=( $(shuf -e "${JOBS_IN_QUEUE[@]}"))
+    fi
 
     # print and submit (sleep so all print statements complete before jobs start spamming teminal)
     echo Queue number $(( $q + 1 )) jobs are "${JOBS_IN_QUEUE[*]}"
