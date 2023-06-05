@@ -601,7 +601,7 @@ Target target_;
 static double last_step_time_ = 0.0;
 
 // turn on/off debug mode for this file only
-constexpr static bool debug_ = true; 
+constexpr static bool debug_ = false; 
 
 // TESTING global variable to prevent table impacts
 bool TEST_prevent_table_impacts = false; // default should always be false

@@ -15,7 +15,7 @@ mjrContext con;                     // custom GPU context
 MjClass* MjPtr = NULL;
 
 // for plotting
-bool plot_sensors = true;
+bool plot_sensors = false;
 mjvFigure figgauges;
 mjvFigure figbendgauge;
 mjvFigure figaxialgauge;

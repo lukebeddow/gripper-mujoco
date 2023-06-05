@@ -321,7 +321,7 @@ std::string MjClass::file_from_from_command_line(int argc, char **argv)
   if (segments.empty()) { segments = "8"; };
   if (width.empty()) { width = "28"; };
   if (gripper.empty()) { gripper = "gripper_N" + segments + "_" + width; };
-  if (object_set.empty()) { object_set = "set6_fullset_800_50i"; };
+  if (object_set.empty()) { object_set = "set7_fullset_1500_50i"; };
   if (task.empty()) { task = "0"; };
   if (path.empty()) { path = "/home/luke/mymujoco/mjcf/"; };
 
@@ -1486,10 +1486,10 @@ void MjClass::set_neat_colours()
 
   float x = 1.0 / 255.0;
 
-  std::vector<float> object_colour {50*x, 205*x, 50*x};
+  std::vector<float> object_colour  {50*x,  205*x, 50*x};
   std::vector<float> gripper_colour {220*x, 220*x, 220*x};
-  std::vector<float> finger_colour {255*x, 140*x, 0*x};
-  std::vector<float> ground_colour {100*x, 100*x, 100*x};
+  std::vector<float> finger_colour  {255*x, 140*x, 0*x};
+  std::vector<float> ground_colour  {100*x, 100*x, 100*x};
 
   luke::set_ground_colour(model, ground_colour);
   luke::set_all_objects_colour(model, object_colour);
