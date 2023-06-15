@@ -102,6 +102,7 @@ struct
     double seg_moment = 0.0;        // added by luke
     int force_style = 0;            // added by luke
     int all_sensors_use_noise = 1;  // added by luke
+    int gram_force = 0;               // added by luke
 
     // figure show flags
     int bendgauge = 0;             // added by luke
@@ -1507,10 +1508,12 @@ void makeObjectUI(int oldstate)
         {mjITEM_BUTTON,   "apply UDL",   2, NULL,                   " #315"},
         {mjITEM_BUTTON,   "apply tip frc",   2, NULL,                   " #316"},
         {mjITEM_BUTTON,   "wipe seg frc",    2, NULL,                   " #317"},
+        {mjITEM_BUTTON,   "apply gram frc",    2, NULL,                   " #317"},
         {mjITEM_SLIDERINT,   "seg num",           2, &settings.seg_num_for_frc, "0 10"},
         {mjITEM_SLIDERNUM,  "force",         2, &settings.seg_force, "0 10"},
         {mjITEM_SLIDERNUM,  "moment",         2, &settings.seg_moment, "0 2"},
         {mjITEM_SLIDERINT,   "frc style",     2, &settings.force_style, "0 2"},
+        {mjITEM_SLIDERINT,   "gram frc",      2, &settings.gram_force, "0 5"},
 
         // {mjITEM_BUTTON,    "Copy pose",     2, NULL,                    " #304"},
         {mjITEM_SLIDERINT, "Live Object",   3, &settings.object_int,    "0 20"},
@@ -2377,12 +2380,12 @@ void uiEvent(mjuiState* state)
             case 18: {          // apply UDL
                 if (not myMjClass.s_.curve_validation) {
                         myMjClass.s_.curve_validation = true;
-                    }
+                }
                 // static bool first_call = true;
                 // if (first_call) luke::get_segment_matrices(m, d);
                 // first_call = false;
-                luke::apply_UDL(settings.seg_force);
-                std::cout << "Applying UDL on the joints with total force " << settings.seg_force << "N\n";
+                luke::apply_UDL_force_per_joint(settings.seg_force);
+                std::cout << "Applying UDL with a force on each joint of " << settings.seg_force << "N\n";
                 break;
             }
             case 19: {          // apply tip force
@@ -2404,9 +2407,18 @@ void uiEvent(mjuiState* state)
                 std::cout << "Wiping all segment forces\n";
                 break;
             }
-            // case 20: seg num int slider
-            // case 21: seg frc num slider
-            // case 22: seg frc moment slider
+            case 21: {          // apply gram force
+                if (not myMjClass.s_.curve_validation) {
+                        myMjClass.s_.curve_validation = true;
+                }
+                float force = settings.gram_force * 0.981;
+                luke::apply_tip_force(force);
+                std::cout << "Applying tip force of " << settings.gram_force * 100 << "grams\n";
+                break;
+            }
+            // case 21: seg num int slider
+            // case 22: seg frc num slider
+            // case 23: seg frc moment slider
             }
         }
 

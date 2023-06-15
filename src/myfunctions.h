@@ -92,6 +92,7 @@ void set_segment_force(int seg_num, bool set_as, double force);
 void set_segment_moment(int seg_num, bool set_as, double moment);
 void resolve_segment_forces(mjModel* model, mjData* data);
 void apply_UDL(double force_per_m);
+void apply_UDL_force_per_joint(double force_per_joint);
 void wipe_segment_forces();
 void apply_tip_force(double force);
 void apply_tip_moment(double moment);
