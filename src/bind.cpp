@@ -37,9 +37,6 @@ PYBIND11_MODULE(bind, m) {
     // sensing
     // none atm
 
-    // TESTING prevent table impacts
-    .def("prevent_table_impacts", &MjClass::prevent_table_impacts)
-
     // control
     .def("set_joint_target", &MjClass::set_joint_target)
     .def("set_motor_target", &MjClass::set_motor_target)

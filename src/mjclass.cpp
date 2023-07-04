@@ -426,6 +426,10 @@ void MjClass::reset()
   s_.motor_state_sensor.reset();
   s_.base_state_sensor.reset();
 
+  // refetch the gripper base limits in case they have changed
+  base_min_ = luke::get_base_min();
+  base_max_ = luke::get_base_max();
+
   // reset data structures
   env_.reset();
   MjType::TestReport blank_report;
@@ -726,29 +730,43 @@ void MjClass::sense_gripper_state()
   /* save the end target state position of the gripper and base */
 
   // get position we think each motor should be (NOT luke::get_gripper_state(data)!)
-  std::vector<luke::gfloat> state_vec = luke::get_target_state();
+  std::vector<luke::gfloat> state_vec = luke::get_target_state_vector();
+  luke::JointStates states = luke::get_target_state();
+
+  bool base_xyz = luke::use_base_xyz();
 
   // normalise { x, y, z } joint values
-  state_vec[0] = normalise_between(
-    state_vec[0], luke::Gripper::xy_min, luke::Gripper::xy_max);
-  state_vec[1] = normalise_between(
-    state_vec[1], luke::Gripper::xy_min, luke::Gripper::xy_max);
-  state_vec[2] = normalise_between(
-    state_vec[2], luke::Gripper::z_min, luke::Gripper::z_max);
-  state_vec[3] = normalise_between(
-    state_vec[3], luke::Target::base_z_min, luke::Target::base_z_max);
+  states.gripper_x = normalise_between(
+    states.gripper_x, luke::Gripper::xy_min, luke::Gripper::xy_max);
+  states.gripper_y = normalise_between(
+    states.gripper_y, luke::Gripper::xy_min, luke::Gripper::xy_max);
+  states.gripper_z = normalise_between(
+    states.gripper_z, luke::Gripper::z_min, luke::Gripper::z_max);
+  states.base_z = normalise_between(states.base_z, base_min_[2], base_max_[2]);
+  if (base_xyz) {
+    states.base_x = normalise_between(states.base_x, base_min_[0], base_max_[0]);
+    states.base_y = normalise_between(states.base_y, base_min_[1], base_max_[1]);
+  }
 
   // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
-  state_vec[0] = s_.motor_state_sensor.apply_noise(state_vec[0], uniform_dist, 1);
-  state_vec[1] = s_.motor_state_sensor.apply_noise(state_vec[1], uniform_dist, 2);
-  state_vec[2] = s_.motor_state_sensor.apply_noise(state_vec[2], uniform_dist, 3);
-  state_vec[3] = s_.base_state_sensor.apply_noise(state_vec[3], uniform_dist);
+  states.gripper_x = s_.motor_state_sensor.apply_noise(states.gripper_x, uniform_dist, 1);
+  states.gripper_y = s_.motor_state_sensor.apply_noise(states.gripper_y, uniform_dist, 2);
+  states.gripper_z = s_.motor_state_sensor.apply_noise(states.gripper_z, uniform_dist, 3);
+  states.base_z = s_.base_state_sensor.apply_noise(states.base_z, uniform_dist, 1);
+  if (base_xyz) {
+    states.base_x = s_.base_state_sensor.apply_noise(states.base_x, uniform_dist, 2);
+    states.base_y = s_.base_state_sensor.apply_noise(states.base_y, uniform_dist, 3);
+  }
 
   // save reading
-  sim_sensors_.x_motor_position.add(state_vec[0]);
-  sim_sensors_.y_motor_position.add(state_vec[1]);
-  sim_sensors_.z_motor_position.add(state_vec[2]);
-  sim_sensors_.z_base_position.add(state_vec[3]);
+  sim_sensors_.x_motor_position.add(states.gripper_x);
+  sim_sensors_.y_motor_position.add(states.gripper_y);
+  sim_sensors_.z_motor_position.add(states.gripper_z);
+  sim_sensors_.z_base_position.add(states.base_z);
+  if (base_xyz) {
+    sim_sensors_.x_base_position.add(states.base_x);
+    sim_sensors_.y_base_position.add(states.base_y);
+  }
 
   // save the time the reading was made
   step_timestamps.add(data->time);
@@ -781,8 +799,8 @@ void MjClass::update_env()
   luke::Forces_faster forces = luke::get_object_forces_faster(model, data);
 
   // extract the gripper height (don't use object height for lifting as fingers tilt)
-  std::vector<float> state_vec = luke::get_target_state();
-  float gripper_z_height = -1 * state_vec[state_vec.size() - 1]; // last entry
+  luke::JointStates states = luke::get_target_state();
+  float gripper_z_height = -1 * states.base_z;
   float object_lift = env_.obj.qpos.z - env_.start_qpos.z; // how much have we lifted it
   
   // // for testing
@@ -1125,20 +1143,9 @@ std::vector<float> MjClass::set_action(int action)
   // update whether this action was within limits or not
   env_.cnt.exceed_limits.value = not wl;
 
-  // get the target state and return it
-  return luke::get_target_state();
+  // get the target state and return it as a vector
+  return luke::get_target_state_vector();
 }
-
-// TESTING prevent table impacts
-void MjClass::prevent_table_impacts(bool set_as)
-{
-  /* TEST function toggle a switch to prevent table impacts */
-
-  luke::prevent_table_impacts(set_as);
-
-  std::cout << "\n\nPREVENTING TABLE IMPACTS SET TO " << set_as << "\n\n";
-}
-// END TESTING - see header file and bind.cpp
 
 bool MjClass::is_done()
 {
@@ -1719,15 +1726,30 @@ luke::gfloat MjClass::get_wrist_force(bool realworld)
 
 std::vector<luke::gfloat> MjClass::get_state_metres(bool realworld)
 {
-  /* get a vector [gripperx, grippery, gripperz, basez] */
+  /* get a vector [gripperx, grippery, gripperz, basez] or if using base
+  xyz it will be [gripperx, grippery, gripperz, basex, basey, basez] */
 
-  std::vector<luke::gfloat> readings(4);
+  // motor state vector elements
+  int n = 4;
+
+  // if using base xyz we add two elements for xy
+  bool base_xyz = luke::use_base_xyz();
+  if (base_xyz) n += 2;
+
+  std::vector<luke::gfloat> readings(n);
 
   if (realworld) {
     readings[0] = real_sensors_.SI.read_x_motor_position();
     readings[1] = real_sensors_.SI.read_y_motor_position();
     readings[2] = real_sensors_.SI.read_z_motor_position();
-    readings[3] = real_sensors_.SI.read_z_base_position();
+    if (base_xyz) {
+      readings[3] = real_sensors_.SI.read_x_base_position();
+      readings[4] = real_sensors_.SI.read_y_base_position();
+      readings[5] = real_sensors_.SI.read_z_base_position();
+    }
+    else {
+      readings[3] = real_sensors_.SI.read_z_base_position();
+    }
   }
   else {
     // map back from [-1, +1] to [min, max] in SI units
@@ -1737,8 +1759,18 @@ std::vector<luke::gfloat> MjClass::get_state_metres(bool realworld)
       sim_sensors_.read_y_motor_position(), luke::Gripper::xy_min, luke::Gripper::xy_max);
     readings[2] = unnormalise_from(
       sim_sensors_.read_z_motor_position(), luke::Gripper::z_min, luke::Gripper::z_max);
-    readings[3] = unnormalise_from(
-      sim_sensors_.read_z_base_position(), luke::Target::base_z_min, luke::Target::base_z_max);
+    if (base_xyz) {
+      readings[3] = unnormalise_from(
+        sim_sensors_.read_x_base_position(), base_min_[0], base_max_[0]);
+      readings[4] = unnormalise_from(
+        sim_sensors_.read_y_base_position(), base_min_[1], base_max_[1]);
+      readings[5] = unnormalise_from(
+        sim_sensors_.read_z_base_position(), base_min_[2], base_max_[2]);
+    }
+    else {
+      readings[3] = unnormalise_from(
+        sim_sensors_.read_z_base_position(), base_min_[2], base_max_[2]);
+    }
   }
 
   return readings;
@@ -1806,6 +1838,15 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     first_call = false;
   }
 
+  // check the state vector has an expected length
+  bool base_xyz = luke::use_base_xyz();
+  if (state_data.size() != 4 and not base_xyz) {
+    throw std::runtime_error("state_data size != 4 but base_xyz = false in MjClass::input_real_data()");
+  }
+  if (state_data.size() != 6 and base_xyz) {
+    throw std::runtime_error("state_data size != 6 but base_xyz = true in MjClass::input_real_data()");
+  }
+
   // vector which outputs all the freshly normalised values
   std::vector<float> output;
 
@@ -1852,20 +1893,38 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
   
   if (save_all or s_.base_state_sensor.in_use) {
 
-    // // for testing
-    // float start = state_data[i];
+    int noise_num = 1;
+
+    if (base_xyz) {
+
+      real_sensors_.raw.x_base_position.add(state_data[i]);
+      real_sensors_.SI.x_base_position.add(state_data[i]);
+      state_data[i] = normalise_between(state_data[i], base_min_[0], base_max_[0]);
+      state_data[i] = s_.base_state_sensor.apply_noise(state_data[i], uniform_dist, 1);
+      real_sensors_.normalised.x_base_position.add(state_data[i]);
+      output.push_back(state_data[i]);
+      ++i; 
+
+      real_sensors_.raw.y_base_position.add(state_data[i]);
+      real_sensors_.SI.y_base_position.add(state_data[i]);
+      state_data[i] = normalise_between(
+        state_data[i], base_min_[1], base_max_[1]);
+      state_data[i] = s_.base_state_sensor.apply_noise(state_data[i], uniform_dist, 2);
+      real_sensors_.normalised.y_base_position.add(state_data[i]);
+      output.push_back(state_data[i]);
+      ++i;
+
+      noise_num = 3;
+    }
 
     real_sensors_.raw.z_base_position.add(state_data[i]);
     real_sensors_.SI.z_base_position.add(state_data[i]);
     state_data[i] = normalise_between(
-      state_data[i], luke::Target::base_z_min, luke::Target::base_z_max);
-    state_data[i] = s_.base_state_sensor.apply_noise(state_data[i], uniform_dist);
+      state_data[i], base_min_[2], base_max_[2]);
+    state_data[i] = s_.base_state_sensor.apply_noise(state_data[i], uniform_dist, noise_num);
     real_sensors_.normalised.z_base_position.add(state_data[i]);
     output.push_back(state_data[i]);
     ++i; 
-
-    // std::cout << "Base height unnormalised " << start << ", normalised "
-    //   << state_data[i-1] << '\n';
 
   }
 

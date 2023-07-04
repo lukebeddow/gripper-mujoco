@@ -944,7 +944,12 @@ namespace MjType
     luke::SlidingWindow<luke::gfloat> x_motor_position { buffer_size };
     luke::SlidingWindow<luke::gfloat> y_motor_position { buffer_size };
     luke::SlidingWindow<luke::gfloat> z_motor_position { buffer_size };
+    luke::SlidingWindow<luke::gfloat> x_base_position { buffer_size };
+    luke::SlidingWindow<luke::gfloat> y_base_position { buffer_size };
     luke::SlidingWindow<luke::gfloat> z_base_position { buffer_size };
+    luke::SlidingWindow<luke::gfloat> roll_base_rotation { buffer_size };
+    luke::SlidingWindow<luke::gfloat> pitch_base_rotation { buffer_size };
+    luke::SlidingWindow<luke::gfloat> yaw_base_rotation { buffer_size };
 
     // create storage containers for sensor data
     luke::SlidingWindow<luke::gfloat> finger1_gauge { buffer_size };
@@ -962,7 +967,12 @@ namespace MjType
       x_motor_position.reset();
       y_motor_position.reset();
       z_motor_position.reset();
+      x_base_position.reset();
+      y_base_position.reset();
       z_base_position.reset();
+      roll_base_rotation.reset();
+      pitch_base_rotation.reset();
+      yaw_base_rotation.reset();
       finger1_gauge.reset();
       finger2_gauge.reset();
       finger3_gauge.reset();
@@ -979,7 +989,12 @@ namespace MjType
     luke::gfloat read_x_motor_position() { return x_motor_position.read_element(); }
     luke::gfloat read_y_motor_position() { return y_motor_position.read_element(); }
     luke::gfloat read_z_motor_position() { return z_motor_position.read_element(); }
+    luke::gfloat read_x_base_position() { return x_base_position.read_element(); }
+    luke::gfloat read_y_base_position() { return y_base_position.read_element(); }
     luke::gfloat read_z_base_position() { return z_base_position.read_element(); }
+    luke::gfloat read_roll_base_rotation() { return roll_base_rotation.read_element(); }
+    luke::gfloat read_pitch_base_rotation() { return pitch_base_rotation.read_element(); }
+    luke::gfloat read_yaw_base_rotation() { return yaw_base_rotation.read_element(); }
     luke::gfloat read_finger1_gauge() { return finger1_gauge.read_element(); }
     luke::gfloat read_finger2_gauge() { return finger2_gauge.read_element(); }
     luke::gfloat read_finger3_gauge() { return finger3_gauge.read_element(); }
@@ -1212,24 +1227,6 @@ public:
   int n_actions;                      // number of possible actions
   std::vector<int> action_options;    // possible action codes
 
-  // // storage containers for state data
-  // luke::SlidingWindow<luke::gfloat> x_motor_position { gauge_buffer_size };
-  // luke::SlidingWindow<luke::gfloat> y_motor_position { gauge_buffer_size };
-  // luke::SlidingWindow<luke::gfloat> z_motor_position { gauge_buffer_size };
-  // luke::SlidingWindow<luke::gfloat> z_base_position { gauge_buffer_size };
-  
-  // // create storage containers for sensor data
-  // luke::SlidingWindow<luke::gfloat> finger1_gauge { gauge_buffer_size };
-  // luke::SlidingWindow<luke::gfloat> finger2_gauge { gauge_buffer_size };
-  // luke::SlidingWindow<luke::gfloat> finger3_gauge { gauge_buffer_size };
-  // luke::SlidingWindow<luke::gfloat> palm_sensor { gauge_buffer_size };
-  // luke::SlidingWindow<luke::gfloat> finger1_axial_gauge { gauge_buffer_size };
-  // luke::SlidingWindow<luke::gfloat> finger2_axial_gauge { gauge_buffer_size };
-  // luke::SlidingWindow<luke::gfloat> finger3_axial_gauge { gauge_buffer_size };
-  // luke::SlidingWindow<luke::gfloat> wrist_X_sensor { gauge_buffer_size };
-  // luke::SlidingWindow<luke::gfloat> wrist_Y_sensor { gauge_buffer_size };
-  // luke::SlidingWindow<luke::gfloat> wrist_Z_sensor { gauge_buffer_size };
-
   // track the timestamps of sensor updates, this is for plotting in mysimlulate.cpp
   luke::SlidingWindow<float> step_timestamps { MjType::SensorData::buffer_size };
   luke::SlidingWindow<float> gauge_timestamps { MjType::SensorData::buffer_size };
@@ -1237,6 +1234,10 @@ public:
   luke::SlidingWindow<float> palm_timestamps { MjType::SensorData::buffer_size };
   luke::SlidingWindow<float> wristXY_timestamps { MjType::SensorData::buffer_size };
   luke::SlidingWindow<float> wristZ_timestamps { MjType::SensorData::buffer_size };
+
+  // operating limits for the base joints
+  std::vector<double> base_min_;
+  std::vector<double> base_max_;
 
   // data structures
   MjType::SensorData sim_sensors_;
@@ -1359,9 +1360,6 @@ public:
   float get_fingertip_z_height();
   float find_highest_stable_timestep();
   void set_sensor_noise_and_normalisation_to(bool set_as);
-
-  // TESTING prevent table impacts
-  void prevent_table_impacts(bool set_as);
 
 }; // class MjClass
 

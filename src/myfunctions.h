@@ -112,6 +112,7 @@ void update_stepper(mjModel* model, mjData* data);
 void update_objects(const mjModel* model, mjData* data);
 void update_all(mjModel* model, mjData* data);
 void update_constraints(mjModel* model, mjData* data);
+void update_base_limits();
 
 // gripper target position
 bool set_gripper_target_m(double x, double y, double z);
@@ -132,7 +133,8 @@ std::vector<gfloat> get_gauge_data(const mjModel* model, mjData* data);
 gfloat get_palm_force(const mjModel* model, mjData* data);
 std::vector<gfloat> get_panda_state(const mjData* data);
 std::vector<gfloat> get_gripper_state(const mjData* data);
-std::vector<gfloat> get_target_state();
+JointStates get_target_state();
+std::vector<gfloat> get_target_state_vector();
 gfloat get_target_finger_angle();
 
 // environment
@@ -169,6 +171,9 @@ std::vector<float> discretise_curve(std::vector<float> X, std::vector<float> tru
 int last_action_robot();
 bool is_sim_unstable(mjModel* model, mjData* data);
 int get_N();
+bool use_base_xyz();
+std::vector<double> get_base_min();
+std::vector<double> get_base_max();
 float get_finger_thickness();
 float get_finger_width();
 float get_finger_length();
@@ -177,9 +182,6 @@ float calc_yield_point_load(float thickness, float width);
 float get_fingertip_z_height();
 std::vector<luke::gfloat> get_stiffnesses();
 void print_stiffnesses();
-
-// TESTING prevent table impacts
-void prevent_table_impacts(bool set_as);
 
 } // namespace luke
 

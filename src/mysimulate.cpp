@@ -1371,35 +1371,75 @@ void makeGripperUI(int oldstate)
         {mjITEM_SLIDERNUM, "", 2, NULL, "0 1"},
         {mjITEM_END}
     };
-
     mjui_add(&ui1, defGripper);
-    defSlider[0].state = 4;
 
-    // luke::UI_GRIPPER_SLIDER.in_use = true;
+    bool base_xyz = luke::use_base_xyz();
 
-    std::vector<std::string> slider_names {
-        "Prismatic", "Revolute", "Palm", "Base Z"
-    };
-    std::vector<void*> slider_values {
-        &luke::target_.end.x, &luke::target_.end.th, &luke::target_.end.z,
-        &luke::target_.base[0]
-        // &luke::UI_GRIPPER_SLIDER.x, &luke::UI_GRIPPER_SLIDER.th, &luke::UI_GRIPPER_SLIDER.z
-    };
-    std::vector<std::string> slider_ranges {
-        "0.05 0.14", "-0.6 0.6", "0.0 0.16", "-0.1 0.1"
-    };
+    if (not base_xyz) {
 
-    for (i = 0; i < slider_names.size(); i++) {
+        defSlider[0].state = 4;
 
-        // set the data address
-        defSlider[0].pdata = slider_values[i];
+        std::vector<std::string> slider_names {
+            "Prismatic", "Revolute", "Palm", "Base Z"
+        };
+        std::vector<void*> slider_values {
+            &luke::target_.end.x, &luke::target_.end.th, &luke::target_.end.z,
+            &luke::target_.base.z
+        };
+        std::vector<std::string> slider_ranges {
+            "0.05 0.14", "-0.6 0.6", "0.0 0.16", "-0.1 0.1"
+        };
 
-        mju_strncpy(defSlider[0].name, slider_names[i].c_str(), mjMAXUINAME);
-        mju_strncpy(defSlider[0].other, slider_ranges[i].c_str(), mjMAXUINAME);
+        for (i = 0; i < slider_names.size(); i++) {
 
-        // add
-        mjui_add(&ui1, defSlider);
+            // set the data address
+            defSlider[0].pdata = slider_values[i];
+
+            mju_strncpy(defSlider[0].name, slider_names[i].c_str(), mjMAXUINAME);
+            mju_strncpy(defSlider[0].other, slider_ranges[i].c_str(), mjMAXUINAME);
+
+            // add
+            mjui_add(&ui1, defSlider);
+        }
     }
+    else if (base_xyz) {
+        defSlider[0].state = 6;
+
+        std::vector<std::string> slider_names {
+            "Prismatic", "Revolute", "Palm", "Base X", "Base Y", "Base Z"
+        };
+        std::vector<void*> slider_values {
+            &luke::target_.end.x, &luke::target_.end.th, &luke::target_.end.z,
+            &luke::target_.base.x, &luke::target_.base.y, &luke::target_.base.z
+        };
+        std::vector<std::string> slider_ranges {
+            "0.05 0.14", "-0.6 0.6", "0.0 0.16", "-0.1 0.1", "-0.1 0.1", "-0.1 0.1"
+        };
+
+        for (i = 0; i < slider_names.size(); i++) {
+
+            // set the data address
+            defSlider[0].pdata = slider_values[i];
+
+            mju_strncpy(defSlider[0].name, slider_names[i].c_str(), mjMAXUINAME);
+            mju_strncpy(defSlider[0].other, slider_ranges[i].c_str(), mjMAXUINAME);
+
+            // add
+            mjui_add(&ui1, defSlider);
+        }
+    }
+
+    // for (i = 0; i < slider_names.size(); i++) {
+
+    //     // set the data address
+    //     defSlider[0].pdata = slider_values[i];
+
+    //     mju_strncpy(defSlider[0].name, slider_names[i].c_str(), mjMAXUINAME);
+    //     mju_strncpy(defSlider[0].other, slider_ranges[i].c_str(), mjMAXUINAME);
+
+    //     // add
+    //     mjui_add(&ui1, defSlider);
+    // }
 }
 
 

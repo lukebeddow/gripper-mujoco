@@ -369,23 +369,61 @@ struct QPos {
   }
 };
 
-struct GripperState {
+struct JointStates {
 
-  // work in progress, this may not be needed
+  // list of all possible joints and their state
+  double gripper_x { 0.0 };
+  double gripper_y { 0.0 };
+  double gripper_z { 0.0 };
+  double base_x { 0.0 };
+  double base_y { 0.0 };
+  double base_z { 0.0 };
+  double base_roll { 0.0 };
+  double base_pitch { 0.0 };
+  double base_yaw { 0.0 };
+};
 
-  // track the state of each finger individually
-  Gripper finger1;
-  Gripper finger2;
-  Gripper finger3;
+struct Base {
+
+  /* describing the gripper base motions */
+  
+  double x;
+  double y;
+  double z;
+  double roll;
+  double pitch;
+  double yaw;
+
+  Base() : x(0), y(0), z(0), roll(0), pitch(0), yaw(0) {}
+
+  Base(double x, double y, double z, double roll, double pitch, double yaw)
+    : x(x), y(y), z(z), roll(roll), pitch(pitch), yaw(yaw)
+    {}
+
+  void reset() {
+    x = y = z = roll = pitch = yaw = 0.0;
+  }
+
+  std::vector<double> to_vec() {
+    std::vector<double> out { x, y, z, roll, pitch, yaw };
+    return out;
+  }
+
 };
 
 struct Target {
 
   Gripper end;                        // final target destination
   Gripper next;                       // target at the next step
-  std::array<double, 6> base {};      // target of base joints (only [0] used for z)
+
+  Base base;
+  Base base_min;
+  Base base_max;
+
+  // std::array<double, 6> base {};      // target of base joints (only [0] used for z)
   std::array<double, 7> panda {};     // target for panda joints (never used)
 
+  // for real life tracking what has just moved
   struct Robot {
     enum {
       none = 0,
@@ -399,8 +437,8 @@ struct Target {
 
   /* ground is at -10mm, max finger tilt from start before tips touch lifts them another
   10mm, then we add 10mm of padding to get +-30mm */
-  static constexpr double base_z_min = -30e-3;
-  static constexpr double base_z_max = 30e-3;
+  // static constexpr double base_z_min = -30e-3;
+  // static constexpr double base_z_max = 30e-3;
 
   // calibration value since z height will not be perfect from controller stiffness
   double z_offset = 0;
@@ -414,33 +452,46 @@ struct Target {
   SlidingWindow<float> target_stepperx {datanum};
   SlidingWindow<float> target_steppery {datanum};
   SlidingWindow<float> target_stepperz {datanum};
+  SlidingWindow<float> target_basex {datanum};
+  SlidingWindow<float> target_basey {datanum};
   SlidingWindow<float> target_basez {datanum};
+  SlidingWindow<float> target_baseroll {datanum};
+  SlidingWindow<float> target_basepitch {datanum};
+  SlidingWindow<float> target_baseyaw {datanum};
   SlidingWindow<float> actual_stepperx {datanum};
   SlidingWindow<float> actual_steppery {datanum};
   SlidingWindow<float> actual_stepperz {datanum};
+  SlidingWindow<float> actual_basex {datanum};
+  SlidingWindow<float> actual_basey {datanum};
   SlidingWindow<float> actual_basez {datanum};
-  
+  SlidingWindow<float> actual_baseroll {datanum};
+  SlidingWindow<float> actual_basepitch {datanum};
+  SlidingWindow<float> actual_baseyaw {datanum};
+
   void reset() {
     end.reset();
     next.reset();
-    base.fill(0);
+    base.reset();
     panda.fill(0);
   }
 
-  std::vector<gfloat> get_target_m()
+  JointStates get_target_m()
   {
-    /* returns in metres the end target in the pattern:
-      { gripper_x, gripper_y, gripper_z, base_z }
-    */
+    /* returns in metres (or radians for rpy) the joint states */
 
-    std::vector<gfloat> out { 
-      (gfloat) end.get_x_m(), 
-      (gfloat) end.get_y_m(), 
-      (gfloat) end.get_z_m(), 
-      (gfloat) base[0]
-    };
+    JointStates state;
 
-    return out;
+    state.gripper_x = end.get_x_m();
+    state.gripper_y = end.get_y_m();
+    state.gripper_z = end.get_z_m();
+    state.base_x = base.x;
+    state.base_y = base.y;
+    state.base_z = base.z;
+    state.base_roll = base.roll;
+    state.base_pitch = base.pitch;
+    state.base_yaw = base.yaw;
+
+    return state;
   }
 
   bool x_moving() {

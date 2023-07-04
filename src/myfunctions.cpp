@@ -204,6 +204,25 @@ struct JointSettings {
 
   } dim;
 
+  // base operating limits
+  struct BaseLims {
+
+    double x_min { -50e-3 };
+    double x_max { 50e-3 };
+    double y_min { -50e-3 };
+    double y_max { 50e-3 };
+    double z_min { -30e-3 };
+    double z_max { 30e-3 };
+    
+    double roll_min { -0.5 };
+    double roll_max { 0.5 };
+    double pitch_min { -0.5 };
+    double pitch_max { 0.5 };
+    double yaw_min { -M_PI / 2 };
+    double yaw_max { M_PI / 2 };
+
+  } baseLims;
+
   // strain gauge parameters
   struct {
     bool use_armadillo_gauges = true;          // whether to use curve fitting for finger bending
@@ -218,14 +237,10 @@ struct JointSettings {
     bool stepper = true;
     int num_steps = 10;                         // number of stepper motors steps in one chunk
     double pulses_per_s = 2000;                 // stepper motor pulses per second, this sets speed (2000pps = 300rpm)
-    Gain kp {100, 40, 1000};                    // proportional gains for gripper xyz motors {x, y, z}
-    Gain kd {1, 1, 1};                          // derivative gains for gripper xyz motors {x, y, z}
-
-    // double base_kp = 2000;                      // proportional gain for gripper base motions
-    // double base_kd = 100;                       // derivative gain for gripper base motions
-
-    Gain base_kp {500, 500, 2000};
-    Gain base_kd {80, 80, 100};
+    Gain gripper_kp {100, 40, 1000};            // proportional gains for gripper xyz motors {x, y, z}
+    Gain gripper_kd {1, 1, 1};                  // derivative gains for gripper xyz motors {x, y, z}
+    Gain base_xyz_kp {500, 500, 2000};          // proportional gains for base xyz motions {x, y, z}
+    Gain base_xyz_kd {80, 80, 100};             // derivative gains for base xyz motions {x, y, z}
 
     double time_per_step = 0.0;                 // runtime depends
   } ctrl;
@@ -404,14 +419,6 @@ static double last_step_time_ = 0.0;
 // turn on/off debug mode for this file only
 constexpr static bool debug_ = true; 
 
-// TESTING global variable to prevent table impacts
-bool TEST_prevent_table_impacts = false; // default should always be false
-float TEST_prevent_table_impacts_value = -12.5e-3; // metres depth below starting position to prevent further motion
-void prevent_table_impacts(bool set_as) {
-  TEST_prevent_table_impacts = set_as;
-}
-// END TESTING - see move_base_m(...) function and header file
-
 /* ----- initialising, setup, and utilities ----- */
 
 void init(mjModel* model, mjData* data)
@@ -434,6 +441,9 @@ void init(mjModel* model, mjData* data)
 
   // // assign my control function to the mujoco control fcn pointer
   // mjcb_control = control;
+
+  // update the base joint limits
+  update_base_limits();
 }
 
 void init_J(mjModel* model, mjData* data)
@@ -496,6 +506,9 @@ void reset(mjModel* model, mjData* data)
   // recalculate all object positions/forces
   mj_forward(model, data);
   update_all(model, data);
+
+  // update the base joint limits
+  update_base_limits();
 
   // set the joints to the equilibrium position
   calibrate_reset(model, data);
@@ -1887,8 +1900,8 @@ void control_gripper(const mjModel* model, mjData* data, Gripper& target)
 
   // input the control signals
   for (int i : j_.gripper.prismatic) {
-    u = ((*j_.to_qpos.gripper[i]) - target.x) * j_.ctrl.kp.x 
-      + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.x;
+    u = ((*j_.to_qpos.gripper[i]) - target.x) * j_.ctrl.gripper_kp.x 
+      + (*j_.to_qvel.gripper[i]) * j_.ctrl.gripper_kd.x;
     // if (abs(u) > force_lim) {
     //   std::cout << "x frc limited from " << u << " to ";
     //   u = force_lim * sign(u);
@@ -1898,8 +1911,8 @@ void control_gripper(const mjModel* model, mjData* data, Gripper& target)
   }
 
   for (int i : j_.gripper.revolute) {
-    u = ((*j_.to_qpos.gripper[i]) - target.th) * j_.ctrl.kp.y 
-      + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.y;
+    u = ((*j_.to_qpos.gripper[i]) - target.th) * j_.ctrl.gripper_kp.y 
+      + (*j_.to_qvel.gripper[i]) * j_.ctrl.gripper_kd.y;
     // if (abs(u) > force_lim) {
     //   std::cout << "y frc limited from " << u << " to ";
     //   u = force_lim * sign(u);
@@ -1909,8 +1922,8 @@ void control_gripper(const mjModel* model, mjData* data, Gripper& target)
   }
   
   for (int i : j_.gripper.palm) {
-    u = ((*j_.to_qpos.gripper[i]) - target.z) * j_.ctrl.kp.z 
-      + (*j_.to_qvel.gripper[i]) * j_.ctrl.kd.z;
+    u = ((*j_.to_qpos.gripper[i]) - target.z) * j_.ctrl.gripper_kp.z 
+      + (*j_.to_qvel.gripper[i]) * j_.ctrl.gripper_kd.z;
     // if (abs(u) > force_lim) {
     //   std::cout << "z frc limited from " << u << " to ";
     //   u = force_lim * sign(u);
@@ -1943,26 +1956,26 @@ void control_base(const mjModel* model, mjData* data)
   if (j_.in_use.base_z) {
 
     // z movement only
-    u = ((*j_.to_qpos.base[0]) - target_.base[0]) * j_.ctrl.base_kp.z
-      + (*j_.to_qvel.base[0]) * j_.ctrl.base_kd.z;
+    u = ((*j_.to_qpos.base[0]) - target_.base.z) * j_.ctrl.base_xyz_kp.z
+      + (*j_.to_qvel.base[0]) * j_.ctrl.base_xyz_kd.z;
     data->ctrl[n + 0] = -u;
 
   }
   else if (j_.in_use.base_xyz) {
 
     // x movement
-    u = ((*j_.to_qpos.base[0]) - target_.base[0]) * j_.ctrl.base_kp.x
-      + (*j_.to_qvel.base[0]) * j_.ctrl.base_kd.x;
+    u = ((*j_.to_qpos.base[0]) - target_.base.x) * j_.ctrl.base_xyz_kp.x
+      + (*j_.to_qvel.base[0]) * j_.ctrl.base_xyz_kd.x;
     data->ctrl[n + 0] = -u;
 
     // y movement
-    u = ((*j_.to_qpos.base[1]) - target_.base[1]) * j_.ctrl.base_kp.y
-      + (*j_.to_qvel.base[1]) * j_.ctrl.base_kd.y;
+    u = ((*j_.to_qpos.base[1]) - target_.base.y) * j_.ctrl.base_xyz_kp.y
+      + (*j_.to_qvel.base[1]) * j_.ctrl.base_xyz_kd.y;
     data->ctrl[n + 1] = -u;
 
     // z movement
-    u = ((*j_.to_qpos.base[2]) - target_.base[2]) * j_.ctrl.base_kp.z
-      + (*j_.to_qvel.base[2]) * j_.ctrl.base_kd.z;
+    u = ((*j_.to_qpos.base[2]) - target_.base.z) * j_.ctrl.base_xyz_kp.z
+      + (*j_.to_qvel.base[2]) * j_.ctrl.base_xyz_kd.z;
     data->ctrl[n + 2] = -u;
   }
   
@@ -2023,9 +2036,6 @@ void update_all(mjModel* model, mjData* data)
 {
   /* update the state of everything in the simulation */
 
-  // update_state(model, data); // NO LONGER NEEDED
-  // update_objects(model, data); // NO LONGER NEEDED
-
   if (j_.ctrl.stepper) {
     update_stepper(model, data);
   }
@@ -2054,19 +2064,33 @@ void update_stepper(mjModel* model, mjData* data)
     // we can optionally log position data to see motor response to steps
     if (log_test_data) {
 
-      Gripper temp;
-      temp.set_xyz_m_rad(*j_.to_qpos.gripper[0], *j_.to_qpos.gripper[1], *j_.to_qpos.gripper[6]);
       target_.timedata.add(data->time);
 
+      // save current target information
       target_.target_stepperx.add(target_.next.x * 1e6);
       target_.target_steppery.add(target_.next.y * 1e6);
       target_.target_stepperz.add(target_.next.z * 1e6);
-      target_.target_basez.add(target_.base[0] * 1e6);
+      target_.target_basez.add(target_.base.z * 1e6);
+      if (j_.in_use.base_xyz) {
+        target_.target_basex.add(target_.base.x * 1e6);
+        target_.target_basey.add(target_.base.y * 1e6);
+      }
 
+      // now save actual position data direct from mujoco
+      Gripper temp;
+      temp.set_xyz_m_rad(*j_.to_qpos.gripper[0], *j_.to_qpos.gripper[1], *j_.to_qpos.gripper[6]);
       target_.actual_stepperx.add(temp.x * 1e6);
       target_.actual_steppery.add(temp.y * 1e6);
       target_.actual_stepperz.add(temp.z * 1e6);
-      target_.actual_basez.add(*j_.to_qpos.base[0] * 1e6);
+      if (j_.in_use.base_z) {
+        target_.actual_basez.add(*j_.to_qpos.base[0] * 1e6);
+      }
+      else if (j_.in_use.base_xyz) {
+        target_.actual_basex.add(*j_.to_qpos.base[0] * 1e6);
+        target_.actual_basey.add(*j_.to_qpos.base[1] * 1e6);
+        target_.actual_basez.add(*j_.to_qpos.base[2] * 1e6);
+      }
+      
     }
 
     // check if motors are moving, if not, lock them
@@ -2184,6 +2208,29 @@ void update_constraints(mjModel* model, mjData* data)
   // std::cout << "\n";
 }
 
+void update_base_limits()
+{
+  /* update the operating limits of the gripper base, only done on reset */
+
+  target_.base_min.x = j_.baseLims.x_min;
+  target_.base_max.x = j_.baseLims.x_max;
+
+  target_.base_min.y = j_.baseLims.y_min;
+  target_.base_max.y = j_.baseLims.y_max;
+
+  target_.base_min.z = j_.baseLims.z_min;
+  target_.base_max.z = j_.baseLims.z_max;
+
+  target_.base_min.roll = j_.baseLims.roll_min;
+  target_.base_max.roll = j_.baseLims.roll_max;
+
+  target_.base_min.pitch = j_.baseLims.pitch_min;
+  target_.base_max.pitch = j_.baseLims.pitch_max;
+
+  target_.base_min.yaw = j_.baseLims.yaw_min;
+  target_.base_max.yaw = j_.baseLims.yaw_max;
+}
+
 /* ----- set gripper target ----- */
 
 bool set_gripper_target_step(int x, int y, int z)
@@ -2222,22 +2269,42 @@ bool set_base_target_m(double x, double y, double z)
 
   target_.last_robot = Target::Robot::panda;
 
-  /* only z motion currently implemented */
-  target_.base[0] = z;
+  // apply the new positions to the targets
+  target_.base.x = x;
+  target_.base.y = y;
+  target_.base.z = z;
 
-  // check limits, currently only z movements supported
-  double z_min = luke::Target::base_z_min;
-  double z_max = luke::Target::base_z_max;
+  bool within_limits = true;
 
-  // check if we have gone outside the limits
-  if (target_.base[0] > z_max) {
-    target_.base[0] = z_max;
-    return false;
+  // x base limits
+  if (target_.base.x > target_.base_max.x) {
+    target_.base.x = target_.base_max.x;
+    within_limits = false;
   }
-  if (target_.base[0] < z_min) {
-    target_.base[0] = z_min;
-    return false;
+  if (target_.base.x < target_.base_min.x) {
+    target_.base.x = target_.base_min.x;
+    within_limits = false;
   }
+  // y base limits
+  if (target_.base.y > target_.base_max.y) {
+    target_.base.y = target_.base_max.y;
+    within_limits = false;
+  }
+  if (target_.base.y < target_.base_min.y) {
+    target_.base.y = target_.base_min.y;
+    within_limits = false;
+  }
+  // z base limits
+  if (target_.base.z > target_.base_max.z) {
+    target_.base.z = target_.base_max.z;
+    within_limits = false;
+  }
+  if (target_.base.z < target_.base_min.z) {
+    target_.base.z = target_.base_min.z;
+    within_limits = false;
+  }
+
+  return within_limits;
 }
 
 bool move_gripper_target_step(int x, int y, int z)
@@ -2279,39 +2346,42 @@ bool move_base_target_m(double x, double y, double z)
 
   target_.last_robot = Target::Robot::panda;
 
-  /* only z motion currently implemented */
-  target_.base[0] += z;
+  // add the incoming position changes to our target
+  target_.base.x += x;
+  target_.base.y += y;
+  target_.base.z += z;
 
-  // check limits, currently only z movements supported
-  double z_min = luke::Target::base_z_min;
-  double z_max = luke::Target::base_z_max;
+  bool within_limits = true;
 
-  // check if we have gone outside the limits
-  if (target_.base[0] > z_max) {
-    target_.base[0] = z_max;
-    return false;
+  // x base limits
+  if (target_.base.x > target_.base_max.x) {
+    target_.base.x = target_.base_max.x;
+    within_limits = false;
   }
-  if (target_.base[0] < z_min) {
-    target_.base[0] = z_min;
-    return false;
+  if (target_.base.x < target_.base_min.x) {
+    target_.base.x = target_.base_min.x;
+    within_limits = false;
+  }
+  // y base limits
+  if (target_.base.y > target_.base_max.y) {
+    target_.base.y = target_.base_max.y;
+    within_limits = false;
+  }
+  if (target_.base.y < target_.base_min.y) {
+    target_.base.y = target_.base_min.y;
+    within_limits = false;
+  }
+  // z base limits
+  if (target_.base.z > target_.base_max.z) {
+    target_.base.z = target_.base_max.z;
+    within_limits = false;
+  }
+  if (target_.base.z < target_.base_min.z) {
+    target_.base.z = target_.base_min.z;
+    within_limits = false;
   }
 
-  // TESTING prevent table impacts
-  /* in future, make a 'base' class to handle all base movements, like the gripper class */
-  if (TEST_prevent_table_impacts) {
-    // if the action is to go lower (+ve means go lower)
-    if (z > 0) {
-      // if the fingertips are below our threshold height
-      if (luke::get_fingertip_z_height() < TEST_prevent_table_impacts_value) {
-        target_.base[0] -= z; // undo the previous addition of the action
-        // std::cout << "\n\n--------------------------- table impact prevented ----------------------\n\n";
-        return false;
-      }
-    }
-  }
-  // END TESTING
-
-  return true;
+  return within_limits;
 }
 
 void print_target()
@@ -2331,19 +2401,18 @@ void set_base_to_max_height(mjData* data)
   tests and not during any grasping */
 
   // confusingly, for the base down is +ve and up is -ve
-  float max_height = Target::base_z_min;
+  float max_height = target_.base_min.z;
 
   // set the base target to maximum
   set_base_target_m(0, 0, max_height);
 
   // override qpos for the base to snap model to maximum
-
-  /* ONLY Z MOTION SUPPORTED */
-  if (j_.num.base > 1) {
-    throw std::runtime_error("only z motion supported in set_base_to_max_height(...)");
+  if (j_.in_use.base_xyz) {
+    (*j_.to_qpos.base[2]) = max_height; 
   }
-
-  (*j_.to_qpos.base[0]) = max_height; 
+  else if (j_.in_use.base_z) {
+    (*j_.to_qpos.base[0]) = max_height; 
+  } 
 }
 
 /* ----- sensing ------ */
@@ -2912,21 +2981,56 @@ std::vector<gfloat> get_gripper_state(const mjData* data)
   return joint_values;
 }
 
-std::vector<gfloat> get_target_state()
+JointStates get_target_state()
 {
-  /* Get the state of the gripper target */
+  /* Get the state of the gripper target in as a named structure */
 
   return target_.get_target_m();
+}
 
-  // // old code
-  // // target_.end.update();
-  // gfloat x = target_.end.x;
-  // gfloat y = target_.end.y; // or theta?
-  // gfloat z = target_.end.z;
+std::vector<gfloat> get_target_state_vector()
+{
+  /* Get a vector of the gripper target positions, only including active joints */
 
-  // std::vector<gfloat> target_joint_values = { x, y, z };
+  JointStates state = target_.get_target_m();
 
-  // return target_joint_values;
+  std::vector<gfloat> state_vec;
+
+  state_vec.push_back(state.gripper_x);
+  state_vec.push_back(state.gripper_x);
+  state_vec.push_back(state.gripper_x);
+  if (j_.in_use.base_xyz) {
+    state_vec.push_back(state.base_x);
+    state_vec.push_back(state.base_y);
+  }
+  state_vec.push_back(state.base_z);
+
+  // state_vec.push_back(state.base_roll);
+  // state_vec.push_back(state.base_pitch);
+  // state_vec.push_back(state.base_yaw);
+
+  return state_vec;
+}
+
+std::vector<double> get_base_min()
+{
+  /* return the base joint minimums */
+
+  return target_.base_min.to_vec();
+}
+
+std::vector<double> get_base_max()
+{
+  /* return the base joint minimums */
+
+  return target_.base_max.to_vec();
+}
+
+bool use_base_xyz()
+{
+  /* are we using full base xyz movement */
+
+  return j_.in_use.base_xyz;
 }
 
 int get_N() 
@@ -2991,11 +3095,11 @@ float get_fingertip_z_height()
   the gripper starts usually at 10mm height, a value of -10e-3 indicates the tips
   have hit the ground */
 
-  float straight_finger_distance = -Target::base_z_min - target_.base[0];
+  float straight_finger_distance = -target_.base_min.z - target_.base.z;
   float tip_lift = j_.dim.finger_length * (1 - std::cos(target_.end.get_th_rad()));
   float height_above_min = straight_finger_distance + tip_lift;
 
-  return height_above_min + Target::base_z_min;
+  return height_above_min + target_.base_min.z;
 }
 
 /* ----- environment ----- */
