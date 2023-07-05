@@ -514,6 +514,23 @@ struct Target {
     }
     return true;
   }
+
+  bool prismatic_moving() {
+    return x_moving();
+  }
+
+  bool revolute_moving() {
+
+    // if angle changes by more than half a degree
+    double tol = 5e-1;
+
+    if (abs(end.get_th_deg() - next.get_th_deg()) < tol) {
+      return false;
+    }
+
+    return true;
+  }
+
 };
 
 } // namespace Luke

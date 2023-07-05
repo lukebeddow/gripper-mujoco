@@ -134,6 +134,31 @@ bool strcmp_w_sub(std::string ref_str, std::string sub_str, int num) {
 
   return false;
 }
+bool str_starts_with(std::string ref_str, std::string check_str)
+{
+  /* does a given ref_str end with a particular check_str */
+  int r = ref_str.size();
+  int c = check_str.size();
+  if (c > r) return false;
+
+  std::string check_target = ref_str.substr(0, c);
+  if (check_target == check_str) return true;
+
+  return false;
+}
+bool str_ends_with(std::string ref_str, std::string check_str)
+{
+  /* does a given ref_str end with a particular check_str */
+  int r = ref_str.size();
+  int c = check_str.size();
+  if (c > r) return false;
+
+  std::string check_target = ref_str.substr(r - c, c);
+  if (check_target == check_str) return true;
+
+  return false;
+}
+
 
 /* ----- global variables and settings ----- */
 
@@ -1947,12 +1972,6 @@ void control_base(const mjModel* model, mjData* data)
     throw std::runtime_error("base dof does not equal 3 but in_use.base_xyz is true");
   }
 
-  // for (int i = 0; i < j_.num.base; i++) {
-  //   u = ((*j_.to_qpos.base[i]) - target_.base[i]) * j_.ctrl.base_kp
-  //     + (*j_.to_qvel.base[i]) * j_.ctrl.base_kd;
-  //   data->ctrl[n + i] = -u;
-  // }
-
   if (j_.in_use.base_z) {
 
     // z movement only
@@ -2135,22 +2154,15 @@ void update_constraints(mjModel* model, mjData* data)
   static bool old_y = true;
   static bool old_z = true;
 
-  bool new_x = target_.x_moving();
-  bool new_y = target_.y_moving();
+  // old
+  // bool new_x = target_.x_moving();
+  // bool new_y = target_.y_moving();
+  // bool new_z = target_.z_moving();
+
+  // we care about revolute/prismatic joints as these are what we constrain
+  bool new_x = target_.prismatic_moving();
+  bool new_y = target_.revolute_moving();
   bool new_z = target_.z_moving();
-
-  // // FOR TESTING - this work was not finished
-  // for (int i : j_.con_idx.prismatic) {
-  //   target_constraint(model, data, i, not new_x, 0);
-  // }
-  // for (int i : j_.con_idx.revolute) {
-  //   target_constraint(model, data, i, not new_y, 1);
-  // }
-  // for (int i : j_.con_idx.palm) {
-  //   target_constraint(model, data, i, not new_z, 2);
-  // }
-
-  // return;
 
   if (new_x != old_x) {
     if (new_x) {
@@ -2199,13 +2211,6 @@ void update_constraints(mjModel* model, mjData* data)
     }
     old_z = new_z;
   }
-
-  // // for testing
-  // std::cout << "Prismatic constraints: ";
-  // for (int i : j_.con_idx.prismatic) {
-  //   std::cout << (int) model->eq_active[i] << ", ";
-  // }
-  // std::cout << "\n";
 }
 
 void update_base_limits()
@@ -2382,6 +2387,13 @@ bool move_base_target_m(double x, double y, double z)
   }
 
   return within_limits;
+}
+
+bool move_base_target_rad(double roll, double pitch, double yaw)
+{
+  /* move the gripper base by an angle, not yet implemented */
+
+  throw std::runtime_error("move_base_target_rad(...) is not yet implemented - do not use!");
 }
 
 void print_target()

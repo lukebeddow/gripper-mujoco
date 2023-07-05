@@ -20,12 +20,11 @@
 // start of user defined simulation settings, all lines except last must end in '\'
 // all settings defined here will be read/write exposed to python under MjClass.set
 
-#define LUKE_MJSETTINGS \
+#define LUKE_MJSETTINGS_GENERAL \
   /*
   
   1. Regular settings
-                                type      value
-  general */\
+                                type      value */\
   XX(  debug,                   bool,     true)     /* print debug info to terminal */\
   XX(  mujoco_timestep,         double,   0.001)    /* sim timestep in seconds - default 0.002 */\
   XX(  curve_validation,        bool,     false)    /* are we in curve validation mode, if yes collect curve data */\
@@ -94,6 +93,10 @@
   XX(  render_on_step,          bool,     false)    /* render on every single sim step */\
   XX(  use_render_delay,        bool,     false)    /* pause when rendering */\
   XX(  render_delay,            double,   0.5)      /* how long to pause when rendering */\
+  
+
+  
+#define LUKE_MJSETTINGS_SENSOR \
   /* 
 
   2. Sensors
@@ -105,9 +108,32 @@
   SS(  palm_sensor,             true,     10.0,     10)  /* palm force sensor */\
   SS(  wrist_sensor_XY,         true,     5.0,      10)  /* force wrist sensor X and Y forces */\
   SS(  wrist_sensor_Z,          true,     10.0,     10)  /* force wrist sensor Z force */\
+  
+  
+  
+#define LUKE_MJSETTINGS_ACTION \
   /* 
 
-  3. Binary rewards
+  3. Actions
+      name                      used      continous  value   sign */\
+  AA(  gripper_X,               true,     true,     1.0e-3,  -1)        /* move gripper X motor by m */\
+  AA(  gripper_prismatic_X,     true,     true,     1.0e-3,  -1)        /* move gripper X and Y motors to move prismatically by m */\
+  AA(  gripper_Y,               true,     true,     1.0e-3,  -1)        /* move gripper Y motor by m */\
+  AA(  gripper_revolute_Y,      true,     true,     0.01,    -1)        /* move gripper Y motor with angular motions/targets in radians */\
+  AA(  gripper_Z,               true,     true,     2.0e-3,   1)        /* move gripper Z motor by m */\
+  AA(  base_X,                  true,     true,     2.0e-3,   1)        /* move gripper base X by m */\
+  AA(  base_Y,                  true,     true,     2.0e-3,   1)        /* move gripper base Y by m */\
+  AA(  base_Z,                  true,     true,     2.0e-3,   1)        /* move gripper base Z by m */\
+  AA(  base_roll,               true,     true,     0.01,     1)        /* rotate gripper base about X in radians */\
+  AA(  base_pitch,              true,     true,     0.01,     1)        /* rotate gripper base about Y in radians */\
+  AA(  base_yaw,                true,     true,     0.01,     1)        /* rotate gripper base about Z in radians */\
+  
+  
+  
+#define LUKE_MJSETTINGS_BINARY_REWARD \
+  /* 
+
+  4. Binary rewards
       name                      reward    done      trigger */\
   BR(  step_num,                -0.01,    false,    1)      /* when a step is made */\
   BR(  lifted,                  0.005,    false,    1)      /* object leaves the ground */\
@@ -118,9 +144,13 @@
   BR(  object_contact,          0.005,    false,    1)      /* fingers or palm touches object */\
   BR(  object_stable,           1.0,      false,    1)      /* fingers and palm apply min force */\
   BR(  stable_height,           0.0,      1,        1)      /* object stable and at height target */\
+  
+  
+  
+#define LUKE_MJSETTINGS_LINEAR_REWARD \
   /*
 
-  4. Linear rewards
+  5. Linear rewards
       name                      reward    done   trigger  min   max   overshoot */\
   LR(  finger_force,            0.0,      false,    1,    1.0,  2.0,  -1)     /* avg. force from fingers */\
   LR(  palm_force,              0.05,     false,    1,    1.0,  3.0,  6.0)    /* palm force applied */\

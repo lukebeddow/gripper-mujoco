@@ -39,17 +39,38 @@ namespace MjType
   // what are the possible actions (order matters - see configure_settings())
   struct Action {
     enum {
-      x_motor_positive = 0,
-      x_motor_negative,
-      prismatic_positive,
-      prismatic_negative,
-      y_motor_positive,
-      y_motor_negative,
-      z_motor_positive,
-      z_motor_negative,
-      height_positive,
-      height_negative,
-      count             // how many possible actions, leave this last
+
+      // each action should have a positive/negative version in the enum
+      #define _TOKEN_CONCAT(a, b) a##b
+      #define TOKEN_CONCAT(a, b) _TOKEN_CONCAT(a, b)
+      #define POSITIVE_TOKEN _positive
+      #define NEGATIVE_TOKEN _negative
+      #define CONTINOUS_TOKEN _continous
+
+      #define AA(NAME, USED, CONTINOUS, VALUE, SIGN) \
+        TOKEN_CONCAT(NAME, POSITIVE_TOKEN),\
+        TOKEN_CONCAT(NAME, NEGATIVE_TOKEN),\
+        TOKEN_CONCAT(NAME, CONTINOUS_TOKEN),
+        
+        // run the macro to create the code
+        LUKE_MJSETTINGS_ACTION
+
+      #undef AA
+
+      count // last entry, how many possible actions
+
+
+      // x_motor_positive = 0,
+      // x_motor_negative,
+      // prismatic_positive,
+      // prismatic_negative,
+      // y_motor_positive,
+      // y_motor_negative,
+      // z_motor_positive,
+      // z_motor_negative,
+      // height_positive,
+      // height_negative,
+      // count             // how many possible actions, leave this last
     };
   };
 
@@ -396,6 +417,116 @@ namespace MjType
 
   };
 
+  // action type for defining action settings
+  struct ActionSetting {
+
+      std::string name {};
+      bool in_use { false };
+      bool continous { false };
+      double value { 0.0 };
+      int sign { 1 };
+      
+      // we want to store the function pointer to the action function
+      typedef bool (*ActionFunctionPtr)(double, double, double);
+      ActionFunctionPtr action_function;
+      int arg_num = 0; // when calling action_function(arg0, arg1, arg2), which arg should we set?
+
+      // constructor - users should hardcode the action function required for any new actions
+      ActionSetting(std::string name, bool in_use, bool continous, double value, int sign)
+        : name(name), in_use(in_use), continous(continous), value(value), sign(sign)
+      {
+        update_action_function();
+        if (sign != -1 and sign != 1) {
+          throw std::runtime_error("ActionSetting given sign not equal to +1 or -1\n");
+        }
+      }
+
+      void update_action_function()
+      {
+        /* determine what action we are, and which action function we should call */
+
+        // gripper action
+        if (luke::str_starts_with(name, "gripper")) {
+
+          // if we are actuating prismatically/revolute
+          if (luke::str_ends_with(name, "prismatic_X") or
+              luke::str_ends_with(name, "revolute_Y")) {
+            action_function = luke::move_gripper_target_m_rad;
+          }
+          // else we are adjusting motor positions directly
+          else {
+            action_function = luke::move_gripper_target_m;
+          }
+        }
+
+        // base action
+        else if (luke::str_starts_with(name, "base")) {
+
+          // cartesian base movement
+          if (luke::str_ends_with(name, "X") or
+              luke::str_ends_with(name, "Y") or
+              luke::str_ends_with(name, "Z")) {
+            action_function = luke::move_base_target_m;
+          }
+          // base rotation
+          else {
+            action_function = luke::move_base_target_rad;
+          }
+        }
+
+        // now determine which argument we want
+        if (luke::str_ends_with(name, "X")) {
+          arg_num = 0;
+        }
+        else if (luke::str_ends_with(name, "Y")) {
+          arg_num = 1;
+        }
+        else if (luke::str_ends_with(name, "Z")) {
+          arg_num = 2;
+        }
+        else if (luke::str_ends_with(name, "roll")) {
+          arg_num = 0;
+        }
+        else if (luke::str_ends_with(name, "pitch")) {
+          arg_num = 1;
+        }
+        else if (luke::str_ends_with(name, "yaw")) {
+          arg_num = 2;
+        }
+        else {
+          std::string e = "ActionSetting::update_action_function() does not recognise this action with name = " + name + "\n";
+          throw std::runtime_error(e);
+        }
+      }
+
+      bool call_action_function(double call_value)
+      {
+        /* call the function which applies the current action */
+
+        // apply the sign change
+        call_value *= sign;
+        
+        // within limits indicator
+        bool wl = true;
+
+        if (arg_num == 0) {
+          wl = action_function(call_value, 0, 0);
+        }
+        else if (arg_num == 1) {
+          wl = action_function(0, call_value, 0);
+        }
+        else if (arg_num == 2) {
+          wl = action_function(0, 0, call_value);
+        }
+        else {
+          std::string e = "ActionSetting::call_action_function() got invalid arg_num for action with name = " + name + "\n";
+          throw std::runtime_error(e);
+        }
+
+        return wl;
+      }
+    };
+
   // what key events will we keep track of in the simulation
   struct EventTrack {
 
@@ -420,14 +551,13 @@ namespace MjType
     };
 
     // create an event for each reward, binary->binary, linear->linear
-    #define XX(NAME, TYPE, VALUE)
-    #define SS(NAME, IN_USE, NORM, READRATE)
     #define BR(NAME, REWARD, DONE, TRIGGER) BinaryEvent NAME;
     #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) LinearEvent NAME;
+      
       // run the macro to create the code
-      LUKE_MJSETTINGS
-    #undef XX
-    #undef SS
+      LUKE_MJSETTINGS_BINARY_REWARD
+      LUKE_MJSETTINGS_LINEAR_REWARD
+
     #undef BR
     #undef LR
 
@@ -439,16 +569,13 @@ namespace MjType
     {
       /* run the reset function for all members of the class */
 
-      #define XX(NAME, TYPE, VALUE)
-      #define SS(NAME, IN_USE, NORM, READRATE)
       #define BR(NAME, REWARD, DONE, TRIGGER) NAME.reset();
       #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) NAME.reset();
 
         // run the macro to create the code
-        LUKE_MJSETTINGS
+        LUKE_MJSETTINGS_BINARY_REWARD
+        LUKE_MJSETTINGS_LINEAR_REWARD
 
-      #undef XX
-      #undef SS
       #undef BR
       #undef LR
     }
@@ -457,9 +584,6 @@ namespace MjType
     {
       /* calculate the percentage of steps where this event occured */
 
-      #define XX(NAME, TYPE, VALUE)
-      #define SS(NAME, IN_USE, NORM, READRATE)
-
       #define BR(NAME, REWARD, DONE, TRIGGER)                             \
                 NAME.percent = (100.0 * NAME.abs) / (float) step_num.abs;
 
@@ -467,10 +591,9 @@ namespace MjType
                 NAME.percent = (100.0 * NAME.abs) / (float) step_num.abs;
                 
         // run the macro to create the code
-        LUKE_MJSETTINGS
+        LUKE_MJSETTINGS_BINARY_REWARD
+        LUKE_MJSETTINGS_LINEAR_REWARD
 
-      #undef XX
-      #undef SS
       #undef BR
       #undef LR
     }
@@ -524,14 +647,13 @@ namespace MjType
     };
 
     // create an event for each reward, default none involved
-    #define XX(NAME, TYPE, VALUE)
-    #define SS(NAME, IN_USE, NORM, READRATE)
     #define BR(NAME, REWARD, DONE, TRIGGER) Event NAME;
     #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT) Event NAME;
+      
       // run the macro to create the code
-      LUKE_MJSETTINGS
-    #undef XX
-    #undef SS
+      LUKE_MJSETTINGS_BINARY_REWARD
+      LUKE_MJSETTINGS_LINEAR_REWARD
+
     #undef BR
     #undef LR
 
@@ -547,8 +669,6 @@ namespace MjType
     {
       /* reset the goal */
 
-      #define XX(NAME, TYPE, VALUE)
-      #define SS(NAME, IN_USE, NORM, READRATE)
       #define BR(NAME, REWARD, DONE, TRIGGER)                                  \
                 NAME.state = -1.0;                                             \
                 if (reset_involved) { NAME.involved = false; }                    
@@ -558,10 +678,9 @@ namespace MjType
                 if (reset_involved) { NAME.involved = false; }                    
 
         // run the macro to create the code
-        LUKE_MJSETTINGS
+        LUKE_MJSETTINGS_BINARY_REWARD
+        LUKE_MJSETTINGS_LINEAR_REWARD
 
-      #undef XX
-      #undef SS
       #undef BR
       #undef LR
     }
@@ -575,13 +694,22 @@ namespace MjType
     // define the assignment code we want for X, BR, LR
     #define XX(name, type, value) type name { value };
     #define SS(name, in_use, norm, readrate) Sensor name { in_use, norm, readrate };
+    #define AA(name, in_use, continous, value, sign) \
+              ActionSetting name { #name, in_use, continous, value, sign };
     #define BR(name, reward, done, trigger) BinaryReward name { reward, done, trigger };
     #define LR(name, reward, done, trigger, min, max, overshoot) \
               LinearReward name { reward, done, trigger, min, max, overshoot };
+      
       // run the macro to create the code
-      LUKE_MJSETTINGS
+      LUKE_MJSETTINGS_GENERAL
+      LUKE_MJSETTINGS_SENSOR
+      LUKE_MJSETTINGS_ACTION
+      LUKE_MJSETTINGS_BINARY_REWARD
+      LUKE_MJSETTINGS_LINEAR_REWARD
+
     #undef XX
     #undef SS
+    #undef AA
     #undef BR
     #undef LR
 

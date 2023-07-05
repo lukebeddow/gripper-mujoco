@@ -110,33 +110,53 @@ void MjClass::configure_settings()
   action_options.clear();
   action_options.resize(MjType::Action::count, -1);
 
-  // what actions are valid - MUST be same order as action enums
+  // use macros to determine which actions are in use
   int i = 0;
-  if (not s_.paired_motor_X_step) {
-    action_options[i] = MjType::Action::x_motor_positive;
-    action_options[i + 1] = MjType::Action::x_motor_negative;
-    i += 2;
-  }
-  else {
-    action_options[i] = MjType::Action::prismatic_positive;
-    action_options[i + 1] = MjType::Action::prismatic_negative;
-    i += 2;
-  }
-  if (true) {
-    action_options[i] = MjType::Action::y_motor_positive;
-    action_options[i + 1] = MjType::Action::y_motor_negative;
-    i += 2;
-  }
-  if (s_.use_palm_action) {
-    action_options[i] = MjType::Action::z_motor_positive;
-    action_options[i + 1] = MjType::Action::z_motor_negative;
-    i += 2;
-  }
-  if (s_.use_height_action) {
-    action_options[i] = MjType::Action::height_positive;
-    action_options[i + 1] = MjType::Action::height_negative;
-    i += 2;
-  }
+  #define AA(NAME, USED, CONTINOUS, VALUE, SIGN)                                    \
+    if (s_.NAME.in_use) {                                                           \
+      if (s_.NAME.continous) {                                                      \
+        action_options[i] = MjType::Action::TOKEN_CONCAT(NAME, CONTINOUS_TOKEN);    \
+        i += 1;                                                                     \
+      }                                                                             \
+      else {                                                                        \
+        action_options[i] = MjType::Action::TOKEN_CONCAT(NAME, POSITIVE_TOKEN);     \
+        action_options[i + 1] = MjType::Action::TOKEN_CONCAT(NAME, NEGATIVE_TOKEN); \
+        i += 2;                                                                     \
+      }                                                                             \
+    }
+    
+    // run the macro to create the code
+    LUKE_MJSETTINGS_ACTION
+
+  #undef AA
+
+  // // what actions are valid - MUST be same order as action enums
+  // int i = 0;
+  // if (not s_.paired_motor_X_step) {
+  //   action_options[i] = MjType::Action::x_motor_positive;
+  //   action_options[i + 1] = MjType::Action::x_motor_negative;
+  //   i += 2;
+  // }
+  // else {
+  //   action_options[i] = MjType::Action::prismatic_positive;
+  //   action_options[i + 1] = MjType::Action::prismatic_negative;
+  //   i += 2;
+  // }
+  // if (true) {
+  //   action_options[i] = MjType::Action::y_motor_positive;
+  //   action_options[i + 1] = MjType::Action::y_motor_negative;
+  //   i += 2;
+  // }
+  // if (s_.use_palm_action) {
+  //   action_options[i] = MjType::Action::z_motor_positive;
+  //   action_options[i + 1] = MjType::Action::z_motor_negative;
+  //   i += 2;
+  // }
+  // if (s_.use_height_action) {
+  //   action_options[i] = MjType::Action::height_positive;
+  //   action_options[i + 1] = MjType::Action::height_negative;
+  //   i += 2;
+  // }
 
   n_actions = i;
 
@@ -1053,81 +1073,137 @@ std::vector<float> MjClass::set_action(int action)
 
   switch (action_code) {
 
-    case MjType::Action::x_motor_positive:
-      if (s_.debug) std::cout << "x_motor_positive";
-      if (s_.XYZ_action_mm_rad) 
-        wl = luke::move_gripper_target_m(-s_.X_action_mm * 1e-3, 0, 0); // -ve since home is 134mm and end is 50mm
-      else
-        wl = luke::move_gripper_target_step(s_.action_motor_steps, 0, 0);
-      break;
-    case MjType::Action::x_motor_negative:
-      if (s_.debug) std::cout << "x_motor_negative";
-      if (s_.XYZ_action_mm_rad) 
-        wl = luke::move_gripper_target_m(s_.X_action_mm * 1e-3, 0, 0);
-      else
-        wl = luke::move_gripper_target_step(-s_.action_motor_steps, 0, 0);
-      break;
+    // define action behaviour for positive/negative/continous
+    // any new actions should be further defined in ActionSettings::update_action_function()
+    #define AA(NAME, USED, CONTINOUS, VALUE, SIGN)              \
+      case MjType::Action::TOKEN_CONCAT(NAME, POSITIVE_TOKEN):  \
+        if (s_.debug) std::cout << s_.NAME.name + "_positive";  \
+        wl = s_.NAME.call_action_function(s_.NAME.value);       \
+        break;                                                  \
+      case MjType::Action::TOKEN_CONCAT(NAME, NEGATIVE_TOKEN):  \
+        if (s_.debug) std::cout << s_.NAME.name + "_negative";  \
+        wl = s_.NAME.call_action_function(-1 * s_.NAME.value);  \
+        break;                                                  \
+      case MjType::Action::TOKEN_CONCAT(NAME, CONTINOUS_TOKEN): \
+        if (s_.debug) std::cout << s_.NAME.name + "_continous"; \
+        wl = s_.NAME.call_action_function(s_.NAME.value);       \
+        break;                                                  \
 
-    case MjType::Action::prismatic_positive:
-      if (s_.debug) std::cout << "prismatic_positive";
-      if (s_.XYZ_action_mm_rad) 
-        wl = luke::move_gripper_target_m_rad(-s_.X_action_mm * 1e-3, 0, 0);
-      else
-        wl = luke::move_gripper_target_step(s_.action_motor_steps, s_.action_motor_steps, 0);
-      break;
-    case MjType::Action::prismatic_negative:
-      if (s_.debug) std::cout << "prismatic_negative";
-      if (s_.XYZ_action_mm_rad) 
-        wl = luke::move_gripper_target_m_rad(s_.X_action_mm * 1e-3, 0, 0);
-      else
-        wl = luke::move_gripper_target_step(-s_.action_motor_steps, -s_.action_motor_steps, 0);
-      break;
+      // run the macro to create the code
+      LUKE_MJSETTINGS_ACTION
 
-    case MjType::Action::y_motor_positive:
-      if (s_.debug) std::cout << "y_motor_positive";
-      if (s_.XYZ_action_mm_rad) 
-        wl = luke::move_gripper_target_m_rad(0, -s_.Y_action_rad, 0); // -ve as angle convention is swapped
-      else 
-        wl = luke::move_gripper_target_step(0, s_.action_motor_steps, 0);
-      break;
-    case MjType::Action::y_motor_negative:
-      if (s_.debug) std::cout << "y_motor_negative";
-      if (s_.XYZ_action_mm_rad) 
-        wl = luke::move_gripper_target_m_rad(0, s_.Y_action_rad, 0);
-      else
-        wl = luke::move_gripper_target_step(0, -s_.action_motor_steps, 0);
-      break;
-
-    case MjType::Action::z_motor_positive:
-      if (s_.debug) std::cout << "z_motor_positive";
-      if (s_.XYZ_action_mm_rad) 
-        wl = luke::move_gripper_target_m_rad(0, 0, s_.Z_action_mm * 1e-3);
-      else
-        wl = luke::move_gripper_target_step(0, 0, s_.action_motor_steps);
-      break;
-    case MjType::Action::z_motor_negative:
-      if (s_.debug) std::cout << "z_motor_negative";
-      if (s_.XYZ_action_mm_rad) 
-        wl = luke::move_gripper_target_m_rad(0, 0, -s_.Z_action_mm * 1e-3);
-      else
-        wl = luke::move_gripper_target_step(0, 0, -s_.action_motor_steps);
-      break;
-
-    case MjType::Action::height_positive:
-      if (s_.debug) std::cout << "height_positive";
-      wl = luke::move_base_target_m(0, 0, s_.action_base_translation);
-      break;
-    case MjType::Action::height_negative:
-      if (s_.debug) std::cout << "height_negative";
-      wl = luke::move_base_target_m(0, 0, -s_.action_base_translation);
-      break;
+    #undef AA
 
     default:
-      std::cout << "Action value received is " << action_code << '\n';
-      std::cout << "Number of actions is " << n_actions << '\n';
-      throw std::runtime_error("MjClass::set_action() received out of bounds int");
-   
+    std::cout << "Action value received is " << action_code << '\n';
+    std::cout << "Number of actions is " << n_actions << '\n';
+    throw std::runtime_error("MjClass::set_action() received out of bounds int");
+
   }
+
+    // gripper_X action, move only the X motor
+    // case MjType::Action::gripper_X_positive:
+    //   if (s_.debug) std::cout << "gripper_X_positive";
+    //   wl = luke::move_gripper_target_m(-s_.gripper_X.value * 1e-3, 0, 0); // -ve since home is 134mm and end is 50mm
+    //   break;
+    // case MjType::Action::gripper_X_negative:
+    //   if (s_.debug) std::cout << "gripper_X_negative";
+    //   wl = luke::move_gripper_target_m(s_.gripper_X.value * 1e-3, 0, 0);
+    //   break;
+    // case MjType::Action::gripper_X_continous:
+    //   if (s_.debug) std::cout << "gripper_X_continous";
+    //   wl = luke::move_gripper_target_m(-s_.gripper_X.value * 1e-3, 0, 0); // -ve since home is 134mm and end is 50mm
+    //   break;
+
+    // case MjType::Action::gripper_X_positive:
+    // case MjType::Action::gripper_X_negative:
+    // case MjType::Action::gripper_X_continous:
+    //   if (s_.debug) std::cout << s_.gripper_X.name
+    //   if (s_.gripper_X.continous) {
+
+    //   }
+
+    // // gripper_prismatic_X action, move the X and Y motors for prismatic motion
+    // case MjType::Action::gripper_prismatic_X_positive:
+    //   if (s_.debug) std::cout << "gripper_prismatic_X_positive";
+    //   wl = luke::move_gripper_target_m_rad(-s_.gripper_prismatic_X.value * 1e-3, 0, 0);
+    //   break;
+    // case MjType::Action::gripper_prismatic_X_negative:
+    //   if (s_.debug) std::cout << "gripper_prismatic_X_negative";
+    //   wl = luke::move_gripper_target_m_rad(s_.gripper_prismatic_X.value * 1e-3, 0, 0);
+    //   break;
+    // case MjType::Action::gripper_prismatic_X_continous:
+    //   if (s_.debug) std::cout << "gripper_prismatic_X_continous";
+    //   wl = luke::move_gripper_target_m_rad(-s_.gripper_prismatic_X.value * 1e-3, 0, 0);
+    //   break;
+
+    // // gripper_Y action, move only the Y motor by mm
+    // case MjType::Action::gripper_Y_positive:
+    //   if (s_.debug) std::cout << "gripper_Y_positive";
+    //   wl = luke::move_gripper_target_m_rad(0, -s_.gripper_Y.value, 0); // -ve since home is 134mm and end is 50mm
+    //   break;
+    // case MjType::Action::gripper_Y_negative:
+    //   if (s_.debug) std::cout << "gripper_Y_positive";
+    //   wl = luke::move_gripper_target_m_rad(0, s_.gripper_Y.value, 0);
+    //   break;
+    // case MjType::Action::gripper_Y_continous:
+    //   if (s_.debug) std::cout << "gripper_Y_continous";
+    //   wl = luke::move_gripper_target_m_rad(0, -s_.gripper_Y.value, 0); // -ve since home is 134mm and end is 50mm
+    //   break;
+
+    // // gripper_revolute_Y action, move only the Y motor to achieve radian change
+    // case MjType::Action::gripper_revolute_Y_positive:
+    //   if (s_.debug) std::cout << "gripper_revolute_Y_positive";
+    //   if (s_.XYZ_action_mm_rad) 
+    //     wl = luke::move_gripper_target_m_rad(0, -s_.Y_action_rad, 0); // -ve as angle convention is swapped
+    //   else 
+    //     wl = luke::move_gripper_target_step(0, s_.action_motor_steps, 0);
+    //   break;
+    // case MjType::Action::gripper_revolute_Y_negative:
+    //   if (s_.debug) std::cout << "gripper_revolute_Y_negative";
+    //   if (s_.XYZ_action_mm_rad) 
+    //     wl = luke::move_gripper_target_m_rad(0, s_.Y_action_rad, 0);
+    //   else
+    //     wl = luke::move_gripper_target_step(0, -s_.action_motor_steps, 0);
+    //   break;
+    // case MjType::Action::gripper_revolute_Y_continous:
+    //   if (s_.debug) std::cout << "gripper_revolute_Y_continous";
+    //   if (s_.XYZ_action_mm_rad) 
+    //     wl = luke::move_gripper_target_m_rad(0, s_.Y_action_rad, 0);
+    //   else
+    //     wl = luke::move_gripper_target_step(0, -s_.action_motor_steps, 0);
+    //   break;
+
+    // case MjType::Action::z_motor_positive:
+    //   if (s_.debug) std::cout << "z_motor_positive";
+    //   if (s_.XYZ_action_mm_rad) 
+    //     wl = luke::move_gripper_target_m_rad(0, 0, s_.Z_action_mm * 1e-3);
+    //   else
+    //     wl = luke::move_gripper_target_step(0, 0, s_.action_motor_steps);
+    //   break;
+    // case MjType::Action::z_motor_negative:
+    //   if (s_.debug) std::cout << "z_motor_negative";
+    //   if (s_.XYZ_action_mm_rad) 
+    //     wl = luke::move_gripper_target_m_rad(0, 0, -s_.Z_action_mm * 1e-3);
+    //   else
+    //     wl = luke::move_gripper_target_step(0, 0, -s_.action_motor_steps);
+    //   break;
+
+    // case MjType::Action::height_positive:
+    //   if (s_.debug) std::cout << "height_positive";
+    //   wl = luke::move_base_target_m(0, 0, s_.action_base_translation);
+    //   break;
+    // case MjType::Action::height_negative:
+    //   if (s_.debug) std::cout << "height_negative";
+    //   wl = luke::move_base_target_m(0, 0, -s_.action_base_translation);
+    //   break;
+
+    // default:
+    //   std::cout << "Action value received is " << action_code << '\n';
+    //   std::cout << "Number of actions is " << n_actions << '\n';
+    //   throw std::runtime_error("MjClass::set_action() received out of bounds int");
+   
+  // }
 
   // special check for whether the fingertips are outside safe limits
   if (luke::get_fingertip_z_height() < s_.fingertip_min_mm * 1e-3) {
@@ -1151,10 +1227,6 @@ bool MjClass::is_done()
 {
   /* determine if an episode should end */
 
-  // general and sensor settings not used
-  #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)
-
   /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)                                \
@@ -1172,10 +1244,9 @@ bool MjClass::is_done()
             }                                                                   
             
     // run the macro to create the code
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_BINARY_REWARD
+    LUKE_MJSETTINGS_LINEAR_REWARD
 
-  #undef XX
-  #undef SS
   #undef BR
   #undef LR
 
@@ -2929,9 +3000,6 @@ MjType::EventTrack MjClass::add_events(MjType::EventTrack& e1, MjType::EventTrac
 
   MjType::EventTrack out;
 
-  #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)
-
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             out.NAME.abs = e1.NAME.abs + e2.NAME.abs;                          \
             out.NAME.last_value = e1.NAME.last_value + e2.NAME.last_value;
@@ -2941,10 +3009,9 @@ MjType::EventTrack MjClass::add_events(MjType::EventTrack& e1, MjType::EventTrac
             out.NAME.last_value = e1.NAME.last_value + e2.NAME.last_value;  
 
     // run the macro to create the code
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_BINARY_REWARD
+    LUKE_MJSETTINGS_LINEAR_REWARD
     
-  #undef XX
-  #undef SS 
   #undef BR
   #undef LR
 
@@ -2965,9 +3032,6 @@ void MjClass::default_goal_event_triggering()
   // this value should not be changed
   constexpr int default_trigger = 1;
 
-  #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)
-
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (goal_.NAME.involved) { s_.NAME.trigger = default_trigger; }    
 
@@ -2975,10 +3039,9 @@ void MjClass::default_goal_event_triggering()
             if (goal_.NAME.involved) { s_.NAME.trigger = default_trigger; }    
 
     // run the macro to create the code
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_BINARY_REWARD
+    LUKE_MJSETTINGS_LINEAR_REWARD
     
-  #undef XX
-  #undef SS 
   #undef BR
   #undef LR
 }
@@ -3291,7 +3354,11 @@ std::string MjType::Settings::get_settings()
             output_str += str;
 
     // now run the macros
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_GENERAL
+    LUKE_MJSETTINGS_SENSOR
+    LUKE_MJSETTINGS_BINARY_REWARD
+    LUKE_MJSETTINGS_LINEAR_REWARD
+
   #undef XX
   #undef SS
   #undef BR
@@ -3308,8 +3375,6 @@ void MjType::Settings::wipe_rewards()
 
   /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
-  #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3) \
             NAME.reward = 0.0;\
             NAME.done = false;\
@@ -3323,10 +3388,9 @@ void MjType::Settings::wipe_rewards()
             NAME.overshoot = -1;
   
     // run the macro and wipe the rewards
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_BINARY_REWARD
+    LUKE_MJSETTINGS_LINEAR_REWARD
   
-  #undef XX
-  #undef SS
   #undef BR
   #undef LR
 }
@@ -3336,18 +3400,12 @@ void MjType::Settings::disable_sensors()
   /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
 
-  #define XX(NAME, TYPE, VALUE)
   #define SS(NAME, IN_USE, NORM, READRATE) NAME.in_use = false;
-  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
-  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
   
     // run the macro and disable all the sensors
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_SENSOR
   
-  #undef XX
   #undef SS
-  #undef BR
-  #undef LR
 }
 
 void MjType::Settings::set_sensor_prev_steps_to(int prev_steps)
@@ -3355,18 +3413,12 @@ void MjType::Settings::set_sensor_prev_steps_to(int prev_steps)
   /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
 
-  #define XX(NAME, TYPE, VALUE)
   #define SS(NAME, IN_USE, NORM, READRATE) NAME.prev_steps = prev_steps;
-  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
-  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
   
     // run the macro and disable all the sensors
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_SENSOR
   
-  #undef XX
   #undef SS
-  #undef BR
-  #undef LR
 }
 
 void MjType::Settings::update_sensor_settings(double time_since_last_sample)
@@ -3381,25 +3433,17 @@ void MjType::Settings::update_sensor_settings(double time_since_last_sample)
   int state_sensor_n_readings_per_step = 1;
   motor_state_sensor.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
   base_state_sensor.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
-
-  #define XX(NAME, TYPE, VALUE)
   
   // update n_readings for all except state sensors
   #define SS(NAME, IN_USE, NORM, READRATE)                       \
             if (#NAME != "motor_state_sensor" and                \
                 #NAME != "base_state_sensor")                    \
               NAME.update_n_readings(time_since_last_sample);
-
-  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
-  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
   
     // run the macro and update all the sensors
-    LUKE_MJSETTINGS
-  
-  #undef XX
+    LUKE_MJSETTINGS_SENSOR
+
   #undef SS
-  #undef BR
-  #undef LR
 }
 
 void MjType::Settings::set_use_normalisation(bool set_as)
@@ -3407,18 +3451,12 @@ void MjType::Settings::set_use_normalisation(bool set_as)
   /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
 
-  #define XX(NAME, TYPE, VALUE)
   #define SS(NAME, IN_USE, NORM, READRATE) NAME.use_normalisation = set_as;
-  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
-  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
   
     // run the macro and disable all the sensors
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_SENSOR
   
-  #undef XX
   #undef SS
-  #undef BR
-  #undef LR
 }
 
 void MjType::Settings::set_use_noise(bool set_as)
@@ -3426,26 +3464,18 @@ void MjType::Settings::set_use_noise(bool set_as)
   /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
 
-  #define XX(NAME, TYPE, VALUE)
   #define SS(NAME, IN_USE, NORM, READRATE) NAME.use_noise = set_as;
-  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
-  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
   
     // run the macro and disable all the sensors
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_SENSOR
   
-  #undef XX
   #undef SS
-  #undef BR
-  #undef LR
 }
 
 void MjType::Settings::apply_noise_params(std::uniform_real_distribution<float>& uniform_dist)
 {
   /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
-
-  #define XX(NAME, TYPE, VALUE)
 
   // set the noise to default UNLESS it has been overriden for ALL sensors
   // mu is randomly chosen between [-noise_mu, noise_mu]
@@ -3456,17 +3486,11 @@ void MjType::Settings::apply_noise_params(std::uniform_real_distribution<float>&
               NAME.noise_mu = sensor_noise_mu;     \
             }                                      \
             NAME.randomise_mu(uniform_dist);                 
-
-  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)
-  #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6)
   
     // run the macro and disable all the sensors
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_SENSOR
   
-  #undef XX
   #undef SS
-  #undef BR
-  #undef LR
 
   // then manually override the state sensors (we want state_noise not sensor_noise)
   if (not motor_state_sensor.noise_overriden) {
@@ -3491,17 +3515,14 @@ void MjType::Settings::scale_rewards(float scale)
 
   /* do NOT use other fields than name as it will pull values from simsettings.h not s_,
      eg instead of using TRIGGER we need to use s_.NAME.trigger */
-  #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3) NAME.reward *= scale;
   #define LR(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4, DONTUSE5, DONTUSE6) \
             NAME.reward *= scale;
   
     // run the macro and scale the rewards
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_BINARY_REWARD
+    LUKE_MJSETTINGS_LINEAR_REWARD
   
-  #undef XX
-  #undef SS
   #undef BR
   #undef LR
 }
@@ -3514,19 +3535,16 @@ void MjType::EventTrack::print()
 
   std::cout << "EventTrack = row (abs); "
 
-  #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)
-
   #define BR(NAME, REWARD, DONE, TRIGGER)                               \
             << #NAME << " = " << NAME.row << " (" << NAME.abs << "); "
   #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)          \
             << #NAME << " = " << NAME.row << " (" << NAME.abs << ", " << NAME.last_value << "); "
 
     // run the macro to create the code
-    LUKE_MJSETTINGS << "\n";
+    LUKE_MJSETTINGS_BINARY_REWARD
+    LUKE_MJSETTINGS_LINEAR_REWARD 
+    << "\n";
 
-  #undef XX
-  #undef SS
   #undef BR
   #undef LR
 
@@ -3538,8 +3556,6 @@ void update_events(MjType::EventTrack& events, MjType::Settings& settings)
 
   bool active = false; // is a linear reward active
 
-  #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)
   #define BR(NAME, REWARD, DONE, TRIGGER)                                    \
             events.NAME.row = events.NAME.row *                              \
                                   events.NAME.value + events.NAME.value;     \
@@ -3559,10 +3575,9 @@ void update_events(MjType::EventTrack& events, MjType::Settings& settings)
             events.NAME.value = 0.0; // reset for next step
 
     // run the macro to create the code
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_BINARY_REWARD
+    LUKE_MJSETTINGS_LINEAR_REWARD
 
-  #undef XX
-  #undef SS
   #undef BR
   #undef LR
 }
@@ -3572,10 +3587,6 @@ float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings)
   /* calculate the reward of one transition based on the simulation events */
 
   float reward = 0;
-
-  // general and sensor settings not used
-  #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)
 
   /* do NOT use other fields than name as it will pull values from simsettings.h,
      eg instead of using TRIGGER we need to use settings.NAME.trigger */
@@ -3599,10 +3610,9 @@ float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings)
             }
             
     // run the macro to create the code
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_BINARY_REWARD
+    LUKE_MJSETTINGS_LINEAR_REWARD
 
-  #undef XX
-  #undef SS
   #undef BR
   #undef LR
 
@@ -3649,10 +3659,6 @@ float goal_rewards(MjType::EventTrack& events, MjType::Settings& settings,
     std::cout << "Goal performance is: "; goal.print_verbose();
   }
 
-  // general and sensor settings not used
-  #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)
-
   /* do NOT use other fields than name as it will pull values from simsettings.h,
      eg instead of using TRIGGER we need to use settings.NAME.trigger */
   #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)                                \
@@ -3686,10 +3692,9 @@ float goal_rewards(MjType::EventTrack& events, MjType::Settings& settings,
             }         
             
     // run the macro to create the code
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_BINARY_REWARD
+    LUKE_MJSETTINGS_LINEAR_REWARD
 
-  #undef XX
-  #undef SS
   #undef BR
   #undef LR
 
@@ -3706,9 +3711,6 @@ std::vector<float> MjType::EventTrack::vectorise()
 
   std::vector<float> out;
 
-  #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)
-
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             out.push_back(NAME.row);
 
@@ -3717,10 +3719,9 @@ std::vector<float> MjType::EventTrack::vectorise()
             out.push_back(NAME.last_value);  
 
     // run the macro to create the code
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_BINARY_REWARD
+    LUKE_MJSETTINGS_LINEAR_REWARD
     
-  #undef XX
-  #undef SS 
   #undef BR
   #undef LR
 
@@ -3742,9 +3743,6 @@ void MjType::EventTrack::unvectorise(std::vector<float> in)
 
   int i = 0;
 
-  #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)
-
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             NAME.row = in[i] + 0.5; /* casts float -> int */                   \
             i++;
@@ -3756,10 +3754,9 @@ void MjType::EventTrack::unvectorise(std::vector<float> in)
             i++;                                                               
 
     // run the macro to create the code
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_BINARY_REWARD
+    LUKE_MJSETTINGS_LINEAR_REWARD
     
-  #undef XX
-  #undef SS 
   #undef BR
   #undef LR
 
@@ -3770,9 +3767,6 @@ std::vector<float> MjType::Goal::vectorise() const
   /* return a vector of the goal state, which must map from [-1,+1]*/
 
   std::vector<float> out;
-
-  #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (NAME.involved) {                                               \
@@ -3789,10 +3783,9 @@ std::vector<float> MjType::Goal::vectorise() const
             }
 
     // run the macro to create the code
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_BINARY_REWARD
+    LUKE_MJSETTINGS_LINEAR_REWARD
     
-  #undef XX
-  #undef SS 
   #undef BR
   #undef LR
 
@@ -3810,9 +3803,6 @@ void MjType::Goal::unvectorise(std::vector<float> vec)
 
   int i = 0;
 
-  #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)
-
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (NAME.involved) {                                               \
               NAME.state = vec[i];                                             \
@@ -3826,10 +3816,9 @@ void MjType::Goal::unvectorise(std::vector<float> vec)
             }
 
     // run the macro to create the code
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_BINARY_REWARD
+    LUKE_MJSETTINGS_LINEAR_REWARD
     
-  #undef XX
-  #undef SS 
   #undef BR
   #undef LR
 }
@@ -3882,9 +3871,6 @@ MjType::Goal score_goal(MjType::Goal const goal, MjType::EventTrack event,
 
   MjType::Goal new_goal;
 
-  #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)
-
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (goal.NAME.involved) {                                          \
               new_goal.NAME.involved = true;                                   \
@@ -3925,10 +3911,9 @@ MjType::Goal score_goal(MjType::Goal const goal, MjType::EventTrack event,
             }
 
     // run the macro to create the code
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_BINARY_REWARD
+    LUKE_MJSETTINGS_LINEAR_REWARD
 
-  #undef XX
-  #undef SS
   #undef BR
   #undef LR
 
@@ -3941,9 +3926,6 @@ std::vector<std::string> MjType::Goal::goal_names()
 
   std::vector<std::string> goal_names;
 
-  #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)
-
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (NAME.involved) { goal_names.push_back(#NAME); }
 
@@ -3951,10 +3933,9 @@ std::vector<std::string> MjType::Goal::goal_names()
             if (NAME.involved) { goal_names.push_back(#NAME); }
 
     // run the macro to create the code
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_BINARY_REWARD
+    LUKE_MJSETTINGS_LINEAR_REWARD
 
-  #undef XX
-  #undef SS
   #undef BR
   #undef LR
 
@@ -3970,9 +3951,6 @@ std::string MjType::Goal::get_goal_info()
   int num = vectorise().size();
   int i = 0;
 
-  #define XX(NAME, TYPE, VALUE)
-  #define SS(NAME, IN_USE, NORM, READRATE)
-
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             if (NAME.involved) {                                               \
               goal_info += #NAME;                                              \
@@ -3988,10 +3966,9 @@ std::string MjType::Goal::get_goal_info()
             }
 
     // run the macro to create the code
-    LUKE_MJSETTINGS
+    LUKE_MJSETTINGS_BINARY_REWARD
+    LUKE_MJSETTINGS_LINEAR_REWARD
 
-  #undef XX
-  #undef SS
   #undef BR
   #undef LR
 

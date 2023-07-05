@@ -177,7 +177,10 @@ PYBIND11_MODULE(bind, m) {
     #define LR(name, reward, done, trigger, min, max, overshoot) \
               .def_readwrite(#name, &MjType::Settings::name)
       // run the macro to create the code
-      LUKE_MJSETTINGS
+      LUKE_MJSETTINGS_GENERAL
+      LUKE_MJSETTINGS_SENSOR
+      LUKE_MJSETTINGS_BINARY_REWARD
+      LUKE_MJSETTINGS_LINEAR_REWARD
     #undef XX
     #undef SS
     #undef BR
@@ -200,7 +203,10 @@ PYBIND11_MODULE(bind, m) {
           #define BR(name, reward, done, trigger) s.name,
           #define LR(name, reward, done, trigger, min, max, overshoot) s.name,
             // run the macro to create the code
-            LUKE_MJSETTINGS
+            LUKE_MJSETTINGS_GENERAL
+            LUKE_MJSETTINGS_SENSOR
+            LUKE_MJSETTINGS_BINARY_REWARD
+            LUKE_MJSETTINGS_LINEAR_REWARD
           #undef XX
           #undef SS
           #undef BR
@@ -235,7 +241,10 @@ PYBIND11_MODULE(bind, m) {
         #define LR(name, reward, done, trigger, min, max, overshoot) \
                   out.name = t[i].cast<MjType::LinearReward>(); ++i;
           // run the macro to create the code
-          LUKE_MJSETTINGS
+          LUKE_MJSETTINGS_GENERAL
+          LUKE_MJSETTINGS_SENSOR
+          LUKE_MJSETTINGS_BINARY_REWARD
+          LUKE_MJSETTINGS_LINEAR_REWARD
         #undef XX
         #undef SS
         #undef BR
@@ -346,8 +355,6 @@ PYBIND11_MODULE(bind, m) {
     .def("reset", &MjType::EventTrack::reset)
     .def("calculate_percentage", &MjType::EventTrack::calculate_percentage)
 
-    #define XX(name, type, value)
-    #define SS(name, in_use, norm, readrate)
     #define BR(name, reward, done, trigger) \
               .def_readonly(#name, &MjType::EventTrack::name)
 
@@ -355,10 +362,9 @@ PYBIND11_MODULE(bind, m) {
               .def_readonly(#name, &MjType::EventTrack::name)
 
       // run the macro to create the binding code
-      LUKE_MJSETTINGS
+      LUKE_MJSETTINGS_BINARY_REWARD
+      LUKE_MJSETTINGS_LINEAR_REWARD
 
-    #undef XX
-    #undef SS
     #undef BR
     #undef LR
 
@@ -368,14 +374,13 @@ PYBIND11_MODULE(bind, m) {
         /* return a tuple that fully encodes the state of the object */
         return py::make_tuple(
           
-          #define XX(name, type, value)
-          #define SS(name, in_use, norm, readrate)
           #define BR(name, reward, done, trigger) et.name,
           #define LR(name, reward, done, trigger, min, max, overshoot) et.name,
+            
             // run the macro to create the binding code
-            LUKE_MJSETTINGS
-          #undef XX
-          #undef SS
+            LUKE_MJSETTINGS_BINARY_REWARD
+            LUKE_MJSETTINGS_LINEAR_REWARD
+          
           #undef BR
           #undef LR
 
@@ -391,16 +396,15 @@ PYBIND11_MODULE(bind, m) {
         int i = 0;
 
         // expand the tuple elements and type cast them with a macro
-        #define XX(name, type, value)
-        #define SS(name, in_use, norm, readrate)
         #define BR(name, reward, done, trigger) \
                   et.name = t[i].cast<MjType::EventTrack::BinaryEvent>(); ++i;
         #define LR(name, reward, done, trigger, min, max, overshoot) \
                   et.name = t[i].cast<MjType::EventTrack::LinearEvent>(); ++i;
+          
           // run the macro to create the code
-          LUKE_MJSETTINGS
-        #undef XX
-        #undef SS
+          LUKE_MJSETTINGS_BINARY_REWARD
+          LUKE_MJSETTINGS_LINEAR_REWARD
+
         #undef BR
         #undef LR
 
@@ -585,8 +589,6 @@ PYBIND11_MODULE(bind, m) {
     .def("print_verbose", &MjType::Goal::print_verbose)
     .def("get_goal_info", &MjType::Goal::get_goal_info)
 
-    #define XX(name, type, value)
-    #define SS(name, in_use, norm, readrate)
     #define BR(name, reward, done, trigger) \
               .def_readwrite(#name, &MjType::Goal::name)
 
@@ -594,10 +596,9 @@ PYBIND11_MODULE(bind, m) {
               .def_readwrite(#name, &MjType::Goal::name)
 
       // run the macro to create the binding code
-      LUKE_MJSETTINGS
+      LUKE_MJSETTINGS_BINARY_REWARD
+      LUKE_MJSETTINGS_LINEAR_REWARD
 
-    #undef XX
-    #undef SS
     #undef BR
     #undef LR
 
@@ -607,14 +608,13 @@ PYBIND11_MODULE(bind, m) {
         /* return a tuple that fully encodes the state of the object */
         return py::make_tuple(
           
-          #define XX(name, type, value)
-          #define SS(name, in_use, norm, readrate)
           #define BR(name, reward, done, trigger) g.name,
           #define LR(name, reward, done, trigger, min, max, overshoot) g.name,
+            
             // run the macro to create the binding code
-            LUKE_MJSETTINGS
-          #undef XX
-          #undef SS
+            LUKE_MJSETTINGS_BINARY_REWARD
+            LUKE_MJSETTINGS_LINEAR_REWARD
+
           #undef BR
           #undef LR
 
@@ -630,16 +630,15 @@ PYBIND11_MODULE(bind, m) {
         int i = 0;
 
         // expand the tuple elements and type cast them with a macro
-        #define XX(name, type, value)
-        #define SS(name, in_use, norm, readrate)
         #define BR(name, reward, done, trigger) \
                   g.name = t[i].cast<MjType::Goal::Event>(); ++i;
         #define LR(name, reward, done, trigger, min, max, overshoot) \
                   g.name = t[i].cast<MjType::Goal::Event>(); ++i;
+
           // run the macro to create the code
-          LUKE_MJSETTINGS
-        #undef XX
-        #undef SS
+          LUKE_MJSETTINGS_BINARY_REWARD
+          LUKE_MJSETTINGS_LINEAR_REWARD
+
         #undef BR
         #undef LR
 

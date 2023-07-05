@@ -60,6 +60,8 @@ void print_vec(std::vector<gfloat> v, std::string name);
 void print_vec(std::vector<QPos> v, std::string name);
 void print_vec(std::vector<std::string> v, std::string name);
 bool strcmp_w_sub(std::string ref_str, std::string sub_str, int num);
+bool str_starts_with(std::string ref_str, std::string check_str);
+bool str_ends_with(std::string ref_str, std::string check_str);
 
 // initialising, setup, and utilities
 void init(mjModel* model, mjData* data);
@@ -85,7 +87,6 @@ void toggle_constraint(mjModel* model, mjData* data, int id);
 void set_constraint(mjModel* model, mjData* data, int id, bool set_as);
 void target_constraint(mjModel* model, mjData* data, int id, bool set_as, int type);
 void apply_tip_force(mjModel* model, mjData* data, double force, bool reset = false);
-
 void apply_segment_force(mjModel* model, mjData* data, int seg_num, double force,
   double moment = 0);
 void set_segment_force(int seg_num, bool set_as, double force);
@@ -123,6 +124,7 @@ bool move_gripper_target_m(double x, double y, double z);
 bool move_gripper_target_m_rad(double x, double th, double z);
 bool move_gripper_target_step(int x, int y, int z);
 bool move_base_target_m(double x, double y, double z);
+bool move_base_target_rad(double roll, double pitch, double yaw);
 void set_base_to_max_height(mjData* data);
 void print_target();
 void update_target();
