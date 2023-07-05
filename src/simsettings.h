@@ -116,17 +116,17 @@
 
   3. Actions
       name                      used      continous  value   sign */\
-  AA(  gripper_X,               true,     true,     1.0e-3,  -1)        /* move gripper X motor by m */\
-  AA(  gripper_prismatic_X,     true,     true,     1.0e-3,  -1)        /* move gripper X and Y motors to move prismatically by m */\
-  AA(  gripper_Y,               true,     true,     1.0e-3,  -1)        /* move gripper Y motor by m */\
-  AA(  gripper_revolute_Y,      true,     true,     0.01,    -1)        /* move gripper Y motor with angular motions/targets in radians */\
-  AA(  gripper_Z,               true,     true,     2.0e-3,   1)        /* move gripper Z motor by m */\
-  AA(  base_X,                  true,     true,     2.0e-3,   1)        /* move gripper base X by m */\
-  AA(  base_Y,                  true,     true,     2.0e-3,   1)        /* move gripper base Y by m */\
-  AA(  base_Z,                  true,     true,     2.0e-3,   1)        /* move gripper base Z by m */\
-  AA(  base_roll,               true,     true,     0.01,     1)        /* rotate gripper base about X in radians */\
-  AA(  base_pitch,              true,     true,     0.01,     1)        /* rotate gripper base about Y in radians */\
-  AA(  base_yaw,                true,     true,     0.01,     1)        /* rotate gripper base about Z in radians */\
+  AA(  gripper_X,               true,     false,     1.0e-3,  -1)        /* move gripper X motor by m */\
+  AA(  gripper_prismatic_X,     true,     false,     1.0e-3,  -1)        /* move gripper X and Y motors to move prismatically by m */\
+  AA(  gripper_Y,               true,     false,     1.0e-3,  -1)        /* move gripper Y motor by m */\
+  AA(  gripper_revolute_Y,      true,     false,     0.01,    -1)        /* move gripper Y motor with angular motions/targets in radians */\
+  AA(  gripper_Z,               true,     false,     2.0e-3,   1)        /* move gripper Z motor by m */\
+  AA(  base_X,                  true,     false,     2.0e-3,   1)        /* move gripper base X by m */\
+  AA(  base_Y,                  true,     false,     2.0e-3,   1)        /* move gripper base Y by m */\
+  AA(  base_Z,                  true,     false,     2.0e-3,   1)        /* move gripper base Z by m */\
+  AA(  base_roll,               false,    false,     0.01,     1)        /* rotate gripper base about X in radians */\
+  AA(  base_pitch,              false,    false,     0.01,     1)        /* rotate gripper base about Y in radians */\
+  AA(  base_yaw,                false,    false,     0.01,     1)        /* rotate gripper base about Z in radians */\
   
   
   

@@ -1442,20 +1442,27 @@ void makeGripperUI(int oldstate)
     // }
 }
 
-
 void makeActionsUI(int oldstate)
 {
     mjuiDef defActions[] =
     {
         {mjITEM_SECTION, "Actions",         oldstate,  NULL,   " #303"},
-        {mjITEM_BUTTON, "Action 0 (X+)",           2,  NULL,   " #304"},
-        {mjITEM_BUTTON, "Action 1 (X-)",           2,  NULL,   " #305"},
-        {mjITEM_BUTTON, "Action 2 (Y+)",           2,  NULL,   " #306"},
-        {mjITEM_BUTTON, "Action 3 (Y-)",           2,  NULL,   " #307"},
-        {mjITEM_BUTTON, "Action 4 (Z+)",           2,  NULL,   " #308"},
-        {mjITEM_BUTTON, "Action 5 (Z-)",           2,  NULL,   " #309"},
-        {mjITEM_BUTTON, "Action 6 (H+)",           2,  NULL,   " #310"},
-        {mjITEM_BUTTON, "Action 7 (H-)",           2,  NULL,   " #310"},
+        {mjITEM_BUTTON, "Gripper X+",              2,  NULL,   " #304"},
+        {mjITEM_BUTTON, "Gripper X-",              2,  NULL,   " #305"},
+        {mjITEM_BUTTON, "Gripper pX+",             2,  NULL,   " #306"},
+        {mjITEM_BUTTON, "Gripper pX-",             2,  NULL,   " #307"},
+        {mjITEM_BUTTON, "Gripper Y+",              2,  NULL,   " #308"},
+        {mjITEM_BUTTON, "Gripper Y-",              2,  NULL,   " #309"},
+        {mjITEM_BUTTON, "Gripper rY+",             2,  NULL,   " #310"},
+        {mjITEM_BUTTON, "Gripper rY-",             2,  NULL,   " #310"},
+        {mjITEM_BUTTON, "Gripper Z+",              2,  NULL,   " #304"},
+        {mjITEM_BUTTON, "Gripper Z-",              2,  NULL,   " #305"},
+        {mjITEM_BUTTON, "Base X+",                 2,  NULL,   " #306"},
+        {mjITEM_BUTTON, "Base X-",                 2,  NULL,   " #307"},
+        {mjITEM_BUTTON, "Base Y+",                 2,  NULL,   " #308"},
+        {mjITEM_BUTTON, "Base Y-",                 2,  NULL,   " #309"},
+        {mjITEM_BUTTON, "Base Z+",                 2,  NULL,   " #310"},
+        {mjITEM_BUTTON, "Base Z-",                 2,  NULL,   " #310"},
         {mjITEM_BUTTON, "Reward",                  2,  NULL,   " #311"},
         {mjITEM_CHECKINT, "Debug",                 2,  &myMjClass.s_.debug,   " #312"},
         {mjITEM_CHECKINT, "Env steps",             2,  &settings.env_steps, " #313"},
@@ -2279,7 +2286,8 @@ void uiEvent(mjuiState* state)
             // std::cout << "case " << it->itemid << '\n';
             switch (it->itemid)
             {
-                case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7: {
+                case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7: 
+                case 8: case 9: case 10: case 11: case 12: case 13: case 14: case 15: {
                     myMjClass.set_action(it->itemid);
                     if (settings.complete_action_steps) {
                         myMjClass.action_step();
@@ -2287,7 +2295,7 @@ void uiEvent(mjuiState* state)
                     break;
                 }
 
-                case 8: {
+                case 16: {
                     double reward = myMjClass.reward();
                     std::cout << "Reward is " << reward << '\n';
                     std::cout << "Cumulative reward is "
