@@ -1574,7 +1574,7 @@ class TrainDQN():
       self.run_episode(i_episode)
 
       # check if time to change curriculum
-      if self.self.params.use_curriculum:
+      if self.params.use_curriculum:
         self.curriculum_fcn(i_episode)
 
       # update the target network every target_update episodes
