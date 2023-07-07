@@ -57,6 +57,7 @@ PYBIND11_MODULE(bind, m) {
     .def("is_done", &MjClass::is_done)
     .def("get_observation", static_cast<std::vector<luke::gfloat> (MjClass::*)()>(&MjClass::get_observation))
     .def("get_observation", static_cast<std::vector<luke::gfloat> (MjClass::*)(MjType::SensorData)>(&MjClass::get_observation))
+    .def("get_RGBD_image", &MjClass::get_RGBD_image)
     .def("get_event_state", &MjClass::get_event_state)
     .def("get_goal", &MjClass::get_goal)
     .def("assess_goal", static_cast<std::vector<float> (MjClass::*)()>(&MjClass::assess_goal))
@@ -958,6 +959,13 @@ PYBIND11_MODULE(bind, m) {
     .def_readwrite("g3", &MjType::RealSensorData::g3)
     .def_readwrite("palm", &MjType::RealSensorData::palm)
     .def_readwrite("wrist_Z", &MjType::RealSensorData::wrist_Z)
+    ;
+  }
+
+  {py::class_<render::RGBD>(m, "RGBD")
+    .def(py::init<>())
+    .def_readonly("rgb", &render::RGBD::rgb)
+    .def_readonly("depth", &render::RGBD::depth)
     ;
   }
 

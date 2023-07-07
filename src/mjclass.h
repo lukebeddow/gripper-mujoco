@@ -22,6 +22,10 @@
 // if we are on the cluster, we must not include the rendering libraries
 #if !defined(LUKE_CLUSTER)
   #include "rendering.h"
+  // forward declaration of RGBD class which we need in this file
+  namespace render {
+    struct RGBD;
+  };
 #endif
 
 // utility functions with no MjType dependency
@@ -58,19 +62,6 @@ namespace MjType
       #undef AA
 
       count // last entry, how many possible actions
-
-
-      // x_motor_positive = 0,
-      // x_motor_negative,
-      // prismatic_positive,
-      // prismatic_negative,
-      // y_motor_positive,
-      // y_motor_negative,
-      // z_motor_positive,
-      // z_motor_negative,
-      // height_positive,
-      // height_negative,
-      // count             // how many possible actions, leave this last
     };
   };
 
@@ -1426,6 +1417,7 @@ public:
   bool is_done();
   std::vector<luke::gfloat> get_observation();
   std::vector<luke::gfloat> get_observation(MjType::SensorData sensors);
+  render::RGBD get_RGBD_image();
   std::vector<float> get_event_state();
   std::vector<float> get_goal();
   std::vector<float> assess_goal();

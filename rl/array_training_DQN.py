@@ -427,7 +427,7 @@ def add_sensors(model, num=None, sensor_mode=1, state_mode=0, sensor_steps=1,
   if num >= 4: model.env.mj.set.axial_gauge.in_use = True
 
   # know where z is in physical space (base z state sensor)
-  if num >= 5 or z_state is True: model.env.mj.set.base_state_sensor.in_use = True
+  if num >= 5 or z_state is True: model.env.mj.set.base_state_sensor_Z.in_use = True
 
   model.wandb_note += (
     f"Num sensors: {num}, state mode: {state_mode}, sensor mode: {sensor_mode}"
@@ -548,7 +548,8 @@ def apply_to_all_models(model):
 
   # ensure state sensors only give one reading per step (read_rate < 0)
   model.env.mj.set.motor_state_sensor.read_rate = -1
-  model.env.mj.set.base_state_sensor.read_rate = -1
+  model.env.mj.set.base_state_sensor_XY.read_rate = -1
+  model.env.mj.set.base_state_sensor_Z.read_rate = -1
 
   # sensor noise options
   model.env.mj.set.sensor_noise_mag = 0

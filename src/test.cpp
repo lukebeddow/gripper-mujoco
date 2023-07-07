@@ -175,7 +175,8 @@ int main(int argc, char** argv)
 
   // disable or enable sensors
   mjObj.s_.motor_state_sensor.in_use = false;
-  mjObj.s_.base_state_sensor.in_use = false;
+  mjObj.s_.base_state_sensor_XY.in_use = false;
+  mjObj.s_.base_state_sensor_Z.in_use = false;
   mjObj.s_.bending_gauge.in_use = true;
   mjObj.s_.axial_gauge.in_use = false;
   mjObj.s_.palm_sensor.in_use = false;

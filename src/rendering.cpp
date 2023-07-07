@@ -35,6 +35,9 @@ bool button_right =  false;
 double lastx = 0;
 double lasty = 0;
 
+bool render_rgb_flag = false;
+bool render_depth_flag = false;
+
 // mouse button callback
 void mouse_button(GLFWwindow* window, int button, int act, int mods)
 {
@@ -437,6 +440,89 @@ void lukesensorfigshow(mjrRect rect)
     }
 }
 
+// get a rgbd image out of the simulation
+RGBD read_rgbd()
+{
 
+    int W = 740;
+    int H = 720;
+
+    mjrRect rect = {230, 0, W, H};
+    // mjrRect rect = {0, 0, W, H};
+
+    cam.type = mjCAMERA_FIXED;
+    cam.fixedcamid = 0;
+
+    RGBD output;
+
+    unsigned char* rgb = (unsigned char*)std::malloc(3*W*H);
+    float* depth = (float*)std::malloc(sizeof(float)*W*H);
+    if (!rgb || !depth) {
+        mju_error("render::read_rgbd() failed, could not allocate buffers for rgb or depth");
+    }
+
+    std::cout << "Reading RGB pixels values\n";
+    mjr_readPixels(rgb, depth, rect, &con);
+    std::cout << "RGB pixels read\n" ;
+
+    // std::vector<int> rgbd_vector;
+
+    for (int i = 0;  i < 3*W*H; i++)
+        // rgbd_vector.push_back((int)rgb[i]);
+        output.rgb.push_back((int)rgb[i]);
+
+    for (int i = 0;  i < W*H; i++)
+        // rgbd_vector.push_back((int)depth[i]);
+        output.depth.push_back(depth[i]);
+
+    if (render_depth_flag) {
+        const int NS = 3;           // depth image sub-sampling
+        for (int r=0; r<H; r+=NS)
+            for (int c=0; c<W; c+=NS) {
+                int adr = (r/NS)*W + c/NS;
+                rgb[3*adr] = rgb[3*adr+1] = rgb[3*adr+2] = (unsigned char)((1.0f-depth[r*W+c])*255.0f);
+            }
+
+        mjrRect viewport2 =  rect;
+        viewport2.height = rect.height/2;
+        viewport2.width = rect.width/2;
+        mjr_drawPixels(rgb, NULL, viewport2, &con);
+    }
+
+    if (render_rgb_flag) {
+        const int NS = 3;           // depth image sub-sampling
+        for (int r=0; r<H; r+=NS)
+            for (int c=0; c<W; c+=NS) {
+                int adr = (r/NS)*W + c/NS;
+                rgb[3*adr] = (unsigned char)((1.0f-rgb[3*r*W+c])*255.0f);
+                rgb[3*adr+1] = (unsigned char)((1.0f-rgb[3*r*W+c + 1])*255.0f);
+                rgb[3*adr+2] = (unsigned char)((1.0f-rgb[3*r*W+c + 2])*255.0f);
+
+                // rgb[3*adr] = rgb[3*adr+1] = rgb[3*adr+2] = (unsigned char)((1.0f-depth[r*W+c])*255.0f);
+            }
+
+        mjrRect viewport3 =  rect;
+        viewport3.bottom = rect.height/2;
+        viewport3.height = rect.height/2;
+        viewport3.width = rect.width/2;
+        mjr_drawPixels(rgb, NULL, viewport3, &con);
+    }
+
+    // delete the buffers
+    std::free(rgb);
+    std::free(depth);
+
+    return output;
+}
+
+void render_rgb(bool set_as)
+{
+    render_rgb_flag = set_as;
+}
+
+void render_depth(bool set_as)
+{
+    render_depth_flag = set_as;
+}
 
 } // namespace render

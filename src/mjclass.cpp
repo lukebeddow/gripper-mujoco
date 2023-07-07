@@ -444,7 +444,8 @@ void MjClass::reset()
   s_.wrist_sensor_XY.reset();
   s_.wrist_sensor_Z.reset();
   s_.motor_state_sensor.reset();
-  s_.base_state_sensor.reset();
+  s_.base_state_sensor_XY.reset();
+  s_.base_state_sensor_Z.reset();
 
   // refetch the gripper base limits in case they have changed
   base_min_ = luke::get_base_min();
@@ -753,8 +754,6 @@ void MjClass::sense_gripper_state()
   std::vector<luke::gfloat> state_vec = luke::get_target_state_vector();
   luke::JointStates states = luke::get_target_state();
 
-  bool base_xyz = luke::use_base_xyz();
-
   // normalise { x, y, z } joint values
   states.gripper_x = normalise_between(
     states.gripper_x, luke::Gripper::xy_min, luke::Gripper::xy_max);
@@ -762,31 +761,25 @@ void MjClass::sense_gripper_state()
     states.gripper_y, luke::Gripper::xy_min, luke::Gripper::xy_max);
   states.gripper_z = normalise_between(
     states.gripper_z, luke::Gripper::z_min, luke::Gripper::z_max);
+  states.base_x = normalise_between(states.base_x, base_min_[0], base_max_[0]);
+  states.base_y = normalise_between(states.base_y, base_min_[1], base_max_[1]);
   states.base_z = normalise_between(states.base_z, base_min_[2], base_max_[2]);
-  if (base_xyz) {
-    states.base_x = normalise_between(states.base_x, base_min_[0], base_max_[0]);
-    states.base_y = normalise_between(states.base_y, base_min_[1], base_max_[1]);
-  }
 
   // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
   states.gripper_x = s_.motor_state_sensor.apply_noise(states.gripper_x, uniform_dist, 1);
   states.gripper_y = s_.motor_state_sensor.apply_noise(states.gripper_y, uniform_dist, 2);
   states.gripper_z = s_.motor_state_sensor.apply_noise(states.gripper_z, uniform_dist, 3);
-  states.base_z = s_.base_state_sensor.apply_noise(states.base_z, uniform_dist, 1);
-  if (base_xyz) {
-    states.base_x = s_.base_state_sensor.apply_noise(states.base_x, uniform_dist, 2);
-    states.base_y = s_.base_state_sensor.apply_noise(states.base_y, uniform_dist, 3);
-  }
+  states.base_x = s_.base_state_sensor_XY.apply_noise(states.base_x, uniform_dist, 1);
+  states.base_y = s_.base_state_sensor_XY.apply_noise(states.base_y, uniform_dist, 2);
+  states.base_z = s_.base_state_sensor_Z.apply_noise(states.base_z, uniform_dist);
 
   // save reading
   sim_sensors_.x_motor_position.add(states.gripper_x);
   sim_sensors_.y_motor_position.add(states.gripper_y);
   sim_sensors_.z_motor_position.add(states.gripper_z);
+  sim_sensors_.x_base_position.add(states.base_x);
+  sim_sensors_.y_base_position.add(states.base_y);
   sim_sensors_.z_base_position.add(states.base_z);
-  if (base_xyz) {
-    sim_sensors_.x_base_position.add(states.base_x);
-    sim_sensors_.y_base_position.add(states.base_y);
-  }
 
   // save the time the reading was made
   step_timestamps.add(data->time);
@@ -1288,39 +1281,7 @@ std::vector<luke::gfloat> MjClass::get_observation(MjType::SensorData sensors)
   // use for printing detailed observation debug information
   constexpr bool debug_obs = false;
 
-  // std::cout << "Use noise is "
-  //   << s_.bending_gauge.use_noise << ", "
-  //   << s_.palm_sensor.use_noise << ", "
-  //   << s_.motor_state_sensor.use_noise << ", "
-  //   << s_.base_state_sensor.use_noise << ", "
-  //   << s_.wrist_sensor_Z.use_noise << "\n";
-
-  // std::cout << "Noise value is "
-  //   << s_.bending_gauge.noise_std << ", "
-  //   << s_.palm_sensor.noise_std << ", "
-  //   << s_.motor_state_sensor.noise_std << ", "
-  //   << s_.base_state_sensor.noise_std << ", "
-  //   << s_.wrist_sensor_Z.noise_std << "\n";
-
-  // std::cout << "Mu value is "
-  //   << s_.bending_gauge.noise_mu << ", "
-  //   << s_.palm_sensor.noise_mu << ", "
-  //   << s_.motor_state_sensor.noise_mu << ", "
-  //   << s_.base_state_sensor.noise_mu << ", "
-  //   << s_.wrist_sensor_Z.noise_mu << "\n";
-
-  // std::cout << "Use normalisation is "
-  //   << s_.bending_gauge.use_normalisation << ", "
-  //   << s_.palm_sensor.use_normalisation << ", "
-  //   << s_.motor_state_sensor.use_normalisation << ", "
-  //   << s_.base_state_sensor.use_normalisation << ", "
-  //   << s_.wrist_sensor_Z.use_normalisation << "\n";
-
   std::vector<luke::gfloat> observation;
-
-  // // FOR TESTING
-  // std::cout << "Last 10 gauge 1 readings: ";
-  // finger1_gauge.print(10);
 
   if (debug_obs) {
     std::cout << "Observation information:\n";
@@ -1444,12 +1405,31 @@ std::vector<luke::gfloat> MjClass::get_observation(MjType::SensorData sensors)
     }
   }
 
-  // get base state
-  if (s_.base_state_sensor.in_use) {
+  // get base XY state
+  if (s_.base_state_sensor_XY.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> bX = 
+      (s_.base_state_sensor_XY.*stateFcnPtr)(sensors.x_base_position);
+    std::vector<luke::gfloat> bY = 
+      (s_.base_state_sensor_XY.*stateFcnPtr)(sensors.y_base_position);
+
+    // insert data into observation output
+    observation.insert(observation.end(), bX.begin(), bX.end());
+    observation.insert(observation.end(), bY.begin(), bY.end());
+
+    if (debug_obs) {
+      luke::print_vec(bX, "Base state X");
+      luke::print_vec(bY, "Base state Y");
+    }
+  }
+
+  // get base Z state
+  if (s_.base_state_sensor_Z.in_use) {
 
     // sample data
     std::vector<luke::gfloat> bZ = 
-      (s_.base_state_sensor.*stateFcnPtr)(sensors.z_base_position);
+      (s_.base_state_sensor_Z.*stateFcnPtr)(sensors.z_base_position);
 
     // insert data into observation output
     observation.insert(observation.end(), bZ.begin(), bZ.end());
@@ -1464,6 +1444,13 @@ std::vector<luke::gfloat> MjClass::get_observation(MjType::SensorData sensors)
   }
   
   return observation;
+}
+
+render::RGBD MjClass::get_RGBD_image()
+{
+  /* return an RGBD image from the current state of the simulation */
+
+  return render::read_rgbd();
 }
 
 std::vector<float> MjClass::get_event_state()
@@ -1804,8 +1791,8 @@ std::vector<luke::gfloat> MjClass::get_state_metres(bool realworld)
   int n = 4;
 
   // if using base xyz we add two elements for xy
-  bool base_xyz = luke::use_base_xyz();
-  if (base_xyz) n += 2;
+  bool base_xy = s_.base_state_sensor_XY.in_use;
+  if (base_xy) n += 2;
 
   std::vector<luke::gfloat> readings(n);
 
@@ -1813,7 +1800,7 @@ std::vector<luke::gfloat> MjClass::get_state_metres(bool realworld)
     readings[0] = real_sensors_.SI.read_x_motor_position();
     readings[1] = real_sensors_.SI.read_y_motor_position();
     readings[2] = real_sensors_.SI.read_z_motor_position();
-    if (base_xyz) {
+    if (base_xy) {
       readings[3] = real_sensors_.SI.read_x_base_position();
       readings[4] = real_sensors_.SI.read_y_base_position();
       readings[5] = real_sensors_.SI.read_z_base_position();
@@ -1830,7 +1817,7 @@ std::vector<luke::gfloat> MjClass::get_state_metres(bool realworld)
       sim_sensors_.read_y_motor_position(), luke::Gripper::xy_min, luke::Gripper::xy_max);
     readings[2] = unnormalise_from(
       sim_sensors_.read_z_motor_position(), luke::Gripper::z_min, luke::Gripper::z_max);
-    if (base_xyz) {
+    if (base_xy) {
       readings[3] = unnormalise_from(
         sim_sensors_.read_x_base_position(), base_min_[0], base_max_[0]);
       readings[4] = unnormalise_from(
@@ -1910,11 +1897,11 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
   }
 
   // check the state vector has an expected length
-  bool base_xyz = luke::use_base_xyz();
-  if (state_data.size() != 4 and not base_xyz) {
+  bool base_xy = s_.base_state_sensor_XY.in_use;
+  if (state_data.size() != 4 and not base_xy) {
     throw std::runtime_error("state_data size != 4 but base_xyz = false in MjClass::input_real_data()");
   }
-  if (state_data.size() != 6 and base_xyz) {
+  if (state_data.size() != 6 and base_xy) {
     throw std::runtime_error("state_data size != 6 but base_xyz = true in MjClass::input_real_data()");
   }
 
@@ -1961,38 +1948,33 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     output.push_back(state_data[i]);
     ++i; 
   }
+
+  if (base_xy and (save_all or s_.base_state_sensor_XY.in_use)) {
+
+    real_sensors_.raw.x_base_position.add(state_data[i]);
+    real_sensors_.SI.x_base_position.add(state_data[i]);
+    state_data[i] = normalise_between(state_data[i], base_min_[0], base_max_[0]);
+    state_data[i] = s_.base_state_sensor_XY.apply_noise(state_data[i], uniform_dist, 1);
+    real_sensors_.normalised.x_base_position.add(state_data[i]);
+    output.push_back(state_data[i]);
+    ++i; 
+
+    real_sensors_.raw.y_base_position.add(state_data[i]);
+    real_sensors_.SI.y_base_position.add(state_data[i]);
+    state_data[i] = normalise_between(state_data[i], base_min_[1], base_max_[1]);
+    state_data[i] = s_.base_state_sensor_XY.apply_noise(state_data[i], uniform_dist, 2);
+    real_sensors_.normalised.y_base_position.add(state_data[i]);
+    output.push_back(state_data[i]);
+    ++i;
+
+  }
   
-  if (save_all or s_.base_state_sensor.in_use) {
-
-    int noise_num = 1;
-
-    if (base_xyz) {
-
-      real_sensors_.raw.x_base_position.add(state_data[i]);
-      real_sensors_.SI.x_base_position.add(state_data[i]);
-      state_data[i] = normalise_between(state_data[i], base_min_[0], base_max_[0]);
-      state_data[i] = s_.base_state_sensor.apply_noise(state_data[i], uniform_dist, 1);
-      real_sensors_.normalised.x_base_position.add(state_data[i]);
-      output.push_back(state_data[i]);
-      ++i; 
-
-      real_sensors_.raw.y_base_position.add(state_data[i]);
-      real_sensors_.SI.y_base_position.add(state_data[i]);
-      state_data[i] = normalise_between(
-        state_data[i], base_min_[1], base_max_[1]);
-      state_data[i] = s_.base_state_sensor.apply_noise(state_data[i], uniform_dist, 2);
-      real_sensors_.normalised.y_base_position.add(state_data[i]);
-      output.push_back(state_data[i]);
-      ++i;
-
-      noise_num = 3;
-    }
+  if (save_all or s_.base_state_sensor_Z.in_use) {
 
     real_sensors_.raw.z_base_position.add(state_data[i]);
     real_sensors_.SI.z_base_position.add(state_data[i]);
-    state_data[i] = normalise_between(
-      state_data[i], base_min_[2], base_max_[2]);
-    state_data[i] = s_.base_state_sensor.apply_noise(state_data[i], uniform_dist, noise_num);
+    state_data[i] = normalise_between(state_data[i], base_min_[2], base_max_[2]);
+    state_data[i] = s_.base_state_sensor_Z.apply_noise(state_data[i], uniform_dist);
     real_sensors_.normalised.z_base_position.add(state_data[i]);
     output.push_back(state_data[i]);
     ++i; 
@@ -2144,7 +2126,8 @@ std::vector<float> MjClass::get_real_observation()
 
   // manually set reading settings to ensure correctness
   s_.motor_state_sensor.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
-  s_.base_state_sensor.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
+  s_.base_state_sensor_XY.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
+  s_.base_state_sensor_Z.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
   s_.bending_gauge.update_n_readings(samples_since_last_obs, s_.sensor_n_prev_steps);
   s_.palm_sensor.update_n_readings(samples_since_last_obs, s_.sensor_n_prev_steps);
   s_.wrist_sensor_Z.update_n_readings(samples_since_last_obs, s_.sensor_n_prev_steps);
@@ -2210,8 +2193,15 @@ std::vector<float> MjClass::get_simple_state_vector(MjType::SensorData sensor)
     simple_state.push_back(sensor.read_z_motor_position());
   }
 
-  // get base state
-  if (s_.base_state_sensor.in_use) {
+  // get base XY state
+  if (s_.base_state_sensor_XY.in_use) {
+
+    simple_state.push_back(sensor.read_x_base_position());
+    simple_state.push_back(sensor.read_y_base_position());
+  }
+
+  // get base Z state
+  if (s_.base_state_sensor_Z.in_use) {
 
     simple_state.push_back(sensor.read_z_base_position());
   }
@@ -3432,12 +3422,14 @@ void MjType::Settings::update_sensor_settings(double time_since_last_sample)
   // manually override state sensors
   int state_sensor_n_readings_per_step = 1;
   motor_state_sensor.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
-  base_state_sensor.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
+  base_state_sensor_XY.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
+  base_state_sensor_Z.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
   
   // update n_readings for all except state sensors
   #define SS(NAME, IN_USE, NORM, READRATE)                       \
             if (#NAME != "motor_state_sensor" and                \
-                #NAME != "base_state_sensor")                    \
+                #NAME != "base_state_sensor_XY" and              \
+                #NAME != "base_state_sensor_Z")                  \
               NAME.update_n_readings(time_since_last_sample);
   
     // run the macro and update all the sensors
@@ -3498,15 +3490,21 @@ void MjType::Settings::apply_noise_params(std::uniform_real_distribution<float>&
     motor_state_sensor.noise_mu = state_noise_mu;
     motor_state_sensor.noise_std = state_noise_std;
   }
-  if (not base_state_sensor.noise_overriden) {
-    base_state_sensor.noise_mag = state_noise_mag;
-    base_state_sensor.noise_mu = state_noise_mu;
-    base_state_sensor.noise_std = state_noise_std;
+  if (not base_state_sensor_XY.noise_overriden) {
+    base_state_sensor_XY.noise_mag = state_noise_mag;
+    base_state_sensor_XY.noise_mu = state_noise_mu;
+    base_state_sensor_XY.noise_std = state_noise_std;
+  }
+  if (not base_state_sensor_Z.noise_overriden) {
+    base_state_sensor_Z.noise_mag = state_noise_mag;
+    base_state_sensor_Z.noise_mu = state_noise_mu;
+    base_state_sensor_Z.noise_std = state_noise_std;
   }
 
   // randomise seed for state
   motor_state_sensor.randomise_mu(uniform_dist);
-  base_state_sensor.randomise_mu(uniform_dist);
+  base_state_sensor_XY.randomise_mu(uniform_dist);
+  base_state_sensor_Z.randomise_mu(uniform_dist);
 }
 
 void MjType::Settings::scale_rewards(float scale)

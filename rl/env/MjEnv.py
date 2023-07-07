@@ -998,7 +998,13 @@ if __name__ == "__main__":
 
   mj.load_finger_width = 24e-3
 
-  mj.load("set_fullset_795", num_segments=7, finger_width=None, finger_thickness=1.0e-3)
+  mj.load("set7_xycamera_50i", num_segments=8, finger_width=28, finger_thickness=0.9e-3)
+
+  print("getting rgbd image now")
+  rgbd = mj.mj.get_RGBD_image()
+
+  print("The rgb information is", rgbd.rgb)
+  print("The depth information is", rgbd.depth)
 
   exit()
 

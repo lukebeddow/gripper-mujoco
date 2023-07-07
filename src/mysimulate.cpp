@@ -58,6 +58,8 @@ mjvFigure figmotors;
 mjvFigure figstepperx;
 mjvFigure figsteppery;
 mjvFigure figstepperz;
+mjvFigure figbasex;
+mjvFigure figbasey;
 mjvFigure figbasez;
 
 // OpenGL rendering and UI
@@ -113,9 +115,13 @@ struct
     int xstepfig = 0;              // added by luke
     int ystepfig = 0;              // added by luke
     int zstepfig = 0;              // added by luke
+    int xbasefig = 0;              // added by luke
+    int ybasefig = 0;              // added by luke
     int zbasefig = 0;              // added by luke
     int allactuators = 0;          // added by luke
     int use_SI_sensors = 0;        // added by luke
+    int render_rgb = 0;
+    int render_depth = 0;
 
     float sensor_mag = 0;
     float sensor_mu = 0;
@@ -212,9 +218,13 @@ const mjuiDef defOption[] =
     {mjITEM_CHECKINT,  "x stepper",     2, &settings.xstepfig,      " #408"}, // added by luke
     {mjITEM_CHECKINT,  "y stepper",     2, &settings.ystepfig,      " #409"}, // added by luke
     {mjITEM_CHECKINT,  "z stepper",     2, &settings.zstepfig,      " #410"}, // added by luke
+    {mjITEM_CHECKINT,  "x base",        2, &settings.xbasefig,      " #411"}, // added by luke
+    {mjITEM_CHECKINT,  "y base",        2, &settings.ybasefig,      " #411"}, // added by luke
     {mjITEM_CHECKINT,  "z base",        2, &settings.zbasefig,      " #411"}, // added by luke
     {mjITEM_CHECKINT,  "all actuators", 2, &settings.allactuators,  " #412"}, // added by luke
     {mjITEM_CHECKINT,  "SI values",     2, &settings.use_SI_sensors," #413"}, // added by luke
+    {mjITEM_CHECKINT,  "Render rgb",    2, &settings.render_rgb,    " #414"}, // added by luke
+    {mjITEM_CHECKINT,  "Render depth",  2, &settings.render_depth,  " #415"}, // added by luke
     {mjITEM_END}
 };
 
@@ -684,10 +694,13 @@ void lukesensorfigsinit(void)
     strcpy(figwrist.linename[0], "X");
     strcpy(figwrist.linename[1], "Y");
     strcpy(figwrist.linename[2], "Z");
-    strcpy(figmotors.linename[0], "X");
-    strcpy(figmotors.linename[1], "Y");
-    strcpy(figmotors.linename[2], "Z");
-    strcpy(figmotors.linename[3], "H");
+    strcpy(figmotors.linename[0], "gX");
+    strcpy(figmotors.linename[1], "gY");
+    strcpy(figmotors.linename[2], "gZ");
+    strcpy(figmotors.linename[3], "bZ");
+    strcpy(figmotors.linename[4], "bX");
+    strcpy(figmotors.linename[5], "bY");
+    
 }
 
 
@@ -711,10 +724,12 @@ void lukesensorfigsupdate(void)
         data_ptr = &myMjClass.sim_sensors_;
     }
 
+    bool base_xyz = luke::use_base_xyz();
+
     // read the data    
-    std::vector<luke::gfloat> b1data = data_ptr->finger1_gauge.read(gnum);
-    std::vector<luke::gfloat> b2data = data_ptr->finger2_gauge.read(gnum);
-    std::vector<luke::gfloat> b3data = data_ptr->finger3_gauge.read(gnum);
+    std::vector<luke::gfloat> g1data = data_ptr->finger1_gauge.read(gnum);
+    std::vector<luke::gfloat> g2data = data_ptr->finger2_gauge.read(gnum);
+    std::vector<luke::gfloat> g3data = data_ptr->finger3_gauge.read(gnum);
     std::vector<luke::gfloat> p1data = data_ptr->palm_sensor.read(gnum);
     std::vector<luke::gfloat> a1data = data_ptr->finger1_axial_gauge.read(gnum);
     std::vector<luke::gfloat> a2data = data_ptr->finger2_axial_gauge.read(gnum);
@@ -725,7 +740,9 @@ void lukesensorfigsupdate(void)
     std::vector<luke::gfloat> mXdata = data_ptr->x_motor_position.read(gnum);
     std::vector<luke::gfloat> mYdata = data_ptr->y_motor_position.read(gnum);
     std::vector<luke::gfloat> mZdata = data_ptr->z_motor_position.read(gnum);
-    std::vector<luke::gfloat> mHdata = data_ptr->z_base_position.read(gnum);
+    std::vector<luke::gfloat> bXdata = data_ptr->x_base_position.read(gnum);
+    std::vector<luke::gfloat> bYdata = data_ptr->y_base_position.read(gnum);
+    std::vector<luke::gfloat> bZdata = data_ptr->z_base_position.read(gnum);
 
     // get the corresponding timestamps
     std::vector<float> btdata = myMjClass.gauge_timestamps.read(gnum);
@@ -736,7 +753,7 @@ void lukesensorfigsupdate(void)
 
     // package sensor data pointers in iterable vectors
     std::vector<std::vector<luke::gfloat>*> bdata {
-        &b1data, &b2data, &b3data
+        &g1data, &g2data, &g3data
     };
     std::vector<std::vector<luke::gfloat>*> adata {
         &a1data, &a2data, &a3data
@@ -748,8 +765,12 @@ void lukesensorfigsupdate(void)
         &wXdata, &wYdata, &wZdata
     };
     std::vector<std::vector<luke::gfloat>*> mdata {
-        &mXdata, &mYdata, &mZdata, &mHdata  
+        &mXdata, &mYdata, &mZdata, &bZdata  
     };
+    if (base_xyz) {
+        mdata.push_back(&bXdata);
+        mdata.push_back(&bYdata);
+    }
 
     // package figures into iterable vector
     std::vector<mjvFigure*> myfigs {
@@ -861,19 +882,24 @@ void lukesensorfigshow(mjrRect rect)
 
 void lukestepperfigsinit(void)
 {
+    bool use_xyz = luke::use_base_xyz();
+
     mjv_defaultFigure(&figstepperx);
     mjv_defaultFigure(&figsteppery);
     mjv_defaultFigure(&figstepperz);
+    mjv_defaultFigure(&figbasex);
+    mjv_defaultFigure(&figbasey);
     mjv_defaultFigure(&figbasez);
 
     // what figures are we initialising
     std::vector<mjvFigure*> myfigs {
-        &figstepperx, &figsteppery, &figstepperz, &figbasez
+        &figstepperx, &figsteppery, &figstepperz, &figbasex, &figbasey, &figbasez
     };
     
     // what are the figure titles
     std::vector<std::string> titles {
-        "Stepper x / um", "Stepper y / um", "Stepper z / um", "Base z / um"
+        "Stepper x / um", "Stepper y / um", "Stepper z / um", 
+        "Base x / um", "Base y / um", "Base z / um"
     };
 
     // // figure limits
@@ -934,14 +960,20 @@ void lukestepperfigsupdate(void)
         gnum = mjMAXLINEPNT;
     }
 
+    bool base_xyz = luke::use_base_xyz();
+
     // read the data    
     std::vector<luke::gfloat> txsdata = luke::target_.target_stepperx.read(gnum);
     std::vector<luke::gfloat> tysdata = luke::target_.target_steppery.read(gnum);
     std::vector<luke::gfloat> tzsdata = luke::target_.target_stepperz.read(gnum);
+    std::vector<luke::gfloat> txbdata = luke::target_.target_basex.read(gnum);
+    std::vector<luke::gfloat> tybdata = luke::target_.target_basey.read(gnum);
     std::vector<luke::gfloat> tzbdata = luke::target_.target_basez.read(gnum);
     std::vector<luke::gfloat> axsdata = luke::target_.actual_stepperx.read(gnum);
     std::vector<luke::gfloat> aysdata = luke::target_.actual_steppery.read(gnum);
     std::vector<luke::gfloat> azsdata = luke::target_.actual_stepperz.read(gnum);
+    std::vector<luke::gfloat> axbdata = luke::target_.actual_basex.read(gnum);
+    std::vector<luke::gfloat> aybdata = luke::target_.actual_basey.read(gnum);
     std::vector<luke::gfloat> azbdata = luke::target_.actual_basez.read(gnum);
     std::vector<luke::gfloat> timedata = luke::target_.timedata.read(gnum);
 
@@ -955,6 +987,12 @@ void lukestepperfigsupdate(void)
     std::vector<std::vector<luke::gfloat>*> szdata {
         &tzsdata, &azsdata
     };
+    std::vector<std::vector<luke::gfloat>*> bxdata {
+        &txbdata, &axbdata
+    };
+    std::vector<std::vector<luke::gfloat>*> bydata {
+        &tybdata, &aybdata
+    };
     std::vector<std::vector<luke::gfloat>*> bzdata {
         &tzbdata, &azbdata
     };
@@ -963,11 +1001,21 @@ void lukestepperfigsupdate(void)
     std::vector<mjvFigure*> myfigs {
         &figstepperx, &figsteppery, &figstepperz, &figbasez
     };
+    if (base_xyz) {
+        myfigs[3] = &figbasex;
+        myfigs.push_back(&figbasey);
+        myfigs.push_back(&figbasez);
+    }
 
     // package sensor data in same order as figures
     std::vector< std::vector<std::vector<luke::gfloat>*>* > sensordata {
         &sxdata, &sydata, &szdata, &bzdata
     };
+    if (base_xyz) {
+        sensordata[3] = &bxdata;
+        sensordata.push_back(&bydata);
+        sensordata.push_back(&bzdata);
+    }
 
     // maximum number of lines on a figure
     static const int maxline = 10;
@@ -1006,10 +1054,17 @@ void lukestepperfigsupdate(void)
 
 void lukestepperfigshow(mjrRect rect)
 {
+    bool base_xyz = luke::use_base_xyz();
+
     // what figures are showing
     std::vector<mjvFigure*> myfigs {
         &figstepperx, &figsteppery, &figstepperz, &figbasez
     };
+    if (base_xyz) {
+        myfigs[3] = &figbasex;
+        myfigs.push_back(&figbasey);
+        myfigs.push_back(&figbasez);
+    }
     // what settings determine if these are showing
     std::vector<int> flags {
         settings.xstepfig, 
@@ -1017,6 +1072,11 @@ void lukestepperfigshow(mjrRect rect)
         settings.zstepfig,
         settings.zbasefig
     };
+    if (base_xyz) {
+        flags[3] = settings.xbasefig;
+        flags.push_back(settings.ybasefig);
+        flags.push_back(settings.zbasefig);
+    }
 
     // how many graphs do we need to fit
     int num = myfigs.size();
@@ -2833,6 +2893,13 @@ void render_MS(GLFWwindow* window)
     // show sensor
     if( settings.sensor )
         sensorshow(smallrect);
+
+    // added by luke
+    if (settings.render_depth or settings.render_rgb) {
+        render::render_rgb(settings.render_rgb);
+        render::render_depth(settings.render_depth);
+        render::read_rgbd();
+    }
 
     // added by luke
     lukesensorfigshow(smallrect);

@@ -23,6 +23,12 @@ class MjClass;
 namespace render
 {
 
+struct RGBD
+{
+  std::vector<int> rgb;
+  std::vector<float> depth;
+};
+
 // functions
 void mouse_button(GLFWwindow* window, int button, int act, int mods);
 void mouse_move(GLFWwindow* window, double xpos, double ypos);
@@ -36,6 +42,10 @@ void finish();
 void lukesensorfigsinit();
 void lukesensorfigsupdate();
 void lukesensorfigshow(mjrRect rect);
+
+RGBD read_rgbd();
+void render_rgb(bool set_as);
+void render_depth(bool set_as);
 
 }
 
