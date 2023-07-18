@@ -397,11 +397,8 @@ class MjEnv():
     Returns the next observation from the simuation
     """
 
-    # testing, can we continue to draw camera images?
-    rgb, depth = self._get_rgbd_image()
-
     obs = self.mj.get_observation()
-    
+
     return np.array(obs)
 
   def _event_state(self):
