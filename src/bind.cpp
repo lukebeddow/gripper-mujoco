@@ -1,10 +1,27 @@
 #include "pybind11/pybind11.h"
 #include "pybind11/stl.h"
+#include "pybind11/numpy.h"
 #include "mjclass.h"
 
 constexpr bool debug_bind = false;
 
 namespace py = pybind11;
+
+
+static py::array_t<luke::rgbint> rgbvec_to_array(std::vector<luke::rgbint>& vec)
+{
+  return py::array(vec.size(), vec.data());
+}
+
+static py::array_t<float> depthvec_to_array(std::vector<float>& vec)
+{
+  return py::array(vec.size(), vec.data());
+}
+
+static py::tuple RGBD_struct_to_tuple(luke::RGBD rgb_struct)
+{
+  return py::make_tuple(rgbvec_to_array(rgb_struct.rgb), depthvec_to_array(rgb_struct.depth));
+}
 
 // create a python module, called bind (must be saved in bind.so)
 PYBIND11_MODULE(bind, m) {
@@ -31,8 +48,20 @@ PYBIND11_MODULE(bind, m) {
     .def("reset", &MjClass::reset)
     .def("hard_reset", &MjClass::hard_reset)
     .def("step", &MjClass::step)
+
+    // rendering
+    .def("rendering_enabled", &MjClass::rendering_enabled)
     .def("render", &MjClass::render)
     .def("close_render", &MjClass::close_render)
+    .def("init_rgbd", &MjClass::init_rgbd)
+    .def("render_RGBD", &MjClass::render_RGBD)
+    .def("read_existing_RGBD", &MjClass::read_existing_RGBD)
+    .def("set_RGBD_size", &MjClass::set_RGBD_size)
+    .def("get_RGBD", &MjClass::get_RGBD)
+    .def("get_RGBD_numpy",
+      [](MjClass &mj) {
+        return RGBD_struct_to_tuple(mj.get_RGBD());
+      })
 
     // sensing
     // none atm
@@ -57,7 +86,6 @@ PYBIND11_MODULE(bind, m) {
     .def("is_done", &MjClass::is_done)
     .def("get_observation", static_cast<std::vector<luke::gfloat> (MjClass::*)()>(&MjClass::get_observation))
     .def("get_observation", static_cast<std::vector<luke::gfloat> (MjClass::*)(MjType::SensorData)>(&MjClass::get_observation))
-    .def("get_RGBD_image", &MjClass::get_RGBD_image)
     .def("get_event_state", &MjClass::get_event_state)
     .def("get_goal", &MjClass::get_goal)
     .def("assess_goal", static_cast<std::vector<float> (MjClass::*)()>(&MjClass::assess_goal))
@@ -962,10 +990,10 @@ PYBIND11_MODULE(bind, m) {
     ;
   }
 
-  {py::class_<render::RGBD>(m, "RGBD")
+  {py::class_<luke::RGBD>(m, "RGBD")
     .def(py::init<>())
-    .def_readonly("rgb", &render::RGBD::rgb)
-    .def_readonly("depth", &render::RGBD::depth)
+    .def_readonly("rgb", &luke::RGBD::rgb)
+    .def_readonly("depth", &luke::RGBD::depth)
     ;
   }
 

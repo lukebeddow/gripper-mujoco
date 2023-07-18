@@ -442,7 +442,7 @@ Target target_;
 static double last_step_time_ = 0.0;
 
 // turn on/off debug mode for this file only
-constexpr static bool debug_ = true; 
+constexpr static bool debug_ = false; 
 
 /* ----- initialising, setup, and utilities ----- */
 

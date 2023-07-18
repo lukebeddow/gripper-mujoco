@@ -21,6 +21,9 @@ namespace luke
 // define the precision of the gauges
 typedef float gfloat;
 
+// define type for RGB image data
+typedef uint8_t rgbint;
+
 /* ----- custom types ----- */
 
 struct Forces {
@@ -381,6 +384,12 @@ struct JointStates {
   double base_roll { 0.0 };
   double base_pitch { 0.0 };
   double base_yaw { 0.0 };
+};
+
+struct RGBD
+{
+  std::vector<rgbint> rgb;
+  std::vector<float> depth;
 };
 
 struct Base {

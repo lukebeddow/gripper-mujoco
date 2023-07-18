@@ -22,10 +22,6 @@
 // if we are on the cluster, we must not include the rendering libraries
 #if !defined(LUKE_CLUSTER)
   #include "rendering.h"
-  // forward declaration of RGBD class which we need in this file
-  namespace render {
-    struct RGBD;
-  };
 #endif
 
 // utility functions with no MjType dependency
@@ -1290,7 +1286,8 @@ public:
 
   MjType::Settings s_;                          // simulation settings
   std::chrono::time_point<time_> start_time_;   // time from tick() call
-  bool render_init = false;                     // have we initialised the render window
+  bool render_init = false;                     // have we initialised the rendering backend
+  bool render_window_init = false;              // have we initialised the rendering window
   bool render_reload = false;                   // have we reloaded and need to update rendering
   double sim_gauge_raw_to_N_factor = 1.0;       // calibration factor, set by auto_calibrate
 
@@ -1388,8 +1385,16 @@ public:
   void reset();
   void hard_reset();
   void step();
+
+  // rendering
+  bool rendering_enabled();
   bool render();
   void close_render();
+  bool init_rgbd();
+  luke::RGBD get_RGBD();
+  void render_RGBD();
+  luke::RGBD read_existing_RGBD();
+  void set_RGBD_size(int width, int height);
 
   // sensing
   void monitor_sensors();
@@ -1417,7 +1422,6 @@ public:
   bool is_done();
   std::vector<luke::gfloat> get_observation();
   std::vector<luke::gfloat> get_observation(MjType::SensorData sensors);
-  render::RGBD get_RGBD_image();
   std::vector<float> get_event_state();
   std::vector<float> get_goal();
   std::vector<float> assess_goal();

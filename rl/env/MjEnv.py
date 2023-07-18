@@ -55,7 +55,7 @@ class MjEnv():
     finger_thickness: float = 0.9e-3
     finger_width: float = 28e-3
 
-  def __init__(self, seed=None, noload=None, num_segments=None, finger_width=None):
+  def __init__(self, seed=None, noload=None, num_segments=None, finger_width=None, rgbd=False):
     """
     A mujoco environment, optionally set the random seed or prevent loading a
     model, in which case the user should call load() before using the class
@@ -106,6 +106,13 @@ class MjEnv():
     # initialise heuristic parameters
     self._initialise_heuristic_parameters()
 
+    # initialise rgbd camera to get images from simulation
+    if rgbd: self._init_rgbd()
+    else:
+      self.rgbd_camera = False
+      self.rgbd_enabled = False
+
+  
     return
 
   # ----- semi-private functions, advanced use ----- #
@@ -307,12 +314,94 @@ class MjEnv():
 
     return done
     
+  def _init_rgbd(self, width=640, height=480):
+    """
+    Initialise an rgbd camera in the simulation. Default size matches realsense
+    """
+    
+    self.rgbd_enabled = self.mj.init_rgbd()
+    if self.rgbd_enabled:
+      self.rgbd_camera = True
+      self._set_rgbd_size(640, 480)
+    else:
+      if self.log_level > 0:
+        print("Failed to initialise an RGBD camera, not enabled in compilation")
+      self.rgbd_camera = False
+
+  def _set_rgbd_size(self, width, height):
+    """
+    Set the size of simulated RGBD images
+    """
+
+    self.rgbd_enabled = self.mj.rendering_enabled()
+    self.rgbd_height = height
+    self.rgbd_width = width
+
+    if self.rgbd_enabled:
+      self.mj.set_RGBD_size(width, height)
+      self.rgbd_enabled = True
+    else:
+      if self.log_level > 0:
+        print("MjClass rendering is disabled in compilation settings, no RGBD images possible")
+      self.rgbd_enabled = False
+
+  def _get_rgbd_image(self):
+    """
+    Return rgbd data from the current state of the simulation, rescaled to match
+    the size of the rgbd data from real life.
+
+    Returns two numpy arrays ready for conversion into torch:
+      - rgb    (with shape 3 x width x height)
+      - depth  (with shape 1 x width x height)
+    """
+
+    if not self.rgbd_enabled:
+      if self.log_level > 2:
+        print("MjClass rendering disabled by compilation, unabled to get RGBD image")
+      return
+
+    # get rgbd information out of the simulation (unit8, float)
+    rgb, depth = self.mj.get_RGBD_numpy()
+
+    # reshape the numpy arrays to the correct aspect ratio
+    rgb = rgb.reshape(self.rgbd_height, self.rgbd_width, 3)
+    depth = depth.reshape(self.rgbd_height, self.rgbd_width, 1)
+
+    # numpy likes image arrays like this: width x height x channels
+    # torch likes image arrays like this: channels x width x height
+    rgb = np.einsum("ijk->kij", rgb)
+    depth = np.einsum("ijk->kij", depth)
+
+    return rgb, depth # ready for conversion to torch tensors
+  
+  def _plot_rgbd_image(self):
+    """
+    Get and then plot an rgbd image from the simulation. Use this for debugging only
+    """
+
+    import matplotlib.pyplot as plt
+    fig, axs = plt.subplots(2, 1)
+    
+    rgb, depth = self._get_rgbd_image()
+
+    # numpy likes image arrays like this: width x height x channels
+    # torch likes image arrays like this: channels x width x height
+    # hence convert from torch style back to numpy style for plotting
+    axs[0].imshow(np.einsum("ijk->jki", rgb)) # swap rgb channel from 1st (eg 3x640x480) to last (eg 640x480x3)
+    axs[1].imshow(depth[0]) # remove the depth 'channel' (eg 1x640x480 -> 640x480)
+
+    plt.show()
+
   def _next_observation(self):
     """
     Returns the next observation from the simuation
     """
 
+    # testing, can we continue to draw camera images?
+    rgb, depth = self._get_rgbd_image()
+
     obs = self.mj.get_observation()
+    
     return np.array(obs)
 
   def _event_state(self):
@@ -994,17 +1083,95 @@ if __name__ == "__main__":
 
   # import pickle
 
-  mj = MjEnv(noload=True)
+  mj = MjEnv(noload=True, rgbd=True)
+  mj.disable_rendering = True
 
   mj.load_finger_width = 24e-3
 
   mj.load("set7_xycamera_50i", num_segments=8, finger_width=28, finger_thickness=0.9e-3)
 
-  print("getting rgbd image now")
-  rgbd = mj.mj.get_RGBD_image()
+  # mj.render()
 
-  print("The rgb information is", rgbd.rgb)
-  print("The depth information is", rgbd.depth)
+  # print("getting rgbd image now")
+
+  
+
+  # mj._get_rgbd_image()
+  # mj._get_rgbd_image()
+
+  # print("before set size")
+  # mj._set_rgbd_size(360, 280)
+  # print("after set size")
+
+  # print("before set size")
+  # mj._set_rgbd_size(320, 240)
+  # print("after set size")
+
+  # mj._plot_rgbd_image()
+
+  import sys
+
+  # sizes of python lists (rgb, depth) = (25.9, 8.6) MB
+  rgbd = mj.mj.get_RGBD()
+  print(f"Size of rgb is: {sys.getsizeof(rgbd.rgb) * 1e-6:.3f} MB")
+  print(f"Size of depth is: {sys.getsizeof(rgbd.depth) * 1e-6:.3f} MB")
+
+  # sizes of numpy arrays -> (3.2, 4.3) MB, uint8 is the same as uint_fast8
+  rgb, depth = mj.mj.get_RGBD_numpy()
+  print(f"Size of numpy rgb is: {sys.getsizeof(rgb) * 1e-6:.3f} MB")
+  print(f"Size of numpy depth is: {sys.getsizeof(depth) * 1e-6:.3f} MB")
+
+  # sizes = [(720, 740), (200, 740), (720, 200),
+  #          (1500, 1500)]
+  
+  # sizes = [(900, 1200)]
+
+  # import matplotlib.pyplot as plt
+  # fig, axs = plt.subplots(len(sizes), 1)
+
+  # for i, (h, w) in enumerate(sizes):
+  #   rgb, d = mj.mj.get_RGBD_numpy(h, w)
+  #   axs.imshow(rgb.reshape(h, w, 3))
+
+  # fig2, axs2 = plt.subplots(3, 1)
+
+  # from torch.nn.functional import interpolate
+  # import torch
+  # from torchvision import transforms
+
+  # resizes= [0.5, 0.1, 0.01]
+  # for i, x in enumerate(resizes):
+
+    # rgbarr = interpolate(torch.tensor([np.transpose(rgb.reshape(h, w, 3))]), scale_factor=x)
+    # axs2[i].imshow(np.array(rgbarr[0]).T)
+    
+    # trans = transforms.Compose([transforms.Resize((100, 100))])
+    # img = trans(torch.tensor(np.transpose(rgb.reshape(h, w, 3))))
+    # axs2[i].imshow(np.array(img).T)
+
+    # trans = transforms.Compose([transforms.Resize((100, 100))])
+    # img = trans(torch.tensor(rgb.reshape(3, h, w)))
+    # axs2[i].imshow(np.array(img).T)
+
+  # rgbnp, depthnp = mj.mj.get_RGBD_numpy()
+  # print(f"Size of numpy rgb is: {sys.getsizeof(rgbnp) * 1e-6:.3f} MB")
+  # print(f"Size of numpy depth is: {sys.getsizeof(depthnp) * 1e-6:.3f} MB")
+
+  # print("The rgb information is", rgbd.rgb[:10])
+  # print("The depth information is", rgbd.depth[:10])
+
+  # print(rgbnp)
+
+  # print(isinstance(rgbnp, np.ndarray))
+  # print(rgbnp.dtype)
+
+  # import matplotlib.pyplot as plt
+
+  # plt.imshow(rgbnp.reshape(720, 740, 3))
+  # plt.show()
+
+  # plt.imshow(depthnp.reshape(720, 740))
+  # plt.show()
 
   exit()
 

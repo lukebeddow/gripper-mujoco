@@ -22,10 +22,10 @@
 #include "customtypes.h"
 #include "objecthandler.h"
 
-// if we have access to boost libraries
-#ifndef LUKE_PREVENT_BOOST
-  #include "boostdep.h"
-#endif
+// // if we have access to boost libraries
+// #ifndef LUKE_PREVENT_BOOST
+//   #include "boostdep.h"
+// #endif
 
 namespace luke
 {

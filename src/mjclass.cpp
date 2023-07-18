@@ -512,19 +512,70 @@ void MjClass::step()
 
 #if defined(LUKE_CLUSTER)
 
+bool MjClass::rendering_enabled()
+{
+  return false;
+}
+
 bool MjClass::render() 
 {
-  std::cout << "Rendering disabled on cluster\n";
+  std::cout << "mjclass::render() disabled in compilation settings\n";
   return false;
 }
 
 void MjClass::close_render()
 {
-  std::cout << "Close rendering disabled on cluster\n";
+  std::cout << "mjclass::close_render() disabled in compilation settings\n";
+  return;
+}
+
+void MjClass::init_rgbd()
+{
+  std::cout << "mjclass::init_rgbd() disabled in compilation settings\n";
   return false;
 }
 
+luke::RGBD MjClass::render_and_get_RGBD_image()
+{
+  std::cout << "mjclass::render_and_get_RGBD_image() disabled in compilation settings\n";
+  throw std::runtime_error("mjclass::render_and_get_RGBD_image() disabled in compilation settings\n")
+  return;
+}
+
+luke::RGBD MjClass::render_and_get_RGBD_image(int height, int width)
+{
+  std::cout << "mjclass::render_and_get_RGBD_image() disabled in compilation settings\n";
+  throw std::runtime_error("mjclass::render_and_get_RGBD_image() disabled in compilation settings\n")
+  return;
+}
+
+void MjClass::render_RGBD_image()
+{
+  std::cout << "mjclass::render_RGBD_image() disabled in compilation settings\n";
+  throw std::runtime_error("mjclass::render_RGBD_image() disabled in compilation settings\n")
+  return;
+}
+
+luke::RGBD MjClass::get_RGBD_image()
+{
+  std::cout << "mjclass::get_RGBD_image() disabled in compilation settings\n";
+  throw std::runtime_error("mjclass::get_RGBD_image() disabled in compilation settings\n")
+  return;
+}
+
+void MjClass::set_RGBD_image_size()
+{
+  std::cout << "mjclass::set_RGBD_image_size() disabled in compilation settings\n";
+  throw std::runtime_error("mjclass::set_RGBD_image_size() disabled in compilation settings\n")
+  return;
+}
+
 #else
+
+bool MjClass::rendering_enabled()
+{
+  return true;
+}
 
 bool MjClass::render()
 {
@@ -537,9 +588,10 @@ bool MjClass::render()
   }
 
   // if the render window has not yet been initialised
-  if (not render_init) {
-    render::init(*this);
+  if (not render_window_init) {
+    render::init_window(*this);
     render_init = true;
+    render_window_init = true;
   }
   else if (render_reload) {
     render::reload_for_rendering(*this);
@@ -572,6 +624,7 @@ bool MjClass::render()
   if (not window_open) {
     render::finish();
     render_init = false;
+    render_window_init = false;
     window_closed = true;
   }
 
@@ -584,6 +637,57 @@ void MjClass::close_render()
 
   if (render_init) render::finish();
   render_init = false;
+}
+
+bool MjClass::init_rgbd()
+{
+  /* initialise an rgbd camera */
+
+  render::init_rendering(*this);
+  render_init = true;
+  render::read_rgbd(); // first output is always incorrect camera view
+
+  return true;
+}
+
+luke::RGBD MjClass::get_RGBD()
+{
+  /* perform a render and then return an RGBD image */
+
+  render_RGBD();
+  return read_existing_RGBD();
+}
+
+void MjClass::render_RGBD()
+{
+  /* render a single frame of the current state, this can be used to bypass the
+  normal render() and keep the window hidden. render() displays the window to
+  the screen */
+
+  // if the render window has not yet been initialised
+  if (not render_init) {
+    init_rgbd();
+  }
+  else if (render_reload) {
+    render::reload_for_rendering(*this);
+  }
+
+  render::render();
+}
+
+luke::RGBD MjClass::read_existing_RGBD()
+{
+  /* return an existing RGBD image from the current state of the simulation,
+  without re-rendering */
+
+  return render::read_rgbd();
+}
+
+void MjClass::set_RGBD_size(int width, int height)
+{
+  /* set how many pixels the RGBD image should be */
+
+  render::resize_window(width, height);
 }
 
 #endif
@@ -1444,13 +1548,6 @@ std::vector<luke::gfloat> MjClass::get_observation(MjType::SensorData sensors)
   }
   
   return observation;
-}
-
-render::RGBD MjClass::get_RGBD_image()
-{
-  /* return an RGBD image from the current state of the simulation */
-
-  return render::read_rgbd();
 }
 
 std::vector<float> MjClass::get_event_state()

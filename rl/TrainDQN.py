@@ -708,7 +708,8 @@ class TrainDQN():
 
   def __init__(self, run_name=None, group_name=None, device=None, use_wandb=None, 
                no_plot=None, log_level=None, object_set=None, use_curriculum=None,
-               num_segments=None, finger_thickness=None, finger_width=None):
+               num_segments=None, finger_thickness=None, finger_width=None,
+               rgbd=False):
 
     # define key training parameters
     self.params = TrainDQN.Parameters()
@@ -721,7 +722,7 @@ class TrainDQN():
     self.best_performance_template = "Best success rate = {0}\nOccured at episode = {1}"
 
     # prepare environment, but don't load a model xml file yet
-    self.env = MjEnv(noload=True, num_segments=num_segments)
+    self.env = MjEnv(noload=True, num_segments=num_segments, rgbd=rgbd)
     self.num_segments = num_segments
     self.finger_thickness = finger_thickness
     self.finger_width = finger_width
@@ -2164,7 +2165,8 @@ if __name__ == "__main__":
   # model.env.mj.set.debug = False
   # model.num_segments = 8
   # model.finger_thickness = 0.9e-3
-  # model.params.num_episodes = 100
+  # model.params.num_episodes = 10000
+  # model.params.object_set = "set7_xycamera_50i"
   # model.train(network=net)
 
   # # continue training
@@ -2173,14 +2175,18 @@ if __name__ == "__main__":
   # model.continue_training(foldername, folderpath)
 
   # ----- profile ----- #
-  # net = networks.DQN_3L60
-  # model.env.disable_rendering = True
-  # model.env.mj.set.debug = False
-  # model.params.num_episodes = 10
-  # cProfile.run("model.train(network=net)", "/home/luke/mymujoco/python_profile_results.xyz")
-  # # in order to read profile results, run: $ python3 -m pstats /path/to/results.xyz
-  # # do: $ sort cumtime OR $ sort tottime AND THEN $ stats
-  # exit()
+  net = networks.DQN_3L60
+  model.env.disable_rendering = True
+  model.params.object_set = "set7_xycamera_50i"
+  model.env.mj.set.debug = False
+  model.params.num_episodes = 10
+  model.num_segments = 8
+  model.env._init_rgbd(width=320, height=240)
+  model.env.seed(1234)
+  cProfile.run("model.train(network=net)", "/home/luke/mymujoco/python_profile_results_8.xyz")
+  # in order to read profile results, run: $ python3 -m pstats /path/to/results.xyz
+  # do: $ sort cumtime OR $ sort tottime AND THEN $ stats
+  exit()
 
   # ----- visualise ----- #
 

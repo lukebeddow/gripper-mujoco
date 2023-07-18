@@ -29,7 +29,7 @@ DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
 						 -DLUKE_MACHINE='"$(MACHINE)"'
 
 # extras
-MAKEFLAGS += -j8 # jN => use N parallel cores
+MAKEFLAGS += -j4 # jN => use N parallel cores
 
 # ----- compiling on the cluster with the old mujoco version ----- #
 ifeq ($(filter cluster-old, $(MAKECMDGOALS)), cluster-old)
