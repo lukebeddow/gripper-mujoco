@@ -29,16 +29,15 @@
   XX(  mujoco_timestep,         double,   0.001)    /* sim timestep in seconds - default 0.002 */\
   XX(  curve_validation,        bool,     false)    /* are we in curve validation mode, if yes collect curve data */\
   XX(  tip_force_applied,       double,   0.0)      /* apply a tip force, only possible in curve validation mode */\
-  XX(  finger_stiffness,        double,   -7.5)     /* <0 means set all joints to this stiffness, -1<x<0 means use model, -2<x<-1 means adjusted model */\
   XX(  random_seed,             uint,     0)        /* random seed */\
   XX(  randomise_colours,       bool,     false)    /* randomise the colours of the objects */\
   /*
   automatic settings value detection, and parameters for guiding this */\
   XX(  auto_set_timestep,       bool,     true)     /* find the highest stable timestep, overrides mujoco_timestep */\
-  XX(  auto_calibrate_gauges,   bool,     true)     /* normalise gauges between +-5N, overrides bending_gauge.normalise */\
+  XX(  auto_calibrate_gauges,   bool,     false)     /* normalise gauges between +-5N, overrides bending_gauge.normalise */\
   XX(  auto_sim_steps,          bool,     true)     /* automatically find the sim steps per action, overrides sim_steps_per_action */\
-  XX(  auto_exceed_lateral_lim, bool,     true)     /* calculate safe finger bending automaticalled based on yield load */\
-  XX(  time_for_action,         float,    0.2)      /* time in seconds to give for each action to complete, only used if auto_sim_steps=true */\
+  XX(  auto_exceed_lateral_lim, bool,     false)     /* calculate safe finger bending automaticalled based on yield load */\
+  XX(  time_for_action,         double,    0.2)      /* time in seconds to give for each action to complete, only used if auto_sim_steps=true */\
   XX(  saturation_yield_factor, float,    1.0)      /* saturate bend sensors at what factor times yield load */\
   XX(  exceed_lat_min_factor,   float,    0.75)     /* minimum factor of yield load to consider lateral force exceeded */\
   XX(  exceed_lat_max_factor,   float,    1.5)      /* maximum factor of yield load to consider lateral force exceeded (saturates beyond)*/\
@@ -67,27 +66,17 @@
   XX(  done_height,             double,   15e-3)    /* the object AND the gripper must go up by this height from starting positions */\
   XX(  stable_finger_force,     double,   1.0)      /* finger force (N) on object to consider stable */\
   XX(  stable_palm_force,       double,   1.0)      /* palm force (N) on object to consider stable */\
-  XX(  stable_finger_force_lim, double,   5.0)      /* finger force (N) limit on the object to stop considering stable */\
-  XX(  stable_palm_force_lim,   double,   10.0)     /* palm force (N) limit on the object to stop considering stable*/\
+  XX(  stable_finger_force_lim, double,   100.0)    /* finger force (N) limit on the object to stop considering stable */\
+  XX(  stable_palm_force_lim,   double,   100.0)    /* palm force (N) limit on the object to stop considering stable*/\
   /* 
   is_done() settings */\
-  XX(  quit_on_reward_below,    float,    -1.01)    /* done=true if reward drops below this value */\
-  XX(  quit_reward_capped,      bool,     true)     /* cap reward at quit_on_reward_below */\
+  XX(  use_quit_on_reward,      bool,     true)     /* cap reward at quit_on_reward_below */\
   XX(  quit_on_reward_above,    float,    1.01)     /* done=true if reward rises above this value */\
+  XX(  quit_on_reward_below,    float,    -1.01)    /* done=true if reward drops below this value */\
   /* 
   set_action() settings */\
-  XX(  action_motor_steps,      int,      100)      /* stepper motor steps per action NB: (X/400)*(4/1.5) gives mm, so 100 steps -> 0.67mm */\
-  XX(  action_base_translation, double,   2e-3)     /* base translation per action */\
   XX(  sim_steps_per_action,    int,      200)      /* number of sim steps performed to complete one action */\
-  XX(  paired_motor_X_step,     bool,     true)     /* run both X and Y motors for X step */\
-  XX(  use_palm_action,         bool,     true)     /* moving palm is a possible action */\
-  XX(  use_height_action,       bool,     true)     /* moving base height is possible action */\
-  XX(  XYZ_action_mm_rad,       bool,     false)    /* define gripper motor movements (XYZ) in millimeters and radians, if false use num steps */\
-  XX(  X_action_mm,             double,   1.0)      /* mm of movement for an X action, moves prsimatic joint, 100steps=0.67mm */\
-  XX(  Y_action_rad,            double,   0.01)     /* rad of movement for a Y action, moves revolute joint, 100steps from vertical=0.02rad */\
-  XX(  Z_action_mm,             double,   2.0)      /* mm of movement for a Z action, moves palm joint, 100steps=1.22mm */\
-  XX(  base_action_mm,          double,   2.0)      /* mm of movement for a gripper base cartesian action */\
-  XX(  fingertip_min_mm,        double,   -12.5)    /* minimum allowable fingertip depth below start position */\
+  XX(  fingertip_min_mm,        double,   -12.5)    /* minimum allowable fingertip depth below start position before within_limits=false */\
   /*
   render() settings */\
   XX(  render_on_step,          bool,     false)    /* render on every single sim step */\

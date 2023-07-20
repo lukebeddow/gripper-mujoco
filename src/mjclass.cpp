@@ -130,34 +130,6 @@ void MjClass::configure_settings()
 
   #undef AA
 
-  // // what actions are valid - MUST be same order as action enums
-  // int i = 0;
-  // if (not s_.paired_motor_X_step) {
-  //   action_options[i] = MjType::Action::x_motor_positive;
-  //   action_options[i + 1] = MjType::Action::x_motor_negative;
-  //   i += 2;
-  // }
-  // else {
-  //   action_options[i] = MjType::Action::prismatic_positive;
-  //   action_options[i + 1] = MjType::Action::prismatic_negative;
-  //   i += 2;
-  // }
-  // if (true) {
-  //   action_options[i] = MjType::Action::y_motor_positive;
-  //   action_options[i + 1] = MjType::Action::y_motor_negative;
-  //   i += 2;
-  // }
-  // if (s_.use_palm_action) {
-  //   action_options[i] = MjType::Action::z_motor_positive;
-  //   action_options[i + 1] = MjType::Action::z_motor_negative;
-  //   i += 2;
-  // }
-  // if (s_.use_height_action) {
-  //   action_options[i] = MjType::Action::height_positive;
-  //   action_options[i + 1] = MjType::Action::height_negative;
-  //   i += 2;
-  // }
-
   n_actions = i;
 
   // what sample function will we use for sampling regular sensor data
@@ -218,7 +190,7 @@ void MjClass::configure_settings()
   default_goal_event_triggering();
 
   // update the finger spring stiffness
-  luke::set_finger_stiffness(model, s_.finger_stiffness);
+  luke::set_finger_stiffness_using_model(model);
 
   // if we have a new random seed, create a new random generator
   static uint old_random_seed = s_.random_seed + 1;
@@ -292,6 +264,16 @@ void MjClass::configure_settings()
 
     // one additional reset() as fingers will be wobbling from the calibration
     reset();
+  }
+
+  // if the 'time_for_action' setting is changed, recalibrate sim steps per action
+  if (s_.auto_sim_steps) {
+    static float time_for_action = s_.time_for_action;
+    static float tol = 1e-4;
+    if (abs(time_for_action - s_.time_for_action) > tol) {
+      resetFlags.auto_simsteps = true;
+      time_for_action = s_.time_for_action;
+    }
   }
 
   // find the sim settings per action automatically, requires timestep to be finalised
@@ -1198,110 +1180,6 @@ std::vector<float> MjClass::set_action(int action)
 
   }
 
-    // gripper_X action, move only the X motor
-    // case MjType::Action::gripper_X_positive:
-    //   if (s_.debug) std::cout << "gripper_X_positive";
-    //   wl = luke::move_gripper_target_m(-s_.gripper_X.value * 1e-3, 0, 0); // -ve since home is 134mm and end is 50mm
-    //   break;
-    // case MjType::Action::gripper_X_negative:
-    //   if (s_.debug) std::cout << "gripper_X_negative";
-    //   wl = luke::move_gripper_target_m(s_.gripper_X.value * 1e-3, 0, 0);
-    //   break;
-    // case MjType::Action::gripper_X_continous:
-    //   if (s_.debug) std::cout << "gripper_X_continous";
-    //   wl = luke::move_gripper_target_m(-s_.gripper_X.value * 1e-3, 0, 0); // -ve since home is 134mm and end is 50mm
-    //   break;
-
-    // case MjType::Action::gripper_X_positive:
-    // case MjType::Action::gripper_X_negative:
-    // case MjType::Action::gripper_X_continous:
-    //   if (s_.debug) std::cout << s_.gripper_X.name
-    //   if (s_.gripper_X.continous) {
-
-    //   }
-
-    // // gripper_prismatic_X action, move the X and Y motors for prismatic motion
-    // case MjType::Action::gripper_prismatic_X_positive:
-    //   if (s_.debug) std::cout << "gripper_prismatic_X_positive";
-    //   wl = luke::move_gripper_target_m_rad(-s_.gripper_prismatic_X.value * 1e-3, 0, 0);
-    //   break;
-    // case MjType::Action::gripper_prismatic_X_negative:
-    //   if (s_.debug) std::cout << "gripper_prismatic_X_negative";
-    //   wl = luke::move_gripper_target_m_rad(s_.gripper_prismatic_X.value * 1e-3, 0, 0);
-    //   break;
-    // case MjType::Action::gripper_prismatic_X_continous:
-    //   if (s_.debug) std::cout << "gripper_prismatic_X_continous";
-    //   wl = luke::move_gripper_target_m_rad(-s_.gripper_prismatic_X.value * 1e-3, 0, 0);
-    //   break;
-
-    // // gripper_Y action, move only the Y motor by mm
-    // case MjType::Action::gripper_Y_positive:
-    //   if (s_.debug) std::cout << "gripper_Y_positive";
-    //   wl = luke::move_gripper_target_m_rad(0, -s_.gripper_Y.value, 0); // -ve since home is 134mm and end is 50mm
-    //   break;
-    // case MjType::Action::gripper_Y_negative:
-    //   if (s_.debug) std::cout << "gripper_Y_positive";
-    //   wl = luke::move_gripper_target_m_rad(0, s_.gripper_Y.value, 0);
-    //   break;
-    // case MjType::Action::gripper_Y_continous:
-    //   if (s_.debug) std::cout << "gripper_Y_continous";
-    //   wl = luke::move_gripper_target_m_rad(0, -s_.gripper_Y.value, 0); // -ve since home is 134mm and end is 50mm
-    //   break;
-
-    // // gripper_revolute_Y action, move only the Y motor to achieve radian change
-    // case MjType::Action::gripper_revolute_Y_positive:
-    //   if (s_.debug) std::cout << "gripper_revolute_Y_positive";
-    //   if (s_.XYZ_action_mm_rad) 
-    //     wl = luke::move_gripper_target_m_rad(0, -s_.Y_action_rad, 0); // -ve as angle convention is swapped
-    //   else 
-    //     wl = luke::move_gripper_target_step(0, s_.action_motor_steps, 0);
-    //   break;
-    // case MjType::Action::gripper_revolute_Y_negative:
-    //   if (s_.debug) std::cout << "gripper_revolute_Y_negative";
-    //   if (s_.XYZ_action_mm_rad) 
-    //     wl = luke::move_gripper_target_m_rad(0, s_.Y_action_rad, 0);
-    //   else
-    //     wl = luke::move_gripper_target_step(0, -s_.action_motor_steps, 0);
-    //   break;
-    // case MjType::Action::gripper_revolute_Y_continous:
-    //   if (s_.debug) std::cout << "gripper_revolute_Y_continous";
-    //   if (s_.XYZ_action_mm_rad) 
-    //     wl = luke::move_gripper_target_m_rad(0, s_.Y_action_rad, 0);
-    //   else
-    //     wl = luke::move_gripper_target_step(0, -s_.action_motor_steps, 0);
-    //   break;
-
-    // case MjType::Action::z_motor_positive:
-    //   if (s_.debug) std::cout << "z_motor_positive";
-    //   if (s_.XYZ_action_mm_rad) 
-    //     wl = luke::move_gripper_target_m_rad(0, 0, s_.Z_action_mm * 1e-3);
-    //   else
-    //     wl = luke::move_gripper_target_step(0, 0, s_.action_motor_steps);
-    //   break;
-    // case MjType::Action::z_motor_negative:
-    //   if (s_.debug) std::cout << "z_motor_negative";
-    //   if (s_.XYZ_action_mm_rad) 
-    //     wl = luke::move_gripper_target_m_rad(0, 0, -s_.Z_action_mm * 1e-3);
-    //   else
-    //     wl = luke::move_gripper_target_step(0, 0, -s_.action_motor_steps);
-    //   break;
-
-    // case MjType::Action::height_positive:
-    //   if (s_.debug) std::cout << "height_positive";
-    //   wl = luke::move_base_target_m(0, 0, s_.action_base_translation);
-    //   break;
-    // case MjType::Action::height_negative:
-    //   if (s_.debug) std::cout << "height_negative";
-    //   wl = luke::move_base_target_m(0, 0, -s_.action_base_translation);
-    //   break;
-
-    // default:
-    //   std::cout << "Action value received is " << action_code << '\n';
-    //   std::cout << "Number of actions is " << n_actions << '\n';
-    //   throw std::runtime_error("MjClass::set_action() received out of bounds int");
-   
-  // }
-
   // special check for whether the fingertips are outside safe limits
   if (luke::get_fingertip_z_height() < s_.fingertip_min_mm * 1e-3) {
     wl = false;
@@ -1309,7 +1187,7 @@ std::vector<float> MjClass::set_action(int action)
 
   if (s_.debug) std::cout << ", within_limits = " << wl << '\n';
 
-  // // for testing only, delete later
+  // // uncomment for debugging
   // std::cout << "fingertip z height is " << luke::get_fingertip_z_height() * 1e3
   //     << ", minimum allowed is " << s_.fingertip_min_mm << "\n";
 
@@ -1731,7 +1609,7 @@ float MjClass::reward()
 
   // if we are capping the maximum cumulative negative reward
   if (env_.cumulative_reward < s_.quit_on_reward_below) {
-    if (s_.quit_reward_capped) {
+    if (s_.use_quit_on_reward) {
       // reduce the reward to not put us below the cap
       transition_reward += s_.quit_on_reward_below - env_.cumulative_reward - ftol;
       env_.cumulative_reward = s_.quit_on_reward_below - ftol;
@@ -1740,7 +1618,7 @@ float MjClass::reward()
 
   // if we are capping the maximum cumulative positive reward
   if (env_.cumulative_reward > s_.quit_on_reward_above) {
-    if (s_.quit_reward_capped) {
+    if (s_.use_quit_on_reward) {
       // reduce the reward to not put us above the cap
       transition_reward += s_.quit_on_reward_above - env_.cumulative_reward - ftol;
       env_.cumulative_reward = s_.quit_on_reward_above - ftol;
@@ -1772,51 +1650,6 @@ float MjClass::reward(std::vector<float> goal_vec, std::vector<float> event_vec)
     std::cout << "Cumulative cpp reward is " << env_.cumulative_reward << '\n';
 
   return transition_reward;
-}
-
-int MjClass::get_n_actions()
-{
-  /* get the number of possible actions */
-  
-  // recheck the settings to ensure we get it right
-  configure_settings();
-
-  return n_actions;
-}
-
-int MjClass::get_n_obs()
-{
-  /* get the number of observations */
-
-  int obs_size = get_observation().size();
-
-  if (s_.use_HER) {
-    int goal_size = get_goal().size();
-    obs_size += goal_size;
-  }
-
-  return obs_size;
-}
-
-int MjClass::get_N()
-{
-  /* return the number of free segments, N */
-
-  return luke::get_N();
-}
-
-float MjClass::get_finger_thickness()
-{
-  /* get the current saved finger thickness */
-
-  return luke::get_finger_thickness();
-}
-
-std::vector<luke::gfloat> MjClass::get_finger_stiffnesses()
-{
-  /* return a vector of the joint stiffnesses */
-
-  return luke::get_stiffnesses();
 }
 
 /* ----- sensor functions ----- */
@@ -2365,6 +2198,108 @@ MjType::TestReport MjClass::get_test_report()
   return testReport_;
 }
 
+void MjClass::set_finger_thickness(float thickness)
+{
+  /* set a new finger thickness for the gripper. This does not affect the URDF model,
+  but updates the finger stiffness behaviour. It will also throw off the gauge
+  calibration so if auto-calibration is on then it recalibrates */
+
+  // change the finger thickness, but full changes occur on call to reset()
+  bool changed = luke::change_finger_thickness(thickness);
+
+  // changes are finished upon next call to reset()
+  if (changed) resetFlags.finger_EI_changed = true;
+}
+
+void MjClass::set_finger_width(float width)
+{
+  /* set a new finger width for the gripper. For the actual width to change a new
+  URDF should have been or about to be loaded. Since EI has changed we need new
+  finger stiffnesses. It will also throw off the gauge calibration so if auto-calibration
+  is on then it recalibrates */
+
+  bool changed = luke::change_finger_width(width);
+
+  // changes are finished upon next call to reset()
+  if (changed) resetFlags.finger_EI_changed = true;
+}
+
+void MjClass::set_finger_modulus(float E)
+{
+  /* set the youngs modulus for the finger */
+
+  bool changed = luke::change_youngs_modulus(E);
+
+  // changes are finished upon next call to reset()
+  if (changed) resetFlags.finger_EI_changed = true;
+}
+
+int MjClass::get_n_actions()
+{
+  /* get the number of possible actions */
+  
+  // recheck the settings to ensure we get it right
+  configure_settings();
+
+  return n_actions;
+}
+
+int MjClass::get_n_obs()
+{
+  /* get the number of observations */
+
+  int obs_size = get_observation().size();
+
+  if (s_.use_HER) {
+    int goal_size = get_goal().size();
+    obs_size += goal_size;
+  }
+
+  return obs_size;
+}
+
+int MjClass::get_N()
+{
+  /* return the number of free segments, N */
+
+  return luke::get_N();
+}
+
+float MjClass::get_finger_thickness()
+{
+  /* get the current saved finger thickness */
+
+  return luke::get_finger_thickness();
+}
+
+float MjClass::get_finger_width()
+{
+  /* get the current saved finger width */
+
+  return luke::get_finger_width();
+}
+
+float MjClass::get_finger_modulus()
+{
+  /* get the current saved finger youngs modulus */
+
+  return luke::get_youngs_modulus();
+}
+
+float MjClass::get_finger_rigidity()
+{
+  /* get the current saved value of finger rigidity */
+
+  return luke::get_finger_rigidity();
+}
+
+std::vector<luke::gfloat> MjClass::get_finger_stiffnesses()
+{
+  /* return a vector of the joint stiffnesses */
+
+  return luke::get_stiffnesses();
+}
+
 MjType::CurveFitData::PoseData MjClass::validate_curve(int force_style)
 {
   /* for testing the curvature of the fingers */
@@ -2382,15 +2317,15 @@ MjType::CurveFitData::PoseData MjClass::validate_curve(int force_style)
   luke::verify_small_angle_model(data, 0, pose.f1.joints, 
     pose.f1.pred_j, pose.f1.pred_x, pose.f1.pred_y, pose.f1.theory_y,
     pose.f1.theory_x_curve, pose.f1.theory_y_curve,
-    s_.tip_force_applied, s_.finger_stiffness, force_style);
+    s_.tip_force_applied, force_style);
   luke::verify_small_angle_model(data, 1, pose.f2.joints, 
     pose.f2.pred_j, pose.f2.pred_x, pose.f2.pred_y, pose.f2.theory_y,
     pose.f2.theory_x_curve, pose.f2.theory_y_curve,
-    s_.tip_force_applied, s_.finger_stiffness, force_style);
+    s_.tip_force_applied, force_style);
   luke::verify_small_angle_model(data, 2, pose.f3.joints, 
     pose.f3.pred_j, pose.f3.pred_x, pose.f3.pred_y, pose.f3.theory_y,
     pose.f3.theory_x_curve, pose.f3.theory_y_curve,
-    s_.tip_force_applied, s_.finger_stiffness, force_style);
+    s_.tip_force_applied, force_style);
 
   // TESTING: replace theory with new points (more accurate)
   pose.f1.theory_y = luke::discretise_curve(pose.f1.x, pose.f1.theory_x_curve,
@@ -3031,42 +2966,6 @@ void MjClass::calibrate_simulated_sensors(float bend_gauge_normalise)
   s_.curve_validation = false;
 }
 
-void MjClass::set_finger_thickness(float thickness)
-{
-  /* set a new finger thickness for the gripper. This does not affect the URDF model,
-  but updates the finger stiffness behaviour. It will also throw off the gauge
-  calibration so if auto-calibration is on then it recalibrates */
-
-  // change the finger thickness, but full changes occur on call to reset()
-  bool changed = luke::change_finger_thickness(thickness);
-
-  // changes are finished upon next call to reset()
-  if (changed) resetFlags.finger_EI_changed = true;
-}
-
-void MjClass::set_finger_width(float width)
-{
-  /* set a new finger width for the gripper. For the actual width to change a new
-  URDF should have been or about to be loaded. Since EI has changed we need new
-  finger stiffnesses. It will also throw off the gauge calibration so if auto-calibration
-  is on then it recalibrates */
-
-  bool changed = luke::change_finger_width(width);
-
-  // changes are finished upon next call to reset()
-  if (changed) resetFlags.finger_EI_changed = true;
-}
-
-void MjClass::set_finger_modulus(float E)
-{
-  /* set the youngs modulus for the finger */
-
-  bool changed = luke::change_youngs_modulus(E);
-
-  // changes are finished upon next call to reset()
-  if (changed) resetFlags.finger_EI_changed = true;
-}
-
 float MjClass::yield_load()
 {
   /* return the yield force (end applied) for the current finger thickness */
@@ -3300,6 +3199,57 @@ float unnormalise_from(float val, float min, float max)
   return (0.5 * (val + 1) * (max - min)) + min;
 }
 
+std::string make_detail_row(std::vector<std::string> x, int type_chars,
+  int name_chars, int val_chars, int float_bonus, std::vector<bool> float_bonus_vec)
+{
+  /* Helper function for MjType::Settings::get_settings
+  makes the top row detail string */
+
+  if (x.size() < 3) {
+    throw std::runtime_error("make_detail_row() got x with size < 3");
+  }
+
+  std::string str;
+  std::string pad;
+  std::string type_str;
+  std::string name_str;
+  std::string val_str;
+
+  /* type first */
+  type_str = x[0];
+  pad.resize(type_chars - type_str.size(), ' ');
+  str += "\n" + type_str + pad;
+  /* name next */
+  name_str = x[1];
+  pad.clear(); 
+  pad.resize(name_chars - name_str.size(), ' ');
+  str += name_str + pad;
+  /* value last */
+  for (int i = 2; i < x.size(); i++) {
+    val_str.clear();
+    val_str = x[i];
+    if (i == 2) {
+      str += "{";
+    }
+    pad.clear();
+    if (float_bonus_vec[i - 2]) {
+      pad.resize(val_chars + float_bonus - val_str.size(), ' ');
+    }
+    else {
+      pad.resize(val_chars - val_str.size(), ' ');
+    }
+    str += pad + val_str;
+    if (i == x.size() - 1) {
+      str += " }\n";
+    }
+    else {
+      str += ", ";
+    }
+  }
+  
+  return str;
+}
+
 std::string MjType::Settings::get_settings()
 {
   /* this function returns a string detailing all of the settings */
@@ -3314,9 +3264,9 @@ std::string MjType::Settings::get_settings()
 
   // define spacings so that values all line up
   constexpr int name_chars = 25;
-  constexpr int val_chars = 5;
+  constexpr int val_chars = 11;//5;
   constexpr int type_chars = 14;
-  constexpr int float_bonus = 6;
+  constexpr int float_bonus = 0;
 
   // create the column headers, type first
   type_str = "Type";
@@ -3327,17 +3277,37 @@ std::string MjType::Settings::get_settings()
   pad.clear(); pad.resize(name_chars - name_str.size(), ' ');
   str += name_str + pad;
   // now values
-  val_str = "Value/s";
+  val_str = "Value";
   str += val_str + "\n";
   // now add headers to output
   output_str += str;
+
+  std::vector<std::string> SS_vec { "Type", "Name", "Used", "Normalise", "Readrate", "Noise mu", "Noise std", "N override" };
+  std::vector<bool> SS_float_vec { false, true, true, true, true, false };
+  std::string SS_str = make_detail_row(SS_vec, type_chars,
+    name_chars, val_chars, float_bonus, SS_float_vec);
+
+  std::vector<std::string> AA_vec { "Type", "Name", "Used", "Continous", "Value", "Sign" };
+  std::vector<bool> AA_float_vec { false, false, true, false };
+  std::string AA_str = make_detail_row(AA_vec, type_chars,
+    name_chars, val_chars, float_bonus, AA_float_vec);
+
+  std::vector<std::string> BR_vec { "Type", "Name", "Reward", "Done", "Trigger" };
+  std::vector<bool> BR_float_vec { true, false, false };
+  std::string BR_str = make_detail_row(BR_vec, type_chars,
+    name_chars, val_chars, float_bonus, BR_float_vec);
+
+  std::vector<std::string> LR_vec { "Type", "Name", "Reward", "Done", "Trigger", "Min", "Max", "Overshoot" };
+  std::vector<bool> LR_float_vec { true, false, false, true, true, true };
+  std::string LR_str = make_detail_row(LR_vec, type_chars,
+    name_chars, val_chars, float_bonus, LR_float_vec);
 
   /* be aware when using macro fields other than name as it will pull values 
      from simsettings.h not s_, instead of using TRIGGER we need to use 
      s_.NAME.trigger */
 
-  // we will use our macro to build one large string
-  #define XX(NAME, TYPE, VALUE) \
+  // we will use our macros to build up strings
+  #define XX(NAME, TYPE, DONTUSE1) \
             str.clear();\
             /* type first */\
             type_str.clear(); type_str += #TYPE;\
@@ -3353,7 +3323,7 @@ std::string MjType::Settings::get_settings()
             /* add to output */\
             output_str += str;
 
-  #define SS(NAME, IN_USE, NORM, READRATE) \
+  #define SS(NAME, DONTUSE1, DONTUSE2, DONTUSE3) \
             str.clear();\
             /* type first */\
             type_str.clear(); type_str += "Sensor";\
@@ -3380,6 +3350,32 @@ std::string MjType::Settings::get_settings()
             pad.clear(); pad.resize(val_chars + float_bonus - val_str.size(), ' ');\
             str += pad + val_str + ", ";\
             val_str.clear(); val_str += std::to_string(NAME.noise_overriden);\
+            pad.clear(); pad.resize(val_chars - val_str.size(), ' ');\
+            str += pad + val_str + " }\n";\
+            /* add to output */\
+            output_str += str;
+
+  #define AA(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4) \
+            str.clear();\
+            /* type first */\
+            type_str.clear(); type_str += "Action";\
+            pad.clear(); pad.resize(type_chars - type_str.size(), ' ');\
+            str += type_str + pad;\
+            /* name next */\
+            name_str.clear(); name_str += #NAME;\
+            pad.clear(); pad.resize(name_chars - name_str.size(), ' ');\
+            str += name_str + pad;\
+            /* now values */\
+            val_str.clear(); val_str += std::to_string((bool)NAME.in_use);\
+            pad.clear(); pad.resize(val_chars - val_str.size(), ' ');\
+            str += "{" + pad + val_str + ", ";\
+            val_str.clear(); val_str += std::to_string((bool)NAME.continous);\
+            pad.clear(); pad.resize(val_chars - val_str.size(), ' ');\
+            str += pad + val_str + ", ";\
+            val_str.clear(); val_str += std::to_string((float)NAME.value);\
+            pad.clear(); pad.resize(val_chars + float_bonus - val_str.size(), ' ');\
+            str += pad + val_str + ", ";\
+            val_str.clear(); val_str += std::to_string((int)NAME.sign);\
             pad.clear(); pad.resize(val_chars - val_str.size(), ' ');\
             str += pad + val_str + " }\n";\
             /* add to output */\
@@ -3441,13 +3437,28 @@ std::string MjType::Settings::get_settings()
             output_str += str;
 
     // now run the macros
+
     LUKE_MJSETTINGS_GENERAL
+
+    output_str += SS_str;
+
     LUKE_MJSETTINGS_SENSOR
+
+    output_str += AA_str;
+    
+    LUKE_MJSETTINGS_ACTION
+
+    output_str += BR_str;
+
     LUKE_MJSETTINGS_BINARY_REWARD
+
+    output_str += LR_str;
+
     LUKE_MJSETTINGS_LINEAR_REWARD
 
   #undef XX
   #undef SS
+  #undef AA
   #undef BR
   #undef LR
 
@@ -3620,6 +3631,54 @@ void MjType::Settings::scale_rewards(float scale)
   
   #undef BR
   #undef LR
+}
+
+void MjType::Settings::set_all_action_use(bool set_as)
+{
+  /* set all the actions to 'set_as' */
+
+  #define AA(NAME, DONT1, DONT2, DONT3, DONT4) NAME.in_use = set_as;
+
+    LUKE_MJSETTINGS_ACTION
+
+  #undef AA
+}
+
+void MjType::Settings::set_all_action_continous(bool set_as)
+{
+  /* set all the actions to 'set_as' */
+
+  #define AA(NAME, DONT1, DONT2, DONT3, DONT4) NAME.continous = set_as;
+
+    LUKE_MJSETTINGS_ACTION
+
+  #undef AA
+}
+
+void MjType::Settings::set_all_action_value(float set_as)
+{
+  /* set all the actions to 'set_as' */
+
+  #define AA(NAME, DONT1, DONT2, DONT3, DONT4) NAME.value = set_as;
+
+    LUKE_MJSETTINGS_ACTION
+
+  #undef AA
+}
+
+void MjType::Settings::set_all_action_sign(int set_as)
+{
+  /* set all the actions to 'set_as' */
+
+  if (set_as != -1 and set_as != 1) {
+    throw std::runtime_error("MjType::Settings::set_all_action_sign recieved a value not either +1 or -1");
+  }
+
+  #define AA(NAME, DONT1, DONT2, DONT3, DONT4) NAME.sign = set_as;
+
+    LUKE_MJSETTINGS_ACTION
+
+  #undef AA
 }
 
 void MjType::EventTrack::print()

@@ -46,7 +46,7 @@ OPTIM = -O2
 endif
 
 # define library locations - this file contains user specified options
-PREVENT_BOOST = 1 # always disable boost, in future remove boost files from repo
+DEPENDS_BOOST = 0 # by default do not depend on boost
 include buildsettings.mk
 
 # ----- compilation settings ----- #
@@ -74,8 +74,8 @@ else
 UITOOLS = $(BUILDDIR)/uitools.o
 endif
 
-# are we going to prevent any boost libraries compiling
-ifeq ($(PREVENT_BOOST), 1)
+# if we don't depend on boost, remove boost from src files
+ifeq ($(DEPENDS_BOOST), 0)
 SOURCES := $(filter-out $(SOURCEDIR)/boostdep.cpp, $(SOURCES))
 endif
 

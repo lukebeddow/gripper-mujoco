@@ -206,7 +206,7 @@ struct JointSettings {
     double finger_length = 235e-3;
     double finger_thickness = 0.9e-3;
     double finger_width = 28e-3;
-    double E = 200e9;
+    double E = 193e9;
     double I = (finger_width * std::pow(finger_thickness, 3)) / 12.0;
     double EI = E * I;
     double yield_stress = 215e6;
@@ -789,115 +789,6 @@ void get_joint_addresses(mjModel* model)
   }
 }
 
-bool change_finger_thickness(float thickness)
-{
-  /* set a new finger thickness, and correspondingly change EI, requires reset after 
-  to set new finger stiffnesses */
-
-  constexpr bool local_debug = debug_;
-
-  if (local_debug) {
-    std::cout << "About to change finger thickness from " << j_.dim.finger_thickness
-      << " to " << thickness << ", EI is " << j_.dim.EI << '\n';
-  }
-
-  // check if thickness is greater than 5mm
-  if (thickness > 2e-3) {
-    std::cout << "thickness given = " << thickness << '\n';
-    throw std::runtime_error("change_finger_thickness() got value above 2mm - make sure you are using SI units!");
-  }
-
-  constexpr float tol = 1e-5;
-
-  if (abs(thickness - j_.dim.finger_thickness) < tol) {
-    if (local_debug) std::cout << "Finger thickness is the same as current, not changing\n";
-    return false;
-  }
-
-  j_.dim.finger_thickness = thickness;
-  j_.dim.I = (j_.dim.finger_width * std::pow(j_.dim.finger_thickness, 3)) / 12.0;
-  j_.dim.EI = j_.dim.E * j_.dim.I;
-
-  if (local_debug) {
-    std::cout << "Finger thickness changed, now is " << j_.dim.finger_thickness
-      << ", EI is " << j_.dim.EI << '\n';
-  }
-
-  return true;
-}
-
-bool change_finger_width(float width)
-{
-  /* set a new finger wdith, and correspondingly change EI, no reset required, but
-  the loaded urdf should be changed if the width changes which would require a hard_reset */
-
-  constexpr bool local_debug = debug_;
-
-  if (local_debug) {
-    std::cout << "About to change finger width from " << j_.dim.finger_width
-      << " to " << width << ", EI is " << j_.dim.EI << '\n';
-  }
-
-  // check if thickness is greater than 1 metre
-  if (width > 1) {
-    std::cout << "width given = " << width << '\n';
-    throw std::runtime_error("change_finger_width() got value above 1 metre - make sure you are using SI units!");
-  }
-
-  constexpr float tol = 1e-5;
-
-  if (abs(width - j_.dim.finger_width) < tol) {
-    if (local_debug) std::cout << "Finger width is the same as current, not changing\n";
-    return false;
-  }
-
-  j_.dim.finger_width = width;
-  j_.dim.I = (j_.dim.finger_width * std::pow(j_.dim.finger_thickness, 3)) / 12.0;
-  j_.dim.EI = j_.dim.E * j_.dim.I;
-
-  if (local_debug) {
-    std::cout << "Finger width changed, now is " << j_.dim.finger_width
-      << ", EI is " << j_.dim.EI << '\n';
-  }
-
-  return true;
-}
-
-bool change_youngs_modulus(float E)
-{
-  /* set a new E value */
-
-  constexpr bool local_debug = true; // debug_;
-
-  if (local_debug) {
-    std::cout << "About to change Youngs modulus from " << j_.dim.E
-      << " to " << E << '\n';
-  }
-
-  // check we have the right order of magnitude
-  if (E < 10e9 or E > 1000e9) {
-    std::cout << "Youngs modulus given, E = " << E << '\n';
-    throw std::runtime_error("change_youngs_modulus() got an E value not in the right magnitude range, should be E = 200e9");
-  }
-
-  constexpr float tol = 1e6;
-
-  if (abs(E - j_.dim.E) < tol) {
-    if (local_debug) std::cout << "Youngs modulus, E, is the same as current, not changing\n";
-    return false;
-  }
-
-  j_.dim.E = E;
-  j_.dim.EI = j_.dim.E * j_.dim.I;
-
-  if (local_debug) {
-    std::cout << "Youngs modulus changed, now is " << j_.dim.E
-      << ", EI is " << j_.dim.EI << '\n';
-  }
-
-  return true;
-}
-
 void set_finger_stiffness(mjModel* model, std::vector<luke::gfloat> stiffness)
 {
   /* set the finger stiffness to a vector sequence of values */
@@ -931,7 +822,7 @@ void set_finger_stiffness(mjModel* model, std::vector<luke::gfloat> stiffness)
   }
 }
 
-void set_finger_stiffness(mjModel* model, mjtNum stiffness)
+void set_finger_stiffness_using_model(mjModel* model)
 {
   /* set the stiffness of the flexible finger joints. The input value for stiffness
   determines the behaviour of this function.
@@ -954,55 +845,38 @@ void set_finger_stiffness(mjModel* model, mjtNum stiffness)
   j_.dim.joint_stiffness.clear();
   j_.dim.joint_stiffness.resize(N);
 
-  if (stiffness > 0) {
-    if (local_debug) std::cout << "Finger joint stiffness ALL set to " << stiffness << '\n';
-    for (int i : j_.idx.finger) {
-      model->jnt_stiffness[i] = stiffness;
-    }
-    // save stiffness values for one finger, even though they are all the same
-    for (int i = 0; i < N; i++) j_.dim.joint_stiffness[i] = stiffness;
-  }
+  if (local_debug) std::cout << "Finger joint stiffness set using finalised theory method (EI*N)/L\n";
 
-  else if (stiffness > -8 and stiffness < -7) {
+  // loop over all three fingers
+  for (int i = 0; i < 3; i++) {
 
-    if (local_debug) std::cout << "Finger joint stiffness set using finalised theory method (EI*N)/L\n";
+    float angle_sum = 0;
 
-    // loop over all three fingers
-    for (int i = 0; i < 3; i++) {
+    // loop from n=1 to N
+    for (int n = 1; n < N + 1; n++) {
 
-      float angle_sum = 0;
+      int idx = j_.idx.finger[i * N + (n - 1)];
 
-      // loop from n=1 to N
-      for (int n = 1; n < N + 1; n++) {
-
-        int idx = j_.idx.finger[i * N + (n - 1)];
-
-        // calculate the stiffness for each joint
-        float c;
-        if (n == 1) {
-          c = ((2 * j_.dim.EI) / j_.dim.finger_length) * ((N*N) / (double)(N - (1.0/3.0)));
-        }
-        else {
-          c = (N * j_.dim.EI) / j_.dim.finger_length;
-        }
-
-        // save stiffness values for 1st finger
-        if (i == 0) {
-          j_.dim.joint_stiffness[n - 1] = c;
-        }
-
-        if (local_debug and i == 0) {
-          std::cout << "finger joint " << n << " has c_n = " << c << '\n';
-        }
-
-        model->jnt_stiffness[idx] = c;
+      // calculate the stiffness for each joint
+      float c;
+      if (n == 1) {
+        c = ((2 * j_.dim.EI) / j_.dim.finger_length) * ((N*N) / (double)(N - (1.0/3.0)));
       }
-    }
-  }
+      else {
+        c = (N * j_.dim.EI) / j_.dim.finger_length;
+      }
 
-  else {
-    std::cout << "set_finger_stiffness(...) input stiffness was " << stiffness << '\n';
-    throw  std::runtime_error("set_finger_stiffness(...) input stiffness not valid");
+      // save stiffness values for 1st finger
+      if (i == 0) {
+        j_.dim.joint_stiffness[n - 1] = c;
+      }
+
+      if (local_debug and i == 0) {
+        std::cout << "finger joint " << n << " has c_n = " << c << '\n';
+      }
+
+      model->jnt_stiffness[idx] = c;
+    }
   }
 
   if (local_debug)
@@ -2665,7 +2539,7 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
   std::vector<float>& joint_angles, std::vector<float>& joint_pred,
   std::vector<float>& pred_x, std::vector<float>& pred_y, std::vector<float>& theory_y,
   std::vector<float>& theory_x_curve, std::vector<float>& theory_y_curve,
-  float force, float finger_stiffness, int force_style)
+  float force, int force_style)
 {
   /* evaluate the difference in joint angle between the actual and model
   predicted values
@@ -3065,6 +2939,129 @@ float get_finger_length()
   /* return the current finger length */
 
   return j_.dim.finger_length;
+}
+
+bool change_finger_thickness(float thickness)
+{
+  /* set a new finger thickness, and correspondingly change EI, requires reset after 
+  to set new finger stiffnesses */
+
+  constexpr bool local_debug = debug_;
+
+  if (local_debug) {
+    std::cout << "About to change finger thickness from " << j_.dim.finger_thickness
+      << " to " << thickness << ", EI is " << j_.dim.EI << '\n';
+  }
+
+  // check if thickness is greater than 5mm
+  if (thickness > 2e-3) {
+    std::cout << "thickness given = " << thickness << '\n';
+    throw std::runtime_error("change_finger_thickness() got value above 2mm - make sure you are using SI units!");
+  }
+
+  constexpr float tol = 1e-5;
+
+  if (abs(thickness - j_.dim.finger_thickness) < tol) {
+    if (local_debug) std::cout << "Finger thickness is the same as current, not changing\n";
+    return false;
+  }
+
+  j_.dim.finger_thickness = thickness;
+  j_.dim.I = (j_.dim.finger_width * std::pow(j_.dim.finger_thickness, 3)) / 12.0;
+  j_.dim.EI = j_.dim.E * j_.dim.I;
+
+  if (local_debug) {
+    std::cout << "Finger thickness changed, now is " << j_.dim.finger_thickness
+      << ", EI is " << j_.dim.EI << '\n';
+  }
+
+  return true;
+}
+
+bool change_finger_width(float width)
+{
+  /* set a new finger wdith, and correspondingly change EI, no reset required, but
+  the loaded urdf should be changed if the width changes which would require a hard_reset */
+
+  constexpr bool local_debug = debug_;
+
+  if (local_debug) {
+    std::cout << "About to change finger width from " << j_.dim.finger_width
+      << " to " << width << ", EI is " << j_.dim.EI << '\n';
+  }
+
+  // check if thickness is greater than 1 metre
+  if (width > 1) {
+    std::cout << "width given = " << width << '\n';
+    throw std::runtime_error("change_finger_width() got value above 1 metre - make sure you are using SI units!");
+  }
+
+  constexpr float tol = 1e-5;
+
+  if (abs(width - j_.dim.finger_width) < tol) {
+    if (local_debug) std::cout << "Finger width is the same as current, not changing\n";
+    return false;
+  }
+
+  j_.dim.finger_width = width;
+  j_.dim.I = (j_.dim.finger_width * std::pow(j_.dim.finger_thickness, 3)) / 12.0;
+  j_.dim.EI = j_.dim.E * j_.dim.I;
+
+  if (local_debug) {
+    std::cout << "Finger width changed, now is " << j_.dim.finger_width
+      << ", EI is " << j_.dim.EI << '\n';
+  }
+
+  return true;
+}
+
+bool change_youngs_modulus(float E)
+{
+  /* set a new E value */
+
+  constexpr bool local_debug = debug_;
+
+  if (local_debug) {
+    std::cout << "About to change Youngs modulus from " << j_.dim.E
+      << " to " << E << '\n';
+  }
+
+  // check we have the right order of magnitude
+  if (E < 10e9 or E > 1000e9) {
+    std::cout << "Youngs modulus given, E = " << E << '\n';
+    throw std::runtime_error("change_youngs_modulus() got an E value not in the right magnitude range, should be E = 200e9");
+  }
+
+  constexpr float tol = 1e6;
+
+  if (abs(E - j_.dim.E) < tol) {
+    if (local_debug) std::cout << "Youngs modulus, E, is the same as current, not changing\n";
+    return false;
+  }
+
+  j_.dim.E = E;
+  j_.dim.EI = j_.dim.E * j_.dim.I;
+
+  if (local_debug) {
+    std::cout << "Youngs modulus changed, now is " << j_.dim.E
+      << ", EI is " << j_.dim.EI << '\n';
+  }
+
+  return true;
+}
+
+float get_youngs_modulus()
+{
+  /* return the youngs modulus value that the simluation is currently using for the fingers */
+
+  return j_.dim.E;
+}
+
+float get_finger_rigidity()
+{
+  /* return the current finger rigidity */
+
+  return j_.dim.EI;
 }
 
 std::vector<luke::gfloat> get_stiffnesses()

@@ -12,6 +12,7 @@ from random import random
 import networks
 import argparse
 from dataclasses import dataclass
+import functools
 
 def set_penalties(model, value, done=False, trigger=1, make_binary=None):
   """
@@ -371,7 +372,7 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
   # termination on specific reward
   model.env.mj.set.quit_on_reward_below = -1.0 if "neg_cap" in options else -1e6
   model.env.mj.set.quit_on_reward_above = +1.0 if "pos_cap" in options else 1e6
-  model.env.mj.set.quit_reward_capped = True
+  model.env.mj.set.use_quit_on_reward = True
 
   model.wandb_note += f"Reward style: '{style}', options: [ "
   for extra in options: model.wandb_note += f"'{extra}' "
@@ -438,10 +439,95 @@ def add_sensors(model, num=None, sensor_mode=1, state_mode=0, sensor_steps=1,
 
   return model
 
+def set_actions(model, discrete=True, base_XY=False, action_values=None):
+  """
+  Configure the actions to use in training
+  """
+
+  if action_values == None:
+    action_values = [
+      1e-3, # [0] gripper_prismatic_X
+      0.01, # [1] gripper_revolute_Y
+      2e-3, # [2] gripper_Z
+      2e-3, # [3] base_Z
+      2e-3  # [4] base_XY
+    ]
+
+  # enable and configure the core actions with default settings
+  model.env.mj.set.gripper_prismatic_X.in_use = True
+  model.env.mj.set.gripper_revolute_Y.in_use = True
+  model.env.mj.set.gripper_Z.in_use = True
+  model.env.mj.set.base_Z.in_use = True
+  model.env.mj.set.gripper_prismatic_X.value = action_values[0]
+  model.env.mj.set.gripper_revolute_Y.value = action_values[1]
+  model.env.mj.set.gripper_Z.value = action_values[2]
+  model.env.mj.set.base_Z.value = action_values[3]
+  model.env.mj.set.gripper_prismatic_X.sign = -1
+  model.env.mj.set.gripper_revolute_Y.sign = -1
+  model.env.mj.set.gripper_Z.sign = 1
+  model.env.mj.set.base_Z.sign = 1
+
+  if base_XY:
+
+    # add in XY base movements
+    model.env.mj.set.base_Z.in_use = True
+    model.env.mj.set.base_Z.value = action_values[4]
+    model.env.mj.set.base_Z.sign = 1
+
+  # are we using continous actions
+  if not discrete: model.env.mj.set.set_all_action_continous(True)
+
+  return model
+
+def curriculum_step_size(self, i):
+  """
+  Curriculum which changes the step size over time
+  """
+
+  if self.curriculum_params["finished"]: return
+
+  stage = 0
+
+  for t in self.curriculum_params["thresholds"]:
+    if i >= t:
+      stage += 1
+    else: break
+
+  if stage == self.curriculum_params["stage"]: return
+
+  # now set the step sizes
+  self.env.mj.set.gripper_prismatic_X.value = self.curriculum_params["step_sizes"][stage][0]
+  self.env.mj.set.gripper_revolute_Y.value = self.curriculum_params["step_sizes"][stage][1]
+  self.env.mj.set.gripper_Z.value = self.curriculum_params["step_sizes"][stage][2]
+  self.env.mj.set.base_Z.value = self.curriculum_params["step_sizes"][stage][3]
+
+  # now adjust the time per action to match the step sizes
+  self.env.mj.set.time_for_action = self.curriculum_params["step_sizes"][stage][4]
+
+  print(f"Episode = {i}, stage = {stage}, curriculum is changing")
+
+  self.curriculum_params["stage"] = stage
+  if stage == 3: self.curriculum_params["finished"] = True
+
+  # now save a text file to reflect the changes
+  labelstr = f"Hyperparameters after curriculum change which occured at episode {i}\n"
+  name = f"hyperparameters_curriculum_stage_{stage}"
+  self.save_hyperparameters(labelstr, name, print_out=False)
+  
+  return
+
+def curriculum_punishments(self, i):
+  """
+  Curriculum which increases penalties for unsafe behaviour over time
+  """
+
+  pass
+
 def apply_to_all_models(model):
   """
   Settings we want to apply to every single running model. This can also be used
-  as a reference for which options are possible to change.
+  as a reference for which options are possible to change. Many options are first
+  wiped here and later set by 'baseline_settings'
   """
 
   # number of steps in an episode
@@ -455,14 +541,14 @@ def apply_to_all_models(model):
   model.params.eps_start = 0.9
   model.params.eps_end = 0.05
   model.params.eps_decay = 4000
-  model.params.target_update = 100
+  model.params.target_update = 50
   model.params.num_episodes = 60_000
   model.params.optimiser = "adam"
   model.params.adam_beta1 = 0.9
   model.params.adam_beta2 = 0.999
 
   # memory replay and HER
-  model.params.memory_replay = 50_000
+  model.params.memory_replay = 75_000
   model.params.min_memory_replay = 5_000
   model.params.use_HER = False # python setting OVERRIDES cpp
   model.params.HER_mode = "final"
@@ -470,12 +556,10 @@ def apply_to_all_models(model):
 
   # curriculum learning
   model.params.use_curriculum = False
-  model.params.curriculum_ep_num = 8000
-  model.params.curriculum_object_set = "set2_fullset_795"
 
   # data loggings
-  model.params.save_freq = 2_000
-  model.params.test_freq = 2_000
+  model.params.save_freq = 4_000
+  model.params.test_freq = 4_000
   model.params.plot_freq_s = 300
   model.params.wandb_freq_s = 900
 
@@ -493,35 +577,29 @@ def apply_to_all_models(model):
   model.env.mj.set.auto_calibrate_gauges = True
   model.env.mj.set.auto_sim_steps = True
   model.env.mj.set.auto_exceed_lateral_lim = True # THIS OVERRIDES LATERAL PUNISHMENT ONLY
-  # model.env.mj.set.bend_gauge_normalise = 5.0 # calibrate saturation to 5.0N # setting deleted
   model.env.mj.set.time_for_action = 0.2
   model.env.mj.set.saturation_yield_factor = 1.0
   model.env.mj.set.exceed_lat_min_factor = 0.75
   model.env.mj.set.exceed_lat_max_factor = 1.5
 
   # define lengths and forces
-  model.env.mj.set.finger_stiffness = -7.5 # finalised theory (101? 102?)
   model.env.mj.set.oob_distance = 75e-3
   model.env.mj.set.done_height = 15e-3
   model.env.mj.set.stable_finger_force = 1.0
   model.env.mj.set.stable_palm_force = 1.0
   model.env.mj.set.stable_finger_force_lim = 100.0
   model.env.mj.set.stable_palm_force_lim = 100.0
+  model.env.mj.set.fingertip_min_mm = -12.5 # below (from start position) sets within_limits=false;
 
-  # what actions are we using
-  model.env.mj.set.paired_motor_X_step = True
-  model.env.mj.set.use_palm_action = True
-  model.env.mj.set.use_height_action = True
-  model.env.mj.set.XYZ_action_mm_rad = True
-  model.env.mj.set.X_action_mm = 1.0
-  model.env.mj.set.Y_action_rad = 0.01
-  model.env.mj.set.Z_action_mm = 2.0
-  model.env.mj.set.base_action_mm = 2.0 # not used currently
-  model.env.mj.set.fingertip_min_mm = -12.5 # MOVEMENT BELOW THIS SETS within_limits=false;
+  # wipe and disable all actions, these can be set in the set_actions(...) function
+  model.env.mj.set.set_all_action_use(False)
+  model.env.mj.set.set_all_action_continous(False)
+  model.env.mj.set.set_all_action_value(0.0)
+  model.env.mj.set.set_all_action_sign(1)
 
-  # what sensing mode (0=raw data, 1=change, 2=average)
+  # what sensing mode (0=raw data, 1=change, 2=average, 3=median, 4=change)
   model.env.mj.set.sensor_sample_mode = 1
-  model.env.mj.set.state_sample_mode = 0
+  model.env.mj.set.state_sample_mode = 4
 
   # turn off all HER by default
   # model.env.mj.set.use_HER = False # this setting is OVERRIDEN by model.params.use_HER
@@ -534,24 +612,19 @@ def apply_to_all_models(model):
   model.env.mj.set.wipe_rewards()
   model.env.mj.set.quit_on_reward_below = -1e6
   model.env.mj.set.quit_on_reward_above = 1e6
-  model.env.mj.set.quit_reward_capped = False
+  model.env.mj.set.use_quit_on_reward = False
 
   # disable use of all sensors
   model.env.mj.set.disable_sensors()
   model.env.mj.set.sensor_n_prev_steps = 1 # lookback only 1 step
   model.env.mj.set.state_n_prev_steps = 1 # lookback only 1 step
 
-  # DONT ADD BACK DEFAULT SENSORS, leave to add_sensors(...) function
-  # # add back default sensors
-  # model.env.mj.set.motor_state_sensor.in_use = True
-  # model.env.mj.set.bending_gauge.in_use = True
-
   # ensure state sensors only give one reading per step (read_rate < 0)
   model.env.mj.set.motor_state_sensor.read_rate = -1
   model.env.mj.set.base_state_sensor_XY.read_rate = -1
   model.env.mj.set.base_state_sensor_Z.read_rate = -1
 
-  # sensor noise options
+  # wipe sensor noise options
   model.env.mj.set.sensor_noise_mag = 0
   model.env.mj.set.sensor_noise_mu = 0
   model.env.mj.set.sensor_noise_std = 0
@@ -641,47 +714,31 @@ def logging_job(model, run_name, group_name):
   model.plot(force=True, end=True, hang=True)
 
 def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 100, 50], target_update=100, 
-                      memory_replay=50_000, state_steps=1, sensor_steps=1, z_state=True, sensor_mode=2,
-                      state_mode=1, sensor_noise=0.025, state_noise=0.025, sensor_mu=0.0,
-                      state_mu=0.0, reward_style="mixed_v3", reward_options=[], 
-                      scale_rewards=2.5, scale_penalties=1.0, penalty_termination=False,
-                      finger_stiffness=-7.5, num_segments=8, finger_thickness=0.9e-3, finger_width=28e-3,
-                      max_episode_steps=250, XYZ_mm_rad=[1.0, 0.01, 2.0], eval_me=None):
+                      memory_replay=50_000, state_steps=5, sensor_steps=1, z_state=True, sensor_mode=2,
+                      state_mode=4, sensor_noise=0.025, state_noise=0.0, sensor_mu=0.05,
+                      state_mu=0.025, reward_style="mixed_v3", reward_options=[], 
+                      scale_rewards=1.0, scale_penalties=1.0, penalty_termination=False,
+                      num_segments=8, finger_thickness=0.9e-3, finger_width=28e-3,
+                      max_episode_steps=250, eval_me=None, base_XY_actions=False):
   """
-  Runs a baseline training on the model
+  Applies baseline settings to the model when run without any arguments
   """
 
-  # set parameters
-  model.env.params.max_episode_steps = max_episode_steps
+  # set key model hyperparameters
   model.params.learning_rate = lr
   model.params.eps_decay = eps_decay
   model.params.memory_replay = memory_replay
   model.params.target_update = target_update
-  model.env.mj.set.finger_stiffness = finger_stiffness # -7.5 is final derivation
-  model.num_segments = num_segments                    # 6 gives fast training primarily
-  model.env.params.finger_thickness = finger_thickness # options are 0.8e-3, 0.9e-3, 1.0e-3
-  model.env.load_finger_width = finger_width           # options are 24e-3, 28e-3
 
-  # options for setting step size, see current defaults in this function
-  if XYZ_mm_rad is False: 
-    model.env.mj.set.XYZ_action_mm_rad = False
-  elif isinstance(XYZ_mm_rad, list) and len(XYZ_mm_rad) == 3:
-    model.env.mj.set.XYZ_action_mm_rad = True
-    model.env.mj.set.X_action_mm = XYZ_mm_rad[0]
-    model.env.mj.set.Y_action_rad = XYZ_mm_rad[1]
-    model.env.mj.set.Z_action_mm = XYZ_mm_rad[2]
-  elif XYZ_mm_rad is True:
-    # apply defaults
-    model.env.mj.set.X_action_mm = 1.0
-    model.env.mj.set.Y_action_rad = 0.01
-    model.env.mj.set.Z_action_mm = 2.0
-  else:
-    raise RuntimeError(f"array_training_DQN.baseline_settings(...) error with XYZ_mm_rad being: {XYZ_mm_rad}")
+  # set key environment parameters
+  model.env.params.max_episode_steps = max_episode_steps   # after this number of steps, is_done=True
+  model.env.load_next.num_segments = num_segments          # 8 gives good speed/accuracy balance
+  model.env.load_next.finger_thickness = finger_thickness  # options are 0.8e-3, 0.9e-3, 1.0e-3
+  model.env.load_next.finger_width = finger_width          # options are 24e-3, 28e-3
 
   # wandb notes
   model.wandb_note += f"Learning rate {lr}\n"
   model.wandb_note += f"eps_decay = {eps_decay}\n"
-  model.wandb_note += f"finger_stiffness = {finger_stiffness}\n"
   model.wandb_note += f"num_segments = {num_segments}\n"
   
   # configure rewards and sensors
@@ -693,6 +750,9 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 1
                       z_state=z_state, sensor_noise_std=sensor_noise, sensor_noise_mu=sensor_mu,
                       state_noise_std=state_noise, state_noise_mu=state_mu)
   model = setup_HER(model, use=False)
+
+  # configure actions
+  model = set_actions(model, base_XY=base_XY_actions)
 
   # can perform special operations here
   if eval_me is not None: 
@@ -2283,6 +2343,83 @@ if __name__ == "__main__":
 
     # run long length trainings
     model.params.num_episodes = 100_000
+
+    # run slightly longer tests during training
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
+  elif training_type == "step_size_curriculum":
+
+    # define step size levels
+    levels_A = [
+      [8e-3, 0.025, 8e-3, 2e-3, 0.8],
+      [4e-3, 0.02,  6e-3, 2e-3, 0.4],
+      [2e-3, 0.015, 4e-3, 2e-3, 0.2],
+      [1e-3, 0.01,  2e-3, 2e-3, 0.2],
+    ]
+    levels_B = [
+      [4e-3, 0.025, 8e-3, 2e-3, 0.4],
+      [3e-3, 0.02,  6e-3, 2e-3, 0.3],
+      [2e-3, 0.015, 4e-3, 2e-3, 0.2],
+      [1e-3, 0.01,  2e-3, 2e-3, 0.2],
+    ]
+
+    thresholds_A = [10_000, 25_000, 40_000]
+    thresholds_B = [20_000, 30_000, 40_000]
+
+    vary_1 = [
+        (False, None, None),
+        (True, levels_A, thresholds_A),
+        (True, levels_A, thresholds_B),
+        (True, levels_B, thresholds_A),
+        (True, levels_B, thresholds_B),
+
+    ]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    param_1_name = "curriculum/levels/thresholds"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    # do we limit stable grasps to a maximum allowable force
+    model.env.mj.set.stable_finger_force_lim = 100
+    model.env.mj.set.stable_palm_force_lim = 100
+
+    # set up the curriculum
+    if param_1[0]:
+      model.params.use_curriculum = True
+      model.curriculum_params["step_sizes"] = param_1[1]
+      model.curriculum_params["thresholds"] = param_1[2]
+      model.curriculum_fcn = functools.partial(curriculum_step_size, model)
+
+    baseline_args = {
+
+      # key finger parameters
+      "finger_thickness" : 0.9e-3,
+      "finger_width" : 28e-3,
+      "sensors" : 3,
+      "num_segments" : 8, # dont forget to set to 8 for proper trainings
+
+      # reward features
+      "penalty_termination" : False, # do we end episodes on dangerous readings
+      "reward_style" : "sensor_mixed", # use new sensor reward function
+
+      # sensor details
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+    # use the new object set
+    model.params.object_set = "set7_fullset_1500_50i"
+
+    # run medium length trainings
+    model.params.num_episodes = 60_000
 
     # run slightly longer tests during training
     model.env.params.test_trials_per_object = 3

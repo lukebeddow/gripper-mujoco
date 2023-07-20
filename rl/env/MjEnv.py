@@ -43,25 +43,35 @@ class MjEnv():
 
   @dataclass
   class Parameters:
-    # key class parameters with default values
+
+    # training parameters
     max_episode_steps: int = 250
     object_position_noise_mm: int = 10
     object_rotation_noise_deg: int = 5
+
+    # file and testing parameters
     test_obj_per_file: int = 20
     task_reload_chance: float = 1.0 / float(test_obj_per_file)
-    test_trials_per_object: int = 1
+    test_trials_per_object: int = 3
     test_objects: int = 100
+
+    # model parameters (for loading xml files)
     num_segments: int = 8
     finger_thickness: float = 0.9e-3
     finger_width: float = 28e-3
+    finger_modulus: float = 193e9
+    depth_camera: bool = False
+    XY_base_actions: bool = False
 
-  def __init__(self, seed=None, noload=None, num_segments=None, finger_width=None, rgbd=False):
+  def __init__(self, seed=None, noload=None, num_segments=None, finger_width=None, 
+               depth_camera=None, finger_thickness=None, finger_modulus=None):
     """
     A mujoco environment, optionally set the random seed or prevent loading a
     model, in which case the user should call load() before using the class
     """
 
     self.params = MjEnv.Parameters()
+    self.load_next = MjEnv.Parameters() # for xml loading, other params do nothing
 
     # define file structure
     self.task_xml_folder = "task"
@@ -76,13 +86,12 @@ class MjEnv():
     self.test_in_progress = False
     self.test_completed = False
 
-    # how many segments to load next time, default is params.num_segments
-    if num_segments == None: self.load_num_segments = self.params.num_segments
-    else: self.load_num_segments = num_segments
-
-    # what finger width to load, default is params.finger_width
-    if finger_width == None: self.load_finger_width = self.params.finger_width
-    else: self.load_finger_width = finger_width
+    # if not given values, set to defaults from the dataclass
+    if num_segments is not None: self.load_next.num_segments = num_segments
+    if finger_width is not None: self.load_next.finger_width = finger_width
+    if finger_thickness is not None: self.load_next.finger_thickness = finger_thickness
+    if finger_modulus is not None: self.load_next.finger_modulus = finger_modulus
+    if depth_camera is not None: self.load_next.depth_camera = depth_camera
 
     # calculate how many files we need to reserve for testing
     self.testing_xmls = int(np.ceil(self.params.test_objects / float(self.params.test_obj_per_file)))
@@ -96,7 +105,7 @@ class MjEnv():
     self.seed(seed)
 
     # load the mujoco models, if not then load() must be run by the user
-    if noload is not True: self.load(num_segments=self.load_num_segments)
+    if noload is not True: self.load()
 
     # initialise tracking variables
     self.track = MjEnv.Track()
@@ -106,13 +115,12 @@ class MjEnv():
     # initialise heuristic parameters
     self._initialise_heuristic_parameters()
 
-    # initialise rgbd camera to get images from simulation
-    if rgbd: self._init_rgbd()
-    else:
-      self.rgbd_camera = False
-      self.rgbd_enabled = False
+    # # initialise rgbd camera to get images from simulation
+    # if depth_camera: self._init_rgbd()
+    # else:
+    #   self.load_next.depth_camera = False
+    #   self.rgbd_enabled = False
 
-  
     return
 
   # ----- semi-private functions, advanced use ----- #
@@ -126,8 +134,8 @@ class MjEnv():
 
     debug_fcn = False
 
-    if num_segments is None: num_segments = self.params.num_segments
-    if width is None: width = self.params.finger_width
+    if num_segments is None: num_segments = self.load_next.num_segments
+    if width is None: width = self.load_next.finger_width
 
     # ensure width is in integer millimeters
     if width < 1:
@@ -155,23 +163,22 @@ class MjEnv():
 
     # apply the chosen width option
     if width_options == []:
-      self.load_finger_width = 28e-3 # hardcoded default
+      self.load_next.finger_width = 28e-3 # hardcoded default
       self.task_xml_folder = self.task_folder_template.format(num_segments)
       if width != 28:
         print(f"MjEnv warning: selected finger width of {width} is not available from this object set")
     else:
       if width in width_options:
-        self.load_finger_width = width * 1e-3 # convert from mm to m
+        self.load_next.finger_width = width * 1e-3 # convert from mm to m
         self.task_xml_folder = self.task_folder_template.format("{0}_{1}".format(num_segments, width))
       else:
         raise RuntimeError(f"chosen width of {width} not found amoung width options: {width_options}")
 
     # apply the selected finger width in mujoco (EI change requires reset to finalise)
-    self.mj.set_finger_width(self.load_finger_width)
-    self.params.finger_width = self.load_finger_width
+    self.mj.set_finger_width(self.load_next.finger_width)
 
     if debug_fcn:
-      print("the width which will be loaded is:", self.load_finger_width)
+      print("the width which will be loaded is:", self.load_next.finger_width)
       print("final task_xml_folder is:", self.task_xml_folder)
 
   def _load_xml(self, test=None, index=None):
@@ -202,12 +209,16 @@ class MjEnv():
 
     self.reload_flag = False
 
-    # get the number of segments currently in use
+    # get the parameters from the newly loaded file
     self.params.num_segments = self.mj.get_N()
+    self.params.finger_width = self.mj.get_finger_width()
+    self.params.finger_thickness = self.mj.get_finger_thickness()
+    self.params.finger_modulus = self.mj.get_finger_modulus()
 
   def _load_object_set(self, name=None, mjcf_path=None, num_segments=None, finger_width=None):
     """
-    Load and determine how many model xml files are in the object set
+    Load in an object set and sort out details (like number of xml files).
+    This functions does NOT load a new XML file from this object set.
     """
 
     debug_fcn = False
@@ -316,17 +327,20 @@ class MjEnv():
     
   def _init_rgbd(self, width=640, height=480):
     """
-    Initialise an rgbd camera in the simulation. Default size matches realsense
+    Initialise an rgbd camera in the simulation. Default size matches realsense.
     """
     
     self.rgbd_enabled = self.mj.init_rgbd()
     if self.rgbd_enabled:
-      self.rgbd_camera = True
-      self._set_rgbd_size(640, 480)
+      self.params.depth_camera = True
+      self._set_rgbd_size(width, height)
     else:
       if self.log_level > 0:
         print("Failed to initialise an RGBD camera, not enabled in compilation")
-      self.rgbd_camera = False
+      self.params.depth_camera = False
+
+    # return if the camera is running or not
+    return self.params.depth_camera
 
   def _set_rgbd_size(self, width, height):
     """
@@ -397,9 +411,10 @@ class MjEnv():
     Returns the next observation from the simuation
     """
 
-    obs = self.mj.get_observation()
+    # get an observation as a numpy array
+    obs = self.mj.get_observation_numpy()
 
-    return np.array(obs)
+    return obs
 
   def _event_state(self):
     """
@@ -574,7 +589,7 @@ class MjEnv():
     if debug_fcn: print("The loaded yield is", loaded_yield)
 
     to_load_yield = self.mj.yield_load(self.params.finger_thickness,
-                                       self.load_finger_width)
+                                       self.load_next.finger_width)
     if debug_fcn: print("The to load yield is", to_load_yield)
 
     return to_load_yield
@@ -937,41 +952,36 @@ class MjEnv():
     return asdict(self.params)
 
   def load(self, object_set_name=None, object_set_path=None, index=None, 
-           num_segments=None, finger_width=None, finger_thickness=None):
+           num_segments=None, finger_width=None, finger_thickness=None,
+           finger_modulus=None, depth_camera=None):
     """
     Load and prepare the mujoco environment, uses defaults if arguments are not given.
     This function sets the 'params' for the class as well.
     """
 
-    # old code compatibility: can delete once all models have finger width options
-    try:
-      test1 = self.load_finger_width
-      test2 = self.params.finger_width
-    except AttributeError as e:
-      print("MjEnv old code catch, error is:", e)
-      self.load_finger_width = 28e-3
-      self.params.finger_width = 28e-3
+    # put inputs into the 'load_next' datastructure
+    if num_segments is not None: self.load_next.num_segments = num_segments
+    if finger_width is not None: self.load_next.finger_width = finger_width
+    if finger_thickness is not None: self.load_next.finger_thickness = finger_thickness
+    if finger_modulus is not None: self.load_next.finger_modulus = finger_modulus
+    if depth_camera is not None: self.load_next.depth_camera = depth_camera
 
-    # if not given an input, use class value
-    if num_segments is None: set_N = self.load_num_segments
-    else: set_N = num_segments
+    # set the thickness/modulus (changes only applied upon reset(), causes hard_reset() if changed)
+    self.mj.set_finger_thickness(self.load_next.finger_thickness)
+    self.mj.set_finger_modulus(self.load_next.finger_modulus)
 
-    if finger_width is None: set_W = self.load_finger_width
-    else: set_W = finger_width
-
-    if finger_thickness is None: set_T = self.params.finger_thickness
-    else: set_T = finger_thickness
-
-    # set the finger thickness (changes only applied upon reset(), causes hard_reset() if changed)
-    self.mj.set_finger_thickness(set_T)
-    self.params.finger_thickness = self.mj.get_finger_thickness()
-
-    self._load_object_set(name=object_set_name, mjcf_path=object_set_path,
-                          num_segments=set_N, finger_width=set_W)
+    self._load_object_set(name=object_set_name, mjcf_path=object_set_path)
     self._load_xml(index=index)  
 
     # auto generated parameters
     self._update_n_actions_obs()
+
+    # check if the depth camera is included in the object set chosen
+    if self.load_next.depth_camera: 
+      self.load_next.depth_camera = self._init_rgbd()
+    else:
+      self.params.depth_camera = False
+      self.rgbd_enabled = False
 
     # reset any lingering goal defaults
     self.mj.reset_goal()
@@ -1086,6 +1096,10 @@ if __name__ == "__main__":
   mj.load_finger_width = 24e-3
 
   mj.load("set7_xycamera_50i", num_segments=8, finger_width=28, finger_thickness=0.9e-3)
+
+  print(mj.get_parameters())
+
+  exit()
 
   # mj.render()
 

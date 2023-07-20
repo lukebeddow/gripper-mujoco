@@ -7,7 +7,7 @@ constexpr bool debug_bind = false;
 
 namespace py = pybind11;
 
-
+// numpy conversion helpers
 static py::array_t<luke::rgbint> rgbvec_to_array(std::vector<luke::rgbint>& vec)
 {
   return py::array(vec.size(), vec.data());
@@ -21,6 +21,11 @@ static py::array_t<float> depthvec_to_array(std::vector<float>& vec)
 static py::tuple RGBD_struct_to_tuple(luke::RGBD rgb_struct)
 {
   return py::make_tuple(rgbvec_to_array(rgb_struct.rgb), depthvec_to_array(rgb_struct.depth));
+}
+
+static py::array_t<luke::gfloat> floatvec_to_array(std::vector<luke::gfloat>& vec)
+{
+  return py::array(vec.size(), vec.data());
 }
 
 // create a python module, called bind (must be saved in bind.so)
@@ -86,20 +91,17 @@ PYBIND11_MODULE(bind, m) {
     .def("is_done", &MjClass::is_done)
     .def("get_observation", static_cast<std::vector<luke::gfloat> (MjClass::*)()>(&MjClass::get_observation))
     .def("get_observation", static_cast<std::vector<luke::gfloat> (MjClass::*)(MjType::SensorData)>(&MjClass::get_observation))
+    .def("get_observation_numpy",
+      [](MjClass &mj) {
+        std::vector<luke::gfloat> obs = mj.get_observation();
+        return floatvec_to_array(obs);
+      })
     .def("get_event_state", &MjClass::get_event_state)
     .def("get_goal", &MjClass::get_goal)
     .def("assess_goal", static_cast<std::vector<float> (MjClass::*)()>(&MjClass::assess_goal))
     .def("assess_goal", static_cast<std::vector<float> (MjClass::*)(std::vector<float>)>(&MjClass::assess_goal))
     .def("reward", static_cast<float (MjClass::*)()>(&MjClass::reward))
     .def("reward", static_cast<float (MjClass::*)(std::vector<float>, std::vector<float>)>(&MjClass::reward))
-    .def("get_n_actions", &MjClass::get_n_actions)
-    .def("get_n_obs", &MjClass::get_n_obs)
-    .def("get_N", &MjClass::get_N)
-    .def("set_finger_thickness", &MjClass::set_finger_thickness)
-    .def("set_finger_width", &MjClass::set_finger_width)
-    .def("set_finger_modulus", &MjClass::set_finger_modulus)
-    .def("get_finger_thickness", &MjClass::get_finger_thickness)
-    .def("get_finger_stiffnesses", &MjClass::get_finger_stiffnesses)
 
     // sensor getters (set a default argument for 'unnormalise' to be false)
     .def("get_finger_forces", &MjClass::get_finger_forces)
@@ -121,6 +123,17 @@ PYBIND11_MODULE(bind, m) {
     .def("get_number_of_objects", &MjClass::get_number_of_objects)
     .def("get_current_object_name", &MjClass::get_current_object_name)
     .def("get_test_report", &MjClass::get_test_report)
+    .def("get_n_actions", &MjClass::get_n_actions)
+    .def("get_n_obs", &MjClass::get_n_obs)
+    .def("get_N", &MjClass::get_N)
+    .def("set_finger_thickness", &MjClass::set_finger_thickness)
+    .def("set_finger_width", &MjClass::set_finger_width)
+    .def("set_finger_modulus", &MjClass::set_finger_modulus)
+    .def("get_finger_thickness", &MjClass::get_finger_thickness)
+    .def("get_finger_stiffnesses", &MjClass::get_finger_stiffnesses)
+    .def("get_finger_width", &MjClass::get_finger_width)
+    .def("get_finger_modulus", &MjClass::get_finger_modulus)
+    .def("get_finger_rigidity", &MjClass::get_finger_rigidity)
     .def("add_events", &MjClass::add_events)
     .def("reset_goal", &MjClass::reset_goal)
     .def("print", &MjClass::print)
@@ -198,20 +211,28 @@ PYBIND11_MODULE(bind, m) {
     .def("set_use_normalisation", &MjType::Settings::set_use_normalisation)
     .def("set_sensor_prev_steps_to", &MjType::Settings::set_sensor_prev_steps_to)
     .def("set_use_noise", &MjType::Settings::set_use_noise)
+    .def("set_all_action_use", &MjType::Settings::set_all_action_use)
+    .def("set_all_action_continous", &MjType::Settings::set_all_action_continous)
+    .def("set_all_action_value", &MjType::Settings::set_all_action_value)
+    .def("set_all_action_sign", &MjType::Settings::set_all_action_sign)
 
     // use a macro to create code snippets for all of the settings
     #define XX(name, type, value) .def_readwrite(#name, &MjType::Settings::name)
     #define SS(name, in_use, norm, readrate) .def_readwrite(#name, &MjType::Settings::name)
+    #define AA(name, in_use, continous, value, sign) .def_readwrite(#name, &MjType::Settings::name)
     #define BR(name, reward, done, trigger) .def_readwrite(#name, &MjType::Settings::name)
     #define LR(name, reward, done, trigger, min, max, overshoot) \
               .def_readwrite(#name, &MjType::Settings::name)
       // run the macro to create the code
       LUKE_MJSETTINGS_GENERAL
       LUKE_MJSETTINGS_SENSOR
+      LUKE_MJSETTINGS_ACTION
       LUKE_MJSETTINGS_BINARY_REWARD
       LUKE_MJSETTINGS_LINEAR_REWARD
+
     #undef XX
     #undef SS
+    #undef AA
     #undef BR
     #undef LR
 
@@ -229,15 +250,18 @@ PYBIND11_MODULE(bind, m) {
           // expand settings into list of variable names for tuple
           #define XX(name, type, value) s.name,
           #define SS(name, in_use, norm, readrate) s.name,
+          #define AA(name, in_use, continous, value, sign) s.name,
           #define BR(name, reward, done, trigger) s.name,
           #define LR(name, reward, done, trigger, min, max, overshoot) s.name,
             // run the macro to create the code
             LUKE_MJSETTINGS_GENERAL
             LUKE_MJSETTINGS_SENSOR
+            LUKE_MJSETTINGS_ACTION
             LUKE_MJSETTINGS_BINARY_REWARD
             LUKE_MJSETTINGS_LINEAR_REWARD
           #undef XX
           #undef SS
+          #undef AA
           #undef BR
           #undef LR
 
@@ -265,17 +289,23 @@ PYBIND11_MODULE(bind, m) {
         #define XX(name, type, value) out.name = t[i].cast<type>(); ++i;
         #define SS(name, in_use, norm, readrate) \
                   out.name = t[i].cast<MjType::Sensor>(); ++i;
+        #define AA(name, used, continous, value, sign) \
+                  out.name = t[i].cast<MjType::ActionSetting>(); ++i;
         #define BR(name, reward, done, trigger) \
                   out.name = t[i].cast<MjType::BinaryReward>(); ++i;
         #define LR(name, reward, done, trigger, min, max, overshoot) \
                   out.name = t[i].cast<MjType::LinearReward>(); ++i;
+
           // run the macro to create the code
           LUKE_MJSETTINGS_GENERAL
           LUKE_MJSETTINGS_SENSOR
+          LUKE_MJSETTINGS_ACTION
           LUKE_MJSETTINGS_BINARY_REWARD
           LUKE_MJSETTINGS_LINEAR_REWARD
+
         #undef XX
         #undef SS
+        #undef AA
         #undef BR
         #undef LR
 
@@ -491,26 +521,57 @@ PYBIND11_MODULE(bind, m) {
       },
       [](py::tuple t) { // __setstate__
 
-        // size == 3 is old and can be later deleted
-        if (t.size() != 3 and t.size() != 9 and t.size() != 10)
+        if (t.size() != 10)
           throw std::runtime_error("MjType::Sensor py::pickle got invalid state");
 
         // create new c++ instance with old data
         MjType::Sensor out(t[0].cast<bool>(), t[1].cast<float>(), t[2].cast<float>());
 
-        if (t.size() >= 9) {
-          out.use_normalisation = t[3].cast<bool>();
-          out.use_noise = t[4].cast<bool>();
-          out.raw_value_offset = t[5].cast<float>();
-          out.noise_mag = t[6].cast<float>();
-          out.noise_mu = t[7].cast<float>();
-          out.noise_std = t[8].cast<float>();
-        }
+        out.use_normalisation = t[3].cast<bool>();
+        out.use_noise = t[4].cast<bool>();
+        out.raw_value_offset = t[5].cast<float>();
+        out.noise_mag = t[6].cast<float>();
+        out.noise_mu = t[7].cast<float>();
+        out.noise_std = t[8].cast<float>();
+        out.noise_overriden = t[9].cast<bool>();
+        
+        return out;
+      }
+    ))
+    ;
+  }
 
-        // newest changes
-        if (t.size() >= 10) {
-          out.noise_overriden = t[9].cast<bool>();
-        }
+  // set up action setting type so python can interact and change them
+  {py::class_<MjType::ActionSetting>(m, "ActionSetting")
+
+    .def(py::init<std::string, bool, bool, double, int>())
+    .def_readwrite("name", &MjType::ActionSetting::name)
+    .def_readwrite("in_use", &MjType::ActionSetting::in_use)
+    .def_readwrite("continous", &MjType::ActionSetting::continous)
+    .def_readwrite("value", &MjType::ActionSetting::value)
+    .def_readwrite("sign", &MjType::ActionSetting::sign)
+
+    // pickle support
+    .def(py::pickle(
+      [](const MjType::ActionSetting r) { // __getstate___
+        /* return a tuple that fully encodes the state of the object */
+        return py::make_tuple(
+          r.name,
+          r.in_use,
+          r.continous,
+          r.value,
+          r.sign
+        );
+      },
+      [](py::tuple t) { // __setstate__
+
+        // size == 3 is old and can be later deleted
+        if (t.size() != 5)
+          throw std::runtime_error("MjType::ActionSetting py::pickle got invalid state");
+
+        // create new c++ instance with old data
+        MjType::ActionSetting out(t[0].cast<std::string>(), t[1].cast<bool>(), 
+          t[2].cast<bool>(), t[3].cast<double>(), t[4].cast<int>());
         
         return out;
       }

@@ -22,10 +22,10 @@
 #include "customtypes.h"
 #include "objecthandler.h"
 
-// // if we have access to boost libraries
-// #ifndef LUKE_PREVENT_BOOST
-//   #include "boostdep.h"
-// #endif
+// if we have access to boost libraries
+#ifdef LUKE_DEPENDS_BOOST
+  #include "boostdep.h"
+#endif
 
 namespace luke
 {
@@ -70,11 +70,8 @@ void print_joint_names(mjModel* model);
 void get_joint_indexes(mjModel* model);
 void get_joint_addresses(mjModel* model);
 void get_geom_indexes(mjModel* model);
-bool change_finger_thickness(float thickness);
-bool change_finger_width(float width);
-bool change_youngs_modulus(float E);
-void set_finger_stiffness(mjModel* model, mjtNum stiffness);
 void set_finger_stiffness(mjModel* model, std::vector<luke::gfloat> stiffness);
+void set_finger_stiffness_using_model(mjModel* model);
 void configure_qpos(mjModel* model, mjData* data);
 void configure_constraints(mjModel* model, mjData* data);
 void keyframe(mjModel* model, mjData* data, std::string keyframe_name);
@@ -165,7 +162,7 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
   std::vector<float>& joint_angles, std::vector<float>& joint_pred,
   std::vector<float>& pred_x, std::vector<float>& pred_y, std::vector<float>& theory_y,
   std::vector<float>& theory_x_curve, std::vector<float>& theory_y_curve,
-  float force, float finger_stiffness, int force_style = 0);
+  float force, int force_style = 0);
 void fill_theory_curve(std::vector<float>& theory_X, std::vector<float>& theory_Y, 
   float force, int num, int force_style = 0);
 std::vector<float> discretise_curve(std::vector<float> X, std::vector<float> truth_X, 
@@ -179,6 +176,11 @@ std::vector<double> get_base_max();
 float get_finger_thickness();
 float get_finger_width();
 float get_finger_length();
+bool change_finger_thickness(float thickness);
+bool change_finger_width(float width);
+bool change_youngs_modulus(float E);
+float get_youngs_modulus();
+float get_finger_rigidity();
 float calc_yield_point_load();
 float calc_yield_point_load(float thickness, float width);
 float get_fingertip_z_height();

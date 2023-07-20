@@ -678,7 +678,7 @@ namespace MjType
 
     // see simsettings.h
 
-    // define the assignment code we want for X, BR, LR
+    // define the assignment code we want to initialise settings variables/classes
     #define XX(name, type, value) type name { value };
     #define SS(name, in_use, norm, readrate) Sensor name { in_use, norm, readrate };
     #define AA(name, in_use, continous, value, sign) \
@@ -713,6 +713,10 @@ namespace MjType
     void set_sensor_prev_steps_to(int prev_steps);
     void update_sensor_settings(double time_since_last_sample);
     void apply_noise_params(std::uniform_real_distribution<float>& uniform_dist);
+    void set_all_action_use(bool set_as);
+    void set_all_action_continous(bool set_as);
+    void set_all_action_value(float set_as);
+    void set_all_action_sign(int set_as);
   };
 
   // data on the simulated objects and environment
@@ -1428,11 +1432,6 @@ public:
   std::vector<float> assess_goal(std::vector<float> event_vec);
   float reward();
   float reward(std::vector<float> goal_vec, std::vector<float> event_vec);
-  int get_n_actions();
-  int get_n_obs();
-  int get_N();
-  float get_finger_thickness();
-  std::vector<luke::gfloat> get_finger_stiffnesses();
 
   // sensor getters
   // std::vector<luke::gfloat> get_bend_gauge_readings(bool unnormalise);
@@ -1456,7 +1455,19 @@ public:
   void forward() { mj_forward(model, data); }
   int get_number_of_objects() { return env_.object_names.size(); }
   std::string get_current_object_name() { return env_.obj.name; }
+  float get_fingertip_z_height();
   MjType::TestReport get_test_report();
+  void set_finger_thickness(float thickness);
+  void set_finger_width(float width);
+  void set_finger_modulus(float E);
+  int get_n_actions();
+  int get_n_obs();
+  int get_N();
+  float get_finger_thickness();
+  float get_finger_width();
+  float get_finger_modulus();
+  float get_finger_rigidity();
+  std::vector<luke::gfloat> get_finger_stiffnesses();
   MjType::CurveFitData::PoseData validate_curve(int force_style = 0);
   MjType::CurveFitData::PoseData validate_curve_under_force(float force, int force_style = 0);
   MjType::CurveFitData curve_validation_regime(bool print = false, int force_style = 0);
@@ -1468,9 +1479,6 @@ public:
     std::vector<float> truth_X, std::vector<float> truth_Y, bool relative);
   float curve_area(std::vector<float> X, std::vector<float> Y);
   void calibrate_simulated_sensors(float bend_gauge_normalise);
-  void set_finger_thickness(float thickness);
-  void set_finger_width(float width);
-  void set_finger_modulus(float E);
   float yield_load();
   float yield_load(float thickness, float width);
   void tick();
@@ -1481,7 +1489,6 @@ public:
   void default_goal_event_triggering();
   bool last_action_gripper();
   bool last_action_panda();
-  float get_fingertip_z_height();
   float find_highest_stable_timestep();
   void set_sensor_noise_and_normalisation_to(bool set_as);
 

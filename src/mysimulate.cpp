@@ -105,6 +105,12 @@ struct
     int force_style = 0;            // added by luke
     int all_sensors_use_noise = 1;  // added by luke
 
+    // action flags
+    mjtNum action_motor_mm = 2;
+    mjtNum action_motor_rad = 0.01;
+    mjtNum action_base_mm = 2;
+    mjtNum action_base_rad = 0.01;
+
     // figure show flags
     int bendgauge = 0;             // added by luke
     int axialgauge = 0;            // added by luke
@@ -1506,41 +1512,31 @@ void makeActionsUI(int oldstate)
 {
     mjuiDef defActions[] =
     {
-        {mjITEM_SECTION, "Actions",         oldstate,  NULL,   " #303"},
-        {mjITEM_BUTTON, "Gripper X+",              2,  NULL,   " #304"},
-        {mjITEM_BUTTON, "Gripper X-",              2,  NULL,   " #305"},
-        {mjITEM_BUTTON, "Gripper pX+",             2,  NULL,   " #306"},
-        {mjITEM_BUTTON, "Gripper pX-",             2,  NULL,   " #307"},
-        {mjITEM_BUTTON, "Gripper Y+",              2,  NULL,   " #308"},
-        {mjITEM_BUTTON, "Gripper Y-",              2,  NULL,   " #309"},
-        {mjITEM_BUTTON, "Gripper rY+",             2,  NULL,   " #310"},
-        {mjITEM_BUTTON, "Gripper rY-",             2,  NULL,   " #310"},
-        {mjITEM_BUTTON, "Gripper Z+",              2,  NULL,   " #304"},
-        {mjITEM_BUTTON, "Gripper Z-",              2,  NULL,   " #305"},
-        {mjITEM_BUTTON, "Base X+",                 2,  NULL,   " #306"},
-        {mjITEM_BUTTON, "Base X-",                 2,  NULL,   " #307"},
-        {mjITEM_BUTTON, "Base Y+",                 2,  NULL,   " #308"},
-        {mjITEM_BUTTON, "Base Y-",                 2,  NULL,   " #309"},
-        {mjITEM_BUTTON, "Base Z+",                 2,  NULL,   " #310"},
-        {mjITEM_BUTTON, "Base Z-",                 2,  NULL,   " #310"},
-        {mjITEM_BUTTON, "Reward",                  2,  NULL,   " #311"},
-        {mjITEM_CHECKINT, "Debug",                 2,  &myMjClass.s_.debug,   " #312"},
-        {mjITEM_CHECKINT, "Env steps",             2,  &settings.env_steps, " #313"},
-        {mjITEM_CHECKINT, "Full step",             2,  &settings.complete_action_steps, " #314"},
-        {mjITEM_CHECKINT, "paired X",              2,  &myMjClass.s_.paired_motor_X_step, " #345"},
-        {mjITEM_CHECKINT, "mm_rad",                2,  &myMjClass.s_.XYZ_action_mm_rad,   " #346"},
-        {mjITEM_SLIDERINT, "No. steps",            2, 
-            &myMjClass.s_.action_motor_steps,             "0 2000"},
-        {mjITEM_SLIDERNUM, "Base trans.",          2, 
-            &myMjClass.s_.action_base_translation,        "0.0 0.035"},
-        {mjITEM_SLIDERINT, "Action steps",          2, 
-            &myMjClass.s_.sim_steps_per_action,           "0 2000"},
-        {mjITEM_SLIDERNUM, "X mm",          2, 
-            &myMjClass.s_.X_action_mm,        "0.0 30.0"},
-        {mjITEM_SLIDERNUM, "Y rad",          2, 
-            &myMjClass.s_.Y_action_rad,        "0.0 0.5"},
-        {mjITEM_SLIDERNUM, "Z mm",          2, 
-            &myMjClass.s_.Z_action_mm,        "0.0 30.0"},
+        {mjITEM_SECTION, "Actions",    oldstate,  NULL,   " #303"},
+        {mjITEM_BUTTON, "Gripper X+",         2,  NULL,   " #304"},
+        {mjITEM_BUTTON, "Gripper X-",         2,  NULL,   " #305"},
+        {mjITEM_BUTTON, "Gripper pX+",        2,  NULL,   " #306"},
+        {mjITEM_BUTTON, "Gripper pX-",        2,  NULL,   " #307"},
+        {mjITEM_BUTTON, "Gripper Y+",         2,  NULL,   " #308"},
+        {mjITEM_BUTTON, "Gripper Y-",         2,  NULL,   " #309"},
+        {mjITEM_BUTTON, "Gripper rY+",        2,  NULL,   " #310"},
+        {mjITEM_BUTTON, "Gripper rY-",        2,  NULL,   " #310"},
+        {mjITEM_BUTTON, "Gripper Z+",         2,  NULL,   " #304"},
+        {mjITEM_BUTTON, "Gripper Z-",         2,  NULL,   " #305"},
+        {mjITEM_BUTTON, "Base X+",            2,  NULL,   " #306"},
+        {mjITEM_BUTTON, "Base X-",            2,  NULL,   " #307"},
+        {mjITEM_BUTTON, "Base Y+",            2,  NULL,   " #308"},
+        {mjITEM_BUTTON, "Base Y-",            2,  NULL,   " #309"},
+        {mjITEM_BUTTON, "Base Z+",            2,  NULL,   " #310"},
+        {mjITEM_BUTTON, "Base Z-",            2,  NULL,   " #310"},
+        {mjITEM_SLIDERNUM, "Motor mm",        2,  &settings.action_motor_mm,        "0.0 20.0"},
+        {mjITEM_SLIDERNUM, "Motor rad",       2,  &settings.action_motor_rad,       "0.0 0.2"},
+        {mjITEM_SLIDERNUM, "Base mm",         2,  &settings.action_base_mm,         "0.0 20.0"},
+        {mjITEM_SLIDERNUM, "Base rad",        2,  &settings.action_base_rad,        "0.0 0.2"},
+        {mjITEM_BUTTON, "Reward",             2,  NULL,   " #311"},
+        {mjITEM_CHECKINT, "Debug",            2,  &myMjClass.s_.debug,   " #312"},
+        {mjITEM_CHECKINT, "Env steps",        2,  &settings.env_steps, " #313"},
+        {mjITEM_CHECKINT, "Full step",        2,  &settings.complete_action_steps, " #314"},
         {mjITEM_END}
     };
 
@@ -1556,7 +1552,6 @@ void makeSettingsUI(int oldstate)
         {mjITEM_SLIDERNUM,"mj timestep",       2, &myMjClass.s_.mujoco_timestep,   "0.00001 0.003"},
         {mjITEM_CHECKINT, "curve_validation",  2, &myMjClass.s_.curve_validation,  " #601"},
         {mjITEM_SLIDERNUM,"tip_force",         2, &myMjClass.s_.tip_force_applied, "-10 10"},
-        {mjITEM_SLIDERNUM,"finger_stiffness",  2, &myMjClass.s_.finger_stiffness,  "1.0 25.0"},
         {mjITEM_CHECKINT, "randomise_colours", 2, &myMjClass.s_.randomise_colours, " #602"},
         {mjITEM_SLIDERNUM,"finger_thickness",  2, &settings.finger_thickness,  "0.5 1.5"},
         {mjITEM_BUTTON,   "apply thickness",   2, NULL,                            " #602"},
@@ -1564,6 +1559,7 @@ void makeSettingsUI(int oldstate)
         {mjITEM_SLIDERINT,"sensor_prev_n",     2, &myMjClass.s_.sensor_n_prev_steps, "0 5"},
         {mjITEM_SLIDERINT,"state_mode",        2, &myMjClass.s_.state_sample_mode,   "0 5"},
         {mjITEM_SLIDERINT,"sensor_mode",       2, &myMjClass.s_.sensor_sample_mode,  "0 5"},
+        {mjITEM_SLIDERNUM,"time4action",       2, &myMjClass.s_.time_for_action,     "0.1 1.0"},
         {mjITEM_END}
     };
 
@@ -2332,7 +2328,7 @@ void uiEvent(mjuiState* state)
 
             switch (it->itemid)
             {
-                case 7:
+                case 6:
                     std::cout << "Applying finger thickness of " << settings.finger_thickness << " mm\n";
                     myMjClass.set_finger_thickness(settings.finger_thickness * 1e-3);
                     myMjClass.reset();
@@ -2355,11 +2351,29 @@ void uiEvent(mjuiState* state)
                     break;
                 }
 
-                case 16: {
+                case 16: case 17: case 18: case 19: {
+
+                    myMjClass.s_.gripper_X.value = settings.action_motor_mm * 1e-3;
+                    myMjClass.s_.gripper_prismatic_X.value = settings.action_motor_mm * 1e-3;
+                    myMjClass.s_.gripper_Y.value = settings.action_motor_mm * 1e-3;
+                    myMjClass.s_.gripper_revolute_Y.value = settings.action_motor_rad;
+                    myMjClass.s_.gripper_Z.value = settings.action_motor_mm * 1e-3;
+
+                    myMjClass.s_.base_X.value = settings.action_base_mm * 1e-3;
+                    myMjClass.s_.base_Y.value = settings.action_base_mm * 1e-3;
+                    myMjClass.s_.base_Z.value = settings.action_base_mm * 1e-3;
+                    myMjClass.s_.base_roll.value = settings.action_base_rad;
+                    myMjClass.s_.base_pitch.value = settings.action_base_rad;
+                    myMjClass.s_.base_yaw.value = settings.action_base_rad;
+                    break;
+                }
+
+                case 20: {
                     double reward = myMjClass.reward();
                     std::cout << "Reward is " << reward << '\n';
                     std::cout << "Cumulative reward is "
                         << myMjClass.env_.cumulative_reward << '\n';
+                    break;
                 }
             }
 

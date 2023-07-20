@@ -44,21 +44,21 @@ class TrainDQN():
   class Parameters:
 
     # key learning hyperparameters
-    object_set: str = "set4_fullset_795"
+    object_set: str = "set7_fullset_1500_50i"
     batch_size: int = 128  
     learning_rate: float = 5e-5
     gamma: float = 0.999 
     eps_start: float = 0.9
     eps_end: float = 0.05
     eps_decay: int = 4000
-    target_update: int = 100
+    target_update: int = 50
     num_episodes: int = 60000
     optimiser: str = "adam" # or "rmsprop"
     adam_beta1: float = 0.9
     adam_beta2: float = 0.999
 
     # memory replay
-    memory_replay: int = 50_000
+    memory_replay: int = 75_000
     min_memory_replay: int = 5000
 
     # HER settings
@@ -68,12 +68,10 @@ class TrainDQN():
 
     # curriculum learning
     use_curriculum: bool = False
-    curriculum_ep_num: int = 8000
-    curriculum_object_set: str = "set4_fullset_795"
 
     # data logging settings
-    save_freq: int = 2000
-    test_freq: int = 2000
+    save_freq: int = 4000
+    test_freq: int = 4000
     plot_freq_s: int = 900
     wandb_freq_s: int = 900
 
@@ -709,7 +707,7 @@ class TrainDQN():
   def __init__(self, run_name=None, group_name=None, device=None, use_wandb=None, 
                no_plot=None, log_level=None, object_set=None, use_curriculum=None,
                num_segments=None, finger_thickness=None, finger_width=None,
-               rgbd=False):
+               depth_camera=None, finger_modulus=None):
 
     # define key training parameters
     self.params = TrainDQN.Parameters()
@@ -722,10 +720,9 @@ class TrainDQN():
     self.best_performance_template = "Best success rate = {0}\nOccured at episode = {1}"
 
     # prepare environment, but don't load a model xml file yet
-    self.env = MjEnv(noload=True, num_segments=num_segments, rgbd=rgbd)
-    self.num_segments = num_segments
-    self.finger_thickness = finger_thickness
-    self.finger_width = finger_width
+    self.env = MjEnv(noload=True, num_segments=num_segments, depth_camera=depth_camera,
+                     finger_thickness=finger_thickness, finger_width=finger_width,
+                     finger_modulus=finger_modulus)
 
     # what machine are we on
     self.machine = self.env._get_machine()
@@ -757,8 +754,12 @@ class TrainDQN():
     self.HER_mode = None
     self.HER_k = None
 
-    # curriculum defaults
-    self.curriculum_applied = None
+    # curriculum defaults, add parameters to this dictionary
+    self.curriculum_params = {
+      "finished" : False,
+      "stage" : None,
+      "metric" : None
+    }
 
     # if we are plotting graphs during this training
     if no_plot == True:
@@ -777,11 +778,7 @@ class TrainDQN():
     # are we using HER (python OVERRIDES cpp)
     self.env.mj.set.use_HER = self.params.use_HER
 
-    # apply any thickness changes and then load the object set from params
-    # if self.finger_thickness is not None: 
-    #   self.env.params.finger_thickness = self.finger_thickness
-    self.load_object_set(num_segments=self.num_segments, finger_thickness=self.finger_thickness,
-                         finger_width=self.finger_width)
+    self.load_object_set()
 
     # now update the environment with correct numbers of actions and observations
     self.env._update_n_actions_obs()
@@ -870,7 +867,7 @@ class TrainDQN():
       raise RuntimeError("device should be 'cuda' or 'cpu'")
 
   def load_object_set(self, object_set=None, num_segments=None, finger_thickness=None,
-                      finger_width=None):
+                      finger_width=None, finger_modulus=None, depth_camera=None):
     """
     Load an object set into the simulation
     """
@@ -879,11 +876,11 @@ class TrainDQN():
 
     # load the object set and the first xml file
     self.env.load(object_set_name=object_set, num_segments=num_segments,
-                  finger_thickness=finger_thickness, finger_width=finger_width)
+                  finger_thickness=finger_thickness, finger_width=finger_width,
+                  finger_modulus=None, depth_camera=None)
 
     # save the changes
     self.params.object_set = object_set
-    self.num_segments = num_segments
 
   def to_torch(self, data, dtype=None):
     """
@@ -1383,6 +1380,8 @@ class TrainDQN():
     Implement a learning curriculum
     """
 
+    if self.curriculum_params["finished"]: return
+
     # if the curriculum has been applied, return (this disallows multi-stage curriculums)
     if self.curriculum_applied is not None and self.curriculum_applied > 0: return
 
@@ -1409,7 +1408,7 @@ class TrainDQN():
     if metric_value > threshold:
 
       if style == "object set":
-        self.load_object_set(object_set=self.params.curriculum_object_set, num_segments=self.num_segments)
+        self.load_object_set(object_set=self.params.curriculum_object_set)
 
       elif style == "learning rate":
         # reduce the learning rate by 75%, eg 50e-6 goes to 12.5e-6
@@ -1436,14 +1435,6 @@ class TrainDQN():
     Perform one episode of training or testing
     """
 
-    # # for debugging, show memory usage (heapy does not seem to be accurate)
-    # if i_episode % 1000 == 1 and not test:
-    #   theheap = guph.heap()
-    #   print("Heap total size is", theheap.size, "(", theheap.size / 1e6, "MB)")
-    #   print("The replay memory size is", asizeof.asizeof(self.memory) / 1e3, "kB",
-    #     "with length", len(self.memory))
-    #   print("The environment size is", asizeof.asizeof(self.env) / 1e3, "kB")
-
     # initialise environment and state
     obs = self.env.reset()
     obs = self.to_torch(obs)
@@ -1453,15 +1444,6 @@ class TrainDQN():
       goal = self.to_torch(goal)
 
     ep_start = time.time()
-
-    # # for testing: is noise certainly in use?
-    # def print_noise_details(sensor, sensor_name):
-    #   in_use = sensor.in_use
-    #   use_noise = sensor.use_noise
-    #   noise_std = sensor.noise_std
-    #   print(f"Sensor: {sensor_name}; in_use = {in_use}; use_noise = {use_noise}; noise_std = {noise_std}")
-    # print_noise_details(self.env.mj.set.bending_gauge, "bending_gauge")
-    # print_noise_details(self.env.mj.set.palm_sensor, "palm_sensor")
 
     # count up through actions
     for t in count():
@@ -1696,25 +1678,15 @@ class TrainDQN():
 
   def get_params_dictionary(self):
     """
-    Return a dictionary of parameters, this function is partly incompatible with old
-    code as MjEnv() did not used to have a parameter dictionary
+    Return a dictionary of parameters
     """
 
     params_dict = {}
     params_dict.update(asdict(self.params))
-
-    # OLD CODE COMPATIBLE: try to get mjenv parameters
-    try:
-      params_dict.update(self.env.get_parameters())
-    except AttributeError as e:
-      print("TrainDQN.get_params_dictionary() error with env params:", e)
+    params_dict.update(self.env.get_parameters())
 
     manual_params = {
       "Network name" : self.policy_net.name,
-      "Finger stiffness setting" : self.env.mj.set.finger_stiffness,
-      "Mujoco timestep" : self.env.mj.set.mujoco_timestep,
-      "Sim steps per action" : self.env.mj.set.sim_steps_per_action,
-      "Bend gauge normalise" : self.env.mj.set.bending_gauge.normalise,
       "n_obs" : self.env.n_obs,
       "n_actions" : self.env.n_actions
     }
@@ -1723,15 +1695,16 @@ class TrainDQN():
 
     return params_dict
 
-  def save_hyperparameters(self, labelstr=None, name=None, printonly=None):
+  def save_hyperparameters(self, labelstr=None, name=None, printonly=None, print_out=None):
     """
     Save a text file with the current hyperparameters
     """
 
-    if self.log_level > 0:
-      print_out = True
-    else:
-      print_out = False
+    if print_out is None:
+      if self.log_level > 0:
+        print_out = True
+      else:
+        print_out = False
 
     param_str = ""
     time_stamp = datetime.now().strftime("%d-%m-%y-%H:%M") # hardcoded date string
@@ -1941,7 +1914,7 @@ class TrainDQN():
 
     # load a new object set if we are told to
     if object_set is not None:
-      self.env._load_object_set(name=object_set, num_segments=self.num_segments)
+      self.env._load_object_set(name=object_set)
 
     # begin the training at the given starting point (always uses most recent pickle)
     self.train(i_start=self.track.episodes_done)
@@ -2160,14 +2133,14 @@ if __name__ == "__main__":
   # ----- train ----- #
 
   # # train
-  # net = networks.DQN_3L60
-  # model.env.disable_rendering = True
-  # model.env.mj.set.debug = False
-  # model.num_segments = 8
-  # model.finger_thickness = 0.9e-3
-  # model.params.num_episodes = 10000
-  # model.params.object_set = "set7_xycamera_50i"
-  # model.train(network=net)
+  net = networks.DQN_3L60
+  model.env.disable_rendering = True
+  model.env.mj.set.debug = False
+  model.num_segments = 8
+  model.finger_thickness = 0.9e-3
+  model.params.num_episodes = 10000
+  model.params.object_set = "set7_xycamera_50i"
+  model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
@@ -2175,18 +2148,18 @@ if __name__ == "__main__":
   # model.continue_training(foldername, folderpath)
 
   # ----- profile ----- #
-  net = networks.DQN_3L60
-  model.env.disable_rendering = True
-  model.params.object_set = "set7_xycamera_50i"
-  model.env.mj.set.debug = False
-  model.params.num_episodes = 10
-  model.num_segments = 8
-  model.env._init_rgbd(width=320, height=240)
-  model.env.seed(1234)
-  cProfile.run("model.train(network=net)", "/home/luke/mymujoco/python_profile_results_8.xyz")
-  # in order to read profile results, run: $ python3 -m pstats /path/to/results.xyz
-  # do: $ sort cumtime OR $ sort tottime AND THEN $ stats
-  exit()
+  # net = networks.DQN_3L60
+  # model.env.disable_rendering = True
+  # model.params.object_set = "set7_xycamera_50i"
+  # model.env.mj.set.debug = False
+  # model.params.num_episodes = 10
+  # model.num_segments = 8
+  # model.env._init_rgbd(width=320, height=240)
+  # model.env.seed(1234)
+  # cProfile.run("model.train(network=net)", "/home/luke/mymujoco/python_profile_results_8.xyz")
+  # # in order to read profile results, run: $ python3 -m pstats /path/to/results.xyz
+  # # do: $ sort cumtime OR $ sort tottime AND THEN $ stats
+  # exit()
 
   # ----- visualise ----- #
 
