@@ -8,7 +8,7 @@ This code has the following dependencies:
 
 * MuJoCo - download here: https://github.com/deepmind/mujoco/releases, this repo has been tested with version ```2.1.5```. Save the folder in your files.
 * Pybind11 - download the source code here: https://github.com/pybind/pybind11 and save it amoungst your files, ```sudo apt-get install pybind11-dev``` unfortunately does not work
-* Armadillo - (if you have ROS you likely already have this library, use ```ldconfig -p | grep armadillo``` to see if the library already exists), otherwise install here: http://arma.sourceforge.net/download.html, or source: https://gitlab.com/conradsnicta/armadillo-code
+* Armadillo - (if you have ROS you likely already have this library, use ```ldconfig -p | grep armadillo``` to see if the library already exists). If not, try the terminal commands here: https://www.uio.no/studier/emner/matnat/fys/FYS4411/v13/guides/installing-armadillo/. If that fails install here: http://arma.sourceforge.net/download.html, or source: https://gitlab.com/conradsnicta/armadillo-code
 * GLFW3 - install with ```sudo apt-get install libglfw3-dev```
 
 ## Building
