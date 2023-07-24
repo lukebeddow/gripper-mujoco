@@ -565,6 +565,10 @@ PYBIND11_MODULE(bind, m) {
       },
       [](py::tuple t) { // __setstate__
 
+        // if (debug_bind) {
+        //   std::cout << "unpickling MjType::ActionSetting ...";
+        // }
+
         // size == 3 is old and can be later deleted
         if (t.size() != 5)
           throw std::runtime_error("MjType::ActionSetting py::pickle got invalid state");
@@ -572,6 +576,10 @@ PYBIND11_MODULE(bind, m) {
         // create new c++ instance with old data
         MjType::ActionSetting out(t[0].cast<std::string>(), t[1].cast<bool>(), 
           t[2].cast<bool>(), t[3].cast<double>(), t[4].cast<int>());
+
+        // if (debug_bind) {
+        //   std::cout << " finished\n";
+        // }
         
         return out;
       }
@@ -1051,12 +1059,14 @@ PYBIND11_MODULE(bind, m) {
     ;
   }
 
-  {py::class_<luke::RGBD>(m, "RGBD")
-    .def(py::init<>())
-    .def_readonly("rgb", &luke::RGBD::rgb)
-    .def_readonly("depth", &luke::RGBD::depth)
-    ;
-  }
+  #if !defined(LUKE_CLUSTER)
+    {py::class_<luke::RGBD>(m, "RGBD")
+      .def(py::init<>())
+      .def_readonly("rgb", &luke::RGBD::rgb)
+      .def_readonly("depth", &luke::RGBD::depth)
+      ;
+    }
+  #endif
 
   /* py::overload_cast requires c++14 */
 

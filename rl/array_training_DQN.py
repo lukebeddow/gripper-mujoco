@@ -713,8 +713,8 @@ def logging_job(model, run_name, group_name):
   model.log_wandb(force=True, end=True)
   model.plot(force=True, end=True, hang=True)
 
-def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 100, 50], target_update=100, 
-                      memory_replay=50_000, state_steps=5, sensor_steps=1, z_state=True, sensor_mode=2,
+def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 100, 50], target_update=50, 
+                      memory_replay=75_000, state_steps=5, sensor_steps=1, z_state=True, sensor_mode=2,
                       state_mode=4, sensor_noise=0.025, state_noise=0.0, sensor_mu=0.05,
                       state_mu=0.025, reward_style="mixed_v3", reward_options=[], 
                       scale_rewards=1.0, scale_penalties=1.0, penalty_termination=False,
@@ -2404,7 +2404,7 @@ if __name__ == "__main__":
       "finger_thickness" : 0.9e-3,
       "finger_width" : 28e-3,
       "sensors" : 3,
-      "num_segments" : 8, # dont forget to set to 8 for proper trainings
+      "num_segments" : 8,
 
       # reward features
       "penalty_termination" : False, # do we end episodes on dangerous readings
