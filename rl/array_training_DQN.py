@@ -2428,6 +2428,60 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
+  elif training_type == "step_size_curriculum_2":
+
+    # define step size levels
+    levels_A = [
+      [8e-3, 0.025, 8e-3, 2e-3, 0.8],
+      [4e-3, 0.02,  6e-3, 2e-3, 0.4],
+      [2e-3, 0.015, 4e-3, 2e-3, 0.2],
+      [1e-3, 0.01,  2e-3, 2e-3, 0.2],
+    ]
+    levels_B = [
+      [4e-3, 0.025, 8e-3, 2e-3, 0.4],
+      [3e-3, 0.02,  6e-3, 2e-3, 0.3],
+      [2e-3, 0.015, 4e-3, 2e-3, 0.2],
+      [1e-3, 0.01,  2e-3, 2e-3, 0.2],
+    ]
+
+    thresholds_A = [10_000, 25_000, 50_000]
+    thresholds_B = [20_000, 35_000, 50_000]
+
+    vary_1 = [levels_A, levels_B]
+    vary_2 = [thresholds_A, thresholds_B]
+    vary_3 = None
+    repeats = 10
+    param_1_name = "step size levels"
+    param_2_name = "episode thresholds"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    # do we limit stable grasps to a maximum allowable force
+    model.env.mj.set.stable_finger_force_lim = 100
+    model.env.mj.set.stable_palm_force_lim = 100
+
+    # set up the curriculum
+    model.params.use_curriculum = True
+    model.curriculum_params["step_sizes"] = param_1
+    model.curriculum_params["thresholds"] = param_2
+    model.curriculum_fcn = functools.partial(curriculum_step_size, model)
+
+    baseline_args = {
+
+      "reward_style" : "sensor_mixed", # use new sensor reward function
+
+      # sensor details
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+    # use the new object set
+    model.params.object_set = "set7_fullset_1500_50i"
+
+    # run medium length trainings
+    model.params.num_episodes = 60_000
+
   else: raise RuntimeError(f"array_training_DQN.py: training_type of '{training_type}' not recognised")
 
   # note and printing information
