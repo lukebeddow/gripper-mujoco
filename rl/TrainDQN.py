@@ -1412,6 +1412,13 @@ class TrainDQN():
     action_batch = torch.cat(batch.action)
     reward_batch = torch.cat(batch.reward)
 
+    # TIDY THIS UP IN FUTURE! not very computationally efficient
+    if self.params.use_images:
+      # add in the images to the 'state' batches
+      state_batch = (torch.cat(batch.img), torch.cat(batch.state))
+      non_final_images = torch.cat([s for s in batch.next_img if s is not None])
+      non_final_next_states = (non_final_images, non_final_next_states)
+
     # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
     # columns of actions taken. These are the actions which would've been taken
     # for each batch state according to policy_net
@@ -2221,6 +2228,7 @@ if __name__ == "__main__":
   model.finger_thickness = 0.9e-3
   model.params.num_episodes = 10000
   model.params.object_set = "set7_xycamera_50i"
+  model.params.min_memory_replay = 0
   model.train(network=net)
 
   # # continue training
