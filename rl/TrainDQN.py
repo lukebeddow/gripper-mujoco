@@ -1391,12 +1391,21 @@ class TrainDQN():
       return
 
     # transitions = self.memory.sample(self.params.batch_size)
+<<<<<<< HEAD
 
     # # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
     # # detailed explanation). This converts batch-array of Transitions
     # # to Transition of batch-arrays.
     # batch = TrainDQN.Transition(*zip(*transitions))
 
+=======
+
+    # # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
+    # # detailed explanation). This converts batch-array of Transitions
+    # # to Transition of batch-arrays.
+    # batch = TrainDQN.Transition(*zip(*transitions))
+
+>>>>>>> 5ca2bf52a818f2e6315c340001e4809528afd720
     batch = self.memory.batch(self.params.batch_size)
 
     # Compute a mask of non-final states and concatenate the batch elements
@@ -2267,6 +2276,7 @@ if __name__ == "__main__":
   # ----- train ----- #
 
   # # train
+<<<<<<< HEAD
   # net = [150, 100, 50]
   # model.env.disable_rendering = True
   # model.env.mj.set.debug = False
@@ -2275,6 +2285,17 @@ if __name__ == "__main__":
   # model.params.num_episodes = 10000
   # model.params.object_set = "set7_xycamera_50i"
   # model.train(network=net)
+=======
+  net = "CNN_25_25"
+  model.env.disable_rendering = True
+  model.env.mj.set.debug = False
+  model.num_segments = 8
+  model.finger_thickness = 0.9e-3
+  model.params.num_episodes = 10000
+  model.params.object_set = "set7_xycamera_50i"
+  model.params.min_memory_replay = 0
+  model.train(network=net)
+>>>>>>> 5ca2bf52a818f2e6315c340001e4809528afd720
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
