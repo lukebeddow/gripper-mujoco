@@ -66,6 +66,9 @@ class TrainDQN():
     HER_mode: str = "final" # 'final' or 'future' or 'episode'
     HER_k: int = 4
 
+    # image training settings
+    use_images: bool = False
+
     # curriculum learning
     use_curriculum: bool = False
 
@@ -77,6 +80,9 @@ class TrainDQN():
 
   Transition = namedtuple('Transition',
                           ('state', 'action', 'next_state', 'reward'))
+  
+  ImgTransition = namedtuple('Transition',
+                          ('state', 'img', 'action', 'next_state', 'next_img', 'reward'))
 
   HER_Transition = namedtuple('Transition',
                     ('obs', 'action', 'next_obs', 'reward', 'goal', 'state'))                        
@@ -86,10 +92,11 @@ class TrainDQN():
 
   class ReplayMemory(object):
 
-    def __init__(self, capacity, device, HER=None, HERMethod="final", k=4):
+    def __init__(self, capacity, device, HER=None, HERMethod="final", k=4, imagedata=False):
       self.memory = deque([], maxlen=capacity)
       self.device = device
       self.HER = True if HER is True else False
+      self.imagedata = imagedata
       if self.HER:
         self.temp_memory = []
         self.HER_method = HERMethod
@@ -103,6 +110,8 @@ class TrainDQN():
       """Save a transition"""
       if self.HER:
         self.temp_memory.append(TrainDQN.HER_Transition(*args))
+      elif self.imagedata:
+        self.memory.append(TrainDQN.ImgTransition(*args))
       else:
         self.memory.append(TrainDQN.Transition(*args))
 
@@ -126,6 +135,18 @@ class TrainDQN():
         return HER_sample
       else: return random.sample(self.memory, batch_size)
 
+    def batch(self, batch_size):
+      # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
+      # detailed explanation). This converts batch-array of Transitions
+      # to Transition of batch-arrays.
+      transitions = self.sample(batch_size)
+      if self.HER:
+        return TrainDQN.HER_Transition(*zip(*transitions))
+      elif self.imagedata:
+        return TrainDQN.ImgTransition(*zip(*transitions))
+      else:
+        return TrainDQN.Transition(*zip(*transitions))
+
     def __len__(self):
       return len(self.memory)
 
@@ -135,6 +156,7 @@ class TrainDQN():
       for item in tuple_of_tensors:
         lst.append(item.to(self.device))
       if self.HER: return TrainDQN.HER_Transition(*tuple(lst))
+      elif self.imagedata: return TrainDQN.ImgTransition(*tuple(lst))
       else: return TrainDQN.Transition(*tuple(lst))
 
     def all_to(self, device):
@@ -789,6 +811,50 @@ class TrainDQN():
     elif network == "loaded":
       # no need to load networks
       pass
+
+    elif isinstance(network, str):
+      if network.startswith("CNN"):
+
+        splits = network.split("_")
+        width = int(splits[-2])
+        height = int(splits[-1])
+
+        print(f"image width = {width} and height = {height}")
+
+        # hardcoded for now!
+        if width == 25 and height == 25:
+          fcn_size = 256
+        elif width == 50 and height == 50:
+          fcn_size = 1600
+        elif width == 75 and height == 75:
+          fcn_size = 4096
+        elif width == 100 and height == 100:
+          fcn_size = 7744
+        else:
+          raise RuntimeError(f"CNN image width = {width} and height = {height} not recognised")
+
+        img_channels = 3
+        self.params.use_images = True
+
+        self.env._init_rgbd(width, height)
+        # model.env._set_rgbd_size(width, height)
+
+        self.policy_net = networks.MixedNetwork(self.env.n_obs, img_channels, 
+                                                self.env.n_actions,
+                                                self.device, fcn_size).to(self.device)
+        self.target_net = networks.MixedNetwork(self.env.n_obs, img_channels, 
+                                                self.env.n_actions,
+                                                self.device, fcn_size).to(self.device)
+
+        self.target_net.load_state_dict(self.policy_net.state_dict())
+
+        self.memory = TrainDQN.ReplayMemory(self.params.memory_replay, self.device,
+                        HER=self.params.use_HER, HERMethod=self.params.HER_mode,
+                        k=self.params.HER_k, imagedata=True)
+
+        # prepare for saving and loading
+        self.modelsaver = ModelSaver(self.savedir + self.group_name)
+
     elif isinstance(network, list):
 
       # we have been given a list of hidden layer sizes
@@ -1324,12 +1390,14 @@ class TrainDQN():
     if (len(self.memory)) < self.params.min_memory_replay: # self.params.batch_size
       return
 
-    transitions = self.memory.sample(self.params.batch_size)
+    # transitions = self.memory.sample(self.params.batch_size)
 
-    # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
-    # detailed explanation). This converts batch-array of Transitions
-    # to Transition of batch-arrays.
-    batch = TrainDQN.Transition(*zip(*transitions))
+    # # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
+    # # detailed explanation). This converts batch-array of Transitions
+    # # to Transition of batch-arrays.
+    # batch = TrainDQN.Transition(*zip(*transitions))
+
+    batch = self.memory.batch(self.params.batch_size)
 
     # Compute a mask of non-final states and concatenate the batch elements
     # (a final state would've been the one after which simulation ended)
@@ -1343,6 +1411,13 @@ class TrainDQN():
     state_batch = torch.cat(batch.state)
     action_batch = torch.cat(batch.action)
     reward_batch = torch.cat(batch.reward)
+
+    # TIDY THIS UP IN FUTURE! not very computationally efficient
+    if self.params.use_images:
+      # add in the images to the 'state' batches
+      state_batch = (torch.cat(batch.img), torch.cat(batch.state))
+      non_final_images = torch.cat([s for s in batch.next_img if s is not None])
+      non_final_next_states = (non_final_images, non_final_next_states)
 
     # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
     # columns of actions taken. These are the actions which would've been taken
@@ -1442,6 +1517,10 @@ class TrainDQN():
     if self.params.use_HER:
       goal = self.env._get_desired_goal()
       goal = self.to_torch(goal)
+    elif self.params.use_images:
+      img, depth = self.env._get_rgbd_image()
+      img = self.to_torch(img)
+      depth = self.to_torch(depth)
 
     ep_start = time.time()
 
@@ -1459,6 +1538,9 @@ class TrainDQN():
       elif self.params.use_HER:
         HER_obs = torch.cat((obs, goal), dim=1)
         action = self.select_action(HER_obs, decay_num=i_episode, test=test)
+      elif self.params.use_images:
+        image_obs = (img, obs)
+        action = self.select_action(image_obs, decay_num=i_episode, test=test)
       else:
         action = self.select_action(obs, decay_num=i_episode, test=test)
 
@@ -1473,6 +1555,12 @@ class TrainDQN():
       if self.params.use_HER:
         (new_obs, reward, done, state, goal) = step_data_torch
         transition_sample = (obs, action, new_obs, reward, goal, state)
+      elif self.params.use_images:
+        (new_obs, reward, done) = step_data_torch
+        new_img, new_depth = self.env._get_rgbd_image()
+        new_img = self.to_torch(new_img)
+        new_depth = self.to_torch(new_depth)
+        transition_sample = (obs, img, action, new_obs, new_img, reward)
       else:
         (new_obs, reward, done) = step_data_torch
         transition_sample = (obs, action, new_obs, reward)

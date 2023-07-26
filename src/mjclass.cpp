@@ -327,7 +327,7 @@ std::string MjClass::file_from_from_command_line(int argc, char **argv)
   if (gripper.empty()) { gripper = "gripper_N" + segments + "_" + width; };
   if (object_set.empty()) { object_set = "set7_fullset_1500_50i"; };
   if (task.empty()) { task = "0"; };
-  if (path.empty()) { path = "/home/luke/mymujoco/mjcf/"; };
+  if (path.empty()) { path = LUKE_MJCF_PATH; };
 
   // use default templates to assemble filepath
   if (path.back() != '/') { path += '/'; };

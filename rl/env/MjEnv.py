@@ -1090,35 +1090,35 @@ if __name__ == "__main__":
 
   # import pickle
 
-  mj = MjEnv(noload=True, rgbd=True)
+  mj = MjEnv(noload=True, depth_camera=True)
   mj.disable_rendering = True
 
   mj.load_finger_width = 24e-3
 
   mj.load("set7_xycamera_50i", num_segments=8, finger_width=28, finger_thickness=0.9e-3)
 
-  print(mj.get_parameters())
+  mj.render()
+
+  print("getting rgbd image now")
+
+  mj._get_rgbd_image()
+  mj._get_rgbd_image()
+
+  print("before set size")
+  mj._set_rgbd_size(360, 280)
+  print("after set size")
+
+  print("before set size")
+  mj._set_rgbd_size(320, 240)
+  print("after set size")
+
+  mj._set_rgbd_size(50, 50)
+
+  mj._spawn_object()
+
+  mj._plot_rgbd_image()
 
   exit()
-
-  # mj.render()
-
-  # print("getting rgbd image now")
-
-  
-
-  # mj._get_rgbd_image()
-  # mj._get_rgbd_image()
-
-  # print("before set size")
-  # mj._set_rgbd_size(360, 280)
-  # print("after set size")
-
-  # print("before set size")
-  # mj._set_rgbd_size(320, 240)
-  # print("after set size")
-
-  # mj._plot_rgbd_image()
 
   import sys
 
@@ -1131,6 +1131,8 @@ if __name__ == "__main__":
   rgb, depth = mj.mj.get_RGBD_numpy()
   print(f"Size of numpy rgb is: {sys.getsizeof(rgb) * 1e-6:.3f} MB")
   print(f"Size of numpy depth is: {sys.getsizeof(depth) * 1e-6:.3f} MB")
+
+  exit()
 
   # sizes = [(720, 740), (200, 740), (720, 200),
   #          (1500, 1500)]
@@ -1183,9 +1185,6 @@ if __name__ == "__main__":
 
   # plt.imshow(depthnp.reshape(720, 740))
   # plt.show()
-
-  exit()
-
 
   # mj.mj.set.set_sensor_prev_steps_to(3)
   mj.mj.set.sensor_n_prev_steps = 1
