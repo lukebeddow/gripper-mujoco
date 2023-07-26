@@ -1549,7 +1549,7 @@ class TrainDQN():
     # begin training episodes
     for i_episode in range(i_start + 1, self.params.num_episodes + 1):
 
-      if self.log_level == 1 and i_episode % self.log_rate_for_episodes == 1:
+      if self.log_level == 1 and (i_episode - 1) % self.log_rate_for_episodes == 0:
         print("Begin training episode", i_episode, flush=True)
       elif self.log_level > 1:
         print("Begin training episode", i_episode, flush=True)
@@ -2048,6 +2048,52 @@ class TrainDQN():
 
     return best_sr, best_ep
 
+  def seed(self, seed=None, strict=False):
+    """
+    Set a seed for the environment, if one is not given, select it randomly
+    """
+
+    # put the seed into MjEnv (if None its randomly generated)
+    self.env.seed(seed)
+
+    # now use this seed for pytorch
+    torch.manual_seed(self.env.myseed)
+
+    # if we want to ensure reproducitibilty at the cost of performance
+    if strict:
+      torch.backends.cudnn.benchmark = False
+      torch.use_deterministic_algorithms(mode=True)
+
+  def profile(self, saveas="python_profile_results.xyz", network=None, loadexisting=False, 
+              episodes=10, seed=1234, id=None, folderpath=None, foldername=None):
+    """
+    Profile the training using CProfile tools. If loadexisting=False, first it
+    trains long enough to fill the replay memory with enough samples, then
+    saves this. This step can be skipped with loadexisting=True and by giving
+    the correct id/folderpath/foldername for load(...).
+    """
+
+    # set a deterministic seed
+    self.seed(seed, strict=True)
+
+    # enable optimisation as fast as possible to profile this as well
+    self.params.min_memory_replay = 0
+    self.log_rate_for_episodes = 1
+
+    if not loadexisting:
+      self.params.num_episodes = 3
+      self.train(network=network)
+      i_episode = self.track.episodes_done
+    else:
+      self.load(id=id, folderpath=folderpath, foldername=foldername)
+      i_episode = self.track.episodes_done
+
+    # now do the profiling
+    self.params.num_episodes = i_episode + episodes
+    cProfile.run(f"model.train(i_start={i_episode})", f"/home/luke/mymujoco/{saveas}")
+
+    print(f"Profiling is now done, file saved at: /home/luke/mymujoco/{saveas}")
+
 if __name__ == "__main__":
   
   # ----- prepare ----- #
@@ -2133,14 +2179,14 @@ if __name__ == "__main__":
   # ----- train ----- #
 
   # # train
-  net = networks.DQN_3L60
-  model.env.disable_rendering = True
-  model.env.mj.set.debug = False
-  model.num_segments = 8
-  model.finger_thickness = 0.9e-3
-  model.params.num_episodes = 10000
-  model.params.object_set = "set7_xycamera_50i"
-  model.train(network=net)
+  # net = [150, 100, 50]
+  # model.env.disable_rendering = True
+  # model.env.mj.set.debug = False
+  # model.num_segments = 8
+  # model.finger_thickness = 0.9e-3
+  # model.params.num_episodes = 10000
+  # model.params.object_set = "set7_xycamera_50i"
+  # model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
@@ -2148,18 +2194,21 @@ if __name__ == "__main__":
   # model.continue_training(foldername, folderpath)
 
   # ----- profile ----- #
-  # net = networks.DQN_3L60
-  # model.env.disable_rendering = True
-  # model.params.object_set = "set7_xycamera_50i"
-  # model.env.mj.set.debug = False
-  # model.params.num_episodes = 10
-  # model.num_segments = 8
+  net = "CNN_25_25"
+  model.env.disable_rendering = True
+  model.params.object_set = "set7_fullset_1500_50i"
+  model.profile(saveas="py_profile_cnn_25_25.xyz", network=net)
+  exit()
+
+  model.env.mj.set.debug = False
+  model.params.num_episodes = 10
+  model.num_segments = 8
   # model.env._init_rgbd(width=320, height=240)
-  # model.env.seed(1234)
-  # cProfile.run("model.train(network=net)", "/home/luke/mymujoco/python_profile_results_8.xyz")
-  # # in order to read profile results, run: $ python3 -m pstats /path/to/results.xyz
-  # # do: $ sort cumtime OR $ sort tottime AND THEN $ stats
-  # exit()
+  model.env.seed(1234)
+  cProfile.run("model.train(network=net)", "/home/luke/mymujoco/python_profile_results.xyz")
+  # in order to read profile results, run: $ python3 -m pstats /path/to/results.xyz
+  # do: $ sort cumtime OR $ sort tottime AND THEN $ stats
+  exit()
 
   # ----- visualise ----- #
 
