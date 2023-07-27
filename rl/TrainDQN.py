@@ -2160,8 +2160,27 @@ class TrainDQN():
     the correct id/folderpath/foldername for load(...).
     """
 
+    # override MjEnv 'take_action' to do only random actions
+    # this should provide exact reproducibility
+    random_action_generator = np.random.default_rng(seed=seed)
+    def random_take_action(self, action):
+      """
+      Take an action in the simulation
+      """
+
+      rand_action = random_action_generator.integers(0, self.n_actions)
+
+      # set the action and step the simulation
+      self.mj.set_action(rand_action)
+      self.mj.action_step()
+
+      return
+    
+    import functools
+    self.env._take_action = functools.partial(random_take_action, self.env)
+
     # set a deterministic seed
-    self.seed(seed, strict=True)
+    self.seed(seed, strict=False)
 
     # enable optimisation as fast as possible to profile this as well
     self.params.min_memory_replay = 0
@@ -2177,6 +2196,7 @@ class TrainDQN():
 
     # now do the profiling
     self.params.num_episodes = i_episode + episodes
+    self.env.prevent_reload = True
     cProfile.run(f"model.train(i_start={i_episode})", f"/home/luke/mymujoco/{saveas}")
 
     print(f"Profiling is now done, file saved at: /home/luke/mymujoco/{saveas}")
@@ -2267,7 +2287,7 @@ if __name__ == "__main__":
 
   # # train
   # net = [150, 100, 50]
-  # model.env.disable_rendering = True
+  # model.env.disable_rendering = False
   # model.env.mj.set.debug = False
   # model.num_segments = 8
   # model.finger_thickness = 0.9e-3
@@ -2281,10 +2301,57 @@ if __name__ == "__main__":
   # model.continue_training(foldername, folderpath)
 
   # ----- profile ----- #
-  net = "CNN_25_25"
+
+
+  # net = "CNN_25_25"
+  # dev = "cpu"
+  # model.env.disable_rendering = True
+  # model.params.object_set = "set7_xycamera_50i"
+  # model.set_device(dev)
+  # model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
+
+  # net = "CNN_25_25"
+  # dev = "cuda"
+  # model.env.disable_rendering = True
+  # model.params.object_set = "set7_xycamera_50i"
+  # model.set_device(dev)
+  # model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
+
+  # net = "CNN_50_50"
+  # dev = "cpu"
+  # model.env.disable_rendering = True
+  # model.params.object_set = "set7_xycamera_50i"
+  # model.set_device(dev)
+  # model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
+
+  # net = "CNN_50_50"
+  # dev = "cuda"
+  # model.env.disable_rendering = True
+  # model.params.object_set = "set7_xycamera_50i"
+  # model.set_device(dev)
+  # model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
+
+  # net = "CNN_75_75"
+  # dev = "cpu"
+  # model.env.disable_rendering = True
+  # model.params.object_set = "set7_xycamera_50i"
+  # model.set_device(dev)
+  # model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
+
+  # net = "CNN_75_75"
+  # dev = "cuda"
+  # model.env.disable_rendering = True
+  # model.params.object_set = "set7_xycamera_50i"
+  # model.set_device(dev)
+  # model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
+
+  net = "CNN_100_100"
+  dev = "cuda"
   model.env.disable_rendering = True
-  model.params.object_set = "set7_fullset_1500_50i"
-  model.profile(saveas="py_profile_cnn_25_25.xyz", network=net)
+  model.params.object_set = "set7_xycamera_50i"
+  model.set_device(dev)
+  model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
+
   exit()
 
   model.env.mj.set.debug = False

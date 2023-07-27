@@ -81,6 +81,7 @@ class MjEnv():
     # general class settings
     self.log_level = 0
     self.disable_rendering = True
+    self.prevent_reload = False
 
     # initialise class variables
     self.test_in_progress = False
@@ -1042,7 +1043,7 @@ class MjEnv():
     self.track = MjEnv.Track()
 
     # there is a small chance we reload a new random task
-    if not self.test_in_progress and not realworld:
+    if not self.test_in_progress and not realworld and not self.prevent_reload:
       if (random_train.random() < self.params.task_reload_chance
           or self.reload_flag):
         self._load_xml()
@@ -1113,6 +1114,9 @@ if __name__ == "__main__":
   print("after set size")
 
   mj._set_rgbd_size(50, 50)
+
+  mj._get_rgbd_image()
+  mj._get_rgbd_image()
 
   mj._spawn_object()
 

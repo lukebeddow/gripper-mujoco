@@ -594,12 +594,12 @@ bool MjClass::render()
       (time_::now() - start_time).count() < s_.render_delay * 1000) { 
       
       // window_open = render::render(model, data);
-      window_open = render::render();
+      window_open = render::render_window();
     }
   }
   else {
     // just render once
-    window_open = render::render();
+    window_open = render::render_window();
   }
 
   // if the window has been closed
@@ -625,7 +625,7 @@ bool MjClass::init_rgbd()
 {
   /* initialise an rgbd camera */
 
-  render::init_rendering(*this);
+  render::init_camera(*this);
   render_init = true;
   render::read_rgbd(); // first output is always incorrect camera view
 
@@ -654,7 +654,7 @@ void MjClass::render_RGBD()
     render::reload_for_rendering(*this);
   }
 
-  render::render();
+  render::render_camera();
 }
 
 luke::RGBD MjClass::read_existing_RGBD()
@@ -669,7 +669,7 @@ void MjClass::set_RGBD_size(int width, int height)
 {
   /* set how many pixels the RGBD image should be */
 
-  render::resize_window(width, height);
+  render::resize_camera(width, height);
 }
 
 #endif
