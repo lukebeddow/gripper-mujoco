@@ -2285,14 +2285,18 @@ if __name__ == "__main__":
 
   # ----- train ----- #
 
-  # # train
+  # train
   # net = [150, 100, 50]
   # model.env.disable_rendering = False
   # model.env.mj.set.debug = False
   # model.num_segments = 8
   # model.finger_thickness = 0.9e-3
   # model.params.num_episodes = 10000
-  # model.params.object_set = "set7_xycamera_50i"
+  # model.params.object_set = "set7_xycamera_50i_updated"
+
+  # model.env.mj.set.auto_set_timestep = False
+  # model.env.mj.set.mujoco_timestep = 1e-3
+
   # model.train(network=net)
 
   # # continue training

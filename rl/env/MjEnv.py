@@ -376,13 +376,10 @@ class MjEnv():
       return
 
     # get rgbd information out of the simulation (unit8, float)
+    # these come as (width x height x channels)
     rgb, depth = self.mj.get_RGBD_numpy()
 
-    # reshape the numpy arrays to the correct aspect ratio
-    rgb = rgb.reshape(self.rgbd_height, self.rgbd_width, 3)
-    depth = depth.reshape(self.rgbd_height, self.rgbd_width, 1)
-
-    # numpy likes image arrays like this: width x height x channels
+    # numpy likes image arrays like this: height x width x channels
     # torch likes image arrays like this: channels x width x height
     rgb = np.einsum("ijk->kij", rgb)
     depth = np.einsum("ijk->kij", depth)
@@ -399,11 +396,11 @@ class MjEnv():
     
     rgb, depth = self._get_rgbd_image()
 
-    # numpy likes image arrays like this: width x height x channels
+    # numpy likes image arrays like this: height x width x channels
     # torch likes image arrays like this: channels x width x height
     # hence convert from torch style back to numpy style for plotting
-    axs[0].imshow(np.einsum("ijk->jki", rgb)) # swap rgb channel from 1st (eg 3x640x480) to last (eg 640x480x3)
-    axs[1].imshow(depth[0]) # remove the depth 'channel' (eg 1x640x480 -> 640x480)
+    axs[0].imshow(np.einsum("ijk->kji", rgb)) # swap rgb channel from 1st (eg 3x640x480) to last (eg 640x480x3)
+    axs[1].imshow(np.transpose(depth[0])) # remove the depth 'channel' (eg 1x640x480 -> 640x480)
 
     plt.show()
 
@@ -1097,30 +1094,46 @@ if __name__ == "__main__":
   mj.load_finger_width = 24e-3
 
   mj.load("set7_xycamera_50i", num_segments=8, finger_width=28, finger_thickness=0.9e-3)
-
-  mj.render()
-
-  print("getting rgbd image now")
-
-  mj._get_rgbd_image()
-  mj._get_rgbd_image()
-
-  print("before set size")
-  mj._set_rgbd_size(360, 280)
-  print("after set size")
-
-  print("before set size")
-  mj._set_rgbd_size(320, 240)
-  print("after set size")
-
-  mj._set_rgbd_size(50, 50)
-
-  mj._get_rgbd_image()
-  mj._get_rgbd_image()
-
   mj._spawn_object()
 
+  mj._set_rgbd_size(848, 480)
+
+  rgb, depth = mj._get_rgbd_image_fast()
+  print(f"fast rgb size is {rgb.shape}")
+  print(f"fast depth size is {depth.shape}")
+
+  rgb, depth = mj._get_rgbd_image()
+  print(f"rgb size is {rgb.shape}")
+  print(f"depth size is {depth.shape}")
+
   mj._plot_rgbd_image()
+
+  
+
+  exit()
+
+  import time
+
+  t1 = time.time()
+
+  num = 579
+  for i in range(num):
+    rgb, depth = mj._get_rgbd_image_fast()
+
+  t2 = time.time()
+
+  print(f"Time taken for {num} calls was {t2-t1:.3f} s")
+
+  exit()
+
+  rgb, depth = mj._get_rgbd_image_fast()
+  rgb, depth = mj._get_rgbd_image_fast()
+
+  print(rgb)
+  print(depth)
+
+  print(f"rgb size is {rgb.shape}")
+  print(f"depth size is {depth.shape}")
 
   exit()
 

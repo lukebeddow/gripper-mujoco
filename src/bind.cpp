@@ -8,24 +8,50 @@ constexpr bool debug_bind = false;
 namespace py = pybind11;
 
 // numpy conversion helpers
-static py::array_t<luke::rgbint> rgbvec_to_array(std::vector<luke::rgbint>& vec)
-{
-  return py::array(vec.size(), vec.data());
-}
+// static py::array_t<luke::rgbint> rgbvec_to_array(std::vector<luke::rgbint>& vec)
+// {
+//   return py::array(vec.size(), vec.data());
+// }
 
-static py::array_t<float> depthvec_to_array(std::vector<float>& vec)
-{
-  return py::array(vec.size(), vec.data());
-}
+// static py::array_t<float> depthvec_to_array(std::vector<float>& vec)
+// {
+//   return py::array(vec.size(), vec.data());
+// }
 
-static py::tuple RGBD_struct_to_tuple(luke::RGBD rgb_struct)
-{
-  return py::make_tuple(rgbvec_to_array(rgb_struct.rgb), depthvec_to_array(rgb_struct.depth));
-}
+// static py::tuple RGBD_struct_to_tuple(luke::RGBD rgb_struct)
+// {
+//   return py::make_tuple(rgbvec_to_array(rgb_struct.rgb), depthvec_to_array(rgb_struct.depth));
+// }
 
 static py::array_t<luke::gfloat> floatvec_to_array(std::vector<luke::gfloat>& vec)
 {
   return py::array(vec.size(), vec.data());
+}
+
+static py::array_t<luke::rgbint> rgbptr_to_array(luke::rgbint* data, int W, int H)
+{
+  return py::array_t<luke::rgbint>(
+    {W, H, 3},        // shape
+    {3*1, W*3*1, 1},  // strides (1 byte for uint8)
+    data
+  );
+}
+
+static py::array_t<float> depthptr_to_array(float* data, int W, int H)
+{
+  return py::array_t<float>(
+    {W, H, 1},        // shape
+    {1*4, W*1*4, 4},  // strides (4 bytes for float)
+    data
+  );
+}
+
+static py::tuple RGBD_ptr_to_tuple(luke::RGBD rgb_struct)
+{
+  return py::make_tuple(
+    rgbptr_to_array(rgb_struct.rgb, rgb_struct.W, rgb_struct.H),
+    depthptr_to_array(rgb_struct.depth, rgb_struct.W, rgb_struct.H)
+  );
 }
 
 // create a python module, called bind (must be saved in bind.so)
@@ -63,9 +89,13 @@ PYBIND11_MODULE(bind, m) {
     .def("read_existing_RGBD", &MjClass::read_existing_RGBD)
     .def("set_RGBD_size", &MjClass::set_RGBD_size)
     .def("get_RGBD", &MjClass::get_RGBD)
+    // .def("get_RGBD_numpy",
+    //   [](MjClass &mj) {
+    //     return RGBD_struct_to_tuple(mj.get_RGBD());
+    //   })
     .def("get_RGBD_numpy",
       [](MjClass &mj) {
-        return RGBD_struct_to_tuple(mj.get_RGBD());
+        return RGBD_ptr_to_tuple(mj.get_RGBD());
       })
 
     // sensing

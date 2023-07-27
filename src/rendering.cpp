@@ -54,8 +54,7 @@ int camera_width = 640;
 int camera_height = 480;
 
 // data storage
-unsigned char* rgb_ = NULL;
-float* depth_ = NULL;
+luke::RGBD rgbd_data;
 
 // global viewport object
 mjrRect window_viewport = {0, 0, 0, 0};
@@ -135,6 +134,10 @@ void init_camera(MjClass& myMjClass)
     mjv_defaultScene(&scn);
     mjr_defaultContext(&con);
 
+    // set to use the fixed camera in xml (must be done after mjv_defaultCamera)
+    cam.type = mjCAMERA_FIXED;
+    cam.fixedcamid = 0;
+
     // set the window hidden by default, create with default size
     create_camera_window(camera_width, camera_height);
     
@@ -143,10 +146,6 @@ void init_camera(MjClass& myMjClass)
     // if (con.currentBuffer!=mjFB_OFFSCREEN) {
     //     std::printf("Warning: offscreen rendering not supported, using default/window framebuffer\n");
     // }
-
-    // set to use the fixed camera in xml
-    cam.type = mjCAMERA_FIXED;
-    cam.fixedcamid = 0;
 
     camera_initialised = true;
 }
@@ -325,14 +324,14 @@ void render_camera()
         std::runtime_error("render_camera() called without first calling init_camera()");
     }
 
+    // // no noticeable speedup from this
+    // // disable shadows and reflections which require extra rendering passes
+    // scn.flags[mjRND_SHADOW] = 0;
+    // scn.flags[mjRND_REFLECTION] = 0;
+
     // update scene and render
     mjv_updateScene(m, d, &opt, NULL, &cam, mjCAT_ALL, &scn);
     mjr_render(camera_viewport, &scn, &con);
-
-    // // swap OpenGL buffers (blocking call due to v-sync)
-    // glfwSwapBuffers(camera_window);
-
-    // glfwPollEvents();
 }
 
 // before closing
@@ -583,45 +582,48 @@ void create_camera_window(int width, int height)
     // create the viewport for the camera
     camera_viewport =  mjr_maxViewport(&con);
 
+    // // reallocate data buffers
+    // if (rgb_ != NULL) std::free(rgb_);
+    // if (depth_ != NULL) std::free(depth_);
+
+    // int X = height * width;
+    // rgb_ = (unsigned char*)std::malloc(3 * X);
+    // depth_ = (float*)std::malloc(sizeof(float) * X);
+
     // reallocate data buffers
-    if (rgb_ != NULL) std::free(rgb_);
-    if (depth_ != NULL) std::free(depth_);
+    if (rgbd_data.rgb != NULL) std::free(rgbd_data.rgb);
+    if (rgbd_data.depth != NULL) std::free(rgbd_data.depth);
 
     int X = height * width;
-    rgb_ = (unsigned char*)std::malloc(3 * X);
-    depth_ = (float*)std::malloc(sizeof(float) * X);
+    rgbd_data.rgb = (luke::rgbint*)std::malloc(3 * X);
+    rgbd_data.depth = (float*)std::malloc(sizeof(float) * X);
+    rgbd_data.H = height;
+    rgbd_data.W = width;
 }
 
 luke::RGBD read_rgbd()
 {
     /* get an rgbd image out of the simulation */
     
-    if (not camera_initialised and (rgb_ == NULL or depth_ == NULL)) {
+    if (not camera_initialised or rgbd_data.rgb == NULL or rgbd_data.depth == NULL) {
         throw std::runtime_error("render::read_rgbd() called but rendering not initialised");
     }
 
     int H = camera_height;
     int W = camera_width;
 
-    // mjrRect cam_viewport = {0, 0, W, H};
-
-    // I should make this better, so rgb/depth dont have to be copied everytime
-    luke::RGBD output;
-
-    if (!rgb_ || !depth_) {
-        mju_error("render::read_rgbd() failed, could not allocate buffers for rgb_ or depth_");
-    }
-
     // read the depth camera using mujoco
-    mjr_readPixels(rgb_, depth_, camera_viewport, &con);
+    mjr_readPixels(rgbd_data.rgb, rgbd_data.depth, camera_viewport, &con);
 
-    for (int i = 0;  i < 3*W*H; i++) {
-        output.rgb.push_back((luke::rgbint)rgb_[i]);
-    }
+    return rgbd_data;
 
-    for (int i = 0;  i < W*H; i++) {
-        output.depth.push_back(depth_[i]);
-    }
+    // for (int i = 0;  i < 3*W*H; i++) {
+    //     output.rgb.push_back((luke::rgbint)rgb_[i]);
+    // }
+
+    // for (int i = 0;  i < W*H; i++) {
+    //     output.depth.push_back(depth_[i]);
+    // }
 
     // // this code overwrites the rgb_ data, which we don't want
     // if (render_depth_flag) {
@@ -668,8 +670,6 @@ luke::RGBD read_rgbd()
     //         mjr_drawPixels(rgb_, NULL, viewport3, &con);
     //     }
     // }
-
-    return output;
 }
 
 void render_rgb(bool set_as)
