@@ -716,7 +716,7 @@ def logging_job(model, run_name, group_name):
 def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 100, 50], target_update=50, 
                       memory_replay=75_000, state_steps=5, sensor_steps=1, z_state=True, sensor_mode=2,
                       state_mode=4, sensor_noise=0.025, state_noise=0.0, sensor_mu=0.05,
-                      state_mu=0.025, reward_style="mixed_v3", reward_options=[], 
+                      state_mu=0.025, reward_style="sensor_mixed", reward_options=[], 
                       scale_rewards=1.0, scale_penalties=1.0, penalty_termination=False,
                       num_segments=8, finger_thickness=0.9e-3, finger_width=28e-3,
                       max_episode_steps=250, eval_me=None, base_XY_actions=False):
@@ -2515,6 +2515,27 @@ if __name__ == "__main__":
 
     # use the new object set
     model.params.object_set = "set7_xycamera_50i"
+
+  elif training_type == "profile_cnn":
+
+    model = baseline_settings(model)
+    model.env.disable_rendering = True
+    model.params.object_set = "set7_xycamera_50i"
+
+    vary_1 = ["CNN_25_25", "CNN_50_50", "CNN_75_75", "CNN_100_100"]
+    vary_2 = ["cpu", "cuda"]
+    vary_3 = None
+    repeats = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    net = param_1
+    dev = param_2
+
+    model.set_device(dev)
+    model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
+
+    exit()
 
   else: raise RuntimeError(f"array_training_DQN.py: training_type of '{training_type}' not recognised")
 

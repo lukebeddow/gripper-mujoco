@@ -2197,9 +2197,15 @@ class TrainDQN():
     # now do the profiling
     self.params.num_episodes = i_episode + episodes
     self.env.prevent_reload = True
+
+    self.env.mj.tick()
     cProfile.run(f"model.train(i_start={i_episode})", f"/home/luke/mymujoco/{saveas}")
+    time_taken = self.env.mj.tock()
 
     print(f"Profiling is now done, file saved at: /home/luke/mymujoco/{saveas}")
+    print(f"Time taken was {time_taken:.3f} seconds")
+
+    return time_taken
 
 if __name__ == "__main__":
   
@@ -2293,10 +2299,6 @@ if __name__ == "__main__":
   # model.finger_thickness = 0.9e-3
   # model.params.num_episodes = 10000
   # model.params.object_set = "set7_xycamera_50i_updated"
-
-  # model.env.mj.set.auto_set_timestep = False
-  # model.env.mj.set.mujoco_timestep = 1e-3
-
   # model.train(network=net)
 
   # # continue training
@@ -2344,6 +2346,13 @@ if __name__ == "__main__":
 
   # net = "CNN_75_75"
   # dev = "cuda"
+  # model.env.disable_rendering = True
+  # model.params.object_set = "set7_xycamera_50i"
+  # model.set_device(dev)
+  # model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
+
+  # net = "CNN_100_100"
+  # dev = "cpu"
   # model.env.disable_rendering = True
   # model.params.object_set = "set7_xycamera_50i"
   # model.set_device(dev)
