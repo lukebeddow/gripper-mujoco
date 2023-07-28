@@ -1093,14 +1093,14 @@ if __name__ == "__main__":
 
   mj.load_finger_width = 24e-3
 
-  mj.load("set7_xycamera_50i", num_segments=8, finger_width=28, finger_thickness=0.9e-3)
+  mj.load("set7_fullset_1500_50i_updated", num_segments=8, finger_width=28, finger_thickness=0.9e-3)
   mj._spawn_object()
 
   mj._set_rgbd_size(848, 480)
 
-  rgb, depth = mj._get_rgbd_image_fast()
-  print(f"fast rgb size is {rgb.shape}")
-  print(f"fast depth size is {depth.shape}")
+  # rgb, depth = mj._get_rgbd_image_fast()
+  # print(f"fast rgb size is {rgb.shape}")
+  # print(f"fast depth size is {depth.shape}")
 
   rgb, depth = mj._get_rgbd_image()
   print(f"rgb size is {rgb.shape}")

@@ -2152,7 +2152,8 @@ class TrainDQN():
       torch.use_deterministic_algorithms(mode=True)
 
   def profile(self, saveas="python_profile_results.xyz", network=None, loadexisting=False, 
-              episodes=10, seed=1234, id=None, folderpath=None, foldername=None):
+              episodes=10, seed=1234, id=None, folderpath=None, foldername=None,
+              path="/home/luke/mymujoco"):
     """
     Profile the training using CProfile tools. If loadexisting=False, first it
     trains long enough to fill the replay memory with enough samples, then
@@ -2199,10 +2200,10 @@ class TrainDQN():
     self.env.prevent_reload = True
 
     self.env.mj.tick()
-    cProfile.run(f"model.train(i_start={i_episode})", f"/home/luke/mymujoco/{saveas}")
+    cProfile.run(f"model.train(i_start={i_episode})", f"{path}/{saveas}")
     time_taken = self.env.mj.tock()
 
-    print(f"Profiling is now done, file saved at: /home/luke/mymujoco/{saveas}")
+    print(f"Profiling is now done, file saved at: {path}/{saveas}")
     print(f"Time taken was {time_taken:.3f} seconds")
 
     return time_taken
