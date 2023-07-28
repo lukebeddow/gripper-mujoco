@@ -81,6 +81,7 @@ class MjEnv():
     # general class settings
     self.log_level = 0
     self.disable_rendering = True
+    self.prevent_reload = False
 
     # initialise class variables
     self.test_in_progress = False
@@ -375,13 +376,10 @@ class MjEnv():
       return
 
     # get rgbd information out of the simulation (unit8, float)
+    # these come as (width x height x channels)
     rgb, depth = self.mj.get_RGBD_numpy()
 
-    # reshape the numpy arrays to the correct aspect ratio
-    rgb = rgb.reshape(self.rgbd_height, self.rgbd_width, 3)
-    depth = depth.reshape(self.rgbd_height, self.rgbd_width, 1)
-
-    # numpy likes image arrays like this: width x height x channels
+    # numpy likes image arrays like this: height x width x channels
     # torch likes image arrays like this: channels x width x height
     rgb = np.einsum("ijk->kij", rgb)
     depth = np.einsum("ijk->kij", depth)
@@ -398,11 +396,11 @@ class MjEnv():
     
     rgb, depth = self._get_rgbd_image()
 
-    # numpy likes image arrays like this: width x height x channels
+    # numpy likes image arrays like this: height x width x channels
     # torch likes image arrays like this: channels x width x height
     # hence convert from torch style back to numpy style for plotting
-    axs[0].imshow(np.einsum("ijk->jki", rgb)) # swap rgb channel from 1st (eg 3x640x480) to last (eg 640x480x3)
-    axs[1].imshow(depth[0]) # remove the depth 'channel' (eg 1x640x480 -> 640x480)
+    axs[0].imshow(np.einsum("ijk->kji", rgb)) # swap rgb channel from 1st (eg 3x640x480) to last (eg 640x480x3)
+    axs[1].imshow(np.transpose(depth[0])) # remove the depth 'channel' (eg 1x640x480 -> 640x480)
 
     plt.show()
 
@@ -1042,7 +1040,7 @@ class MjEnv():
     self.track = MjEnv.Track()
 
     # there is a small chance we reload a new random task
-    if not self.test_in_progress and not realworld:
+    if not self.test_in_progress and not realworld and not self.prevent_reload:
       if (random_train.random() < self.params.task_reload_chance
           or self.reload_flag):
         self._load_xml()
@@ -1090,35 +1088,54 @@ if __name__ == "__main__":
 
   # import pickle
 
-  mj = MjEnv(noload=True, rgbd=True)
+  mj = MjEnv(noload=True, depth_camera=True)
   mj.disable_rendering = True
 
   mj.load_finger_width = 24e-3
 
   mj.load("set7_xycamera_50i", num_segments=8, finger_width=28, finger_thickness=0.9e-3)
+  mj._spawn_object()
 
-  print(mj.get_parameters())
+  mj._set_rgbd_size(848, 480)
 
-  exit()
+  rgb, depth = mj._get_rgbd_image_fast()
+  print(f"fast rgb size is {rgb.shape}")
+  print(f"fast depth size is {depth.shape}")
 
-  # mj.render()
+  rgb, depth = mj._get_rgbd_image()
+  print(f"rgb size is {rgb.shape}")
+  print(f"depth size is {depth.shape}")
 
-  # print("getting rgbd image now")
+  mj._plot_rgbd_image()
 
   
 
-  # mj._get_rgbd_image()
-  # mj._get_rgbd_image()
+  exit()
 
-  # print("before set size")
-  # mj._set_rgbd_size(360, 280)
-  # print("after set size")
+  import time
 
-  # print("before set size")
-  # mj._set_rgbd_size(320, 240)
-  # print("after set size")
+  t1 = time.time()
 
-  # mj._plot_rgbd_image()
+  num = 579
+  for i in range(num):
+    rgb, depth = mj._get_rgbd_image_fast()
+
+  t2 = time.time()
+
+  print(f"Time taken for {num} calls was {t2-t1:.3f} s")
+
+  exit()
+
+  rgb, depth = mj._get_rgbd_image_fast()
+  rgb, depth = mj._get_rgbd_image_fast()
+
+  print(rgb)
+  print(depth)
+
+  print(f"rgb size is {rgb.shape}")
+  print(f"depth size is {depth.shape}")
+
+  exit()
 
   import sys
 
@@ -1131,6 +1148,8 @@ if __name__ == "__main__":
   rgb, depth = mj.mj.get_RGBD_numpy()
   print(f"Size of numpy rgb is: {sys.getsizeof(rgb) * 1e-6:.3f} MB")
   print(f"Size of numpy depth is: {sys.getsizeof(depth) * 1e-6:.3f} MB")
+
+  exit()
 
   # sizes = [(720, 740), (200, 740), (720, 200),
   #          (1500, 1500)]
@@ -1183,9 +1202,6 @@ if __name__ == "__main__":
 
   # plt.imshow(depthnp.reshape(720, 740))
   # plt.show()
-
-  exit()
-
 
   # mj.mj.set.set_sensor_prev_steps_to(3)
   mj.mj.set.sensor_n_prev_steps = 1

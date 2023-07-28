@@ -716,7 +716,7 @@ def logging_job(model, run_name, group_name):
 def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 100, 50], target_update=50, 
                       memory_replay=75_000, state_steps=5, sensor_steps=1, z_state=True, sensor_mode=2,
                       state_mode=4, sensor_noise=0.025, state_noise=0.0, sensor_mu=0.05,
-                      state_mu=0.025, reward_style="mixed_v3", reward_options=[], 
+                      state_mu=0.025, reward_style="sensor_mixed", reward_options=[], 
                       scale_rewards=1.0, scale_penalties=1.0, penalty_termination=False,
                       num_segments=8, finger_thickness=0.9e-3, finger_width=28e-3,
                       max_episode_steps=250, eval_me=None, base_XY_actions=False):
@@ -1282,7 +1282,7 @@ if __name__ == "__main__":
 
   # CONFIGURE KEY SETTINGS (take care that baseline_settings(...) does not overwrite)
   model.params.use_curriculum = False
-  model.params.num_episodes = 50_000
+  model.params.num_episodes = 60_000
   model.params.object_set = "set6_fullset_800_50i"
 
   if args.program is None:
@@ -2476,6 +2476,61 @@ if __name__ == "__main__":
 
     # run medium length trainings
     model.params.num_episodes = 60_000
+
+  elif training_type == "cnn_trial_1":
+
+    vary_1 = [
+      [150, 100, 50],
+      "CNN_25_25",
+      "CNN_50_50"
+    ]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    param_1_name = "network style"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    # do we limit stable grasps to a maximum allowable force
+    model.env.mj.set.stable_finger_force_lim = 100
+    model.env.mj.set.stable_palm_force_lim = 100
+
+    baseline_args = {
+
+      "network" : param_1,
+
+      "reward_style" : "sensor_mixed", # use new sensor reward function
+
+      # sensor details
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+    # use the new object set
+    model.params.object_set = "set7_xycamera_50i"
+
+  elif training_type == "profile_cnn":
+
+    model = baseline_settings(model)
+    model.env.disable_rendering = True
+    model.params.object_set = "set7_xycamera_50i"
+
+    vary_1 = ["CNN_25_25", "CNN_50_50", "CNN_75_75", "CNN_100_100"]
+    vary_2 = ["cpu", "cuda"]
+    vary_3 = None
+    repeats = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    net = param_1
+    dev = param_2
+
+    model.set_device(dev)
+    model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
+
+    exit()
 
   else: raise RuntimeError(f"array_training_DQN.py: training_type of '{training_type}' not recognised")
 
