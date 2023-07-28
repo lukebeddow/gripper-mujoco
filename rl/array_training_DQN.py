@@ -930,8 +930,6 @@ def test_and_load(model, demo=False, render=False, pause=False, id=None, best_id
   Test overload where we load a specific model
   """
 
-  print(f"RENDER is {render} at start of test_and_load()")
-
   # set up the object set
   model.env.mj.model_folder_path = "/home/luke/mymujoco/mjcf"
 
@@ -955,8 +953,6 @@ def test(model, heuristic=False, trials_per_obj=10, render=False, pause=False, d
   """
 
   print("\nPreparing to perform a model test, heuristic =", heuristic)
-
-  print(f"RENDER is {render} at start of test()")
 
   # load the best performing network
   if load and not heuristic: 
@@ -1207,7 +1203,7 @@ if __name__ == "__main__":
   model = apply_to_all_models(model)
 
   # cpu training only on cluster or PC
-  if model.machine in ["cluster", "luke-PC"] and args.device is None: 
+  if model.machine in ["cluster", "luke-PC", "operator-PC"] and args.device is None: 
     model.set_device("cpu")
     if log_level > 0: print(" -> Setting to default 'cpu' device, to override use '--device cuda'")
   elif args.device is not None:
@@ -1278,7 +1274,6 @@ if __name__ == "__main__":
     if args.test:
       test_and_load(model, best_id=True)
     elif args.demo:
-      print("RENDER is TRUE when we call test_and_load()")
       test_and_load(model, demo=True, render=True, pause=False, best_id=True)
     exit()
 
