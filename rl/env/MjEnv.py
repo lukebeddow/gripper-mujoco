@@ -64,7 +64,8 @@ class MjEnv():
     XY_base_actions: bool = False
 
   def __init__(self, seed=None, noload=None, num_segments=None, finger_width=None, 
-               depth_camera=None, finger_thickness=None, finger_modulus=None):
+               depth_camera=None, finger_thickness=None, finger_modulus=None,
+               log_level=0):
     """
     A mujoco environment, optionally set the random seed or prevent loading a
     model, in which case the user should call load() before using the class
@@ -79,7 +80,7 @@ class MjEnv():
     self.task_xml_template = "gripper_task_{}.xml"
 
     # general class settings
-    self.log_level = 0
+    self.log_level = log_level
     self.disable_rendering = True
     self.prevent_reload = False
 
@@ -100,6 +101,7 @@ class MjEnv():
     # create mujoco instance
     self.mj = MjClass()
     if self.log_level == 0: self.mj.set.debug = False
+    elif self.log_level >= 4: self.mj.set.debug = True
 
     # seed the environment
     self.myseed = None
@@ -134,6 +136,9 @@ class MjEnv():
     """
 
     debug_fcn = False
+
+    # add printing if we are at a high log level
+    if self.log_level >= 3: debug_fcn = True
 
     if num_segments is None: num_segments = self.load_next.num_segments
     if width is None: width = self.load_next.finger_width
@@ -199,10 +204,10 @@ class MjEnv():
       r = random_train.integers(self.testing_xmls, self.testing_xmls + self.training_xmls)
       filename = self.task_xml_template.format(r)
 
-    if self.log_level > 1: 
+    if self.log_level >= 2: 
       print("Load path: ", self.mj.model_folder_path
             + self.mj.object_set_name + "/" + self.task_xml_folder)
-    if self.log_level > 0: print("Loading xml: ", filename)
+    if self.log_level >= 1: print("Loading xml: ", filename)
 
     # load the new task xml (old model/data are deleted)
     self.mj.load_relative(self.task_xml_folder + '/' + filename)
@@ -317,7 +322,7 @@ class MjEnv():
 
     # if we have exceeded our time limit
     if self.track.current_step >= self.params.max_episode_steps:
-      if self.log_level > 1 or self.mj.set.debug: 
+      if self.log_level >= 3 or self.mj.set.debug: 
         print("is_done() = true (in python) as max step number exceeded")
       return True
 
@@ -337,7 +342,7 @@ class MjEnv():
       self._set_rgbd_size(width, height)
     else:
       if self.log_level > 0:
-        print("Failed to initialise an RGBD camera, not enabled in compilation")
+        print("MjEnv() failed to initialise an RGBD camera, not enabled in compilation")
       self.params.depth_camera = False
 
     # return if the camera is running or not
@@ -371,7 +376,7 @@ class MjEnv():
     """
 
     if not self.rgbd_enabled:
-      if self.log_level > 2:
+      if self.log_level >= 3:
         print("MjClass rendering disabled by compilation, unabled to get RGBD image")
       return
 
@@ -989,8 +994,6 @@ class MjEnv():
     Perform an action and step the simulation until it is resolved
     """
 
-    t0 = time.time()
-
     # safety check: if step is called when done=true
     if self.track.is_done:
       raise RuntimeError("step has been called with done=true, use reset()")
@@ -1022,10 +1025,6 @@ class MjEnv():
     # track testing if this result has finished
     if done and self.test_in_progress:
       self._monitor_test()
-
-    t1 = time.time()
-
-    if self.log_level > 2: print("MjEnv step() time was ", t1 - t0)
 
     return to_return
 
@@ -1068,7 +1067,7 @@ class MjEnv():
 
       self.mj.render()
 
-      if self.log_level > 2:
+      if self.log_level >= 3:
         print('MjEnv render update:')
         print(f'\tStep: {self.track.current_step}')
         print(f'\tLast action: {self.track.last_action}')
@@ -1082,7 +1081,7 @@ class MjEnv():
     """
     Tidy up and finish everything
     """
-    if self.log_level > 0: print("Environment closed")
+    if self.log_level > 0: print("MjEnv() environment closed (this currently has no effect)")
 
 if __name__ == "__main__":
 
@@ -1093,7 +1092,7 @@ if __name__ == "__main__":
 
   mj.load_finger_width = 24e-3
 
-  mj.load("set7_xycamera_50i", num_segments=8, finger_width=28, finger_thickness=0.9e-3)
+  mj.load("set7_fullset_1500_50i_updated", num_segments=8, finger_width=28, finger_thickness=0.9e-3)
   mj._spawn_object()
 
   mj._set_rgbd_size(848, 480)

@@ -13,7 +13,8 @@ from dataclasses import dataclass, asdict
 from copy import deepcopy
 import cProfile
 
-import wandb
+# import wandb # only imported if actually used
+# import matplotlib # only imported if actually used
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -726,7 +727,7 @@ class TrainDQN():
 
       return
 
-  def __init__(self, run_name=None, group_name=None, device=None, use_wandb=None, 
+  def __init__(self, run_name=None, group_name=None, device=None, use_wandb=False, 
                no_plot=None, log_level=None, object_set=None, use_curriculum=None,
                num_segments=None, finger_thickness=None, finger_width=None,
                depth_camera=None, finger_modulus=None):
@@ -745,6 +746,7 @@ class TrainDQN():
     self.env = MjEnv(noload=True, num_segments=num_segments, depth_camera=depth_camera,
                      finger_thickness=finger_thickness, finger_width=finger_width,
                      finger_modulus=finger_modulus)
+    self.env.log_level = 0 if log_level is None else log_level
 
     # what machine are we on
     self.machine = self.env._get_machine()
@@ -767,7 +769,7 @@ class TrainDQN():
 
     # wandb options
     self.wandb_init_flag = False
-    self.use_wandb = use_wandb if use_wandb is not None else True
+    self.use_wandb = use_wandb
     self.wandb_note = ""
     self.wandb_project = "luke-gripper-mujoco"
     self.wandb_entity = "lbeddow"
@@ -901,6 +903,8 @@ class TrainDQN():
 
     # save weights and biases
     if self.use_wandb:
+      global wandb
+      import wandb
       wandb.init(project=self.wandb_project, entity=self.wandb_entity, 
                  name=self.run_name, config=self.get_params_dictionary(),
                  notes=self.wandb_note, group=self.group_name)
@@ -1021,12 +1025,12 @@ class TrainDQN():
       return
 
     if not self.wandb_init_flag:
-      if self.use_wandb:
-
-        wandb.init(project=self.wandb_project, entity=self.wandb_entity, 
-                  name=self.run_name, config=self.get_params_dictionary(),
-                  notes=self.wandb_note, group=self.group_name)
-        self.wandb_init_flag = True
+      global wandb
+      import wandb
+      wandb.init(project=self.wandb_project, entity=self.wandb_entity, 
+                name=self.run_name, config=self.get_params_dictionary(),
+                notes=self.wandb_note, group=self.group_name)
+      self.wandb_init_flag = True
 
     freq = self.params.wandb_freq_s if force is not True else 0
 
@@ -2152,7 +2156,8 @@ class TrainDQN():
       torch.use_deterministic_algorithms(mode=True)
 
   def profile(self, saveas="python_profile_results.xyz", network=None, loadexisting=False, 
-              episodes=10, seed=1234, id=None, folderpath=None, foldername=None):
+              episodes=10, seed=1234, id=None, folderpath=None, foldername=None,
+              path="/home/luke/mymujoco"):
     """
     Profile the training using CProfile tools. If loadexisting=False, first it
     trains long enough to fill the replay memory with enough samples, then
@@ -2199,10 +2204,10 @@ class TrainDQN():
     self.env.prevent_reload = True
 
     self.env.mj.tick()
-    cProfile.run(f"model.train(i_start={i_episode})", f"/home/luke/mymujoco/{saveas}")
+    cProfile.run(f"model.train(i_start={i_episode})", f"{path}/{saveas}")
     time_taken = self.env.mj.tock()
 
-    print(f"Profiling is now done, file saved at: /home/luke/mymujoco/{saveas}")
+    print(f"Profiling is now done, file saved at: {path}/{saveas}")
     print(f"Time taken was {time_taken:.3f} seconds")
 
     return time_taken
