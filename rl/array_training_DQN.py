@@ -1158,6 +1158,7 @@ if __name__ == "__main__":
   parser.add_argument("--results",            action="store_true") # print a table of results.txt
   parser.add_argument("--print-results",      action="store_true") # prepare and print all results
   parser.add_argument("--delete-results",     action="store_true") # delete any results.txt data
+  parser.add_argument("--log-rate",           type=int, default=None) # log rate for episodes, so every X episodes
 
   args = parser.parse_args()
 
@@ -1225,6 +1226,9 @@ if __name__ == "__main__":
 
   # are we rendering
   if args.render is True: model.env.disable_rendering = False
+
+  # have we been given a rate to log episodes
+  if args.log_rate is not None: model.log_rate_for_episodes = args.log_rate
 
   if log_level > 0:
     print(" -> Run group is:", model.group_name)
@@ -1634,19 +1638,6 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  # only change is to go from 10 repeats to 20 repeats
-  # EI:1, Sensors:0 = 1:20        <- test this, running x20
-  # EI:2, Sensors:0 = 21:40
-  # EI:3, Sensors:0 = 41:60
-  # EI:1, Sensors:1 = 61:80       <- test this, done x20
-  # EI:2, Sensors:1 = 81:100
-  # EI:3, Sensors:1 = 101:120
-  # EI:1, Sensors:2 = 121:140     <- test this, done x20
-  # EI:2, Sensors:2 = 141:160
-  # EI:3, Sensors:2 = 161:180
-  # EI:1, Sensors:3 = 181:200     <- test this, done x20
-  # EI:2, Sensors:3 = 201:220     <- test this, done x20
-  # EI:3, Sensors:3 = 221:240     <- test this, done x20
   elif training_type == "paper_baseline_3.1":
 
     vary_1 = [
@@ -1842,19 +1833,6 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  # heuristic
-  # EI:1, Sensors:0 = 1:5
-  # EI:2, Sensors:0 = 6:10
-  # EI:3, Sensors:0 = 11:15
-  # EI:1, Sensors:1 = 16:20
-  # EI:2, Sensors:1 = 21:25
-  # EI:3, Sensors:1 = 26:30
-  # EI:1, Sensors:2 = 31:35
-  # EI:2, Sensors:2 = 36:40
-  # EI:3, Sensors:2 = 41:45
-  # EI:1, Sensors:3 = 46:50
-  # EI:2, Sensors:3 = 51:55
-  # EI:3, Sensors:3 = 56:60
   elif training_type == "paper_baseline_4_heuristic":
 
     vary_1 = [
@@ -2035,23 +2013,6 @@ if __name__ == "__main__":
 
     # prevent gripper from going lower than -12.5mm (see myfunctions.cpp for variable hardcoding)
     model.env.mj.prevent_table_impacts(True)
-
-  elif training_type == "vary_others":
-
-    vary_1 = None
-    vary_2 = None
-    vary_3 = None
-    repeats = None
-    param_1_name = None
-    param_2_name = None
-    param_3_name = None
-    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
-                                                param_3=vary_3, repeats=repeats)
-    baseline_args = {
-      "param_1_arg" : param_1,
-      "param_2_arg" : param_2,
-      "param_3_arg" : param_3
-    }
 
   elif training_type == "new_sensor_rewards":
 
@@ -2574,6 +2535,29 @@ if __name__ == "__main__":
     # use the new object set
     model.params.object_set = "set7_fullset_1500_50i_updated"
 
+    # FOR TESTING - DELETE BEFORE A PROPER TRAINING
+    model.params.min_memory_replay = 0
+
+    # test more often
+    model.params.test_freq = 2000
+    model.params.save_freq = 2000
+
+  elif training_type == "example_template":
+
+    vary_1 = None
+    vary_2 = None
+    vary_3 = None
+    repeats = None
+    param_1_name = None
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "param_1_arg" : param_1,
+      "param_2_arg" : param_2,
+      "param_3_arg" : param_3
+    }
 
   else: raise RuntimeError(f"array_training_DQN.py: training_type of '{training_type}' not recognised")
 
