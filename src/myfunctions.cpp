@@ -3128,6 +3128,13 @@ Forces_faster get_object_forces_faster(const mjModel* model, mjData* data)
   return oh_.extract_forces_faster(model, data);
 }
 
+void set_object_visibility(mjModel* model, bool visible)
+{
+  /* set the colour of the main object */
+
+  oh_.set_object_visibility(model, visible);
+}
+
 void set_object_colour(mjModel* model, std::vector<float> rgba)
 {
   /* set the colour of the main object */

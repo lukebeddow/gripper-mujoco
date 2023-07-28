@@ -1098,9 +1098,9 @@ if __name__ == "__main__":
 
   mj._set_rgbd_size(848, 480)
 
-  rgb, depth = mj._get_rgbd_image_fast()
-  print(f"fast rgb size is {rgb.shape}")
-  print(f"fast depth size is {depth.shape}")
+  # rgb, depth = mj._get_rgbd_image_fast()
+  # print(f"fast rgb size is {rgb.shape}")
+  # print(f"fast depth size is {depth.shape}")
 
   rgb, depth = mj._get_rgbd_image()
   print(f"rgb size is {rgb.shape}")

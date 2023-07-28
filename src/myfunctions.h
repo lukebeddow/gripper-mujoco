@@ -146,6 +146,7 @@ void spawn_object(mjModel* model, mjData* data, int idx, QPos pose);
 QPos get_object_qpos(mjModel* model, mjData* data);
 Forces get_object_forces(const mjModel* model, mjData* data);
 Forces_faster get_object_forces_faster(const mjModel* model, mjData* data);
+void set_object_visibility(mjModel* model, bool visible);
 void set_object_colour(mjModel* model, std::vector<float> rgba);
 void set_all_objects_colour(mjModel* model, std::vector<float> rgba);
 void set_ground_colour(mjModel* model, std::vector<float> rgba);
