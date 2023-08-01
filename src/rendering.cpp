@@ -56,6 +56,9 @@ int camera_height = 480;
 // data storage
 luke::RGBD rgbd_data;
 
+// do we disable shadows/reflections for camera rendering
+constexpr bool camera_no_shadow_reflection = false;
+
 // global viewport object
 mjrRect window_viewport = {0, 0, 0, 0};
 mjrRect camera_viewport = {0, 0, 0, 0};
@@ -324,10 +327,11 @@ void render_camera()
         std::runtime_error("render_camera() called without first calling init_camera()");
     }
 
-    // // no noticeable speedup from this
-    // // disable shadows and reflections which require extra rendering passes
-    // scn.flags[mjRND_SHADOW] = 0;
-    // scn.flags[mjRND_REFLECTION] = 0;
+    if (camera_no_shadow_reflection) {
+        // disable shadows and reflections which require extra rendering passes
+        scn.flags[mjRND_SHADOW] = 0;
+        scn.flags[mjRND_REFLECTION] = 0;
+    }
 
     // update scene and render
     mjv_updateScene(m, d, &opt, NULL, &cam, mjCAT_ALL, &scn);

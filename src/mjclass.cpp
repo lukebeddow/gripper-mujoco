@@ -325,7 +325,7 @@ std::string MjClass::file_from_from_command_line(int argc, char **argv)
   if (segments.empty()) { segments = "8"; };
   if (width.empty()) { width = "28"; };
   if (gripper.empty()) { gripper = "gripper_N" + segments + "_" + width; };
-  if (object_set.empty()) { object_set = "set7_fullset_1500_50i"; };
+  if (object_set.empty()) { object_set = "set7_fullset_1500_50i_updated"; };
   if (task.empty()) { task = "0"; };
   if (path.empty()) { path = LUKE_MJCF_PATH; };
 
@@ -627,6 +627,7 @@ bool MjClass::init_rgbd()
 
   render::init_camera(*this);
   render_init = true;
+  render_reload = false;
   render::read_rgbd(); // first output is always incorrect camera view
 
   return true;
@@ -652,6 +653,7 @@ void MjClass::render_RGBD()
   }
   else if (render_reload) {
     render::reload_for_rendering(*this);
+    render_reload = false; // no need to reload again
   }
 
   render::render_camera();

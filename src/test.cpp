@@ -161,16 +161,34 @@ int main(int argc, char** argv)
 
   MjClass mjObj;
   std::string filepath = mjObj.file_from_from_command_line(argc, argv);
+
+  mjObj.s_.auto_set_timestep = false;
+  mjObj.s_.mujoco_timestep = 3.187e-3;
+
   mjObj.load(filepath);
 
-  // change settings
-  mjObj.s_.mujoco_timestep = 1.8e-3;
-  mjObj.s_.sensor_n_prev_steps = 2;
-  mjObj.s_.sensor_sample_mode = MjType::Sample::change;
+  // // change settings
+  // mjObj.s_.mujoco_timestep = 1.8e-3;
+  // mjObj.s_.sensor_n_prev_steps = 2;
+  // mjObj.s_.sensor_sample_mode = MjType::Sample::change;
 
   // apply changes and begin simulating
   mjObj.reset();
   mjObj.spawn_object(0);
+
+  int num = 100;
+
+  mjObj.tick();
+
+  for (int i = 0; i < num; i++) {
+    luke::RGBD rgbd_image = mjObj.get_RGBD();
+  }
+
+  std::cout << "Time taken was " << mjObj.tock() << " seconds\n";
+
+  return 0;
+
+  // old
   mjObj.set_step_target(6000, 7000, 0);
 
   // disable or enable sensors

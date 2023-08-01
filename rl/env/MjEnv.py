@@ -1087,19 +1087,24 @@ if __name__ == "__main__":
 
   # import pickle
 
-  mj = MjEnv(noload=True, depth_camera=True)
+  mj = MjEnv(noload=True, depth_camera=True, log_level=2, seed=122)
   mj.disable_rendering = True
-
-  mj.load_finger_width = 24e-3
 
   mj.load("set7_fullset_1500_50i_updated", num_segments=8, finger_width=28, finger_thickness=0.9e-3)
   mj._spawn_object()
 
   mj._set_rgbd_size(848, 480)
 
-  # rgb, depth = mj._get_rgbd_image_fast()
-  # print(f"fast rgb size is {rgb.shape}")
-  # print(f"fast depth size is {depth.shape}")
+  num = 10000
+
+  mj.mj.tick()
+
+  for i in range(num):
+    mj._get_rgbd_image()
+
+  time_taken = mj.mj.tock()
+
+  print(f"Time taken for {num} fcn calls was {time_taken:.3f} seconds")
 
   rgb, depth = mj._get_rgbd_image()
   print(f"rgb size is {rgb.shape}")
