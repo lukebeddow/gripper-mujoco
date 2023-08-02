@@ -54,6 +54,8 @@ int camera_width = 640;
 int camera_height = 480;
 
 // data storage
+luke::rgbint* rgb;
+float* depth;
 luke::RGBD rgbd_data;
 
 // do we disable shadows/reflections for camera rendering
@@ -586,30 +588,30 @@ void create_camera_window(int width, int height)
     // create the viewport for the camera
     camera_viewport =  mjr_maxViewport(&con);
 
-    // // reallocate data buffers
-    // if (rgb_ != NULL) std::free(rgb_);
-    // if (depth_ != NULL) std::free(depth_);
-
-    // int X = height * width;
-    // rgb_ = (unsigned char*)std::malloc(3 * X);
-    // depth_ = (float*)std::malloc(sizeof(float) * X);
-
     // reallocate data buffers
-    if (rgbd_data.rgb != NULL) std::free(rgbd_data.rgb);
-    if (rgbd_data.depth != NULL) std::free(rgbd_data.depth);
+    if (rgb != NULL) std::free(rgb);
+    if (depth != NULL) std::free(depth);
 
     int X = height * width;
-    rgbd_data.rgb = (luke::rgbint*)std::malloc(3 * X);
-    rgbd_data.depth = (float*)std::malloc(sizeof(float) * X);
-    rgbd_data.H = height;
-    rgbd_data.W = width;
+    rgb = (luke::rgbint*)std::malloc(3 * X);
+    depth = (float*)std::malloc(sizeof(float) * X);
+
+    // // reallocate data buffers
+    // if (rgbd_data.rgb != NULL) std::free(rgbd_data.rgb);
+    // if (rgbd_data.depth != NULL) std::free(rgbd_data.depth);
+
+    // int X = height * width;
+    // rgbd_data.rgb = (luke::rgbint*)std::malloc(3 * X);
+    // rgbd_data.depth = (float*)std::malloc(sizeof(float) * X);
+    // rgbd_data.H = height;
+    // rgbd_data.W = width;
 }
 
 luke::RGBD read_rgbd()
 {
     /* get an rgbd image out of the simulation */
     
-    if (not camera_initialised or rgbd_data.rgb == NULL or rgbd_data.depth == NULL) {
+    if (not camera_initialised) {
         throw std::runtime_error("render::read_rgbd() called but rendering not initialised");
     }
 
@@ -617,17 +619,18 @@ luke::RGBD read_rgbd()
     int W = camera_width;
 
     // read the depth camera using mujoco
-    mjr_readPixels(rgbd_data.rgb, rgbd_data.depth, camera_viewport, &con);
+    mjr_readPixels(rgb, depth, camera_viewport, &con);
+    // mjr_readPixels(rgbd_data.rgb, rgbd_data.depth, camera_viewport, &con);
+
+    for (int i = 0;  i < 3*W*H; i++) {
+        rgbd_data.rgb_vec.push_back(rgb[i]);
+    }
+
+    for (int i = 0;  i < W*H; i++) {
+        rgbd_data.depth_vec.push_back(depth[i]);
+    }
 
     return rgbd_data;
-
-    // for (int i = 0;  i < 3*W*H; i++) {
-    //     output.rgb.push_back((luke::rgbint)rgb_[i]);
-    // }
-
-    // for (int i = 0;  i < W*H; i++) {
-    //     output.depth.push_back(depth_[i]);
-    // }
 
     // // this code overwrites the rgb_ data, which we don't want
     // if (render_depth_flag) {

@@ -394,6 +394,9 @@ struct RGBD
   rgbint* rgb;
   float* depth;
 
+  std::vector<rgbint> rgb_vec;
+  std::vector<float> depth_vec;
+
   int H;
   int W;
 };

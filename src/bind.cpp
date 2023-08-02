@@ -8,20 +8,21 @@ constexpr bool debug_bind = false;
 namespace py = pybind11;
 
 // numpy conversion helpers
-// static py::array_t<luke::rgbint> rgbvec_to_array(std::vector<luke::rgbint>& vec)
-// {
-//   return py::array(vec.size(), vec.data());
-// }
+static py::array_t<luke::rgbint> rgbvec_to_array(std::vector<luke::rgbint>& vec)
+{
+  return py::array(vec.size(), vec.data());
+}
 
-// static py::array_t<float> depthvec_to_array(std::vector<float>& vec)
-// {
-//   return py::array(vec.size(), vec.data());
-// }
+static py::array_t<float> depthvec_to_array(std::vector<float>& vec)
+{
+  return py::array(vec.size(), vec.data());
+}
 
-// static py::tuple RGBD_struct_to_tuple(luke::RGBD rgb_struct)
-// {
-//   return py::make_tuple(rgbvec_to_array(rgb_struct.rgb), depthvec_to_array(rgb_struct.depth));
-// }
+static py::tuple RGBD_struct_to_tuple(luke::RGBD rgb_struct)
+{
+  return py::make_tuple(rgbvec_to_array(rgb_struct.rgb_vec), 
+    depthvec_to_array(rgb_struct.depth_vec));
+}
 
 static py::array_t<luke::gfloat> floatvec_to_array(std::vector<luke::gfloat>& vec)
 {
@@ -89,14 +90,14 @@ PYBIND11_MODULE(bind, m) {
     .def("read_existing_RGBD", &MjClass::read_existing_RGBD)
     .def("set_RGBD_size", &MjClass::set_RGBD_size)
     .def("get_RGBD", &MjClass::get_RGBD)
-    // .def("get_RGBD_numpy",
-    //   [](MjClass &mj) {
-    //     return RGBD_struct_to_tuple(mj.get_RGBD());
-    //   })
     .def("get_RGBD_numpy",
       [](MjClass &mj) {
-        return RGBD_ptr_to_tuple(mj.get_RGBD());
+        return RGBD_struct_to_tuple(mj.get_RGBD());
       })
+    // .def("get_RGBD_numpy",
+    //   [](MjClass &mj) {
+    //     return RGBD_ptr_to_tuple(mj.get_RGBD());
+    //   })
 
     // sensing
     // none atm
