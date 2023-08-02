@@ -384,6 +384,9 @@ class MjEnv():
     # these come as (width x height x channels)
     rgb, depth = self.mj.get_RGBD_numpy()
 
+    # rgb = np.reshape(rgb, (self.rgbd_height, self.rgbd_width, 3))
+    # depth = np.reshape(depth, (self.rgbd_height, self.rgbd_width))
+
     # numpy likes image arrays like this: height x width x channels
     # torch likes image arrays like this: channels x width x height
     rgb = np.einsum("ijk->kij", rgb)
@@ -1087,6 +1090,8 @@ if __name__ == "__main__":
 
   # import pickle
 
+  from guppy import hpy; h=hpy()
+
   mj = MjEnv(noload=True, depth_camera=True, log_level=2, seed=122)
   mj.disable_rendering = True
 
@@ -1095,7 +1100,11 @@ if __name__ == "__main__":
 
   mj._set_rgbd_size(848, 480)
 
+  # start_heap = h.heap()
+
   num = 10000
+
+  # test = []
 
   mj.mj.tick()
 
@@ -1105,6 +1114,15 @@ if __name__ == "__main__":
   time_taken = mj.mj.tock()
 
   print(f"Time taken for {num} fcn calls was {time_taken:.3f} seconds")
+
+  # end_heap = h.heap()
+  # print(f"Start heap size is {start_heap.size * 1e-6:.1f} MB")
+  # print(f"End heap size is {end_heap.size * 1e-6:.1f} MB")
+
+  # del test
+
+  # final_heap = h.heap()
+  # print(f"Final heap size is {final_heap.size * 1e-6:.1f} MB")
 
   rgb, depth = mj._get_rgbd_image()
   print(f"rgb size is {rgb.shape}")

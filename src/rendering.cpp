@@ -605,6 +605,27 @@ void create_camera_window(int width, int height)
     // rgbd_data.depth = (float*)std::malloc(sizeof(float) * X);
     // rgbd_data.H = height;
     // rgbd_data.W = width;
+
+    // rgbd_data.rgb = (luke::rgbint*)std::malloc(3 * X);
+    // rgbd_data.depth = (float*)std::malloc(sizeof(float) * X);
+    // rgbd_data.H = height;
+    // rgbd_data.W = width;
+
+    // // empty the current pointer and create a new one
+    // int X = height * width;
+    // rgbd_data.rgb_ptr.reset(new luke::rgbint[3*X]);
+    // rgbd_data.depth_ptr.reset(new float[X]);
+    // rgbd_data.W = width;
+    // rgbd_data.H = height;
+
+    // empty and resize the vectors
+    // int X = height * width;
+    // rgbd_data.rgb_vec.clear();
+    // rgbd_data.depth_vec.clear();
+    // rgbd_data.rgb_vec.resize(3 * X);
+    // rgbd_data.depth_vec.resize(X);
+    // rgbd_data.W = width;
+    // rgbd_data.H = height;
 }
 
 luke::RGBD read_rgbd()
@@ -618,9 +639,15 @@ luke::RGBD read_rgbd()
     int H = camera_height;
     int W = camera_width;
 
+    // luke::RGBD new_data;
+    // int X = H * W;
+    // new_data.rgb = (luke::rgbint*)std::malloc(3 * X);
+    // new_data.depth = (float*)std::malloc(sizeof(float) * X);
+    // new_data.W = W;
+    // new_data.H = H;
+
     // read the depth camera using mujoco
     mjr_readPixels(rgb, depth, camera_viewport, &con);
-    // mjr_readPixels(rgbd_data.rgb, rgbd_data.depth, camera_viewport, &con);
 
     for (int i = 0;  i < 3*W*H; i++) {
         rgbd_data.rgb_vec.push_back(rgb[i]);
@@ -629,6 +656,29 @@ luke::RGBD read_rgbd()
     for (int i = 0;  i < W*H; i++) {
         rgbd_data.depth_vec.push_back(depth[i]);
     }
+
+    // mjr_readPixels(rgbd_data.rgb, rgbd_data.depth, camera_viewport, &con);
+    // mjr_readPixels(rgbd_data.rgb_ptr.get(), rgbd_data.depth_ptr.get(), camera_viewport, &con);
+    // mjr_readPixels(&rgbd_data.rgb_vec[0], &rgbd_data.depth_vec[0], camera_viewport, &con);
+
+    // now copy into a std::vector to fix memory issues
+    // rgbd_data.rgb_vec.clear();
+    // rgbd_data.depth_vec.clear();
+    // rgbd_data.rgb_vec.insert(rgbd_data.rgb_vec.end(), 
+    //     &rgbd_data.rgb_ptr.get()[0], &rgbd_data.rgb_ptr.get()[3 * H * W]);
+    // rgbd_data.depth_vec.insert(rgbd_data.depth_vec.end(), 
+    //     &rgbd_data.depth_ptr.get()[0], &rgbd_data.depth_ptr.get()[H * W]);
+
+    // for (int i = 0;  i < 3*W*H; i++) {
+    //     rgbd_data.rgb_vec[i] = new_data.rgb[i];
+    // }
+
+    // for (int i = 0;  i < W*H; i++) {
+    //     rgbd_data.depth_vec[i] = new_data.depth[i];
+    // }
+
+    // if (new_data.rgb != NULL) std::free(new_data.rgb);
+    // if (new_data.depth != NULL) std::free(new_data.depth);
 
     return rgbd_data;
 

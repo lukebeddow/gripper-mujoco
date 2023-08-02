@@ -1643,7 +1643,8 @@ class TrainDQN():
       if self.log_level == 1 and (i_episode - 1) % self.log_rate_for_episodes == 0:
         print("Begin training episode", i_episode, flush=True)
       elif self.log_level > 1:
-        print("Begin training episode", i_episode, flush=True)
+        print(f"Begin training episode {i_episode} at {datetime.now().strftime('%H:%M')}")
+        # print("Begin training episode", i_episode, flush=True)
 
       self.run_episode(i_episode)
 
@@ -2296,7 +2297,7 @@ if __name__ == "__main__":
 
   # ----- train ----- #
 
-  # train
+  # # train
   # net = [150, 100, 50]
   # model.env.disable_rendering = False
   # model.env.mj.set.debug = False

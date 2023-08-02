@@ -8,20 +8,32 @@ constexpr bool debug_bind = false;
 namespace py = pybind11;
 
 // numpy conversion helpers
-static py::array_t<luke::rgbint> rgbvec_to_array(std::vector<luke::rgbint>& vec)
+static py::array_t<luke::rgbint> rgbvec_to_array(std::vector<luke::rgbint>& vec, int W, int H)
 {
-  return py::array(vec.size(), vec.data());
+  // return py::array(vec.size(), vec.data());
+  return py::array(
+    {W, H, 3},        // shape
+    {3*1, W*3*1, 1},  // strides (1 byte for uint8)
+    vec.data()
+  );
 }
 
-static py::array_t<float> depthvec_to_array(std::vector<float>& vec)
+static py::array_t<float> depthvec_to_array(std::vector<float>& vec, int W, int H)
 {
-  return py::array(vec.size(), vec.data());
+  // return py::array(vec.size(), vec.data());
+  return py::array(
+    {W, H, 1},        // shape
+    {1*4, W*1*4, 4},  // strides (4 bytes for float)
+    vec.data()
+  );
 }
 
 static py::tuple RGBD_struct_to_tuple(luke::RGBD rgb_struct)
 {
-  return py::make_tuple(rgbvec_to_array(rgb_struct.rgb_vec), 
-    depthvec_to_array(rgb_struct.depth_vec));
+  return py::make_tuple(
+    rgbvec_to_array(rgb_struct.rgb_vec, rgb_struct.W, rgb_struct.H), 
+    depthvec_to_array(rgb_struct.depth_vec, rgb_struct.W, rgb_struct.H)
+  );
 }
 
 static py::array_t<luke::gfloat> floatvec_to_array(std::vector<luke::gfloat>& vec)
@@ -47,7 +59,7 @@ static py::array_t<float> depthptr_to_array(float* data, int W, int H)
   );
 }
 
-static py::tuple RGBD_ptr_to_tuple(luke::RGBD rgb_struct)
+static py::tuple RGBD_ptr_to_tuple(luke::RGBD& rgb_struct)
 {
   return py::make_tuple(
     rgbptr_to_array(rgb_struct.rgb, rgb_struct.W, rgb_struct.H),
@@ -96,7 +108,12 @@ PYBIND11_MODULE(bind, m) {
       })
     // .def("get_RGBD_numpy",
     //   [](MjClass &mj) {
-    //     return RGBD_ptr_to_tuple(mj.get_RGBD());
+    //     luke::RGBD x = mj.get_RGBD();
+    //     return RGBD_ptr_to_tuple(x);
+    //     // std::free(x.rgb);
+    //     // std::free(x.depth);
+    //     // return y;
+
     //   })
 
     // sensing
@@ -1090,14 +1107,14 @@ PYBIND11_MODULE(bind, m) {
     ;
   }
 
-  #if !defined(LUKE_CLUSTER)
-    {py::class_<luke::RGBD>(m, "RGBD")
-      .def(py::init<>())
-      .def_readonly("rgb", &luke::RGBD::rgb)
-      .def_readonly("depth", &luke::RGBD::depth)
-      ;
-    }
-  #endif
+  // #if !defined(LUKE_CLUSTER)
+  //   {py::class_<luke::RGBD>(m, "RGBD")
+  //     .def(py::init<>())
+  //     .def_readonly("rgb", &luke::RGBD::rgb)
+  //     .def_readonly("depth", &luke::RGBD::depth)
+  //     ;
+  //   }
+  // #endif
 
   /* py::overload_cast requires c++14 */
 
