@@ -64,7 +64,8 @@ class MjEnv():
     XY_base_actions: bool = False
 
   def __init__(self, seed=None, noload=None, num_segments=None, finger_width=None, 
-               depth_camera=None, finger_thickness=None, finger_modulus=None):
+               depth_camera=None, finger_thickness=None, finger_modulus=None,
+               log_level=0):
     """
     A mujoco environment, optionally set the random seed or prevent loading a
     model, in which case the user should call load() before using the class
@@ -79,7 +80,7 @@ class MjEnv():
     self.task_xml_template = "gripper_task_{}.xml"
 
     # general class settings
-    self.log_level = 0
+    self.log_level = log_level
     self.disable_rendering = True
 
     # initialise class variables
@@ -1090,31 +1091,28 @@ if __name__ == "__main__":
 
   # import pickle
 
-  mj = MjEnv(noload=True, depth_camera=True)
+  mj = MjEnv(noload=True, depth_camera=True, log_level=2, seed=122)
   mj.disable_rendering = True
+  mj.mj.set.mujoco_timestep = 3.187e-3
+  mj.mj.set.auto_set_timestep = False
 
-  mj.load_finger_width = 24e-3
-
-  mj.load("set7_xycamera_50i", num_segments=8, finger_width=28, finger_thickness=0.9e-3)
-
-  mj.render()
-
-  print("getting rgbd image now")
-
-  mj._get_rgbd_image()
-  mj._get_rgbd_image()
-
-  print("before set size")
-  mj._set_rgbd_size(360, 280)
-  print("after set size")
-
-  print("before set size")
-  mj._set_rgbd_size(320, 240)
-  print("after set size")
-
-  mj._set_rgbd_size(50, 50)
-
+  mj.load("set7_fullset_1500_50i_updated", num_segments=8, finger_width=28, finger_thickness=0.9e-3)
   mj._spawn_object()
+  mj._set_rgbd_size(848, 480)
+
+  num = 10_000
+  mj.mj.tick()
+
+  for i in range(num):
+    mj._get_rgbd_image()
+
+  time_taken = mj.mj.tock()
+  print(f"Time taken for {num} fcn calls was {time_taken:.3f} seconds")
+
+
+  rgb, depth = mj._get_rgbd_image()
+  print(f"rgb size is {rgb.shape}")
+  print(f"depth size is {depth.shape}")
 
   mj._plot_rgbd_image()
 

@@ -19,11 +19,12 @@ MJCF_PATH = /home/luke/mymujoco/mjcf
 
 # local machine library locations
 PYTHON_PATH = /usr/include/python3.6m
-PYBIND_PATH = /home/luke/pybind11
+PYBIND_PATH = /home/luke/repo/pybind11
 ARMA_PATH = # none, use system library
-MUJOCO_PATH = /home/luke/mujoco-2.1.5
+MUJOCO_PATH = /home/luke/repo/mujoco/mujoco-2.1.5
+MUJOCO_LIB = $(MUJOCO_PATH)/lib
 RENDER_PATH = # none, use system library
-CORE_LIBS = -L$(MUJOCO_PATH)/lib -lmujoco -larmadillo
+CORE_LIBS = -L$(MUJOCO_LIB) -lmujoco -larmadillo
 RENDER_LIBS = -lglfw
 DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
 						 -DLUKE_MACHINE='"$(MACHINE)"'
@@ -31,33 +32,53 @@ DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
 # extras
 MAKEFLAGS += -j4 # jN => use N parallel cores
 
-# ----- compiling on the cluster with the old mujoco version ----- #
-ifeq ($(filter cluster-old, $(MAKECMDGOALS)), cluster-old)
+# ----- compiling on lukes laptop ----- #
+ifeq ($(findstring luke, $(MAKECMDGOALS)), luke)
 
-.PHONY: cluster-old
-cluster-old: cluster
+# set this command goal as a phony target (important)
+.PHONY: luke
 
 # what machine are we compiling for
-MACHINE = cluster
+MACHINE = luke-laptop
 
-# cluster mjcf files location (model files like gripper/objects)
-MJCF_PATH = /home/lbeddow/mymujoco/mjcf
+# mjcf files location (model files like gripper/objects)
+MJCF_PATH = /home/luke/mymujoco/mjcf
 
-# cluster library locations
-PYTHON_PATH = /share/apps/python-3.6.9/include/python3.6m
-PYBIND_PATH = /home/lbeddow/clusterlibs/pybind11
-ARMA_PATH = /home/lbeddow/clusterlibs/armadillo-code
-MUJOCO_PATH = /home/lbeddow/clusterlibs/mujoco/mujoco210
+# local machine library locations
+PYTHON_PATH = /usr/include/python3.6m
+PYBIND_PATH = /home/luke/repo/pybind11
+ARMA_PATH = # none, use system library
+MUJOCO_PATH = /home/luke/repo/mujoco/mujoco-2.1.5
+MUJOCO_LIB = $(MUJOCO_PATH)/lib
+
+# are we compiling a specific mujoco version
+ifeq ($(findstring 220, $(MAKECMDGOALS)), 220)
+.PHONY: 220
+MUJOCO_PATH = /home/luke/repo/mujoco/src/mujoco-2.2.0
+MUJOCO_LIB = $(MUJOCO_PATH)/build/lib
+ifeq ($(findstring debug, $(MAKECMDGOALS)), debug)
+MUJOCO_PATH = /home/luke/repo/mujoco/src/mujoco-2.2.0-debug
+MUJOCO_LIB = $(MUJOCO_PATH)/build/lib
+endif
+endif
+ifeq ($(findstring 237, $(MAKECMDGOALS)), 237)
+.PHONY: 237
+MUJOCO_PATH = /home/luke/repo/mujoco/mujoco-2.3.7
+MUJOCO_LIB = $(MUJOCO_PATH)/lib
+endif
+
 RENDER_PATH = # none, use system library
-CORE_LIBS = -L$(MUJOCO_PATH)/bin -lmujoco210 -lblas -llapack
-RENDER_LIBS = -lGL -lglew $(MUJOCO_PATH)/bin/libglfw.so.3
-DEFINE_VAR = -DLUKE_CLUSTER -DARMA_DONT_USE_WRAPPER \
-						 -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
+CORE_LIBS = -L$(MUJOCO_LIB) -lmujoco -larmadillo
+RENDER_LIBS = -lglfw
+DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
 						 -DLUKE_MACHINE='"$(MACHINE)"'
+
+# extras
+MAKEFLAGS += -j4 # jN => use N parallel cores
 
 endif
 
-# ----- compiling on the cluster, new mujoco version ----- #
+# ----- compiling on the cluster ----- #
 ifeq ($(filter cluster, $(MAKECMDGOALS)), cluster)
 
 # phony target for cluster is defined in Makefile
@@ -73,8 +94,9 @@ PYTHON_PATH = /share/apps/python-3.6.9/include/python3.6m
 PYBIND_PATH = /home/lbeddow/clusterlibs/pybind11
 ARMA_PATH = /home/lbeddow/clusterlibs/armadillo-code
 MUJOCO_PATH = /home/lbeddow/clusterlibs/mujoco/mujoco-2.1.5
+MUJOCO_LIB = $(MUJOCO_PATH)/lib
 RENDER_PATH = /home/lbeddow/clusterlibs/glfw
-CORE_LIBS = -L$(MUJOCO_PATH)/lib -lmujoco -lblas -llapack
+CORE_LIBS = -L$(MUJOCO_LIB) -lmujoco -lblas -llapack
 RENDER_LIBS = # none, no rendering
 DEFINE_VAR = -DLUKE_CLUSTER -DARMA_DONT_USE_WRAPPER \
 						 -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
@@ -82,62 +104,6 @@ DEFINE_VAR = -DLUKE_CLUSTER -DARMA_DONT_USE_WRAPPER \
 
 # we do not want to compile any rendering files
 PREVENT_RENDERING := 1
-
-endif
-
-# ----- compiling on lukes laptop, old mujoco version ----- #
-ifeq ($(filter luke-old, $(MAKECMDGOALS)), luke-old)
-
-# set this command goal as a phony target (important)
-.PHONY: luke-old
-
-# what machine are we compiling for
-MACHINE = luke-laptop
-
-# mjcf files location (model files like gripper/objects)
-MJCF_PATH = /home/luke/mymujoco/mjcf
-
-# local machine library locations
-PYTHON_PATH = /usr/include/python3.6m
-PYBIND_PATH = /home/luke/pybind11
-ARMA_PATH = # none, use system library
-MUJOCO_PATH = /home/luke/.mujoco/mujoco210
-RENDER_PATH = # none, use system library
-CORE_LIBS = -L$(MUJOCO_PATH)/bin -lmujoco210 -larmadillo
-RENDER_LIBS = -lGL -lglew $(MUJOCO_PATH)/bin/libglfw.so.3
-DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
-						 -DLUKE_MACHINE='"$(MACHINE)"'
-
-# extras
-MAKEFLAGS += -j8 # jN => use N parallel cores
-
-endif
-
-# ----- compiling on lukes laptop, new mujoco version ----- #
-ifeq ($(filter luke, $(MAKECMDGOALS)), luke)
-
-# set this command goal as a phony target (important)
-.PHONY: luke
-
-# what machine are we compiling for
-MACHINE = luke-laptop
-
-# mjcf files location (model files like gripper/objects)
-MJCF_PATH = /home/luke/mymujoco/mjcf
-
-# local machine library locations
-PYTHON_PATH = /usr/include/python3.6m
-PYBIND_PATH = /home/luke/pybind11
-ARMA_PATH = # none, use system library
-MUJOCO_PATH = /home/luke/mujoco-2.1.5
-RENDER_PATH = # none, use system library
-CORE_LIBS = -L$(MUJOCO_PATH)/lib -lmujoco -larmadillo
-RENDER_LIBS = -lglfw
-DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
-						 -DLUKE_MACHINE='"$(MACHINE)"'
-
-# extras
-MAKEFLAGS += -j8 # jN => use N parallel cores
 
 endif
 
@@ -158,8 +124,9 @@ PYTHON_PATH = /usr/include/python3.6m
 PYBIND_PATH = /home/luke/mymujoco/libs/pybind11
 ARMA_PATH = # none, use system library
 MUJOCO_PATH = /home/luke/mymujoco/libs/mujoco/mujoco-2.1.5
+MUJOCO_LIB = $(MUJOCO_PATH)/lib
 RENDER_PATH = # none, use system library
-CORE_LIBS = -L$(MUJOCO_PATH)/lib -lmujoco -larmadillo 
+CORE_LIBS = -L$(MUJOCO_LIB) -lmujoco -larmadillo 
 RENDER_LIBS = -lglfw
 DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
 						 -DLUKE_MACHINE='"$(MACHINE)"'
@@ -186,37 +153,10 @@ PYTHON_PATH = /usr/include/python3.8
 PYBIND_PATH = /home/luke/luke-gripper-mujoco/libs/pybind11
 ARMA_PATH = # none, use system library
 MUJOCO_PATH = /home/luke/luke-gripper-mujoco/libs/mujoco/mujoco-2.1.5
+MUJOCO_LIB = $(MUJOCO_PATH)/lib
 RENDER_PATH = # none, use system library
-CORE_LIBS = -L$(MUJOCO_PATH)/lib -lmujoco -larmadillo 
+CORE_LIBS = -L$(MUJOCO_LIB) -lmujoco -larmadillo 
 RENDER_LIBS = -lglfw
-DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
-						 -DLUKE_MACHINE='"$(MACHINE)"'
-
-# extras
-MAKEFLAGS += -j8 # jN => use N parallel cores
-
-endif
-
-# ----- compiling on the lab desktop PC ----- #
-ifeq ($(filter lab-old, $(MAKECMDGOALS)), lab-old)
-
-# set this command goal as a phony target (important)
-.PHONY: lab-old
-
-# what machine are we compiling for
-MACHINE = luke-PC
-
-# mjcf files location (model files like gripper/objects)
-MJCF_PATH = /home/luke/mymujoco/mjcf
-
-# local machine library locations
-PYTHON_PATH = /usr/include/python3.6m
-PYBIND_PATH = /home/luke/mymujoco/libs/pybind11
-ARMA_PATH = # none, use system library
-MUJOCO_PATH = /home/luke/mymujoco/libs/mujoco/mujoco210
-RENDER_PATH = # none, use system library
-CORE_LIBS = -L$(MUJOCO_PATH)/bin -lmujoco210 -larmadillo 
-RENDER_LIBS = -lGL -lglew $(MUJOCO_PATH)/bin/libglfw.so.3
 DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
 						 -DLUKE_MACHINE='"$(MACHINE)"'
 
@@ -242,8 +182,9 @@ PYTHON_PATH = /usr/include/python3.6m
 PYBIND_PATH = /home/luke/mymujoco/libs/pybind11
 ARMA_PATH = # none, use system library
 MUJOCO_PATH = /home/luke/mymujoco/libs/mujoco/mujoco-2.1.5
+MUJOCO_LIB = $(MUJOCO_PATH)/lib
 RENDER_PATH = # none, use system library
-CORE_LIBS = -L$(MUJOCO_PATH)/lib -lmujoco -larmadillo 
+CORE_LIBS = -L$(MUJOCO_LIB) -lmujoco -larmadillo 
 RENDER_LIBS = -lglfw
 DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
 			 -DLUKE_MACHINE='"$(MACHINE)"'

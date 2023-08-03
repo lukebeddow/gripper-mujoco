@@ -627,6 +627,7 @@ bool MjClass::init_rgbd()
 
   render::init_rendering(*this);
   render_init = true;
+  render_reload = false;
   render::read_rgbd(); // first output is always incorrect camera view
 
   return true;
@@ -652,6 +653,7 @@ void MjClass::render_RGBD()
   }
   else if (render_reload) {
     render::reload_for_rendering(*this);
+    render_reload = false;
   }
 
   render::render();

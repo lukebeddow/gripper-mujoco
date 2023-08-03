@@ -2516,6 +2516,54 @@ if __name__ == "__main__":
     # use the new object set
     model.params.object_set = "set7_xycamera_50i"
 
+  elif training_type == "cnn_trial_2":
+
+    # setup up a step size curriculum
+    levels_A = [
+      [8e-3, 0.025, 8e-3, 2e-3, 0.8],
+      [4e-3, 0.02,  6e-3, 2e-3, 0.4],
+      [2e-3, 0.015, 4e-3, 2e-3, 0.2],
+      [1e-3, 0.01,  2e-3, 2e-3, 0.2],
+    ]
+    thresholds_A = [10_000, 25_000, 50_000]
+    model.params.use_curriculum = True
+    model.curriculum_params["step_sizes"] = levels_A
+    model.curriculum_params["thresholds"] = thresholds_A
+    model.curriculum_fcn = functools.partial(curriculum_step_size, model)
+
+    vary_1 = [
+      "CNN_25_25",
+      "CNN_50_50"
+    ]
+    vary_2 = None
+    vary_3 = None
+    repeats = 4
+    param_1_name = "network"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    # do we limit stable grasps to a maximum allowable force
+    model.env.mj.set.stable_finger_force_lim = 100
+    model.env.mj.set.stable_palm_force_lim = 100
+
+    baseline_args = {
+      "network" : param_1,
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+    # use the new object set
+    model.params.object_set = "set7_fullset_1500_50i_updated"
+
+    # FOR TESTING - DELETE BEFORE A PROPER TRAINING
+    model.params.min_memory_replay = 0
+
+    # test more often
+    model.params.test_freq = 2000
+    model.params.save_freq = 2000
+
   else: raise RuntimeError(f"array_training_DQN.py: training_type of '{training_type}' not recognised")
 
   # note and printing information

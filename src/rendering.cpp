@@ -254,11 +254,11 @@ bool render()
             lukesensorfigshow(rect);
         }
 
-        // swap OpenGL buffers (blocking call due to v-sync)
-        glfwSwapBuffers(window);
+        // // swap OpenGL buffers (blocking call due to v-sync)
+        // glfwSwapBuffers(window);
 
-        // process pending GUI events, call GLFW callbacks
-        glfwPollEvents();
+        // // process pending GUI events, call GLFW callbacks
+        // glfwPollEvents();
 
         return true;
     }
