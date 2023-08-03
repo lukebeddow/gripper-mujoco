@@ -1644,102 +1644,27 @@ void step(mjModel* model, mjData* data)
 {
   /* make a simulation step */
 
+  // static bool first_call = true;
+
+  // if (first_call) {
+
+  //   // assign the control pointer on the first call
+  //   mjcb_control = control;
+  //   first_call = false;
+
+  //   // select the integrator
+  //   model->opt.integrator = mjINT_EULER;
+  //   // model->opt.integrator = mjINT_IMPLICIT;
+  // }
+
   // mj_step(model, data); // needs ctrl ptr assigned
 
+  // half stepping, only Euler integrator valid
   mj_step1(model, data);
   control(model, data); // since ctrl ptr not assigned
   mj_step2(model, data);
 
   return;
-
-  // mj_step1(model, data);
-
-  // /* 
-  // To make the 'leadscrews' non-backdriveable, we want no forces to be
-  // transferred from the finger to the finger platform/joints. So we will
-  // try wiping any forces, and trust that the momentum forces are sufficiently
-  // small.
-
-  // The joints to wipe are either:
-  //   finger_1_revolute_joint (1 + panda)
-  //   finger_2_revolute_joint (12 + panda)
-  //   finger_3_revolute_joint (23 + panda)
-  // or:
-  //   finger_1_segment_joint_1 (2 + panda)
-  //   finger_2_segment_joint_2 (13 + panda)
-  //   finger_3_segment_joint_3 (24 + panda)
-
-  // */   
-
-  // static std::vector<int> to_wipe {
-  //   j_.idx.gripper[j_.gripper.prismatic[0]],  // 0
-  //   j_.idx.gripper[j_.gripper.prismatic[1]],  // 11
-  //   j_.idx.gripper[j_.gripper.prismatic[2]],  // 22
-  //   j_.idx.gripper[j_.gripper.revolute[0]],   // 1
-  //   j_.idx.gripper[j_.gripper.revolute[1]],   // 12
-  //   j_.idx.gripper[j_.gripper.revolute[2]],   // 23
-  // };
-
-  // control(model, data);   // since ctrl pntr not assigned
-
-  // for (int i = 0; i < to_wipe.size(); i++) {
-  //   // all are (nv * 1), and nv = 34 for gripper, which = njnts
-  //   // data->qfrc_passive[to_wipe[i]] = 0;  // passive force
-  //   // data->efc_vel[to_wipe[i]] = 0;       // velocity in constraint space: J*qvel
-  //   // data->efc_aref[to_wipe[i]] = 0;      // reference pseudo-acceleartion
-  //   // data->qfrc_bias[to_wipe[i]] = 0;     // C(qpos, qvel)
-  //   // data->cvel[to_wipe[i]] = 0;          // com-based velcotiy [3D rot; 3D tran]
-
-  //   // data->qfrc_unc[to_wipe[i]] = 0;
-  //   // data->qacc_unc[to_wipe[i]] = 0;
-  // }
-
-  // // // for testing, applly known force to the end of the finger
-  // // data->xfrc_applied[11 * 6 + 1] = 10;
-
-  // mj_step2(model, data);
-  // return;
-
-  // mj_fwdActuation(model, data);
-  // mj_fwdAcceleration(model, data);
-  // mj_fwdConstraint(model, data);
-
-
-  // std::vector<mjtNum> qfrc;
-  // // std::cout << "qfrc constraint is ";
-  // for (int i = 0; i < to_wipe.size(); i++) {
-
-  //   // // wipe forces arising from constraints (contacts)
-  //   // qfrc.push_back(data->qfrc_constraint[to_wipe[i]]);
-  //   // data->qfrc_constraint[to_wipe[i]] = 0;
-  //   // // std::cout << data->qfrc_constraint[to_wipe[i]] << " ";
-  // } 
-  // // std::cout << "\n";
-
-  // // int j = 0;
-  // // for (int i : j_.gripper.prismatic) {
-  // //   data->ctrl[j_.num.panda + i] += -qfrc[j];
-  // //   j += 1;
-  // // }
-  // // for (int i : j_.gripper.revolute) {
-  // //   data->ctrl[j_.num.panda + i] += -qfrc[j];
-  // //   j += 1;
-  // // }
-  // // mj_fwdActuation(model, data);
-  // // mj_fwdAcceleration(model, data);
-  // // mj_fwdConstraint(model, data);
-
-  // mj_sensorAcc(model, data);
-  // mj_checkAcc(model, data);
-
-  // // compare forward and inverse solutions if enabled
-  // // if( mjENABLED(mjENBL_FWDINV) )
-  // if (model->opt.enableflags and mjENBL_FWDINV)
-  //     mj_compareFwdInv(model, data);
-
-  // mj_Euler(model, data);
-
-
 }
 
 void after_step(mjModel* model, mjData* data)
@@ -3200,6 +3125,13 @@ Forces_faster get_object_forces_faster(const mjModel* model, mjData* data)
 
   // use the faster version of the extract_forces() function
   return oh_.extract_forces_faster(model, data);
+}
+
+void set_object_visibility(mjModel* model, bool visible)
+{
+  /* set the colour of the main object */
+
+  oh_.set_object_visibility(model, visible);
 }
 
 void set_object_colour(mjModel* model, std::vector<float> rgba)

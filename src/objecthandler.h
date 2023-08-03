@@ -41,6 +41,9 @@ struct ObjectHandler {
   int live_object;
   std::string live_geom;
 
+  // are we showing objects not being used (default: no)
+  bool object_visibility = false;
+  
   // body ids for fingers and palm
   int f1_idx;
   int f2_idx;
@@ -151,6 +154,7 @@ struct ObjectHandler {
   bool check_contact_forces(const mjModel* model, mjData* data);
 
   // set object properties
+  void set_object_visibility(mjModel* model, bool visible);
   void set_colour(mjModel* model, std::vector<float> rgba);
   void set_all_colours(mjModel* model, std::vector<float> rgba);
   void set_ground_colour(mjModel* model, std::vector<float> rgba);

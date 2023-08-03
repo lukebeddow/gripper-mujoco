@@ -82,6 +82,7 @@ class MjEnv():
     # general class settings
     self.log_level = log_level
     self.disable_rendering = True
+    self.prevent_reload = False
 
     # initialise class variables
     self.test_in_progress = False
@@ -100,6 +101,7 @@ class MjEnv():
     # create mujoco instance
     self.mj = MjClass()
     if self.log_level == 0: self.mj.set.debug = False
+    elif self.log_level >= 4: self.mj.set.debug = True
 
     # seed the environment
     self.myseed = None
@@ -199,10 +201,10 @@ class MjEnv():
       r = random_train.integers(self.testing_xmls, self.testing_xmls + self.training_xmls)
       filename = self.task_xml_template.format(r)
 
-    if self.log_level > 1: 
+    if self.log_level >= 3: 
       print("Load path: ", self.mj.model_folder_path
             + self.mj.object_set_name + "/" + self.task_xml_folder)
-    if self.log_level > 0: print("Loading xml: ", filename)
+    if self.log_level >= 2: print("Loading xml: ", filename)
 
     # load the new task xml (old model/data are deleted)
     self.mj.load_relative(self.task_xml_folder + '/' + filename)
@@ -317,7 +319,7 @@ class MjEnv():
 
     # if we have exceeded our time limit
     if self.track.current_step >= self.params.max_episode_steps:
-      if self.log_level > 1 or self.mj.set.debug: 
+      if self.log_level >= 3 or self.mj.set.debug: 
         print("is_done() = true (in python) as max step number exceeded")
       return True
 
@@ -337,7 +339,7 @@ class MjEnv():
       self._set_rgbd_size(width, height)
     else:
       if self.log_level > 0:
-        print("Failed to initialise an RGBD camera, not enabled in compilation")
+        print("MjEnv() failed to initialise an RGBD camera, not enabled in compilation")
       self.params.depth_camera = False
 
     # return if the camera is running or not
@@ -371,7 +373,7 @@ class MjEnv():
     """
 
     if not self.rgbd_enabled:
-      if self.log_level > 2:
+      if self.log_level > 0:
         print("MjClass rendering disabled by compilation, unabled to get RGBD image")
       return
 
@@ -992,8 +994,6 @@ class MjEnv():
     Perform an action and step the simulation until it is resolved
     """
 
-    t0 = time.time()
-
     # safety check: if step is called when done=true
     if self.track.is_done:
       raise RuntimeError("step has been called with done=true, use reset()")
@@ -1026,10 +1026,6 @@ class MjEnv():
     if done and self.test_in_progress:
       self._monitor_test()
 
-    t1 = time.time()
-
-    if self.log_level > 2: print("MjEnv step() time was ", t1 - t0)
-
     return to_return
 
   def reset(self, hard=None, timestep=None, realworld=False):
@@ -1043,7 +1039,7 @@ class MjEnv():
     self.track = MjEnv.Track()
 
     # there is a small chance we reload a new random task
-    if not self.test_in_progress and not realworld:
+    if not self.test_in_progress and not realworld and not self.prevent_reload:
       if (random_train.random() < self.params.task_reload_chance
           or self.reload_flag):
         self._load_xml()
@@ -1071,15 +1067,15 @@ class MjEnv():
 
       self.mj.render()
 
-      if self.log_level > 2:
-        print('MjEnv render update:')
-        print(f'\tStep: {self.track.current_step}')
-        print(f'\tLast action: {self.track.last_action}')
-        print(f'\tLast reward: {self.track.last_reward:.3f}')
-        print(f'\tCumulative reward: {self.track.cumulative_reward:.3f}')
-        print(f'\tDone: {self.track.is_done}')
-        print(f'\tTesting: {self.test_in_progress}')
-        print()
+    if self.log_level >= 3:
+      print('MjEnv render update:')
+      print(f'\tStep: {self.track.current_step}')
+      print(f'\tLast action: {self.track.last_action}')
+      print(f'\tLast reward: {self.track.last_reward:.3f}')
+      print(f'\tCumulative reward: {self.track.cumulative_reward:.3f}')
+      print(f'\tDone: {self.track.is_done}')
+      print(f'\tTesting: {self.test_in_progress}')
+      print()
 
   def close(self):
     """

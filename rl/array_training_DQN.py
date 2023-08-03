@@ -716,7 +716,7 @@ def logging_job(model, run_name, group_name):
 def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 100, 50], target_update=50, 
                       memory_replay=75_000, state_steps=5, sensor_steps=1, z_state=True, sensor_mode=2,
                       state_mode=4, sensor_noise=0.025, state_noise=0.0, sensor_mu=0.05,
-                      state_mu=0.025, reward_style="mixed_v3", reward_options=[], 
+                      state_mu=0.025, reward_style="sensor_mixed", reward_options=[], 
                       scale_rewards=1.0, scale_penalties=1.0, penalty_termination=False,
                       num_segments=8, finger_thickness=0.9e-3, finger_width=28e-3,
                       max_episode_steps=250, eval_me=None, base_XY_actions=False):
@@ -930,8 +930,6 @@ def test_and_load(model, demo=False, render=False, pause=False, id=None, best_id
   Test overload where we load a specific model
   """
 
-  print(f"RENDER is {render} at start of test_and_load()")
-
   # set up the object set
   model.env.mj.model_folder_path = "/home/luke/mymujoco/mjcf"
 
@@ -956,14 +954,12 @@ def test(model, heuristic=False, trials_per_obj=10, render=False, pause=False, d
 
   print("\nPreparing to perform a model test, heuristic =", heuristic)
 
-  print(f"RENDER is {render} at start of test()")
-
   # load the best performing network
   if load and not heuristic: 
     if id is None: model.load(best_id=True)
     else: model.load(id=id)
 
-  # adjust settings
+  # adjust settingss
   if demo:
     model.env.params.test_trials_per_object = 1
     model.env.params.test_objects = 30
@@ -1278,7 +1274,6 @@ if __name__ == "__main__":
     if args.test:
       test_and_load(model, best_id=True)
     elif args.demo:
-      print("RENDER is TRUE when we call test_and_load()")
       test_and_load(model, demo=True, render=True, pause=False, best_id=True)
     exit()
 
@@ -1639,19 +1634,6 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  # only change is to go from 10 repeats to 20 repeats
-  # EI:1, Sensors:0 = 1:20        <- test this, running x20
-  # EI:2, Sensors:0 = 21:40
-  # EI:3, Sensors:0 = 41:60
-  # EI:1, Sensors:1 = 61:80       <- test this, done x20
-  # EI:2, Sensors:1 = 81:100
-  # EI:3, Sensors:1 = 101:120
-  # EI:1, Sensors:2 = 121:140     <- test this, done x20
-  # EI:2, Sensors:2 = 141:160
-  # EI:3, Sensors:2 = 161:180
-  # EI:1, Sensors:3 = 181:200     <- test this, done x20
-  # EI:2, Sensors:3 = 201:220     <- test this, done x20
-  # EI:3, Sensors:3 = 221:240     <- test this, done x20
   elif training_type == "paper_baseline_3.1":
 
     vary_1 = [
@@ -1847,19 +1829,6 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  # heuristic
-  # EI:1, Sensors:0 = 1:5
-  # EI:2, Sensors:0 = 6:10
-  # EI:3, Sensors:0 = 11:15
-  # EI:1, Sensors:1 = 16:20
-  # EI:2, Sensors:1 = 21:25
-  # EI:3, Sensors:1 = 26:30
-  # EI:1, Sensors:2 = 31:35
-  # EI:2, Sensors:2 = 36:40
-  # EI:3, Sensors:2 = 41:45
-  # EI:1, Sensors:3 = 46:50
-  # EI:2, Sensors:3 = 51:55
-  # EI:3, Sensors:3 = 56:60
   elif training_type == "paper_baseline_4_heuristic":
 
     vary_1 = [
@@ -2040,23 +2009,6 @@ if __name__ == "__main__":
 
     # prevent gripper from going lower than -12.5mm (see myfunctions.cpp for variable hardcoding)
     model.env.mj.prevent_table_impacts(True)
-
-  elif training_type == "vary_others":
-
-    vary_1 = None
-    vary_2 = None
-    vary_3 = None
-    repeats = None
-    param_1_name = None
-    param_2_name = None
-    param_3_name = None
-    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
-                                                param_3=vary_3, repeats=repeats)
-    baseline_args = {
-      "param_1_arg" : param_1,
-      "param_2_arg" : param_2,
-      "param_3_arg" : param_3
-    }
 
   elif training_type == "new_sensor_rewards":
 
@@ -2563,6 +2515,62 @@ if __name__ == "__main__":
     # test more often
     model.params.test_freq = 2000
     model.params.save_freq = 2000
+
+  elif training_type == "profile_cnn":
+
+    model = baseline_settings(model)
+    model.env.disable_rendering = True
+    model.params.object_set = "set7_fullset_1500_50i_updated"
+
+    # vary_1 = ["CNN_25_25", "CNN_50_50", "CNN_75_75", "CNN_100_100"]
+    vary_1 = [[150, 100, 50]]
+    vary_2 = ["cpu", "cuda"]
+    vary_3 = None
+    repeats = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    net = param_1
+    dev = param_2
+
+    model.set_device(dev)
+    model.profile(saveas=f"py_profile_150x100x50_{dev}.xyz", network=net, path="/home/luke/luke-gripper-mujoco")
+
+    exit()
+
+  elif training_type == "example_template":
+
+    vary_1 = None
+    vary_2 = None
+    vary_3 = None
+    repeats = None
+    param_1_name = None
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "param_1_arg" : param_1,
+      "param_2_arg" : param_2,
+      "param_3_arg" : param_3
+    }
+
+  elif training_type == "program_template":
+
+    vary_1 = None
+    vary_2 = None
+    vary_3 = None
+    repeats = None
+    param_1_name = None
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "param_1_arg" : param_1,
+      "param_2_arg" : param_2,
+      "param_3_arg" : param_3
+    }
 
   else: raise RuntimeError(f"array_training_DQN.py: training_type of '{training_type}' not recognised")
 

@@ -1633,9 +1633,7 @@ void makeObjectUI(int oldstate)
         {mjITEM_SLIDERINT, "z rotation",    3, &settings.object_z_rot_deg,  "0 360"},
         // {mjITEM_BUTTON,    "Reset to key",  3},
         // {mjITEM_BUTTON,    "Set key",       3},
-
-        
-
+        {mjITEM_BUTTON,   "visibility",    2, NULL,                   " #317"},
         {mjITEM_END}
     };
 
@@ -2537,9 +2535,18 @@ void uiEvent(mjuiState* state)
                 std::cout << "Wiping all segment forces\n";
                 break;
             }
+
             // case 20: seg num int slider
             // case 21: seg frc num slider
             // case 22: seg frc moment slider
+            
+            case 29: {          // set object visibility
+                static bool visible = false; // default case is false
+                visible = not visible;
+                luke::set_object_visibility(myMjClass.model, visible);
+                std::cout << "Setting hidden object visibility to: " << visible << "\n";
+                break;
+            }
             }
         }
 
