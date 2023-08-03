@@ -10,22 +10,22 @@ namespace py = pybind11;
 // numpy conversion helpers
 static py::array_t<luke::rgbint> rgbvec_to_array(std::vector<luke::rgbint>& vec, int W, int H)
 {
-  // return py::array(vec.size(), vec.data());
-  return py::array(
-    {W, H, 3},        // shape
-    {3*1, W*3*1, 1},  // strides (1 byte for uint8)
-    vec.data()
-  );
+  return py::array(vec.size(), vec.data());
+  // return py::array(
+  //   {W, H, 3},        // shape
+  //   {3*1, W*3*1, 1},  // strides (1 byte for uint8)
+  //   vec.data()
+  // );
 }
 
 static py::array_t<float> depthvec_to_array(std::vector<float>& vec, int W, int H)
 {
-  // return py::array(vec.size(), vec.data());
-  return py::array(
-    {W, H, 1},        // shape
-    {1*4, W*1*4, 4},  // strides (4 bytes for float)
-    vec.data()
-  );
+  return py::array(vec.size(), vec.data());
+  // return py::array(
+  //   {W, H, 1},        // shape
+  //   {1*4, W*1*4, 4},  // strides (4 bytes for float)
+  //   vec.data()
+  // );
 }
 
 static py::tuple RGBD_struct_to_tuple(luke::RGBD rgb_struct)

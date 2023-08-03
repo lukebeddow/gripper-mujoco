@@ -620,12 +620,12 @@ void create_camera_window(int width, int height)
 
     // empty and resize the vectors
     // int X = height * width;
-    // rgbd_data.rgb_vec.clear();
-    // rgbd_data.depth_vec.clear();
-    // rgbd_data.rgb_vec.resize(3 * X);
-    // rgbd_data.depth_vec.resize(X);
-    // rgbd_data.W = width;
-    // rgbd_data.H = height;
+    rgbd_data.rgb_vec.clear();
+    rgbd_data.depth_vec.clear();
+    rgbd_data.rgb_vec.resize(3 * X);
+    rgbd_data.depth_vec.resize(X);
+    rgbd_data.W = width;
+    rgbd_data.H = height;
 }
 
 luke::RGBD read_rgbd()
@@ -650,11 +650,11 @@ luke::RGBD read_rgbd()
     mjr_readPixels(rgb, depth, camera_viewport, &con);
 
     for (int i = 0;  i < 3*W*H; i++) {
-        rgbd_data.rgb_vec.push_back(rgb[i]);
+        rgbd_data.rgb_vec[i] = rgb[i];
     }
 
     for (int i = 0;  i < W*H; i++) {
-        rgbd_data.depth_vec.push_back(depth[i]);
+        rgbd_data.depth_vec[i] = depth[i];
     }
 
     // mjr_readPixels(rgbd_data.rgb, rgbd_data.depth, camera_viewport, &con);

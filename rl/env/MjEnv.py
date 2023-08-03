@@ -384,13 +384,16 @@ class MjEnv():
     # these come as (width x height x channels)
     rgb, depth = self.mj.get_RGBD_numpy()
 
-    # rgb = np.reshape(rgb, (self.rgbd_height, self.rgbd_width, 3))
-    # depth = np.reshape(depth, (self.rgbd_height, self.rgbd_width))
+    # pics end up sideways but this does work
+    rgb = np.reshape(rgb, (self.rgbd_height, self.rgbd_width, 3))
+    depth = np.reshape(depth, (self.rgbd_height, self.rgbd_width, 1))
+    rgb = np.einsum("ijk->kji", rgb)
+    depth = np.einsum("ijk->kji", depth)
 
     # numpy likes image arrays like this: height x width x channels
     # torch likes image arrays like this: channels x width x height
-    rgb = np.einsum("ijk->kij", rgb)
-    depth = np.einsum("ijk->kij", depth)
+    # rgb = np.einsum("ijk->kij", rgb)
+    # depth = np.einsum("ijk->kij", depth)
 
     return rgb, depth # ready for conversion to torch tensors
   
@@ -1094,6 +1097,8 @@ if __name__ == "__main__":
 
   mj = MjEnv(noload=True, depth_camera=True, log_level=2, seed=122)
   mj.disable_rendering = True
+  mj.mj.set.mujoco_timestep = 3.187e-3
+  mj.mj.set.auto_set_timestep = False
 
   mj.load("set7_fullset_1500_50i_updated", num_segments=8, finger_width=28, finger_thickness=0.9e-3)
   mj._spawn_object()
@@ -1102,7 +1107,7 @@ if __name__ == "__main__":
 
   # start_heap = h.heap()
 
-  num = 10000
+  num = 10_000
 
   # test = []
 
