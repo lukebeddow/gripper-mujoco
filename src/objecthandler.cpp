@@ -101,9 +101,6 @@ void ObjectHandler::init(mjModel* model, mjData* data)
   // set up collision types and affinities
   remove_collisions(model, data);
 
-  // apply default object visibility
-  set_object_visibility(model, object_visibility);
-
   // for testing
   if (debug) print();
 }
@@ -259,8 +256,6 @@ void ObjectHandler::set_live(mjModel* model, int idx)
   model->geom_contype[geom_id[idx]] = COL_main;
   model->geom_conaffinity[geom_id[idx]] = COL_main;
 
-  // turn on visibility
-  model->geom_rgba[geom_id[idx] * 4 + 3] = 1;
 }
 
 void ObjectHandler::move_object(mjData* data, int idx, QPos pose) 
@@ -304,11 +299,6 @@ void ObjectHandler::reset_object(mjModel* model, mjData* data, int idx)
     // disable collisions,set to 10
     model->geom_contype[geom_id[idx]] = COL_dead;
     model->geom_conaffinity[geom_id[idx]] = COL_dead;
-
-    // check if we should make the object invisible
-    if (not object_visibility) {
-      model->geom_rgba[geom_id[idx] * 4 + 3] = 0;
-    }
   }
 }
 
@@ -951,27 +941,6 @@ bool ObjectHandler::check_contact_forces(const mjModel* model, mjData* data)
 }
 
 // change object parameters
-
-void ObjectHandler::set_object_visibility(mjModel* model, bool visible)
-{
-  /* set the visbility of all objects, except the live object which must
-  always be visible. Setting the background objects invisible speeds up
-  rendering times and is recommended when using a camera */
-
-  // set all objects to the given visibility (alpha=0 in rgba)
-  for (int i : geom_id) {
-    model->geom_rgba[i * 4 + 3] = visible;
-  }
-
-  // finally, set the live object as visible (cannot be invisible)
-  if (live_object != -1) {
-    int rgba_idx = geom_id[live_object] * 4;
-    model->geom_rgba[rgba_idx + 3] = 1;
-  }
-
-  // save the change
-  object_visibility = visible;
-}
 
 void ObjectHandler::set_colour(mjModel* model, std::vector<float> rgba)
 {

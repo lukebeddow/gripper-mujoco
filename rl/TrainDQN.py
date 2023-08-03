@@ -13,8 +13,7 @@ from dataclasses import dataclass, asdict
 from copy import deepcopy
 import cProfile
 
-# import wandb # only imported if actually used
-# import matplotlib # only imported if actually used
+import wandb
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -727,7 +726,7 @@ class TrainDQN():
 
       return
 
-  def __init__(self, run_name=None, group_name=None, device=None, use_wandb=False, 
+  def __init__(self, run_name=None, group_name=None, device=None, use_wandb=None, 
                no_plot=None, log_level=None, object_set=None, use_curriculum=None,
                num_segments=None, finger_thickness=None, finger_width=None,
                depth_camera=None, finger_modulus=None):
@@ -746,7 +745,6 @@ class TrainDQN():
     self.env = MjEnv(noload=True, num_segments=num_segments, depth_camera=depth_camera,
                      finger_thickness=finger_thickness, finger_width=finger_width,
                      finger_modulus=finger_modulus)
-    self.env.log_level = 0 if log_level is None else log_level
 
     # what machine are we on
     self.machine = self.env._get_machine()
@@ -769,7 +767,7 @@ class TrainDQN():
 
     # wandb options
     self.wandb_init_flag = False
-    self.use_wandb = use_wandb
+    self.use_wandb = use_wandb if use_wandb is not None else True
     self.wandb_note = ""
     self.wandb_project = "luke-gripper-mujoco"
     self.wandb_entity = "lbeddow"
@@ -903,8 +901,6 @@ class TrainDQN():
 
     # save weights and biases
     if self.use_wandb:
-      global wandb
-      import wandb
       wandb.init(project=self.wandb_project, entity=self.wandb_entity, 
                  name=self.run_name, config=self.get_params_dictionary(),
                  notes=self.wandb_note, group=self.group_name)
@@ -1025,12 +1021,12 @@ class TrainDQN():
       return
 
     if not self.wandb_init_flag:
-      global wandb
-      import wandb
-      wandb.init(project=self.wandb_project, entity=self.wandb_entity, 
-                name=self.run_name, config=self.get_params_dictionary(),
-                notes=self.wandb_note, group=self.group_name)
-      self.wandb_init_flag = True
+      if self.use_wandb:
+
+        wandb.init(project=self.wandb_project, entity=self.wandb_entity, 
+                  name=self.run_name, config=self.get_params_dictionary(),
+                  notes=self.wandb_note, group=self.group_name)
+        self.wandb_init_flag = True
 
     freq = self.params.wandb_freq_s if force is not True else 0
 
@@ -1400,6 +1396,7 @@ class TrainDQN():
     # # detailed explanation). This converts batch-array of Transitions
     # # to Transition of batch-arrays.
     # batch = TrainDQN.Transition(*zip(*transitions))
+
     batch = self.memory.batch(self.params.batch_size)
 
     # Compute a mask of non-final states and concatenate the batch elements
@@ -1640,11 +1637,10 @@ class TrainDQN():
     # begin training episodes
     for i_episode in range(i_start + 1, self.params.num_episodes + 1):
 
-      if self.log_level == 1 and (i_episode - 1) % self.log_rate_for_episodes == 0:
+      if self.log_level == 1 and i_episode % self.log_rate_for_episodes == 1:
         print("Begin training episode", i_episode, flush=True)
       elif self.log_level > 1:
-        print(f"Begin training episode {i_episode} at {datetime.now().strftime('%H:%M')}")
-        # print("Begin training episode", i_episode, flush=True)
+        print("Begin training episode", i_episode, flush=True)
 
       self.run_episode(i_episode)
 
@@ -2140,79 +2136,6 @@ class TrainDQN():
 
     return best_sr, best_ep
 
-  def seed(self, seed=None, strict=False):
-    """
-    Set a seed for the environment, if one is not given, select it randomly
-    """
-
-    # put the seed into MjEnv (if None its randomly generated)
-    self.env.seed(seed)
-
-    # now use this seed for pytorch
-    torch.manual_seed(self.env.myseed)
-
-    # if we want to ensure reproducitibilty at the cost of performance
-    if strict:
-      torch.backends.cudnn.benchmark = False
-      torch.use_deterministic_algorithms(mode=True)
-
-  def profile(self, saveas="python_profile_results.xyz", network=None, loadexisting=False, 
-              episodes=10, seed=1234, id=None, folderpath=None, foldername=None,
-              path="/home/luke/mymujoco"):
-    """
-    Profile the training using CProfile tools. If loadexisting=False, first it
-    trains long enough to fill the replay memory with enough samples, then
-    saves this. This step can be skipped with loadexisting=True and by giving
-    the correct id/folderpath/foldername for load(...).
-    """
-
-    # override MjEnv 'take_action' to do only random actions
-    # this should provide exact reproducibility
-    random_action_generator = np.random.default_rng(seed=seed)
-    def random_take_action(self, action):
-      """
-      Take an action in the simulation
-      """
-
-      rand_action = random_action_generator.integers(0, self.n_actions)
-
-      # set the action and step the simulation
-      self.mj.set_action(rand_action)
-      self.mj.action_step()
-
-      return
-    
-    import functools
-    self.env._take_action = functools.partial(random_take_action, self.env)
-
-    # set a deterministic seed
-    self.seed(seed, strict=False)
-
-    # enable optimisation as fast as possible to profile this as well
-    self.params.min_memory_replay = 0
-    self.log_rate_for_episodes = 1
-
-    if not loadexisting:
-      self.params.num_episodes = 3
-      self.train(network=network)
-      i_episode = self.track.episodes_done
-    else:
-      self.load(id=id, folderpath=folderpath, foldername=foldername)
-      i_episode = self.track.episodes_done
-
-    # now do the profiling
-    self.params.num_episodes = i_episode + episodes
-    self.env.prevent_reload = True
-
-    self.env.mj.tick()
-    cProfile.run(f"model.train(i_start={i_episode})", f"{path}/{saveas}")
-    time_taken = self.env.mj.tock()
-
-    print(f"Profiling is now done, file saved at: {path}/{saveas}")
-    print(f"Time taken was {time_taken:.3f} seconds")
-
-    return time_taken
-
 if __name__ == "__main__":
   
   # ----- prepare ----- #
@@ -2298,14 +2221,15 @@ if __name__ == "__main__":
   # ----- train ----- #
 
   # # train
-  # net = [150, 100, 50]
-  # model.env.disable_rendering = False
-  # model.env.mj.set.debug = False
-  # model.num_segments = 8
-  # model.finger_thickness = 0.9e-3
-  # model.params.num_episodes = 10000
-  # model.params.object_set = "set7_xycamera_50i_updated"
-  # model.train(network=net)
+  net = "CNN_25_25"
+  model.env.disable_rendering = True
+  model.env.mj.set.debug = False
+  model.num_segments = 8
+  model.finger_thickness = 0.9e-3
+  model.params.num_episodes = 10000
+  model.params.object_set = "set7_xycamera_50i"
+  model.params.min_memory_replay = 0
+  model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
@@ -2313,75 +2237,18 @@ if __name__ == "__main__":
   # model.continue_training(foldername, folderpath)
 
   # ----- profile ----- #
-
-
-  # net = "CNN_25_25"
-  # dev = "cpu"
+  # net = networks.DQN_3L60
   # model.env.disable_rendering = True
   # model.params.object_set = "set7_xycamera_50i"
-  # model.set_device(dev)
-  # model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
-
-  # net = "CNN_25_25"
-  # dev = "cuda"
-  # model.env.disable_rendering = True
-  # model.params.object_set = "set7_xycamera_50i"
-  # model.set_device(dev)
-  # model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
-
-  # net = "CNN_50_50"
-  # dev = "cpu"
-  # model.env.disable_rendering = True
-  # model.params.object_set = "set7_xycamera_50i"
-  # model.set_device(dev)
-  # model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
-
-  # net = "CNN_50_50"
-  # dev = "cuda"
-  # model.env.disable_rendering = True
-  # model.params.object_set = "set7_xycamera_50i"
-  # model.set_device(dev)
-  # model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
-
-  # net = "CNN_75_75"
-  # dev = "cpu"
-  # model.env.disable_rendering = True
-  # model.params.object_set = "set7_xycamera_50i"
-  # model.set_device(dev)
-  # model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
-
-  # net = "CNN_75_75"
-  # dev = "cuda"
-  # model.env.disable_rendering = True
-  # model.params.object_set = "set7_xycamera_50i"
-  # model.set_device(dev)
-  # model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
-
-  # net = "CNN_100_100"
-  # dev = "cpu"
-  # model.env.disable_rendering = True
-  # model.params.object_set = "set7_xycamera_50i"
-  # model.set_device(dev)
-  # model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
-
-  net = "CNN_100_100"
-  dev = "cuda"
-  model.env.disable_rendering = True
-  model.params.object_set = "set7_xycamera_50i"
-  model.set_device(dev)
-  model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
-
-  exit()
-
-  model.env.mj.set.debug = False
-  model.params.num_episodes = 10
-  model.num_segments = 8
+  # model.env.mj.set.debug = False
+  # model.params.num_episodes = 10
+  # model.num_segments = 8
   # model.env._init_rgbd(width=320, height=240)
-  model.env.seed(1234)
-  cProfile.run("model.train(network=net)", "/home/luke/mymujoco/python_profile_results.xyz")
-  # in order to read profile results, run: $ python3 -m pstats /path/to/results.xyz
-  # do: $ sort cumtime OR $ sort tottime AND THEN $ stats
-  exit()
+  # model.env.seed(1234)
+  # cProfile.run("model.train(network=net)", "/home/luke/mymujoco/python_profile_results_8.xyz")
+  # # in order to read profile results, run: $ python3 -m pstats /path/to/results.xyz
+  # # do: $ sort cumtime OR $ sort tottime AND THEN $ stats
+  # exit()
 
   # ----- visualise ----- #
 

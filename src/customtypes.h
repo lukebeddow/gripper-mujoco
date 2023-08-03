@@ -388,17 +388,8 @@ struct JointStates {
 
 struct RGBD
 {
-  rgbint* rgb;
-  float* depth;
-
-  // std::shared_ptr<rgbint> rgb_ptr;
-  // std::shared_ptr<float> depth_ptr;
-
-  std::vector<rgbint> rgb_vec;
-  std::vector<float> depth_vec;
-
-  int H;
-  int W;
+  std::vector<rgbint> rgb;
+  std::vector<float> depth;
 };
 
 struct Base {

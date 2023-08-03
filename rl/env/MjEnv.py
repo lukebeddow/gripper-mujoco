@@ -64,8 +64,7 @@ class MjEnv():
     XY_base_actions: bool = False
 
   def __init__(self, seed=None, noload=None, num_segments=None, finger_width=None, 
-               depth_camera=None, finger_thickness=None, finger_modulus=None,
-               log_level=0):
+               depth_camera=None, finger_thickness=None, finger_modulus=None):
     """
     A mujoco environment, optionally set the random seed or prevent loading a
     model, in which case the user should call load() before using the class
@@ -80,9 +79,8 @@ class MjEnv():
     self.task_xml_template = "gripper_task_{}.xml"
 
     # general class settings
-    self.log_level = log_level
+    self.log_level = 0
     self.disable_rendering = True
-    self.prevent_reload = False
 
     # initialise class variables
     self.test_in_progress = False
@@ -101,7 +99,6 @@ class MjEnv():
     # create mujoco instance
     self.mj = MjClass()
     if self.log_level == 0: self.mj.set.debug = False
-    elif self.log_level >= 4: self.mj.set.debug = True
 
     # seed the environment
     self.myseed = None
@@ -136,9 +133,6 @@ class MjEnv():
     """
 
     debug_fcn = False
-
-    # add printing if we are at a high log level
-    if self.log_level >= 3: debug_fcn = True
 
     if num_segments is None: num_segments = self.load_next.num_segments
     if width is None: width = self.load_next.finger_width
@@ -204,10 +198,10 @@ class MjEnv():
       r = random_train.integers(self.testing_xmls, self.testing_xmls + self.training_xmls)
       filename = self.task_xml_template.format(r)
 
-    if self.log_level >= 2: 
+    if self.log_level > 1: 
       print("Load path: ", self.mj.model_folder_path
             + self.mj.object_set_name + "/" + self.task_xml_folder)
-    if self.log_level >= 1: print("Loading xml: ", filename)
+    if self.log_level > 0: print("Loading xml: ", filename)
 
     # load the new task xml (old model/data are deleted)
     self.mj.load_relative(self.task_xml_folder + '/' + filename)
@@ -322,7 +316,7 @@ class MjEnv():
 
     # if we have exceeded our time limit
     if self.track.current_step >= self.params.max_episode_steps:
-      if self.log_level >= 3 or self.mj.set.debug: 
+      if self.log_level > 1 or self.mj.set.debug: 
         print("is_done() = true (in python) as max step number exceeded")
       return True
 
@@ -342,7 +336,7 @@ class MjEnv():
       self._set_rgbd_size(width, height)
     else:
       if self.log_level > 0:
-        print("MjEnv() failed to initialise an RGBD camera, not enabled in compilation")
+        print("Failed to initialise an RGBD camera, not enabled in compilation")
       self.params.depth_camera = False
 
     # return if the camera is running or not
@@ -376,24 +370,21 @@ class MjEnv():
     """
 
     if not self.rgbd_enabled:
-      if self.log_level >= 3:
+      if self.log_level > 2:
         print("MjClass rendering disabled by compilation, unabled to get RGBD image")
       return
 
     # get rgbd information out of the simulation (unit8, float)
-    # these come as (width x height x channels)
     rgb, depth = self.mj.get_RGBD_numpy()
 
-    # pics end up sideways but this does work
-    rgb = np.reshape(rgb, (self.rgbd_height, self.rgbd_width, 3))
-    depth = np.reshape(depth, (self.rgbd_height, self.rgbd_width, 1))
-    rgb = np.einsum("ijk->kji", rgb)
-    depth = np.einsum("ijk->kji", depth)
+    # reshape the numpy arrays to the correct aspect ratio
+    rgb = rgb.reshape(self.rgbd_height, self.rgbd_width, 3)
+    depth = depth.reshape(self.rgbd_height, self.rgbd_width, 1)
 
-    # numpy likes image arrays like this: height x width x channels
+    # numpy likes image arrays like this: width x height x channels
     # torch likes image arrays like this: channels x width x height
-    # rgb = np.einsum("ijk->kij", rgb)
-    # depth = np.einsum("ijk->kij", depth)
+    rgb = np.einsum("ijk->kij", rgb)
+    depth = np.einsum("ijk->kij", depth)
 
     return rgb, depth # ready for conversion to torch tensors
   
@@ -407,11 +398,11 @@ class MjEnv():
     
     rgb, depth = self._get_rgbd_image()
 
-    # numpy likes image arrays like this: height x width x channels
+    # numpy likes image arrays like this: width x height x channels
     # torch likes image arrays like this: channels x width x height
     # hence convert from torch style back to numpy style for plotting
-    axs[0].imshow(np.einsum("ijk->kji", rgb)) # swap rgb channel from 1st (eg 3x640x480) to last (eg 640x480x3)
-    axs[1].imshow(np.transpose(depth[0])) # remove the depth 'channel' (eg 1x640x480 -> 640x480)
+    axs[0].imshow(np.einsum("ijk->jki", rgb)) # swap rgb channel from 1st (eg 3x640x480) to last (eg 640x480x3)
+    axs[1].imshow(depth[0]) # remove the depth 'channel' (eg 1x640x480 -> 640x480)
 
     plt.show()
 
@@ -1000,6 +991,8 @@ class MjEnv():
     Perform an action and step the simulation until it is resolved
     """
 
+    t0 = time.time()
+
     # safety check: if step is called when done=true
     if self.track.is_done:
       raise RuntimeError("step has been called with done=true, use reset()")
@@ -1032,6 +1025,10 @@ class MjEnv():
     if done and self.test_in_progress:
       self._monitor_test()
 
+    t1 = time.time()
+
+    if self.log_level > 2: print("MjEnv step() time was ", t1 - t0)
+
     return to_return
 
   def reset(self, hard=None, timestep=None, realworld=False):
@@ -1045,7 +1042,7 @@ class MjEnv():
     self.track = MjEnv.Track()
 
     # there is a small chance we reload a new random task
-    if not self.test_in_progress and not realworld and not self.prevent_reload:
+    if not self.test_in_progress and not realworld:
       if (random_train.random() < self.params.task_reload_chance
           or self.reload_flag):
         self._load_xml()
@@ -1073,7 +1070,7 @@ class MjEnv():
 
       self.mj.render()
 
-      if self.log_level >= 3:
+      if self.log_level > 2:
         print('MjEnv render update:')
         print(f'\tStep: {self.track.current_step}')
         print(f'\tLast action: {self.track.last_action}')
@@ -1087,80 +1084,39 @@ class MjEnv():
     """
     Tidy up and finish everything
     """
-    if self.log_level > 0: print("MjEnv() environment closed (this currently has no effect)")
+    if self.log_level > 0: print("Environment closed")
 
 if __name__ == "__main__":
 
   # import pickle
 
-  from guppy import hpy; h=hpy()
-
-  mj = MjEnv(noload=True, depth_camera=True, log_level=2, seed=122)
+  mj = MjEnv(noload=True, depth_camera=True)
   mj.disable_rendering = True
-  mj.mj.set.mujoco_timestep = 3.187e-3
-  mj.mj.set.auto_set_timestep = False
 
-  mj.load("set7_fullset_1500_50i_updated", num_segments=8, finger_width=28, finger_thickness=0.9e-3)
+  mj.load_finger_width = 24e-3
+
+  mj.load("set7_xycamera_50i", num_segments=8, finger_width=28, finger_thickness=0.9e-3)
+
+  mj.render()
+
+  print("getting rgbd image now")
+
+  mj._get_rgbd_image()
+  mj._get_rgbd_image()
+
+  print("before set size")
+  mj._set_rgbd_size(360, 280)
+  print("after set size")
+
+  print("before set size")
+  mj._set_rgbd_size(320, 240)
+  print("after set size")
+
+  mj._set_rgbd_size(50, 50)
+
   mj._spawn_object()
 
-  mj._set_rgbd_size(848, 480)
-
-  # start_heap = h.heap()
-
-  num = 10_000
-
-  # test = []
-
-  mj.mj.tick()
-
-  for i in range(num):
-    mj._get_rgbd_image()
-
-  time_taken = mj.mj.tock()
-
-  print(f"Time taken for {num} fcn calls was {time_taken:.3f} seconds")
-
-  # end_heap = h.heap()
-  # print(f"Start heap size is {start_heap.size * 1e-6:.1f} MB")
-  # print(f"End heap size is {end_heap.size * 1e-6:.1f} MB")
-
-  # del test
-
-  # final_heap = h.heap()
-  # print(f"Final heap size is {final_heap.size * 1e-6:.1f} MB")
-
-  rgb, depth = mj._get_rgbd_image()
-  print(f"rgb size is {rgb.shape}")
-  print(f"depth size is {depth.shape}")
-
   mj._plot_rgbd_image()
-
-  
-
-  exit()
-
-  import time
-
-  t1 = time.time()
-
-  num = 579
-  for i in range(num):
-    rgb, depth = mj._get_rgbd_image_fast()
-
-  t2 = time.time()
-
-  print(f"Time taken for {num} calls was {t2-t1:.3f} s")
-
-  exit()
-
-  rgb, depth = mj._get_rgbd_image_fast()
-  rgb, depth = mj._get_rgbd_image_fast()
-
-  print(rgb)
-  print(depth)
-
-  print(f"rgb size is {rgb.shape}")
-  print(f"depth size is {depth.shape}")
 
   exit()
 

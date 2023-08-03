@@ -27,14 +27,13 @@ namespace render
 void mouse_button(GLFWwindow* window, int button, int act, int mods);
 void mouse_move(GLFWwindow* window, double xpos, double ypos);
 void scroll(GLFWwindow* window, double xoffset, double yoffset);
-void init_camera(MjClass& myMjClass);
+void init_rendering(MjClass& myMjClass);
 void init_window(MjClass& myMjClass);
-void resize_camera(int width, int height);
-void create_camera_window(int width, int height);
+void resize_window(int width, int height);
+void create_window(int width, int height, bool visibility);
 void uiLayout(mjuiState* state);
 void reload_for_rendering(MjClass& myMjClass);
-bool render_window();
-void render_camera();
+bool render();
 void finish();
 
 void lukesensorfigsinit();
