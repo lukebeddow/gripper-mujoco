@@ -526,7 +526,7 @@ luke::RGBD read_rgbd()
 {
     /* get an rgbd image out of the simulation */
     
-    if (not rendering_initialised and (rgb_ == NULL or depth_ == NULL)) {
+    if (not rendering_initialised) {
         throw std::runtime_error("render::read_rgbd() called but rendering not initialised");
     }
 
@@ -538,26 +538,23 @@ luke::RGBD read_rgbd()
     cam.type = mjCAMERA_FIXED;
     cam.fixedcamid = 0;
 
-    luke::RGBD output;
+    std::cout << "height is " << H << " and width is " << W << '\n';
 
-    if (!rgb_ || !depth_) {
-        mju_error("render::read_rgbd() failed, could not allocate buffers for rgb_ or depth_");
-    }
 
     // testing: read depth camera directly into a vector
     mjr_readPixels(&rgbd_data.rgb[0], &rgbd_data.depth[0], rect, &con);
     return rgbd_data;
 
-    // read the depth camera using mujoco
-    mjr_readPixels(rgb_, depth_, rect, &con);
+    // // read the depth camera using mujoco
+    // mjr_readPixels(rgb_, depth_, rect, &con);
 
-    for (int i = 0;  i < 3*W*H; i++) {
-        output.rgb.push_back((luke::rgbint)rgb_[i]);
-    }
+    // for (int i = 0;  i < 3*W*H; i++) {
+    //     output.rgb.push_back((luke::rgbint)rgb_[i]);
+    // }
 
-    for (int i = 0;  i < W*H; i++) {
-        output.depth.push_back(depth_[i]);
-    }
+    // for (int i = 0;  i < W*H; i++) {
+    //     output.depth.push_back(depth_[i]);
+    // }
 
     // // this code overwrites the rgb_ data, which we don't want
     // if (render_depth_flag) {
@@ -605,7 +602,7 @@ luke::RGBD read_rgbd()
     //     }
     // }
 
-    return output;
+    // return output;
 }
 
 void render_rgb(bool set_as)

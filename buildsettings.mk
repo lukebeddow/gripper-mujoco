@@ -54,8 +54,13 @@ MUJOCO_LIB = $(MUJOCO_PATH)/lib
 # are we compiling a specific mujoco version
 ifeq ($(findstring 220, $(MAKECMDGOALS)), 220)
 .PHONY: 220
+MUJOCO_PATH = /home/luke/repo/mujoco/mujoco-2.2.0
+MUJOCO_LIB = $(MUJOCO_PATH)/lib
+ifeq ($(findstring src, $(MAKECMDGOALS)), src)
+.PHONY: src
 MUJOCO_PATH = /home/luke/repo/mujoco/src/mujoco-2.2.0
 MUJOCO_LIB = $(MUJOCO_PATH)/build/lib
+endif
 ifeq ($(findstring debug, $(MAKECMDGOALS)), debug)
 MUJOCO_PATH = /home/luke/repo/mujoco/src/mujoco-2.2.0-debug
 MUJOCO_LIB = $(MUJOCO_PATH)/build/lib

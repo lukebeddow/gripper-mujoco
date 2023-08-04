@@ -839,7 +839,7 @@ class TrainDQN():
         self.params.use_images = True
 
         self.env._init_rgbd(width, height)
-        # model.env._set_rgbd_size(width, height)
+        # self.env._set_rgbd_size(width, height)
 
         self.policy_net = networks.MixedNetwork(self.env.n_obs, img_channels, 
                                                 self.env.n_actions,
@@ -2298,16 +2298,16 @@ if __name__ == "__main__":
 
   # ----- train ----- #
 
-  # # train
-  # net = "CNN_25_25"
-  # model.env.disable_rendering = True
-  # model.env.mj.set.debug = False
-  # model.num_segments = 8
-  # model.finger_thickness = 0.9e-3
-  # model.params.num_episodes = 10000
-  # model.params.object_set = "set7_xycamera_50i"
-  # model.params.min_memory_replay = 0
-  # model.train(network=net)
+  # train
+  net = [150, 100, 50]
+  model.env.disable_rendering = False
+  model.env.mj.set.debug = False
+  model.num_segments = 8
+  model.finger_thickness = 0.9e-3
+  model.params.num_episodes = 10000
+  model.params.object_set = "set7_fullset_1500_50i_updated"
+  model.params.min_memory_replay = 0
+  model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
@@ -2318,14 +2318,15 @@ if __name__ == "__main__":
   # in order to read profile results, run: $ python3 -m pstats /path/to/results.xyz
   # do: $ sort cumtime OR $ sort tottime AND THEN $ stats
 
-  # model.env.disable_rendering = True
-  # model.params.object_set = "set7_xycamera_50i"
+  model.env.disable_rendering = True
+  model.params.object_set = "set7_fullset_1500_50i_updated"
 
-  # net = "CNN_25_25"
-  # dev = "cpu"
+  net = "CNN_50_50"
+  dev = "cuda"
 
-  # model.set_device(dev)
-  # model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
+  model.set_device(dev)
+  model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
+  exit()
 
   # ----- visualise ----- #
 

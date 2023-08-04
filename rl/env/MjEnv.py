@@ -328,7 +328,7 @@ class MjEnv():
 
     return done
     
-  def _init_rgbd(self, width=640, height=480):
+  def _init_rgbd(self, width=None, height=None):
     """
     Initialise an rgbd camera in the simulation. Default size matches realsense.
     """
@@ -345,10 +345,17 @@ class MjEnv():
     # return if the camera is running or not
     return self.params.depth_camera
 
-  def _set_rgbd_size(self, width, height):
+  def _set_rgbd_size(self, width=None, height=None):
     """
     Set the size of simulated RGBD images
     """
+
+    if width is None:
+      if self.rgbd_width is None: width = 848
+      else: width = self.rgbd_width
+    if height is None:
+      if self.rgbd_height is None: height = 480
+      else: height = self.rgbd_height
 
     self.rgbd_enabled = self.mj.rendering_enabled()
     self.rgbd_height = height
@@ -356,7 +363,6 @@ class MjEnv():
 
     if self.rgbd_enabled:
       self.mj.set_RGBD_size(width, height)
-      self.rgbd_enabled = True
     else:
       if self.log_level > 0:
         print("MjClass rendering is disabled in compilation settings, no RGBD images possible")
@@ -386,8 +392,8 @@ class MjEnv():
 
     # numpy likes image arrays like this: width x height x channels
     # torch likes image arrays like this: channels x width x height
-    rgb = np.einsum("ijk->kij", rgb)
-    depth = np.einsum("ijk->kij", depth)
+    rgb = np.einsum("ijk->kji", rgb)
+    depth = np.einsum("ijk->kji", depth)
 
     return rgb, depth # ready for conversion to torch tensors
   
@@ -401,11 +407,11 @@ class MjEnv():
     
     rgb, depth = self._get_rgbd_image()
 
-    # numpy likes image arrays like this: width x height x channels
+    # numpy likes image arrays like this: height x width x channels (ie rows x columns x dim)
     # torch likes image arrays like this: channels x width x height
     # hence convert from torch style back to numpy style for plotting
-    axs[0].imshow(np.einsum("ijk->jki", rgb)) # swap rgb channel from 1st (eg 3x640x480) to last (eg 640x480x3)
-    axs[1].imshow(depth[0]) # remove the depth 'channel' (eg 1x640x480 -> 640x480)
+    axs[0].imshow(np.einsum("ijk->kji", rgb)) # swap to numpy style rows/cols (eg 3x640x480 -> 480x640x3)
+    axs[1].imshow(np.transpose(depth[0])) # remove the depth 'channel' then swap (eg 1x640x480 -> 480x640)
 
     plt.show()
 
@@ -1096,7 +1102,7 @@ if __name__ == "__main__":
   mj._spawn_object()
   mj._set_rgbd_size(848, 480)
 
-  num = 10_000
+  num = 1
   mj.mj.tick()
 
   for i in range(num):
@@ -1110,6 +1116,9 @@ if __name__ == "__main__":
   print(f"rgb size is {rgb.shape}")
   print(f"depth size is {depth.shape}")
 
+  mj._plot_rgbd_image()
+
+  mj._set_rgbd_size(25, 25)
   mj._plot_rgbd_image()
 
   exit()

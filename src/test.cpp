@@ -58,9 +58,40 @@ void reset_sim(MjClass& mj)
   return;
 }
 
+void load_task(MjClass& mj, int task_num, std::string object_set = "default")
+{
+  /* load a task xml file */
+
+  std::vector<std::string> arguments = {
+    "--task", std::to_string(task_num),
+    "--width", "28",
+    "--segments", "8",
+  };
+
+  if (object_set != "default") {
+    arguments.push_back("--object-set");
+    arguments.push_back(object_set);
+  }
+
+  std::vector<char*> argv;
+  for (const auto& arg : arguments)
+      argv.push_back((char*)arg.data());
+  argv.push_back(nullptr);
+
+  std::string file = mj.file_from_from_command_line(argv.size() - 1, argv.data());
+  mj.load(file);
+}
+
 void run_test(int num_episodes, int step_cap, int reload_rate)
 {
   /* run a test as if we were learning, no data generated */
+
+  // user options
+  bool randxml = false;
+  bool use_default_object_set = true;
+  std::string object_set = "set7_fullset_1500_50i_updated";
+  bool use_random_seed = true;
+  int random_seed = 13572;
 
   if (print_ep) std::cout << "Test started\n";
 
@@ -68,13 +99,27 @@ void run_test(int num_episodes, int step_cap, int reload_rate)
   MjClass mj;
   mj.s_.debug = debug_print;
 
+  // which object set should we use
+  if (use_default_object_set) {
+    object_set = "default";
+  }
+
+  // do we have a fixed random seed
+  if (use_random_seed) {
+    mj.s_.random_seed = random_seed;
+  }
+
+  // hardcode stable timestep
+  mj.s_.auto_set_timestep = false;
+  mj.s_.mujoco_timestep = 3.187e-3;
+
   // begin timer
   mj.tick();
 
-  // get the xml file name
-  int randxml = rand() % num_xml_tasks;
-  std::string xmltask = "/task/gripper_task_" + std::to_string(randxml) + ".xml";
-  mj.load_relative(xmltask);
+  // load an xml model file
+  int xml_num = 0;
+  if (randxml) xml_num = rand() % num_xml_tasks;
+  load_task(mj, randxml);
 
   reset_sim(mj);
 
@@ -95,11 +140,14 @@ void run_test(int num_episodes, int step_cap, int reload_rate)
       if (print_ep) std::cout << "Reloading simulation\n";
 
       // get the xml file name
-      randxml = rand() % num_xml_tasks;
-      std::string xmltask = "/task/gripper_task_" + std::to_string(randxml) + ".xml";
+      if (randxml) xml_num = rand() % num_xml_tasks;
+      else {
+        xml_num += 1;
+        if (randxml >= num_xml_tasks) randxml = 0;
+      }
 
       // load a new task
-      mj.load_relative(xmltask);
+      load_task(mj, xml_num);
     }
 
     reset_sim(mj);
@@ -117,42 +165,19 @@ void run_test(int num_episodes, int step_cap, int reload_rate)
 
 int main(int argc, char** argv)
 {
-  // MjClass testmj;
-
-  // std::vector<float> profile_X { 0, 1, 2, 3 };
-  // std::vector<float> profile_Y { 0, 1.25, 3.5, 9.5 };
-
-  // std::vector<float> truth_X;
-  // std::vector<float> truth_Y;
-
-  // for (int i = 0; i < 35; i++) {
-
-  //   float X = i * 0.1 + 0.01;
-  //   float Y = X * X;
-
-  //   truth_X.push_back(X);
-  //   truth_Y.push_back(Y);
-
-  // }
-
-  // bool relative_error = false;
-  // std::vector<float> errors = testmj.profile_error(profile_X, profile_Y, truth_X, truth_Y, relative_error);
-
-  // luke::print_vec(errors, "errors");
-
-  // return 0;
-
   /* ----- run a test of 10 learning steps ----- */
 
-  // // precompiled settings
-  // /* settings of 20, 200, 20 -> initial time taken 52.6s, newest 42.6s (both laptop times, newest PC is 45.0s */
-  // int num_episodes = 20;
-  // int step_cap = 200;
-  // int reload_rate = 20;
+  // precompiled settings
+  /* settings of 20, 200, 20 -> initial time taken 52.6s, newest 42.6s (both laptop times, newest PC is 45.0s */
+  /* settings of 20, 200, 20 -> mujoco-2.1.5 takes 12.261/12.466/12.872 seconds */
+  /* settings of 20, 200, 20 -> mujoco-2.2.0 takes 12.307/12.888/12.729 seconds */
+  int num_episodes = 20;
+  int step_cap = 200;
+  int reload_rate = 20;
 
-  // run_test(num_episodes, step_cap, reload_rate);
+  run_test(num_episodes, step_cap, reload_rate);
 
-  // return 0;
+  return 0;
 
   /* ----- load the gripper, generic testing ----- */
 
