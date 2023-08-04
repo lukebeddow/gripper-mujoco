@@ -52,6 +52,7 @@ int window_height = 480;
 // data storage
 unsigned char* rgb_ = NULL;
 float* depth_ = NULL;
+luke::RGBD rgbd_data;
 
 // mouse button callback
 void mouse_button(GLFWwindow* window, int button, int act, int mods)
@@ -513,6 +514,12 @@ void create_window(int width, int height, bool visibility)
     int X = height * width;
     rgb_ = (unsigned char*)std::malloc(3 * X);
     depth_ = (float*)std::malloc(sizeof(float) * X);
+
+    // clear and resize vectors
+    rgbd_data.rgb.clear();
+    rgbd_data.depth.clear();
+    rgbd_data.rgb.resize(3 * X);
+    rgbd_data.depth.resize(X);
 }
 
 luke::RGBD read_rgbd()
@@ -536,6 +543,10 @@ luke::RGBD read_rgbd()
     if (!rgb_ || !depth_) {
         mju_error("render::read_rgbd() failed, could not allocate buffers for rgb_ or depth_");
     }
+
+    // testing: read depth camera directly into a vector
+    mjr_readPixels(&rgbd_data.rgb[0], &rgbd_data.depth[0], rect, &con);
+    return rgbd_data;
 
     // read the depth camera using mujoco
     mjr_readPixels(rgb_, depth_, rect, &con);
