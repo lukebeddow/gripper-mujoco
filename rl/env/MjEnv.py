@@ -118,11 +118,9 @@ class MjEnv():
     # initialise heuristic parameters
     self._initialise_heuristic_parameters()
 
-    # # initialise rgbd camera to get images from simulation
-    # if depth_camera: self._init_rgbd()
-    # else:
-    #   self.load_next.depth_camera = False
-    #   self.rgbd_enabled = False
+    # set default rgbd camera size
+    self.rgbd_width = 848
+    self.rgbd_height = 480
 
     return
 
@@ -350,16 +348,12 @@ class MjEnv():
     Set the size of simulated RGBD images
     """
 
-    if width is None:
-      if self.rgbd_width is None: width = 848
-      else: width = self.rgbd_width
-    if height is None:
-      if self.rgbd_height is None: height = 480
-      else: height = self.rgbd_height
+    if width is None: width = self.rgbd_width
+    if height is None: height = self.rgbd_height
 
     self.rgbd_enabled = self.mj.rendering_enabled()
-    self.rgbd_height = height
     self.rgbd_width = width
+    self.rgbd_height = height
 
     if self.rgbd_enabled:
       self.mj.set_RGBD_size(width, height)
@@ -1101,8 +1095,9 @@ if __name__ == "__main__":
   mj.load("set7_fullset_1500_50i_updated", num_segments=8, finger_width=28, finger_thickness=0.9e-3)
   mj._spawn_object()
   mj._set_rgbd_size(848, 480)
+  # mj._set_rgbd_size(1000, 1000)
 
-  num = 1
+  num = 10000
   mj.mj.tick()
 
   for i in range(num):
@@ -1111,14 +1106,13 @@ if __name__ == "__main__":
   time_taken = mj.mj.tock()
   print(f"Time taken for {num} fcn calls was {time_taken:.3f} seconds")
 
-
   rgb, depth = mj._get_rgbd_image()
   print(f"rgb size is {rgb.shape}")
   print(f"depth size is {depth.shape}")
 
   mj._plot_rgbd_image()
 
-  mj._set_rgbd_size(25, 25)
+  mj._set_rgbd_size(250, 150)
   mj._plot_rgbd_image()
 
   exit()

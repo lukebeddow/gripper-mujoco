@@ -2299,7 +2299,7 @@ if __name__ == "__main__":
   # ----- train ----- #
 
   # train
-  net = [150, 100, 50]
+  net = "CNN_25_25"
   model.env.disable_rendering = False
   model.env.mj.set.debug = False
   model.num_segments = 8

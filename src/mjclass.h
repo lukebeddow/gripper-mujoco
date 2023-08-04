@@ -1290,7 +1290,7 @@ public:
 
   MjType::Settings s_;                          // simulation settings
   std::chrono::time_point<time_> start_time_;   // time from tick() call
-  bool render_init = false;                     // have we initialised the rendering backend
+  bool render_camera_init = false;              // have we initialised the rgbd camera
   bool render_window_init = false;              // have we initialised the rendering window
   bool render_reload = false;                   // have we reloaded and need to update rendering
   double sim_gauge_raw_to_N_factor = 1.0;       // calibration factor, set by auto_calibrate

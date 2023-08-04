@@ -11,6 +11,12 @@ mjvOption opt;                      // visualization options
 mjvScene scn;                       // abstract scene
 mjrContext con;                     // custom GPU context
 
+// for rgbd camera
+mjvCamera cam_rgbd;
+mjvOption opt_rgbd;
+mjvScene scn_rgbd;
+mjrContext con_rgbd;
+
 // mjclass for plotting sensor data
 MjClass* MjPtr = NULL;
 
@@ -26,6 +32,7 @@ mjUI ui0;
 
 // window
 GLFWwindow* window = NULL;
+GLFWwindow* camera_window = NULL;
 
 // mouse interaction
 bool button_left = false;
@@ -36,22 +43,23 @@ double lasty = 0;
 
 // will we put items into the render window
 bool plot_sensors = false;
+bool plot_rgbd = true;
 
 // what will we render to the GUI screen
 bool render_rgb_flag = false;
 bool render_depth_flag = false;
 
 // what is initialised
-bool rendering_initialised = false;
-bool window_visible = false;
+bool window_initialised = false;
+bool camera_initialised = false;
 
-// window size
-int window_width = 640;
-int window_height = 480;
+// size defaults
+int window_width = 1200;
+int window_height = 900;
+int camera_width = 848;
+int camera_height = 480;
 
-// data storage
-unsigned char* rgb_ = NULL;
-float* depth_ = NULL;
+// data to return out of read_rgbd()
 luke::RGBD rgbd_data;
 
 // mouse button callback
@@ -107,7 +115,37 @@ void scroll(GLFWwindow* window, double xoffset, double yoffset)
     mjv_moveCamera(m, mjMOUSE_ZOOM, 0, -0.05*yoffset, &scn, &cam);
 }
 
-void init_rendering(MjClass& myMjClass)
+void init_camera(MjClass& myMjClass)
+{
+    /* initialise the rendering backend (eg for read_RGBD_pixels)*/
+
+    MjPtr = &myMjClass;
+
+    // update our global m/d to this most recent update
+    m = MjPtr->model;
+    d = MjPtr->data;
+
+    // init GLFW
+    if( !glfwInit() ) {
+        mju_error("Could not initialize GLFW");
+    }
+
+    // initialize visualization data structures
+    mjv_defaultCamera(&cam_rgbd);
+    mjv_defaultOption(&opt_rgbd);
+    mjv_defaultScene(&scn_rgbd);
+    mjr_defaultContext(&con_rgbd);
+
+    cam_rgbd.type = mjCAMERA_FIXED;
+    cam_rgbd.fixedcamid = 0;
+
+    // create a new invisible window for the camera
+    create_camera_window(camera_width, camera_height);
+
+    camera_initialised = true;
+}
+
+void init_window(MjClass& myMjClass)
 {
     /* initialise the rendering backend (eg for read_RGBD_pixels)*/
 
@@ -127,26 +165,20 @@ void init_rendering(MjClass& myMjClass)
     mjv_defaultOption(&opt);
     mjv_defaultScene(&scn);
     mjr_defaultContext(&con);
+    
+    // set window size and visibility
+    glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
+    glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
 
-    // set the window hidden by default, create with default size
-    window_visible = false;
-    create_window(window_width, window_height, window_visible);
+    // create window, make OpenGL context current, request v-sync
+    window = glfwCreateWindow(window_width, window_height, "luke-gripper-mujoco", NULL, NULL);
+    glfwMakeContextCurrent(window);
+    glfwSwapInterval(1);
 
-    rendering_initialised = true;
-}
+    // create scene and context
+    mjv_makeScene(m, &scn, 2000);
+    mjr_makeContext(m, &con, mjFONTSCALE_150);
 
-// initialise window
-void init_window(MjClass& myMjClass)
-{
-    /* initialise the viewing window as a GUI for rendered scenes */
-
-    init_rendering(myMjClass);
-
-    // resize the window and make it visible
-    int new_height = 900;
-    int new_width = 1200;
-    window_visible = true;
-    resize_window(new_width, new_height);
     glfwShowWindow(window);
 
     // install GLFW mouse and keyboard callbacks
@@ -167,6 +199,8 @@ void init_window(MjClass& myMjClass)
     uiLayout(&uistate);
 
     if (plot_sensors) lukesensorfigsinit();
+
+    window_initialised = true;
 }
 
 // set window layout
@@ -220,15 +254,11 @@ void reload_for_rendering(MjClass& myMjClass)
 }
 
 // render the scene
-bool render()
+bool render_window()
 {
-    if (not m or not d) {
+    if (not m or not d or not window_initialised) {
         mju_error_s("Error: %s", "Render has been called without first running init");
     }
-
-    // // update our global m/d to this most recent update
-    // m = myMjClass.model;
-    // d = myMjClass.data;
 
     if (!glfwWindowShouldClose(window)) {
 
@@ -238,14 +268,8 @@ bool render()
 
         // update scene and render
         mjv_updateScene(m, d, &opt, NULL, &cam, mjCAT_ALL, &scn);
-
-        // this stops a crash, but nothing new renders on screen
-        // // swap OpenGL buffers (blocking call due to v-sync)
-        // glfwSwapBuffers(window);
   
-        // std::cout << "before crash\n";
         mjr_render(viewport, &scn, &con);
-        // std::cout << "after crash\n";
 
         // added - render UIs
         if (plot_sensors) {
@@ -255,11 +279,108 @@ bool render()
             lukesensorfigshow(rect);
         }
 
-        // // swap OpenGL buffers (blocking call due to v-sync)
-        // glfwSwapBuffers(window);
+        if (plot_rgbd and camera_initialised) {
+            render_rgbd_feed();
+        }
 
-        // // process pending GUI events, call GLFW callbacks
-        // glfwPollEvents();
+        // swap OpenGL buffers (blocking call due to v-sync)
+        glfwSwapBuffers(window);
+
+        // process pending GUI events, call GLFW callbacks
+        glfwPollEvents();
+
+        return true;
+    }
+
+    return false;
+}
+
+void render_rgbd_feed()
+{
+    /* render the rgbd images in the regular rendering window */
+
+    int W = camera_width;
+    int H = camera_height;
+
+    int Wt = 200;
+    int scale = Wt / camera_width;
+
+    // scale = 1;
+
+    int X = camera_height * camera_width * scale * scale;
+    luke::rgbint* rgb_ = (luke::rgbint*)std::malloc(3 * X);
+    float* depth_ = (float*)std::malloc(sizeof(float) * X);
+
+    for (int r = 0; r < H; r++) {
+        for (int c = 0; c < W; c++) {
+            int adr_old = r*W + c;
+            int adr_new = r*W*scale + c*scale;
+            for (int i = 0; i < scale; i++) {
+                rgb_[adr_new + 0 + i * scale] = rgbd_data.rgb[adr_old + 0];
+                rgb_[adr_new + 1 + i * scale] = rgbd_data.rgb[adr_old + 1];
+                rgb_[adr_new + 2 + i * scale] = rgbd_data.rgb[adr_old + 2];
+            }
+        }
+    }
+
+    mjrRect viewport2 =  {0, window_height - H*scale, W*scale, H*scale};
+    mjr_drawPixels(rgb_, NULL, viewport2, &con);
+
+    // // this code overwrites the rgb_ data, which we don't want
+    // const int NS = 3;           // depth_ image sub-sampling
+    // for (int r=0; r<H; r+=NS)
+    //     for (int c=0; c<W; c+=NS) {
+    //         int adr = (r/NS)*W + c/NS;
+    //         rgb_[3*adr] = rgb_[3*adr+1] = rgb_[3*adr+2] = (unsigned char)((1.0f-depth_[r*W+c])*255.0f);
+    //     }
+
+    // // if we have a window, draw the pixels on screen
+    // mjrRect viewport2 =  {0, 0, 0, 0};
+    // viewport2.height = rect.height/2;
+    // viewport2.width = rect.width/2;
+    // mjr_drawPixels(rgb_, NULL, viewport2, &con);
+
+    // const int NS = 3;           // depth_ image sub-sampling
+    // for (int r=0; r<H; r+=NS)
+    //     for (int c=0; c<W; c+=NS) {
+    //         int adr = (r/NS)*W + c/NS;
+    //         rgb_[3*adr] = (unsigned char)((1.0f-rgb_[3*r*W+c])*255.0f);
+    //         rgb_[3*adr+1] = (unsigned char)((1.0f-rgb_[3*r*W+c + 1])*255.0f);
+    //         rgb_[3*adr+2] = (unsigned char)((1.0f-rgb_[3*r*W+c + 2])*255.0f);
+
+    //         // rgb_[3*adr] = rgb_[3*adr+1] = rgb_[3*adr+2] = (unsigned char)((1.0f-depth_[r*W+c])*255.0f);
+    //     }
+
+    // // if we have a window, draw the pixels on screen
+    // mjrRect viewport3 =  rect;
+    // viewport3.bottom = rect.height/2;
+    // viewport3.height = rect.height/2;
+    // viewport3.width = rect.width/2;
+    // mjr_drawPixels(rgb_, NULL, viewport3, &con);
+
+    // reallocate data buffers
+    if (rgb_ != NULL) std::free(rgb_);
+    if (depth_ != NULL) std::free(depth_);
+
+    // return output;
+}
+
+// render the camera
+bool render_camera()
+{
+    if (not m or not d or not camera_initialised) {
+        mju_error_s("Error: %s", "render_camera() has been called without first running init");
+    }
+
+    if (!glfwWindowShouldClose(camera_window)) {
+
+        // get framebuffer viewport
+        mjrRect viewport = {0, 0, camera_width, camera_height};
+        // glfwGetFramebufferSize(camera_window, &viewport.width, &viewport.height);
+
+        // update scene and render
+        mjv_updateScene(m, d, &opt_rgbd, NULL, &cam_rgbd, mjCAT_ALL, &scn_rgbd);
+        mjr_render(viewport, &scn_rgbd, &con_rgbd);
 
         return true;
     }
@@ -268,11 +389,18 @@ bool render()
 }
 
 // before closing
-void finish()
+void finish_window()
 {
     // free visualization storage
     mjv_freeScene(&scn);
     mjr_freeContext(&con);
+}
+
+void finish_camera()
+{
+    // free visualization storage
+    mjv_freeScene(&scn_rgbd);
+    mjr_freeContext(&con_rgbd);
 }
 
 void lukesensorfigsinit(void)
@@ -468,54 +596,50 @@ void lukesensorfigshow(mjrRect rect)
     }
 }
 
-void resize_window(int width, int height)
+void resize_camera_window(int width, int height)
 {
     /* resize a window */
 
-    if (window == NULL) {
-        throw std::runtime_error("render::resize_window found NULL window pointer");
+    if (camera_window == NULL) {
+        throw std::runtime_error("render::resize_window found NULL camera_window pointer");
     }
 
-    glfwDestroyWindow(window);
-    create_window(width, height, window_visible);
+    glfwDestroyWindow(camera_window);
+    create_camera_window(width, height);
 }
 
-void create_window(int width, int height, bool visibility)
+void create_camera_window(int width, int height)
 {
     /* create a graphical window, and indicate if it is visible. Also allocate
     the rgb and depth buffers for if we want to use this window as a camera */
 
     // save the window size to global variables
-    window_width = width;
-    window_height = height;
+    camera_width = width;
+    camera_height = height;
 
-    if (visibility) {
-        glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
-        window_visible = true;
-    }
-    else {
-        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-        window_visible = false;
-    }
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+
+    // offscreen rendering requires to set the buffer size, default is 640x480
+    /* In the XML: <visual> <global offwidth="640" offheight="480"/></visual> */
+    // offscreen buffer appears to be slower than regular
+    // glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_FALSE);
 
     // create window, make OpenGL context current, request v-sync
-    window = glfwCreateWindow(window_width, window_height, "luke-gripper-mujoco", NULL, NULL);
-    glfwMakeContextCurrent(window);
-    glfwSwapInterval(1);
+    camera_window = glfwCreateWindow(camera_width, camera_height, "rgbd-camera-window", NULL, NULL);
+    glfwMakeContextCurrent(camera_window);
 
     // create scene and context
-    mjv_makeScene(m, &scn, 2000);
-    mjr_makeContext(m, &con, mjFONTSCALE_150);
+    mjv_makeScene(m, &scn_rgbd, 2000);
+    mjr_makeContext(m, &con_rgbd, mjFONTSCALE_150);
 
-    // reallocate data buffers
-    if (rgb_ != NULL) std::free(rgb_);
-    if (depth_ != NULL) std::free(depth_);
+    // // set rendering to offscreen buffer
+    // mjr_setBuffer(mjFB_OFFSCREEN, &con_rgbd);
+    // if (con_rgbd.currentBuffer!=mjFB_OFFSCREEN) {
+    //     std::printf("Warning: offscreen rendering not supported, using default/window framebuffer\n");
+    // }
 
-    int X = height * width;
-    rgb_ = (unsigned char*)std::malloc(3 * X);
-    depth_ = (float*)std::malloc(sizeof(float) * X);
-
-    // clear and resize vectors
+    // clear and resize vectors storing rgbd data
+    int X = camera_width * camera_height;
     rgbd_data.rgb.clear();
     rgbd_data.depth.clear();
     rgbd_data.rgb.resize(3 * X);
@@ -526,83 +650,23 @@ luke::RGBD read_rgbd()
 {
     /* get an rgbd image out of the simulation */
     
-    if (not rendering_initialised) {
-        throw std::runtime_error("render::read_rgbd() called but rendering not initialised");
+    if (not camera_initialised) {
+        throw std::runtime_error("render::read_rgbd() called but camera not initialised");
     }
 
-    int H = window_height;
-    int W = window_width;
+    // mjrRect rect =  mjr_maxViewport(&con_rgbd);
+    // int W = rect.width;
+    // int H = rect.height;
+
+    int W = camera_width;
+    int H = camera_height;
 
     mjrRect rect = {0, 0, W, H};
 
-    cam.type = mjCAMERA_FIXED;
-    cam.fixedcamid = 0;
+    // read depth camera directly into std::vector by passing pointer
+    mjr_readPixels(&rgbd_data.rgb[0], &rgbd_data.depth[0], rect, &con_rgbd);
 
-    std::cout << "height is " << H << " and width is " << W << '\n';
-
-
-    // testing: read depth camera directly into a vector
-    mjr_readPixels(&rgbd_data.rgb[0], &rgbd_data.depth[0], rect, &con);
     return rgbd_data;
-
-    // // read the depth camera using mujoco
-    // mjr_readPixels(rgb_, depth_, rect, &con);
-
-    // for (int i = 0;  i < 3*W*H; i++) {
-    //     output.rgb.push_back((luke::rgbint)rgb_[i]);
-    // }
-
-    // for (int i = 0;  i < W*H; i++) {
-    //     output.depth.push_back(depth_[i]);
-    // }
-
-    // // this code overwrites the rgb_ data, which we don't want
-    // if (render_depth_flag) {
-
-    //     std::cout << "2.1\n";
-
-    //     const int NS = 3;           // depth_ image sub-sampling
-    //     for (int r=0; r<H; r+=NS)
-    //         for (int c=0; c<W; c+=NS) {
-    //             int adr = (r/NS)*W + c/NS;
-    //             rgb_[3*adr] = rgb_[3*adr+1] = rgb_[3*adr+2] = (unsigned char)((1.0f-depth_[r*W+c])*255.0f);
-    //         }
-
-    //     // if we have a window, draw the pixels on screen
-    //     if (window_visible) {
-    //         mjrRect viewport2 =  rect;
-    //         viewport2.height = rect.height/2;
-    //         viewport2.width = rect.width/2;
-    //         mjr_drawPixels(rgb_, NULL, viewport2, &con);
-    //     }
-    // }
-
-    // if (render_rgb_flag) {
-
-    //     std::cout << "2.2\n";
-
-    //     const int NS = 3;           // depth_ image sub-sampling
-    //     for (int r=0; r<H; r+=NS)
-    //         for (int c=0; c<W; c+=NS) {
-    //             int adr = (r/NS)*W + c/NS;
-    //             rgb_[3*adr] = (unsigned char)((1.0f-rgb_[3*r*W+c])*255.0f);
-    //             rgb_[3*adr+1] = (unsigned char)((1.0f-rgb_[3*r*W+c + 1])*255.0f);
-    //             rgb_[3*adr+2] = (unsigned char)((1.0f-rgb_[3*r*W+c + 2])*255.0f);
-
-    //             // rgb_[3*adr] = rgb_[3*adr+1] = rgb_[3*adr+2] = (unsigned char)((1.0f-depth_[r*W+c])*255.0f);
-    //         }
-
-    //     // if we have a window, draw the pixels on screen
-    //     if (window_visible) {
-    //         mjrRect viewport3 =  rect;
-    //         viewport3.bottom = rect.height/2;
-    //         viewport3.height = rect.height/2;
-    //         viewport3.width = rect.width/2;
-    //         mjr_drawPixels(rgb_, NULL, viewport3, &con);
-    //     }
-    // }
-
-    // return output;
 }
 
 void render_rgb(bool set_as)

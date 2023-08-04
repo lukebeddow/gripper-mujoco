@@ -572,7 +572,6 @@ bool MjClass::render()
   // if the render window has not yet been initialised
   if (not render_window_init) {
     render::init_window(*this);
-    render_init = true;
     render_window_init = true;
   }
   else if (render_reload) {
@@ -594,18 +593,17 @@ bool MjClass::render()
       (time_::now() - start_time).count() < s_.render_delay * 1000) { 
       
       // window_open = render::render(model, data);
-      window_open = render::render();
+      window_open = render::render_window();
     }
   }
   else {
     // just render once
-    window_open = render::render();
+    window_open = render::render_window();
   }
 
   // if the window has been closed
   if (not window_open) {
-    render::finish();
-    render_init = false;
+    render::finish_window();
     render_window_init = false;
     window_closed = true;
   }
@@ -617,18 +615,17 @@ void MjClass::close_render()
 {
   /* close the rendering window */
 
-  if (render_init) render::finish();
-  render_init = false;
+  if (render_window_init) render::finish_window();
+  render_window_init = false;
 }
 
 bool MjClass::init_rgbd()
 {
   /* initialise an rgbd camera */
 
-  render::init_rendering(*this);
-  render_init = true;
+  render::init_camera(*this);
+  render_camera_init = true;
   render_reload = false;
-  render::read_rgbd(); // first output is always incorrect camera view
 
   return true;
 }
@@ -648,7 +645,7 @@ void MjClass::render_RGBD()
   the screen */
 
   // if the render window has not yet been initialised
-  if (not render_init) {
+  if (not render_camera_init) {
     init_rgbd();
   }
   else if (render_reload) {
@@ -656,7 +653,7 @@ void MjClass::render_RGBD()
     render_reload = false;
   }
 
-  render::render();
+  render::render_camera();
 }
 
 luke::RGBD MjClass::read_existing_RGBD()
@@ -671,7 +668,7 @@ void MjClass::set_RGBD_size(int width, int height)
 {
   /* set how many pixels the RGBD image should be */
 
-  render::resize_window(width, height);
+  render::resize_camera_window(width, height);
 }
 
 #endif
