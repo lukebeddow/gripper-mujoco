@@ -488,12 +488,32 @@ def curriculum_step_size(self, i):
 
   stage = 0
 
-  for t in self.curriculum_params["thresholds"]:
-    if i >= t:
-      stage += 1
-    else: break
+  # determine the curriculum metric
+  if self.curriculum_params["metric"] == "episode_number":
 
-  if stage == self.curriculum_params["stage"]: return
+    for t in self.curriculum_params["thresholds"]:
+      if i >= t:
+        stage += 1
+      else: break
+
+    if stage == self.curriculum_params["stage"]: return
+
+  elif self.curriculum_params["metric"] == "success_rate":
+
+    # get the most recent success rate
+    if len(self.track.avg_stable_height) > 0:
+      success_rate = self.track.avg_stable_height[-1]
+    else: success_rate = 0.0
+
+    # determine if we have passed the required threshold
+    for t in self.curriculum_params["thresholds"]:
+      if success_rate >= t:
+        stage += 1
+
+    if stage <= self.curriculum_params["stage"]: return
+
+  # if the metric is not recognised
+  else: return
 
   # now set the step sizes
   self.env.mj.set.gripper_prismatic_X.value = self.curriculum_params["step_sizes"][stage][0]
@@ -507,7 +527,7 @@ def curriculum_step_size(self, i):
   print(f"Episode = {i}, stage = {stage}, curriculum is changing")
 
   self.curriculum_params["stage"] = stage
-  if stage == 3: self.curriculum_params["finished"] = True
+  if stage == len(self.curriculum_params["thresholds"]): self.curriculum_params["finished"] = True
 
   # now save a text file to reflect the changes
   labelstr = f"Hyperparameters after curriculum change which occured at episode {i}\n"
@@ -2481,6 +2501,7 @@ if __name__ == "__main__":
     model.params.use_curriculum = True
     model.curriculum_params["step_sizes"] = levels_A
     model.curriculum_params["thresholds"] = thresholds_A
+    model.curriculum_params["metric"] = "episode_number"
     model.curriculum_fcn = functools.partial(curriculum_step_size, model)
 
     vary_1 = [
@@ -2509,12 +2530,56 @@ if __name__ == "__main__":
     # use the new object set
     model.params.object_set = "set7_fullset_1500_50i_updated"
 
-    # FOR TESTING - DELETE BEFORE A PROPER TRAINING
-    model.params.min_memory_replay = 0
-
     # test more often
     model.params.test_freq = 2000
     model.params.save_freq = 2000
+
+  elif training_type == "cnn_trial_3":
+
+    # setup up a step size curriculum
+    levels_A = [
+      [8e-3, 0.025, 8e-3, 2e-3, 0.8],
+      [4e-3, 0.02,  6e-3, 2e-3, 0.4],
+      [2e-3, 0.015, 4e-3, 2e-3, 0.2],
+      [1e-3, 0.01,  2e-3, 2e-3, 0.2],
+    ]
+    thresholds_A = [0.5, 0.65, 0.8]
+    model.params.use_curriculum = True
+    model.curriculum_params["step_sizes"] = levels_A
+    model.curriculum_params["thresholds"] = thresholds_A
+    model.curriculum_params["metric"] = "success_rate"
+    model.curriculum_fcn = functools.partial(curriculum_step_size, model)
+
+    vary_1 = [
+      "CNN_25_25",
+      # "CNN_50_50"
+    ]
+    vary_2 = [5e-5, 1e-4]
+    vary_3 = None
+    repeats = 5
+    param_1_name = "network"
+    param_2_name = "learning rate"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    # do we limit stable grasps to a maximum allowable force
+    model.env.mj.set.stable_finger_force_lim = 100
+    model.env.mj.set.stable_palm_force_lim = 100
+
+    baseline_args = {
+      "network" : param_1,
+      "lr" : param_2,
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+    # use the new object set
+    model.params.object_set = "set7_fullset_1500_50i_updated"
+
+    # normal testing
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
 
   elif training_type == "profile_cnn":
 
@@ -2539,23 +2604,6 @@ if __name__ == "__main__":
     exit()
 
   elif training_type == "example_template":
-
-    vary_1 = None
-    vary_2 = None
-    vary_3 = None
-    repeats = None
-    param_1_name = None
-    param_2_name = None
-    param_3_name = None
-    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
-                                                param_3=vary_3, repeats=repeats)
-    baseline_args = {
-      "param_1_arg" : param_1,
-      "param_2_arg" : param_2,
-      "param_3_arg" : param_3
-    }
-
-  elif training_type == "program_template":
 
     vary_1 = None
     vary_2 = None
