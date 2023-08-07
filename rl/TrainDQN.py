@@ -729,7 +729,7 @@ class TrainDQN():
       return
 
   def __init__(self, run_name=None, group_name=None, device=None, use_wandb=False, 
-               no_plot=None, log_level=1, object_set=None, use_curriculum=None,
+               no_plot=True, log_level=1, object_set=None, use_curriculum=None,
                num_segments=None, finger_thickness=None, finger_width=None,
                depth_camera=None, finger_modulus=None):
 
@@ -781,7 +781,7 @@ class TrainDQN():
     # curriculum defaults, add parameters to this dictionary
     self.curriculum_params = {
       "finished" : False,
-      "stage" : None,
+      "stage" : -1,
       "metric" : None
     }
 
@@ -1457,7 +1457,14 @@ class TrainDQN():
 
   def curriculum_fcn(self, i_episode):
     """
-    Implement a learning curriculum
+    Implement a learning curriculum. This function should almost certainly be
+    overriden for a curriculum training, here is only an example. This is how:
+
+    import functools
+    def my_curriculum_function(self, i_episode): ...
+    model.curriculum_fcn = functools.partial(my_curriculum_function, model)
+
+    Use the 'self.curriculums_params' dictionary and add to it if needed.
     """
 
     if self.curriculum_params["finished"]: return
