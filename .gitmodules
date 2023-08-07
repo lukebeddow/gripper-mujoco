@@ -1,3 +1,4 @@
 [submodule "description"]
 	path = description
 	url = git@github.com:RPL-CS-UCL/luke-gripper-description.git
+	branch = main

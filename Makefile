@@ -33,6 +33,12 @@ OUTPY := rl/env/mjpy
 # default object set name
 DEFAULT_OBJECTSET = set6_fullset_800_50i
 
+# where is the gripper-description submodule (if we have it)
+DESCRIPTION_MODULE := description
+
+# where are we storing mjcf files
+MJCF_FOLDER := mjcf
+
 # do we want to prevent any rendering libraries from compiling (1=True, 0=false)
 PREVENT_RENDERING = 0
 
@@ -116,6 +122,12 @@ cluster: py $(OUTCPP)/test
 
 .PHONY: pc
 pc: cpp py lab
+
+.PHONY: sets
+sets:
+	$(info $(shell mkdir -p $(MJCF_FOLDER)))
+	$(MAKE) -C $(DESCRIPTION_MODULE) sets $(ARGS) EXTRA_COPY_TO="../../$(MJCF_FOLDER)" \
+		MUJOCO_PATH=$(MUJOCO_PATH) EXTRA_COPY_YES_TO_ALL=yes
 
 # compile the uitools object file which is used by both cpp and python targets
 # ADDED -fPIC FOR CLUSTER TO WORK
