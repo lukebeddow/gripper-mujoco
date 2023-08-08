@@ -815,7 +815,8 @@ class TrainDQN():
       pass
 
     elif isinstance(network, str):
-      if network.startswith("CNN"):
+
+      if network.startswith("CNN_"):
 
         splits = network.split("_")
         width = int(splits[-2])
@@ -836,11 +837,6 @@ class TrainDQN():
           raise RuntimeError(f"CNN image width = {width} and height = {height} not recognised")
 
         img_channels = 3
-        self.params.use_images = True
-
-        self.env._init_rgbd(width, height)
-        # self.env._set_rgbd_size(width, height)
-
         self.policy_net = networks.MixedNetwork(self.env.n_obs, img_channels, 
                                                 self.env.n_actions,
                                                 self.device, fcn_size).to(self.device)
@@ -848,14 +844,34 @@ class TrainDQN():
                                                 self.env.n_actions,
                                                 self.device, fcn_size).to(self.device)
 
-        self.target_net.load_state_dict(self.policy_net.state_dict())
+      elif network.startswith("CNN2_"):
 
-        self.memory = TrainDQN.ReplayMemory(self.params.memory_replay, self.device,
-                        HER=self.params.use_HER, HERMethod=self.params.HER_mode,
-                        k=self.params.HER_k, imagedata=True)
+        splits = network.split("_")
+        width = int(splits[-2])
+        height = int(splits[-1])
 
-        # prepare for saving and loading
-        self.modelsaver = ModelSaver(self.savedir + self.group_name)
+        img_channels = 3
+        img_size = (img_channels, width, height)
+
+        self.policy_net = networks.MixedNetwork2(self.env.n_obs, img_size, 
+                                                self.env.n_actions,
+                                                self.device).to(self.device)
+        self.target_net = networks.MixedNetwork2(self.env.n_obs, img_size, 
+                                                self.env.n_actions,
+                                                self.device).to(self.device)
+
+      # prepare to use image data
+      self.params.use_images = True
+      self.env._init_rgbd(width, height)
+
+      self.target_net.load_state_dict(self.policy_net.state_dict())
+
+      self.memory = TrainDQN.ReplayMemory(self.params.memory_replay, self.device,
+                      HER=self.params.use_HER, HERMethod=self.params.HER_mode,
+                      k=self.params.HER_k, imagedata=True)
+
+      # prepare for saving and loading
+      self.modelsaver = ModelSaver(self.savedir + self.group_name)
 
     elif isinstance(network, list):
 
@@ -2306,7 +2322,7 @@ if __name__ == "__main__":
   # ----- train ----- #
 
   # train
-  net = "CNN_25_25"
+  net = "CNN2_25_25"
   model.env.disable_rendering = False
   model.env.mj.set.debug = False
   model.num_segments = 8
