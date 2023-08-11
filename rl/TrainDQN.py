@@ -70,6 +70,7 @@ class TrainDQN():
 
     # image training settings
     use_images: bool = False
+    image_collection_only: bool = False
 
     # curriculum learning
     use_curriculum: bool = False
