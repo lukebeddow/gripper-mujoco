@@ -800,7 +800,7 @@ void read_gripper_dimensions(mjModel* model)
 {
   /* read information from the model for custom dimensions */
 
-  bool debug_fcn = false;
+  bool debug_fcn = debug_;
 
   int i = 0;
 
@@ -1334,7 +1334,7 @@ void calibrate_reset(mjModel* model, mjData* data)
 {
   /* find the equilibrium start position and set the simulation to that */
 
-  constexpr bool debug_fcn = true;
+  constexpr bool debug_fcn = debug_;
 
   static bool first_call = true;
   static std::vector<mjtNum> control_signals;
@@ -3151,7 +3151,7 @@ float get_fingerend_z_height(mjModel* model, mjData* data)
   // ASSUMES STRAIGHT FINGERS! IGNORES FINGERTIP!
   // Only use this function for initial calibration
   float z = data->xpos[j * 3 + 2];
-  float seg_len = j_.dim.finger_length / j_.num.per_finger;
+  float seg_len = j_.dim.finger_length / (float) j_.num.per_finger;
   z -= seg_len;
 
   return z;
