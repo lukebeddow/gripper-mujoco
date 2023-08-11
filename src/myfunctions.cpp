@@ -203,17 +203,26 @@ struct JointSettings {
   // key dimensions and details
   struct Dim {
     
-    double finger_length = 235e-3;
-    double finger_thickness = 0.9e-3;
-    double finger_width = 28e-3;
-    double E = 193e9;
+    double finger_length = 235e-3;                    // set by mjcf file
+    double finger_thickness = 0.9e-3;                 // set by mjcf file
+    double finger_width = 28e-3;                      // set by mjcf file
+    double hook_length = 35e-3;                       // set by mjcf file
+    double hook_angle_degrees = 90.0;                 // set by mjcf file
+    double E = 193e9;                                 // set by mjcf file
+    double gripper_distance_above_ground = 10e-3;     // set by mjcf file
+    double yield_stress = 215e6;
+
+    // also updated during reset()
     double I = (finger_width * std::pow(finger_thickness, 3)) / 12.0;
     double EI = E * I;
-    double yield_stress = 215e6;
-    double gripper_distance_above_ground = 10e-3;
+
+    // these are set from the mjcf file, but then overwritten by auto detection
     bool fixed_first_segment;                         // runtime depends
     bool fixed_hook_segment;                          // runtime depends
-    double stiffness_c = 0;                           // runtime depends
+    bool xy_base_joint = false;                       // not used, see in_use.xyz_base
+    bool xy_base_rotation = false;                    // not used, see in_use.xyz_base
+    bool z_base_rotation = false;                     // not used, see in_use.xyz_base
+
     double segment_length = 0;                        // runtime depends
     std::vector<luke::gfloat> joint_stiffness;        // runtime depends
 
@@ -475,7 +484,10 @@ void init_J(mjModel* model, mjData* data)
 {
   /* initialise our global data structure with joint and model information */
 
-  // wipe the global settings structure
+  // read in gripper dimensions and model values
+  read_gripper_dimensions(model);
+
+  // wipe the global settings structure, updates EI
   j_.reset();
 
   // use joint names to get body indexes and qpos/qvel addresses
@@ -497,18 +509,8 @@ void init_J(mjModel* model, mjData* data)
   int Ntotal = j_.num.per_finger + j_.dim.fixed_first_segment;
   j_.dim.segment_length = j_.dim.finger_length / float(Ntotal);
 
-  if (j_.dim.fixed_first_segment) {
-    j_.dim.stiffness_c = ( j_.dim.EI / (2 * j_.dim.finger_length) ) 
-      * ( (float)(N * (N*N + 6*N + 11)) / (float)((N + 1) * (N + 1)) );
-  }
-  else {
-    j_.dim.stiffness_c = ( j_.dim.EI / (2 * j_.dim.finger_length) ) 
-       * ( (float)((N + 1)*(N + 2)) / N);
-  }
-
   if (debug_) {
     std::cout << "Number of finger joints N is " << j_.num.per_finger << '\n';
-    std::cout << "Joint stiffness c is " << j_.dim.stiffness_c << '\n';
   }
 
   configure_constraints(model, data);
@@ -550,6 +552,11 @@ void print_joint_names(mjModel* model)
     auto x = mj_id2name(model, mjOBJ_JOINT, i);
     std::cout << "i = " << i << " gives jnt name = " << x << '\n';
   }
+
+  // for (int i = 0; i < model->nbody; i++) {
+  //   auto x = mj_id2name(model, mjOBJ_BODY, i);
+  //   std::cout << "i = " << i << " gives body name = " << x << '\n';
+  // }
 }
 
 void get_joint_indexes(mjModel* model)
@@ -787,6 +794,64 @@ void get_joint_addresses(mjModel* model)
     j_.print_qposadr();
     j_.print_qveladr();
   }
+}
+
+void read_gripper_dimensions(mjModel* model)
+{
+  /* read information from the model for custom dimensions */
+
+  bool debug_fcn = false;
+
+  int i = 0;
+
+  i = mj_name2id(model, mjOBJ_NUMERIC, "finger_length");
+  j_.dim.finger_length = model->numeric_data[model->numeric_adr[i]];
+  if (debug_fcn) std::cout << "finger_length is set to " << j_.dim.finger_length << '\n';
+
+  i = mj_name2id(model, mjOBJ_NUMERIC, "finger_width");
+  j_.dim.finger_width = model->numeric_data[model->numeric_adr[i]];
+  if (debug_fcn) std::cout << "finger_width is set to " << j_.dim.finger_width << '\n';
+
+  i = mj_name2id(model, mjOBJ_NUMERIC, "finger_thickness");
+  j_.dim.finger_thickness = model->numeric_data[model->numeric_adr[i]];
+  if (debug_fcn) std::cout << "finger_thickness is set to " << j_.dim.finger_thickness << '\n';
+
+  i = mj_name2id(model, mjOBJ_NUMERIC, "finger_E");
+  j_.dim.E = model->numeric_data[model->numeric_adr[i]];
+  if (debug_fcn) std::cout << "finger_E is set to " << j_.dim.E << '\n';
+
+  i = mj_name2id(model, mjOBJ_NUMERIC, "fingertip_clearance");
+  j_.dim.gripper_distance_above_ground = model->numeric_data[model->numeric_adr[i]];
+  if (debug_fcn) std::cout << "fingertip_clearance is set to " << j_.dim.gripper_distance_above_ground << '\n';
+
+  i = mj_name2id(model, mjOBJ_NUMERIC, "hook_angle_degrees");
+  j_.dim.hook_angle_degrees = model->numeric_data[model->numeric_adr[i]];
+  if (debug_fcn) std::cout << "hook_angle_degrees is set to " << j_.dim.hook_angle_degrees << '\n';
+
+  i = mj_name2id(model, mjOBJ_NUMERIC, "hook_length");
+  j_.dim.hook_length = model->numeric_data[model->numeric_adr[i]];
+  if (debug_fcn) std::cout << "hook_length is set to " << j_.dim.hook_length << '\n';
+
+  i = mj_name2id(model, mjOBJ_NUMERIC, "fixed_hook_segment");
+  j_.dim.fixed_hook_segment = model->numeric_data[model->numeric_adr[i]];
+  if (debug_fcn) std::cout << "fixed_hook_segment is set to " << j_.dim.fixed_hook_segment << '\n';
+
+  i = mj_name2id(model, mjOBJ_NUMERIC, "fixed_first_segment");
+  j_.dim.fixed_first_segment = model->numeric_data[model->numeric_adr[i]];
+  if (debug_fcn) std::cout << "fixed_first_segment is set to " << j_.dim.fixed_first_segment << '\n';
+
+  i = mj_name2id(model, mjOBJ_NUMERIC, "xy_base_joint");
+  j_.dim.xy_base_joint = model->numeric_data[model->numeric_adr[i]];
+  if (debug_fcn) std::cout << "xy_base_joint is set to " << j_.dim.xy_base_joint << '\n';
+
+  i = mj_name2id(model, mjOBJ_NUMERIC, "xy_base_rotation");
+  j_.dim.xy_base_rotation = model->numeric_data[model->numeric_adr[i]];
+  if (debug_fcn) std::cout << "xy_base_rotation is set to " << j_.dim.xy_base_rotation << '\n';
+
+  i = mj_name2id(model, mjOBJ_NUMERIC, "z_base_rotation");
+  j_.dim.z_base_rotation = model->numeric_data[model->numeric_adr[i]];
+  if (debug_fcn) std::cout << "z_base_rotation is set to " << j_.dim.z_base_rotation << '\n';
+
 }
 
 void set_finger_stiffness(mjModel* model, std::vector<luke::gfloat> stiffness)
@@ -1269,6 +1334,8 @@ void calibrate_reset(mjModel* model, mjData* data)
 {
   /* find the equilibrium start position and set the simulation to that */
 
+  constexpr bool debug_fcn = true;
+
   static bool first_call = true;
   static std::vector<mjtNum> control_signals;
   static std::vector<mjtNum> qpos_positions;
@@ -1316,6 +1383,12 @@ void calibrate_reset(mjModel* model, mjData* data)
   for (int i = 0; i < j_.num.gripper; i++) {
     (*j_.to_qpos.gripper[i]) = qpos_positions[k]; 
     k += 1;
+  }
+
+  if (debug_fcn) {
+    std::cout << "After calibrate reset, finger end z height is "
+      << get_fingerend_z_height(model, data) 
+      << " metres (ignores fingertip/finger angles)\n";
   }
 }
 
@@ -2849,21 +2922,42 @@ int get_N()
   return j_.num.per_finger + j_.dim.fixed_first_segment;
 }
 
-float get_finger_thickness()
+double get_finger_thickness()
 {
   return j_.dim.finger_thickness;
 }
 
-float get_finger_width()
+double get_finger_width()
 {
   return j_.dim.finger_width;
 }
 
-float get_finger_length()
+double get_finger_length()
 {
   /* return the current finger length */
 
   return j_.dim.finger_length;
+}
+
+double get_finger_hook_angle_degrees()
+{
+  /* return the angle of the 'fixed' finger hook */
+
+  return j_.dim.hook_angle_degrees;
+}
+
+bool is_finger_hook_fixed()
+{
+  /* return whether the finger hook is fixed */
+
+  return j_.dim.fixed_hook_segment;
+}
+
+double get_fingertip_clearance()
+{
+  /* return the height the fingertips are set above the ground */
+
+  return j_.dim.gripper_distance_above_ground;
 }
 
 bool change_finger_thickness(float thickness)
@@ -2975,14 +3069,14 @@ bool change_youngs_modulus(float E)
   return true;
 }
 
-float get_youngs_modulus()
+double get_youngs_modulus()
 {
   /* return the youngs modulus value that the simluation is currently using for the fingers */
 
   return j_.dim.E;
 }
 
-float get_finger_rigidity()
+double get_finger_rigidity()
 {
   /* return the current finger rigidity */
 
@@ -3034,6 +3128,33 @@ float get_fingertip_z_height()
   float height_above_min = straight_finger_distance + tip_lift;
 
   return height_above_min + target_.base_min.z;
+}
+
+float get_fingerend_z_height(mjModel* model, mjData* data)
+{
+  /* return the z height of the end of the finger (ignoring fingertip) from
+  the simulation itself */
+
+  // get the z height of the last finger segment
+  std::string last_seg = "finger_1_segment_link_"
+    + std::to_string(j_.num.per_finger);
+
+  // get the body index (not joint) of the last link
+  int j = mj_name2id(model, mjOBJ_BODY, last_seg.c_str());
+
+  // if the body is present in the model
+  if (j == -1) {
+    std::cout << "get_fingerend_z_height() failed, " << last_seg << " not found in model\n";
+    return 0.0;
+  }
+
+  // ASSUMES STRAIGHT FINGERS! IGNORES FINGERTIP!
+  // Only use this function for initial calibration
+  float z = data->xpos[j * 3 + 2];
+  float seg_len = j_.dim.finger_length / j_.num.per_finger;
+  z -= seg_len;
+
+  return z;
 }
 
 /* ----- environment ----- */
@@ -3155,7 +3276,7 @@ void set_all_objects_colour(mjModel* model, std::vector<float> rgba)
   oh_.set_all_colours(model, rgba);
 }
 
-void randomise_all_colours(mjModel* model, std::shared_ptr<std::default_random_engine> generator)
+void randomise_all_object_colours(mjModel* model, std::shared_ptr<std::default_random_engine> generator)
 {
   /* randomise the colour of every object but not the ground*/
 

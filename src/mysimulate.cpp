@@ -2464,7 +2464,7 @@ void uiEvent(mjuiState* state)
                 break;
             }
             case 12: {          // randomise all colours
-                luke::randomise_all_colours(myMjClass.model, MjType::generator);
+                luke::randomise_all_object_colours(myMjClass.model, MjType::generator);
                 myMjClass.randomise_ground_colour();
                 myMjClass.randomise_finger_colours();
                 break;
@@ -2917,9 +2917,17 @@ void render_MS(GLFWwindow* window)
 
     // added by luke
     if (settings.render_depth or settings.render_rgb) {
-        render::render_rgb(settings.render_rgb);
-        render::render_depth(settings.render_depth);
-        render::read_rgbd();
+        // // render::render_rgb(settings.render_rgb);
+        // // render::render_depth(settings.render_depth);
+        // static bool first_call = true;
+        // if (first_call) {
+        //     render::init_camera(myMjClass);
+        //     // render::init_window(myMjClass);
+        //     first_call = false;
+        // }
+        // render::read_rgbd();
+        // render::render_rgbd_feed();
+        std::cout << "render_depth and render_rgb are disabled\n";
     }
 
     // added by luke

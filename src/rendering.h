@@ -43,8 +43,6 @@ void lukesensorfigsupdate();
 void lukesensorfigshow(mjrRect rect);
 
 luke::RGBD read_rgbd();
-void render_rgb(bool set_as);
-void render_depth(bool set_as);
 
 }
 

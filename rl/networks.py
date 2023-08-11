@@ -38,6 +38,38 @@ class DQN_variable(nn.Module):
 
 # --- CNN and sensor data --- #
 
+def calc_conv_layer_size(W, H, C, kernel_num, kernel_size, stride, padding, print=True):
+
+  new_W = floor(((W - kernel_size + 2*padding) / (stride)) + 1)
+  new_H = floor(((H - kernel_size + 2*padding) / (stride)) + 1)
+
+  if print:
+    print(f"Convolution transforms ({C}x{W}x{H}) to ({kernel_num}x{new_W}x{new_H})")
+
+  return new_W, new_H, kernel_num
+
+def calc_max_pool_size(W, H, C, pool_size, stride, print=True):
+
+  new_W = floor(((W - pool_size) / stride) + 1)
+  new_H = floor(((H - pool_size) / stride) + 1)
+
+  if print:
+    print(f"Max pool transforms ({C}x{W}x{H}) to ({C}x{new_W}x{new_H})")
+
+  return new_W, new_H, C
+
+def calc_FC_layer_size(W, H, C, print=True):
+
+  new_W = 1
+  new_H = 1
+  new_C = W * H * C
+
+  if print:
+    print(f"The first FC layer should take size ({C}x{W}x{H}) as ({new_C}x{new_W}x{new_H})")
+
+  return new_W, new_H, new_C
+
+
 class MixedNetwork(nn.Module):
 
   name = "MixedNetwork"
@@ -55,7 +87,7 @@ class MixedNetwork(nn.Module):
       nn.ReLU(),
       nn.MaxPool2d(kernel_size=3, stride=2),
       # nn.Dropout(),
-      nn.Conv2d(16, 64, kernel_size=5, padding=2),
+      nn.Conv2d(16, 64, kernel_size=5, stride=1, padding=2),
       nn.ReLU(),
       # output 64*64
       nn.MaxPool2d(kernel_size=3, stride=2),
@@ -84,6 +116,75 @@ class MixedNetwork(nn.Module):
       nn.Linear(300, 100),
       nn.ReLU(),
       nn.Linear(100, outputs),
+      nn.Softmax(dim=1),
+    )
+
+  def forward(self, tuple_img_sensors):
+    image = tuple_img_sensors[0].to(self.device)
+    sensors = tuple_img_sensors[1].to(self.device)
+    x = self.image_features_(image)
+    # x = x.view(-1, 64*64)
+    y = self.numeric_features_(sensors)
+    z = torch.cat((x, y), 1)
+    z = self.combined_features_(z)
+    return z
+
+class MixedNetwork2(nn.Module):
+
+  name = "MixedNetwork2"
+
+  def __init__(self, numeric_inputs, image_size, outputs, device):
+
+    super(MixedNetwork2, self).__init__()
+    self.device = device
+
+    (channel, width, height) = image_size
+    self.name += f"_{width}x{height}"
+
+    # calculate the size of the first fully connected layer (ensure settings match image_features_ below)
+    w, h, c = calc_conv_layer_size(width, height, channel, kernel_num=16, kernel_size=5, stride=2, padding=2, print=False)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, print=False)
+    w, h, c = calc_conv_layer_size(w, h, c, kernel_num=64, kernel_size=5, stride=2, padding=2, print=False)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, print=False)
+    w, h, c = calc_FC_layer_size(w, h, c, print=False)
+    fc_layer_num = c
+
+    # define the CNN to handle the images
+    self.image_features_ = nn.Sequential(
+
+      # input CxWxH, output 16xWxH
+      nn.Conv2d(channel, 16, kernel_size=5, stride=2, padding=2),
+      nn.ReLU(),
+      nn.MaxPool2d(kernel_size=3, stride=2),
+      # nn.Dropout(),
+      nn.Conv2d(16, 64, kernel_size=5, stride=2, padding=2),
+      nn.ReLU(),
+      nn.MaxPool2d(kernel_size=3, stride=2),
+      # nn.Dropout(),
+      nn.Flatten(),
+      nn.Linear(fc_layer_num, 128),
+      nn.ReLU(),
+      # nn.Linear(64*16, 64),
+      # nn.ReLU(),
+    )
+
+    # define the MLP to handle the sensor data
+    self.numeric_features_ = nn.Sequential(
+      nn.Linear(numeric_inputs, 128),
+      nn.ReLU(),
+      # nn.Linear(150, 100),
+      # nn.ReLU(),
+      # nn.Linear(100, 50),
+      # nn.ReLU(),
+    )
+
+    # combine the image and MLP features
+    self.combined_features_ = nn.Sequential(
+      nn.Linear(128 + 128, 128),
+      nn.ReLU(),
+      nn.Linear(128, 64),
+      nn.ReLU(),
+      nn.Linear(64, outputs),
       nn.Softmax(dim=1),
     )
 
@@ -583,34 +684,6 @@ class DQN_3LX(nn.Module):
 
     return x
   
-def calc_conv_layer_size(W, H, C, kernel_num, kernel_size, stride, padding):
-
-  new_W = floor(((W - kernel_size + 2*padding) / (stride)) + 1)
-  new_H = floor(((H - kernel_size + 2*padding) / (stride)) + 1)
-
-  print(f"Convolution transforms ({C}x{W}x{H}) to ({kernel_num}x{new_W}x{new_H})")
-
-  return new_W, new_H, kernel_num
-
-def calc_max_pool_size(W, H, C, pool_size, stride):
-
-  new_W = floor(((W - pool_size) / stride) + 1)
-  new_H = floor(((H - pool_size) / stride) + 1)
-
-  print(f"Max pool transforms ({C}x{W}x{H}) to ({C}x{new_W}x{new_H})")
-
-  return new_W, new_H, C
-
-def calc_FC_layer_size(W, H, C):
-
-  new_W = 1
-  new_H = 1
-  new_C = W * H * C
-
-  print(f"The first FC layer should take size ({C}x{W}x{H}) a ({new_C}x{new_W}x{new_H})")
-
-  return new_W, new_H, new_C
-
 if __name__ == "__main__":
 
   # self.image_features_ = nn.Sequential(
@@ -631,15 +704,52 @@ if __name__ == "__main__":
   #     # nn.ReLU(),
   #   )
   
-  w = 100
-  h = 100
+  w = 25
+  h = 25
   c = 3
 
-  w, h, c = calc_conv_layer_size(w, h, c, 16, 5, 2, 2)
-  w, h, c = calc_max_pool_size(w, h, c, 3, 2)
-  w, h, c = calc_conv_layer_size(w, h, c, 64, 5, 2, 2)
-  w, h, c = calc_max_pool_size(w, h, c, 3, 2)
-  w, h, c = calc_FC_layer_size(w, h, c)
+  sizes = [25, 50, 75, 100]
+  roundup_str = ""
+
+  for s in sizes:
+
+    w = s
+    h = s
+    c = 3
+
+    w, h, c = calc_conv_layer_size(w, h, c, kernel_num=16, kernel_size=5, stride=2, padding=2)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2)
+    w, h, c = calc_conv_layer_size(w, h, c, kernel_num=64, kernel_size=5, stride=1, padding=2)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2)
+    w, h, c = calc_FC_layer_size(w, h, c)
+
+    roundup_str += f"size ({s} x {s}) gives fully connected layer width {c}\n"
+
+  roundup_str += "\nOr using stride=2 gives\n"
+
+  for s in sizes:
+
+    w = s
+    h = s
+    c = 3
+
+    w, h, c = calc_conv_layer_size(w, h, c, kernel_num=16, kernel_size=5, stride=2, padding=2)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2)
+    w, h, c = calc_conv_layer_size(w, h, c, kernel_num=64, kernel_size=5, stride=2, padding=2)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2)
+    w, h, c = calc_FC_layer_size(w, h, c)
+
+    roundup_str += f"size ({s} x {s}) gives fully connected layer width {c}\n"
+
+  print("\n" + roundup_str)
+
+  # self.conv1 = nn.Conv2d(image_channels, 16, kernel_size=5, stride=2, padding=2)
+  # self.relu1 = nn.ReLU()
+  # self.maxp1 = nn.MaxPool2d(kernel_size=3, stride=2)
+  
+  # self.conv2 = nn.Conv2d(16, 64, kernel_size=5, padding=2)
+  # self.relu2 = nn.ReLU()
+  # self.maxp2 = nn.MaxPool2d(kernel_size=3, stride=2)
 
   # # alex net: correct answer for FC layer is 9216
   # w = 227

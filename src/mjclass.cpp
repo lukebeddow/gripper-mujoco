@@ -71,8 +71,7 @@ void MjClass::init()
 
   // if we are randomising the colour of simulated objects
   if (s_.randomise_colours) {
-    luke::randomise_all_colours(model, MjType::generator);
-    randomise_ground_colour();
+    randomise_every_colour();
   }
   else {
     set_neat_colours();
@@ -1524,17 +1523,32 @@ void MjClass::spawn_object(int index, double xpos, double ypos, double zrot)
   forward();
 }
 
-void MjClass::randomise_object_colour()
+void MjClass::randomise_every_colour()
+{
+  /* makes every single item in the simulation a random colour */
+
+  randomise_object_colour(true);
+  randomise_finger_colours(false);
+  randomise_ground_colour();
+}
+
+void MjClass::randomise_object_colour(bool all_objects)
 {
   /* randomise the colour of the object */
 
-  std::vector<float> rgb(3);
-  std::uniform_real_distribution<double> distribution(0.0, 1.0);
-  rgb[0] = distribution(*MjType::generator);
-  rgb[1] = distribution(*MjType::generator);
-  rgb[2] = distribution(*MjType::generator);
+  if (all_objects) {
+    luke::randomise_all_object_colours(model, MjType::generator);
+  }
+  else {
 
-  luke::set_object_colour(model, rgb);
+    std::vector<float> rgb(3);
+    std::uniform_real_distribution<double> distribution(0.0, 1.0);
+    rgb[0] = distribution(*MjType::generator);
+    rgb[1] = distribution(*MjType::generator);
+    rgb[2] = distribution(*MjType::generator);
+
+    luke::set_object_colour(model, rgb);
+  }
 }
 
 void MjClass::randomise_ground_colour()
@@ -1550,21 +1564,40 @@ void MjClass::randomise_ground_colour()
   luke::set_ground_colour(model, rgb);
 }
 
-void MjClass::randomise_finger_colours()
+void MjClass::randomise_finger_colours(bool all_same)
 {
   /* give all the fingers the same random colour */
 
-  std::vector<float> rgb(3);
-  std::uniform_real_distribution<double> distribution(0.0, 1.0);
-  rgb[0] = distribution(*MjType::generator);
-  rgb[1] = distribution(*MjType::generator);
-  rgb[2] = distribution(*MjType::generator);
+  if (all_same) {
 
-  // set each finger in turn to be the same colour
-  luke::set_finger_colour(model, rgb, 1);
-  luke::set_finger_colour(model, rgb, 2);
-  luke::set_finger_colour(model, rgb, 3);
-  luke::set_finger_colour(model, rgb, 4); // 4 means palm
+    std::vector<float> rgb(3);
+    std::uniform_real_distribution<double> distribution(0.0, 1.0);
+    rgb[0] = distribution(*MjType::generator);
+    rgb[1] = distribution(*MjType::generator);
+    rgb[2] = distribution(*MjType::generator);
+
+    // set each finger in turn to be the same colour
+    luke::set_finger_colour(model, rgb, 1);
+    luke::set_finger_colour(model, rgb, 2);
+    luke::set_finger_colour(model, rgb, 3);
+    luke::set_finger_colour(model, rgb, 4); // 4 means palm
+
+  }
+  else {
+
+    // loop over fingers (1-3) and palm (4)
+    for (int i = 1; i <=4; i++) {
+
+      std::vector<float> rgb(3);
+      std::uniform_real_distribution<double> distribution(0.0, 1.0);
+      rgb[0] = distribution(*MjType::generator);
+      rgb[1] = distribution(*MjType::generator);
+      rgb[2] = distribution(*MjType::generator);
+
+      // set each finger in turn to be different colours
+      luke::set_finger_colour(model, rgb, i);
+    }
+  }
 }
 
 void MjClass::set_neat_colours()
@@ -2197,7 +2230,7 @@ MjType::TestReport MjClass::get_test_report()
   return testReport_;
 }
 
-void MjClass::set_finger_thickness(float thickness)
+void MjClass::set_finger_thickness(double thickness)
 {
   /* set a new finger thickness for the gripper. This does not affect the URDF model,
   but updates the finger stiffness behaviour. It will also throw off the gauge
@@ -2210,7 +2243,7 @@ void MjClass::set_finger_thickness(float thickness)
   if (changed) resetFlags.finger_EI_changed = true;
 }
 
-void MjClass::set_finger_width(float width)
+void MjClass::set_finger_width(double width)
 {
   /* set a new finger width for the gripper. For the actual width to change a new
   URDF should have been or about to be loaded. Since EI has changed we need new
@@ -2223,7 +2256,7 @@ void MjClass::set_finger_width(float width)
   if (changed) resetFlags.finger_EI_changed = true;
 }
 
-void MjClass::set_finger_modulus(float E)
+void MjClass::set_finger_modulus(double E)
 {
   /* set the youngs modulus for the finger */
 
@@ -2264,32 +2297,67 @@ int MjClass::get_N()
   return luke::get_N();
 }
 
-float MjClass::get_finger_thickness()
+double MjClass::get_finger_thickness()
 {
   /* get the current saved finger thickness */
 
   return luke::get_finger_thickness();
 }
 
-float MjClass::get_finger_width()
+double MjClass::get_finger_width()
 {
   /* get the current saved finger width */
 
   return luke::get_finger_width();
 }
 
-float MjClass::get_finger_modulus()
+double MjClass::get_finger_modulus()
 {
   /* get the current saved finger youngs modulus */
 
   return luke::get_youngs_modulus();
 }
 
-float MjClass::get_finger_rigidity()
+double MjClass::get_finger_rigidity()
 {
   /* get the current saved value of finger rigidity */
 
   return luke::get_finger_rigidity();
+}
+
+double MjClass::get_finger_length()
+{
+  /* get the current saved finger length */
+
+  return luke::get_finger_length();
+}
+
+double MjClass::get_finger_hook_angle_degrees()
+{
+  /* get the current saved finger hook angle, only valid if fixed */
+
+  return luke::get_finger_hook_angle_degrees();
+}
+
+bool MjClass::is_finger_hook_fixed()
+{
+  /* get whether the finger hook is fixed */
+
+  return luke::is_finger_hook_fixed();
+}
+
+double MjClass::get_fingertip_clearance()
+{
+  /* get the current saved fingertip clearance */
+
+  return luke::get_fingertip_clearance();
+}
+
+bool MjClass::using_xyz_base_actions()
+{
+  /* get whether xy base actions are in use */
+
+  return luke::use_base_xyz();
 }
 
 std::vector<luke::gfloat> MjClass::get_finger_stiffnesses()

@@ -41,13 +41,9 @@ bool button_right =  false;
 double lastx = 0;
 double lasty = 0;
 
-// will we put items into the render window
-bool plot_sensors = false;
+// will we put items into the render window GUI
+bool plot_sensors = true;
 bool plot_rgbd = true;
-
-// what will we render to the GUI screen
-bool render_rgb_flag = false;
-bool render_depth_flag = false;
 
 // what is initialised
 bool window_initialised = false;
@@ -299,32 +295,52 @@ void render_rgbd_feed()
 {
     /* render the rgbd images in the regular rendering window */
 
+    // double the depth values to show more colour variety, assumes depth never exceeds 1.0/x metres
+    constexpr float depthstretch = 2;
+
     int W = camera_width;
     int H = camera_height;
 
-    int Wt = 200;
+    int Wt = 300;
     int scale = Wt / camera_width;
-
-    // scale = 1;
 
     int X = camera_height * camera_width * scale * scale;
     luke::rgbint* rgb_ = (luke::rgbint*)std::malloc(3 * X);
-    float* depth_ = (float*)std::malloc(sizeof(float) * X);
+    luke::rgbint* depth_ = (luke::rgbint*)std::malloc(3 * X);
 
     for (int r = 0; r < H; r++) {
         for (int c = 0; c < W; c++) {
+            
+            // pixel location in our original image
             int adr_old = r*W + c;
-            int adr_new = r*W*scale + c*scale;
+
+            // loop and copy that pixel in a grid to make the image larger
             for (int i = 0; i < scale; i++) {
-                rgb_[adr_new + 0 + i * scale] = rgbd_data.rgb[adr_old + 0];
-                rgb_[adr_new + 1 + i * scale] = rgbd_data.rgb[adr_old + 1];
-                rgb_[adr_new + 2 + i * scale] = rgbd_data.rgb[adr_old + 2];
+                for (int j = 0; j < scale; j++) {
+
+                    // copy the current value into the same position but on new rows just below
+                    int new_row = r*scale + i;
+                    int new_col = c*scale + j;
+                    int new_adr = new_row*W*scale + new_col;
+
+                    rgb_[3 * new_adr + 0] = rgbd_data.rgb[3 * adr_old + 0];
+                    rgb_[3 * new_adr + 1] = rgbd_data.rgb[3 * adr_old + 1];
+                    rgb_[3 * new_adr + 2] = rgbd_data.rgb[3 * adr_old + 2];
+
+                    depth_[3 * new_adr + 0] = (luke::rgbint)((1.0f - rgbd_data.depth[adr_old] * depthstretch) * 255.0f);
+                    depth_[3 * new_adr + 1] = (luke::rgbint)((1.0f - rgbd_data.depth[adr_old] * depthstretch) * 255.0f);
+                    depth_[3 * new_adr + 2] = (luke::rgbint)((1.0f - rgbd_data.depth[adr_old] * depthstretch) * 255.0f);
+                }
             }
         }
     }
 
-    mjrRect viewport2 =  {0, window_height - H*scale, W*scale, H*scale};
-    mjr_drawPixels(rgb_, NULL, viewport2, &con);
+    // draw the rgb and depth onto the viewing window
+    mjrRect rgb_viewport =  {0, window_height - H*scale, W*scale, H*scale};
+    mjr_drawPixels(rgb_, NULL, rgb_viewport, &con);
+
+    mjrRect depth_viewport =  {0, window_height - H*scale*2, W*scale, H*scale};
+    mjr_drawPixels(depth_, NULL, depth_viewport, &con);
 
     // // this code overwrites the rgb_ data, which we don't want
     // const int NS = 3;           // depth_ image sub-sampling
@@ -361,8 +377,6 @@ void render_rgbd_feed()
     // reallocate data buffers
     if (rgb_ != NULL) std::free(rgb_);
     if (depth_ != NULL) std::free(depth_);
-
-    // return output;
 }
 
 // render the camera
@@ -654,10 +668,6 @@ luke::RGBD read_rgbd()
         throw std::runtime_error("render::read_rgbd() called but camera not initialised");
     }
 
-    // mjrRect rect =  mjr_maxViewport(&con_rgbd);
-    // int W = rect.width;
-    // int H = rect.height;
-
     int W = camera_width;
     int H = camera_height;
 
@@ -667,16 +677,6 @@ luke::RGBD read_rgbd()
     mjr_readPixels(&rgbd_data.rgb[0], &rgbd_data.depth[0], rect, &con_rgbd);
 
     return rgbd_data;
-}
-
-void render_rgb(bool set_as)
-{
-    render_rgb_flag = set_as;
-}
-
-void render_depth(bool set_as)
-{
-    render_depth_flag = set_as;
 }
 
 } // namespace render
