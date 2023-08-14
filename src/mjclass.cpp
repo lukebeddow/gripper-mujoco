@@ -324,7 +324,7 @@ std::string MjClass::file_from_from_command_line(int argc, char **argv)
   if (segments.empty()) { segments = "8"; };
   if (width.empty()) { width = "28"; };
   if (gripper.empty()) { gripper = "gripper_N" + segments + "_" + width; };
-  if (object_set.empty()) { object_set = "set7_fullset_1500_50i_updated"; };
+  if (object_set.empty()) { object_set = "set8_fullset_1500"; };
   if (task.empty()) { task = "0"; };
   if (path.empty()) { path = LUKE_MJCF_PATH; };
 

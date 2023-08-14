@@ -744,6 +744,7 @@ class TrainDQN():
     self.last_test_data = None
     self.best_performance_txt_file_name = "best_performance"
     self.best_performance_template = "Best success rate = {0}\nOccured at episode = {1}"
+    self.test_performance_txt_file_name = "test_performance"
 
     # prepare environment, but don't load a model xml file yet
     self.env = MjEnv(noload=True, num_segments=num_segments, depth_camera=depth_camera,
@@ -1928,6 +1929,15 @@ class TrainDQN():
     best_txt = self.best_performance_template.format(best_sr, best_ep)
     self.modelsaver.save(self.best_performance_txt_file_name, txtonly=True, txtstr=best_txt)
 
+    # new: save also a file indicating test performance
+    log_str = "Test time performance (success rate metric = stable height):\n\n"
+    top_row = "{0:<10} | {1:<15}\n".format("Episode", "Success rate")
+    log_str += top_row
+    row_str = "{0:<10} | {1:<15.3f}\n"
+    for i in range(len(self.track.test_episodes)):
+      log_str += row_str.format(self.track.test_episodes[i], self.track.avg_stable_height[i])
+    self.modelsaver.save(self.test_performance_txt_file_name, txtonly=True, txtstr=log_str)
+
     return savepath
   
   def save_policy_only(self, name_ext="policy_net", compressed=True):
@@ -1982,6 +1992,13 @@ class TrainDQN():
       
     if load_data.extra != None:
       self.last_test_data = load_data.extra
+
+    # backwards compatibility fix, check for imagedata field
+    try:
+      x = self.memory.imagedata
+    except AttributeError as e:
+      print(f"self.memory error: {e}")
+      self.memory.imagedata = False
 
     # CATCH failures above, so compatible with old code. This double check could be deleted but it is quite handy
     if best_id:
@@ -2083,8 +2100,6 @@ class TrainDQN():
     hardcoding
     """
 
-    print("entered the function")
-
     readroot = self.savedir + self.group_name + "/"
 
     if heuristic: 
@@ -2106,7 +2121,7 @@ class TrainDQN():
         
         elif len(test_files) > 1: 
 
-          print(f"Multiple '{fulltest_str}.txt' files found in read_best_performance_from_text(...)")
+          if not silence: print(f"Multiple '{fulltest_str}.txt' files found in read_best_performance_from_text(...)")
 
           # hardcoded date string
           datestr = "%d-%m-%y-%H:%M"
@@ -2123,8 +2138,8 @@ class TrainDQN():
           try:
             dates = [datetime.strptime(x, datestr) for x in date_strings[:]]
           except ValueError as e:
-            print("read_best_performance_from_text() datetime error:", e)
-            print("Trying again with another datestring") # OLD CODE compatible
+            if not silence: print("read_best_performance_from_text() datetime error:", e)
+            if not silence: print("Trying again with another datestring") # OLD CODE compatible
             # try again with alternative datestring
             datestr = "%d-%m-%Y-%H:%M"
             ex_date = datetime.now().strftime(datestr)
@@ -2142,7 +2157,7 @@ class TrainDQN():
           # now finally select the most recent date
           readname = str(test_files[recent_ind])
 
-          print("Most recent fulltest selected:", readname)
+          if not silence: print("Most recent fulltest selected:", readname)
 
         else: readname = str(test_files[0])
 
@@ -2173,7 +2188,7 @@ class TrainDQN():
 
     # check for errors
     if len(lines) < 2:
-      print("Error in read_best_performance_from_text(), lines < 2")
+      if not silence: print("Error in read_best_performance_from_text(), lines < 2")
       return None, None
     
     try:
@@ -2326,13 +2341,17 @@ if __name__ == "__main__":
 
   # ----- load ----- #
 
-  # # load
-  # folder = "mymujoco"
-  # group = "paper_baseline_2/31-01-23"
-  # run = "luke-PC_10_54_A117"
-  # folderpath = f"/home/luke/{folder}/rl/models/dqn/{group}/"
+  # load
+  folder = "mujoco-devel"
+  group = "24-07-23"
+  run = "operator-PC_15:10_A2"
+  folderpath = f"/home/luke/{folder}/rl/models/dqn/{group}/"
   # model.set_device("cuda")
-  # model.load(id=None, folderpath=folderpath, foldername=run, best_id=True)
+  model.load(id=None, folderpath=folderpath, foldername=run, best_id=False)
+
+  model.save()
+
+  exit()
 
   # # save only the policy network
   # folder = "mymujoco"

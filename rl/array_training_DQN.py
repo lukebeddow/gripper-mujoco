@@ -2655,6 +2655,44 @@ if __name__ == "__main__":
 
     exit()
 
+  elif training_type == "set8_baseline":
+
+    vary_1 = [False, True]
+    vary_2 = [(1, 5), (3, 3)]
+    vary_3 = None
+    repeats = 10
+    param_1_name = "use_curriculum"
+    param_2_name = "sensor/state steps"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    
+    if param_1:
+      # setup up a step size curriculum
+      levels_A = [
+        [8e-3, 0.025, 8e-3, 2e-3, 0.8],
+        [4e-3, 0.02,  6e-3, 2e-3, 0.4],
+        [2e-3, 0.015, 4e-3, 2e-3, 0.2],
+        [1e-3, 0.01,  2e-3, 2e-3, 0.2],
+      ]
+      thresholds_A = [10_000, 25_000, 50_000]
+      model.params.use_curriculum = True
+      model.curriculum_params["step_sizes"] = levels_A
+      model.curriculum_params["thresholds"] = thresholds_A
+      model.curriculum_params["metric"] = "episode_number"
+      model.curriculum_fcn = functools.partial(curriculum_step_size, model)
+    else:
+      model.params.use_curriculum = False
+
+    model.params.object_set = "set8_fullset_1500"
+
+    baseline_args = {
+      # I've used (3, 3) in all recent trainings despite not testing if it is better
+      # than the pb4 (1, 5) split
+      "sensor_steps" : param_2[0],
+      "state_steps" : param_2[1],
+    }
+
   elif training_type == "example_template":
 
     vary_1 = None

@@ -30,7 +30,7 @@
   XX(  curve_validation,        bool,     false)    /* are we in curve validation mode, if yes collect curve data */\
   XX(  tip_force_applied,       double,   0.0)      /* apply a tip force, only possible in curve validation mode */\
   XX(  random_seed,             uint,     0)        /* random seed */\
-  XX(  randomise_colours,       bool,     true)    /* randomise the colours of the objects */\
+  XX(  randomise_colours,       bool,     false)    /* randomise the colours of the objects */\
   /*
   automatic settings value detection, and parameters for guiding this */\
   XX(  auto_set_timestep,       bool,     true)     /* find the highest stable timestep, overrides mujoco_timestep */\

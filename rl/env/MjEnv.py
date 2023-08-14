@@ -321,7 +321,7 @@ class MjEnv():
     self.params.segment_inertia_scaling = self.load_next.segment_inertia_scaling
 
   def _load_object_set(self, name=None, mjcf_path=None, num_segments=None, 
-                       finger_width=None, auto_generate=False):
+                       finger_width=None, auto_generate=False, use_hashes=True):
     """
     Load in an object set and sort out details (like number of xml files).
     This functions does NOT load a new XML file from this object set.
@@ -342,7 +342,7 @@ class MjEnv():
         print(f"MjEnv() warning: given mjcf_path='{mjcf_path}' is about to be overriden by MjEnv._auto_generate_xml_file()")
 
       # create the file we need
-      self.task_xml_folder = self._auto_generate_xml_file(self.mj.object_set_name, use_hashes=True)
+      self.task_xml_folder = self._auto_generate_xml_file(self.mj.object_set_name, use_hashes=use_hashes)
 
       # apply the selected finger width in mujoco (EI change requires reset to finalise)
       self.mj.set_finger_width(self.load_next.finger_width)
@@ -1077,7 +1077,8 @@ class MjEnv():
 
   def load(self, object_set_name=None, object_set_path=None, index=None, 
            num_segments=None, finger_width=None, finger_thickness=None,
-           finger_modulus=None, depth_camera=None, auto_generate=True):
+           finger_modulus=None, depth_camera=None, auto_generate=True,
+           use_hashes=False):
     """
     Load and prepare the mujoco environment, uses defaults if arguments are not given.
     This function sets the 'params' for the class as well.
@@ -1095,7 +1096,7 @@ class MjEnv():
     self.mj.set_finger_modulus(self.load_next.finger_modulus) # duplicate xml setting
 
     self._load_object_set(name=object_set_name, mjcf_path=object_set_path,
-                          auto_generate=auto_generate)
+                          auto_generate=auto_generate, use_hashes=use_hashes)
     self._load_xml(index=index)  
 
     # auto generated parameters
