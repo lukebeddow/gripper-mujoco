@@ -2,6 +2,7 @@
 
 from datetime import datetime
 import dill as pickle
+# import pickle
 import bz2
 import os
 import shutil
@@ -91,7 +92,7 @@ class ModelSaver:
     num_len = len(self.file_num.format(0))
     return int(file[-num_len:])
 
-  def get_recent_file(self, path=None, name=None, id=None):
+  def get_recent_file(self, path=None, name=None, id=None, return_int=False):
     """
     Get the path to the highest index save in the path, or return None if empty,
     for example, if we have file_001, file_002, file_004, we return file_004
@@ -134,6 +135,14 @@ class ModelSaver:
         if id == num:
           imax = i
           break
+
+    # are we returning the integer number of this file
+    if return_int:
+      print("Biggest number found was", num_max)
+      print("Number of matching files found", len(files))
+      if num_max != len(files):
+        raise RuntimeError(f"ModelSaver.get_recent_file() has return_int=True and found a mismatch between the biggest number ({num_max}) and number of files ({len(files)})")
+      return num_max
 
     # return the path to this file
     if path[-1] != '/': path += '/'

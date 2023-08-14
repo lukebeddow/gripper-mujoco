@@ -1489,6 +1489,84 @@ class TrainDQN():
 
     return
 
+  def offline_optimise_model(self):
+    """
+    Implement conservative q-learning on offline data in self.memory
+    """
+
+    # only proceed if we have enough memory for a batch
+    if len(self.memory) < self.params.batch_size: return
+
+    # only begin to optimise when enough memory is built up
+    if (len(self.memory)) < self.params.min_memory_replay: # self.params.batch_size
+      return
+
+    # transitions = self.memory.sample(self.params.batch_size)
+
+    # # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
+    # # detailed explanation). This converts batch-array of Transitions
+    # # to Transition of batch-arrays.
+    # batch = TrainDQN.Transition(*zip(*transitions))
+
+    batch = self.memory.batch(self.params.batch_size)
+
+    # Compute a mask of non-final states and concatenate the batch elements
+    # (a final state would've been the one after which simulation ended)
+    non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
+                                          batch.next_state)), device=self.device,
+                                          dtype=torch.bool)
+
+    non_final_next_states = torch.cat([s for s in batch.next_state
+                                                if s is not None])
+                                                
+    state_batch = torch.cat(batch.state)
+    action_batch = torch.cat(batch.action)
+    reward_batch = torch.cat(batch.reward)
+
+    # TIDY THIS UP IN FUTURE! not very computationally efficient
+    if self.params.use_images and not self.params.image_collection_only:
+      # add in the images to the 'state' batches
+      state_batch = (torch.cat(batch.img), torch.cat(batch.state))
+      non_final_images = torch.cat([s for s in batch.next_img if s is not None])
+      non_final_next_states = (non_final_images, non_final_next_states)
+
+    # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
+    # columns of actions taken. These are the actions which would've been taken
+    # for each batch state according to policy_net
+    state_action_values = self.policy_net(state_batch).gather(1, action_batch)
+
+    # Compute V(s_{t+1}) for all next states.
+    # Expected values of actions for non_final_next_states are computed based
+    # on the "older" target_net; selecting their best reward with max(1)[0].
+    # This is merged based on the mask, such that we'll have either the expected
+    # state value or 0 in case the state was final.
+    next_state_values = torch.zeros(self.params.batch_size, device=self.device)
+    next_state_values[non_final_mask] = self.target_net(
+        non_final_next_states).max(1)[0].detach()
+    
+    # Compute the expected Q values
+    expected_state_action_values = (next_state_values 
+                                        * self.params.gamma) + reward_batch
+
+    # Compute Huber loss
+    criterion = nn.SmoothL1Loss()
+    loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+
+    # Compute the conservative q-learning loss
+    cql_loss = torch.logsumexp(state_action_values, dim=1).mean() - state_action_values.mean()
+
+    # compute the overall loss
+    overall_loss = cql_loss + 0.5 * loss
+
+    # Optimize the model
+    self.optimiser.zero_grad()
+    overall_loss.backward()
+    for param in self.policy_net.parameters():
+        param.grad.data.clamp_(-1, 1)
+    self.optimiser.step()
+
+    return
+
   def curriculum_fcn(self, i_episode):
     """
     Implement a learning curriculum. This function should almost certainly be
@@ -1729,6 +1807,105 @@ class TrainDQN():
     # get some key details to save in a text file now training is finished
     best_sr, best_ep = self.track.calc_best_performance()
     finish_txt = f"Training finished after {i_episode} episodes"
+    finish_txt += f"\n\nBest performance was {best_sr} at episode {best_ep}"
+    self.modelsaver.save("training_finished", txtonly=True, txtstr=finish_txt)
+
+    # wrap up
+    self.env.render()
+    self.log_wandb(force=True, end=True)
+    self.plot(force=True, end=True, hang=True) # leave plots on screen if we are plotting
+
+    # end of training
+    self.env.close()
+
+  def train_offline(self, replay_path, network=None, i_start=None, iter_per_file=250,
+                    replayfile="memory_with_image_data", random_order=False):
+    """
+    Perform an offline training
+    """
+
+    # if we have been given a network to train
+    if network != None: self.init(network)
+
+    # if this is a fresh, new training
+    if i_start == None or i_start == 0:
+      i_start = 0
+      # create a new folder to save training results in
+      self.modelsaver.new_folder(name=self.run_name, notimestamp=True)
+      # save record of the training time hyperparameters and important files
+      self.save_hyperparameters()
+      self.save_important_files()
+      self.save() # save starting network parameters
+    else:
+      # save a record of the training restart
+      continue_label = f"Training is continuing from episode {i_start} with these hyperparameters\n"
+      hypername = f"hyperparameters_from_ep_{i_start}"
+      self.save_hyperparameters(labelstr=continue_label, name=hypername)
+
+    # determine how many files of replay memory we have
+    replay_loader = ModelSaver(replay_path)
+    num_memory = replay_loader.get_recent_file(name=replayfile, return_int=True)
+
+    if self.log_level > 0:
+      print(f"\nBEGIN OFFLINE TRAINING, target is {num_memory * iter_per_file} episodes (files = {num_memory}, iter_per_file = {iter_per_file})\n", flush=True)
+
+    ids = list(range(1, num_memory + 1))
+
+    if random_order:
+      randomiser = np.random.default_rng(self.env.myseed)
+      ids = randomiser.permutation(ids)
+
+    for i_file, id in enumerate(ids):
+
+      # load the file into our replay memory
+      timenow = time.time()
+      self.memory = replay_loader.load(filenamestarts=replayfile, id=id)
+      print("Time taken for load was:", time.time() - timenow)
+      self.memory.all_to(self.device)
+
+      # train on this memory set
+      for j_episode in range(iter_per_file * i_file + 1, iter_per_file * (i_file + 1) + 1):
+      
+        if self.log_level == 1 and (j_episode - 1) % self.log_rate_for_episodes == 0:
+          print(f"Offline file {i_file + 1}/{num_memory} (num={id}), begin training episode {j_episode}", flush=True)
+        elif self.log_level > 1:
+          print(f"Begin training episode {j_episode} at {datetime.now().strftime('%H:%M')}", flush=True)
+
+        # optimise using the replay memory 
+        self.offline_optimise_model()
+          
+        # update the target network at the end of the iteration
+        if j_episode % self.params.target_update == 0:
+          self.target_net.load_state_dict(self.policy_net.state_dict())
+
+        # test the target network and then save it
+        if j_episode % self.params.test_freq == 0 and j_episode != 0:
+          test_data = self.test()
+          # process test data
+          test_report = self.create_test_report(test_data, i_episode=j_episode)
+          additional_data = (test_data)
+          # save the result
+          timenow = time.time()
+          self.save(txtstring=test_report, txtlabel="test_results", 
+                    tupledata=additional_data)
+          print("Time taken for save was:", time.time() - timenow)
+
+        # or only save the network
+        elif j_episode % self.params.save_freq == 0:
+          timenow = time.time()
+          self.save()
+          print("Time taken for save was:", time.time() - timenow)
+
+    # update the target network at the end
+    self.target_net.load_state_dict(self.policy_net.state_dict())
+
+    # save, log and plot now we are finished
+    if self.log_level > 0:
+      print("\nTRAINING COMPLETE, finished", j_episode, "episodes\n")
+  
+    # get some key details to save in a text file now training is finished
+    best_sr, best_ep = self.track.calc_best_performance()
+    finish_txt = f"Training finished after {j_episode} episodes"
     finish_txt += f"\n\nBest performance was {best_sr} at episode {best_ep}"
     self.modelsaver.save("training_finished", txtonly=True, txtstr=finish_txt)
 
@@ -2341,17 +2518,13 @@ if __name__ == "__main__":
 
   # ----- load ----- #
 
-  # load
-  folder = "mujoco-devel"
-  group = "24-07-23"
-  run = "operator-PC_15:10_A2"
-  folderpath = f"/home/luke/{folder}/rl/models/dqn/{group}/"
-  # model.set_device("cuda")
-  model.load(id=None, folderpath=folderpath, foldername=run, best_id=False)
-
-  model.save()
-
-  exit()
+  # # load
+  # folder = "mujoco-devel"
+  # group = "24-07-23"
+  # run = "operator-PC_15:10_A2"
+  # folderpath = f"/home/luke/{folder}/rl/models/dqn/{group}/"
+  # # model.set_device("cuda")
+  # model.load(id=None, folderpath=folderpath, foldername=run, best_id=False)
 
   # # save only the policy network
   # folder = "mymujoco"
@@ -2365,7 +2538,7 @@ if __name__ == "__main__":
   # ----- train ----- #
 
   # train
-  net = "CNN2_25_25"
+  net = "CNN2_100_100"
   model.env.disable_rendering = False
   model.env.mj.set.debug = False
   model.num_segments = 8
@@ -2373,7 +2546,8 @@ if __name__ == "__main__":
   model.params.num_episodes = 10000
   model.params.object_set = "set7_fullset_1500_50i_updated"
   model.params.min_memory_replay = 0
-  model.train(network=net)
+  mem_folder = "/home/luke/luke-gripper-mujoco/rl/models/dqn/11-08-23/operator-PC_16:33_A1"
+  model.train_offline(mem_folder, network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
