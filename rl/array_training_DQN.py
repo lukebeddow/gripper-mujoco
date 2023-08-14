@@ -2581,6 +2581,58 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
+  elif training_type == "image_collection":
+
+    vary_1 = [True, False]
+    vary_2 = None
+    vary_3 = None
+    repeats = 1
+    param_1_name = "network"
+    param_2_name = "learning rate"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    # do we limit stable grasps to a maximum allowable force
+    model.env.mj.set.stable_finger_force_lim = 100
+    model.env.mj.set.stable_palm_force_lim = 100
+
+    baseline_args = {
+      "network" : "image_collection_",
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+    # 100x100 images appear to be about 100MB each in memory replay
+    # the computer has 60GB RAM so I can store 600_000 maximum
+
+    if param_1:
+      # setup up a step size curriculum
+      levels_A = [
+        [8e-3, 0.025, 8e-3, 2e-3, 0.8],
+        [4e-3, 0.02,  6e-3, 2e-3, 0.4],
+        [2e-3, 0.015, 4e-3, 2e-3, 0.2],
+        [1e-3, 0.01,  2e-3, 2e-3, 0.2],
+      ]
+      thresholds_A = [10_000, 25_000, 50_000]
+      model.params.use_curriculum = True
+      model.curriculum_params["step_sizes"] = levels_A
+      model.curriculum_params["thresholds"] = thresholds_A
+      model.curriculum_params["metric"] = "episode_number"
+      model.curriculum_fcn = functools.partial(curriculum_step_size, model)
+    else:
+      model.params.use_curriculum = False
+
+    # use the new object set
+    model.params.object_set = "set8_fullset_1500"
+
+    # normal testing
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000 
+
+    # 75k -> 75000/200 = 375 episodes
+    model.params.image_save_freq = 500 # save memory replay frequently
+
   elif training_type == "profile_cnn":
 
     model = baseline_settings(model)

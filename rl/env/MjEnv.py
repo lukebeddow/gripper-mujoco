@@ -169,10 +169,6 @@ class MjEnv():
     config_folder = "config"
     config_file = "gripper.yaml"
     mjcf_folder = "mjcf"
-
-    # override the current mjcf path with the new path
-    self.mj.model_folder_path = f"{repo_path}/{mjcf_folder}"
-
     yaml_path = f"{description_path}/{config_folder}/{config_file}"
     with open(yaml_path) as file:
       gripper_details = yaml.safe_load(file)
@@ -203,7 +199,15 @@ class MjEnv():
     with open(yaml_path, "w") as outfile:
       yaml.dump(gripper_details, outfile, default_flow_style=False)
 
-    # determine the name of the set we want to make
+    # now run make in order to generate the files for this object seto
+    hash_str = "yes" if use_hashes else "no"
+    make = f"make -s sets SET={object_set} EXTRA_COPY_TO_MERGE_SETS=yes USE_HASHES={hash_str}"
+    subprocess.run([make], shell=True, cwd=repo_path)
+
+    # override the current mjcf path with the new path
+    self.mj.model_folder_path = f"{repo_path}/{mjcf_folder}"
+
+    # now return the name of the xml files we just generated
     N = self.load_next.num_segments
     W = self.load_next.finger_width
     if use_hashes:
@@ -211,25 +215,6 @@ class MjEnv():
       taskname = f"gripper_N{N}_H{yaml_hash}"
     else:
       taskname = f"gripper_N{N}_{W*1e3:.0f}"
-
-    # see if that set already exists
-    if os.path.exists(f"{repo_path}/{mjcf_folder}/{object_set}/{taskname}"):
-      if self.log_level > 1:
-        print(f"Required object set already found: {repo_path}/{mjcf_folder}/{object_set}/{taskname}")
-
-    # else we will try to generate this set
-    else:
-      if self.log_level > 1:
-        print(f"Required object set NOT found: {repo_path}/{mjcf_folder}/{object_set}/{taskname}")
-
-      # now run make in order to generate the files for this object set
-      hash_str = "yes" if use_hashes else "no"
-      make = f"make -s sets SET={object_set} EXTRA_COPY_TO_MERGE_SETS=yes USE_HASHES={hash_str}"
-      subprocess.run([make], shell=True, cwd=repo_path)
-
-      # confirm that the object set now exists
-      if not os.path.exists(f"{repo_path}/{mjcf_folder}/{object_set}/{taskname}"):
-        raise RuntimeError(f"MjEnv.auto_generate_xml_file() failed to generate set: {repo_path}/{mjcf_folder}/{object_set}/{taskname}")
 
     # restore the gripper.yaml file to its original state
     with open(yaml_path, "w") as outfile:
@@ -336,7 +321,7 @@ class MjEnv():
     self.params.segment_inertia_scaling = self.load_next.segment_inertia_scaling
 
   def _load_object_set(self, name=None, mjcf_path=None, num_segments=None, 
-                       finger_width=None, auto_generate=False, use_hashes=True):
+                       finger_width=None, auto_generate=False):
     """
     Load in an object set and sort out details (like number of xml files).
     This functions does NOT load a new XML file from this object set.
@@ -357,7 +342,7 @@ class MjEnv():
         print(f"MjEnv() warning: given mjcf_path='{mjcf_path}' is about to be overriden by MjEnv._auto_generate_xml_file()")
 
       # create the file we need
-      self.task_xml_folder = self._auto_generate_xml_file(self.mj.object_set_name, use_hashes=use_hashes)
+      self.task_xml_folder = self._auto_generate_xml_file(self.mj.object_set_name, use_hashes=True)
 
       # apply the selected finger width in mujoco (EI change requires reset to finalise)
       self.mj.set_finger_width(self.load_next.finger_width)
@@ -1092,8 +1077,7 @@ class MjEnv():
 
   def load(self, object_set_name=None, object_set_path=None, index=None, 
            num_segments=None, finger_width=None, finger_thickness=None,
-           finger_modulus=None, depth_camera=None, auto_generate=True,
-           use_hashes=True):
+           finger_modulus=None, depth_camera=None, auto_generate=True):
     """
     Load and prepare the mujoco environment, uses defaults if arguments are not given.
     This function sets the 'params' for the class as well.
@@ -1111,7 +1095,7 @@ class MjEnv():
     self.mj.set_finger_modulus(self.load_next.finger_modulus) # duplicate xml setting
 
     self._load_object_set(name=object_set_name, mjcf_path=object_set_path,
-                          auto_generate=auto_generate, use_hashes=use_hashes)
+                          auto_generate=auto_generate)
     self._load_xml(index=index)  
 
     # auto generated parameters
@@ -1260,7 +1244,7 @@ if __name__ == "__main__":
   # mj.load_next.finger_length = 200e-3
   # mj.load_next.finger_thickness = 1.9e-3
 
-  mj.load("set8_fullset_1500", depth_camera=True, use_hashes=True)
+  mj.load("set_test", depth_camera=True)
   mj._spawn_object()
   mj.reset()
 

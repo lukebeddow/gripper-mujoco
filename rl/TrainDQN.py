@@ -71,6 +71,7 @@ class TrainDQN():
     # image training settings
     use_images: bool = False
     image_collection_only: bool = False
+    image_save_freq: int = 1000
 
     # curriculum learning
     use_curriculum: bool = False
@@ -860,6 +861,21 @@ class TrainDQN():
         self.target_net = networks.MixedNetwork2(self.env.n_obs, img_size, 
                                                 self.env.n_actions,
                                                 self.device).to(self.device)
+        
+      elif network.startswith("image_collection"):
+
+        # we can always downsample later
+        # beware large images cause v. large RAM usage
+        width = 100
+        height = 100
+
+        self.params.image_collection_only = True
+
+        network = [150, 100, 50]
+        layers = [self.env.n_obs, *network, self.env.n_actions]
+        self.policy_net = networks.DQN_variable(layers, self.device).to(self.device)
+        self.target_net = networks.DQN_variable(layers, self.device).to(self.device)
+        self.target_net.load_state_dict(self.policy_net.state_dict())
 
       # prepare to use image data
       self.params.use_images = True
@@ -870,7 +886,7 @@ class TrainDQN():
       self.memory = TrainDQN.ReplayMemory(self.params.memory_replay, self.device,
                       HER=self.params.use_HER, HERMethod=self.params.HER_mode,
                       k=self.params.HER_k, imagedata=True)
-
+      
       # prepare for saving and loading
       self.modelsaver = ModelSaver(self.savedir + self.group_name)
 
@@ -1435,7 +1451,7 @@ class TrainDQN():
     reward_batch = torch.cat(batch.reward)
 
     # TIDY THIS UP IN FUTURE! not very computationally efficient
-    if self.params.use_images:
+    if self.params.use_images and not self.params.image_collection_only:
       # add in the images to the 'state' batches
       state_batch = (torch.cat(batch.img), torch.cat(batch.state))
       non_final_images = torch.cat([s for s in batch.next_img if s is not None])
@@ -1567,7 +1583,7 @@ class TrainDQN():
       elif self.params.use_HER:
         HER_obs = torch.cat((obs, goal), dim=1)
         action = self.select_action(HER_obs, decay_num=i_episode, test=test)
-      elif self.params.use_images:
+      elif self.params.use_images and not self.params.image_collection_only:
         image_obs = (img, obs)
         action = self.select_action(image_obs, decay_num=i_episode, test=test)
       else:
@@ -1694,6 +1710,13 @@ class TrainDQN():
       # or only save the network
       elif i_episode % self.params.save_freq == 0:
         self.save()
+
+      # saving for image collection
+      if (self.params.image_collection_only and 
+          i_episode % self.params.image_save_freq == 0):
+        p = self.modelsaver.save("memory_with_image_data", pyobj=self.memory)
+        if self.log_level > 1:
+          print(f"Saved image data at: {p}")
 
     # update the target network at the end
     self.target_net.load_state_dict(self.policy_net.state_dict())
