@@ -1086,6 +1086,7 @@ void ObjectHandler::randomise_all_colours(mjModel* model,
 
   std::uniform_real_distribution<double> distribution(0.0, 1.0);
 
+  // we should ignore a as object_visibility handles this
   std::vector<float> rgba(4);
 
   for (int i : geom_id) {
@@ -1094,13 +1095,13 @@ void ObjectHandler::randomise_all_colours(mjModel* model,
     rgba[0] = distribution(*generator);
     rgba[1] = distribution(*generator);
     rgba[2] = distribution(*generator);
-    rgba[3] = distribution(*generator);
+    // rgba[3] = distribution(*generator);
 
     // set the colour parameters
     model->geom_rgba[i * 4 + 0] = rgba[0];
     model->geom_rgba[i * 4 + 1] = rgba[1];
     model->geom_rgba[i * 4 + 2] = rgba[2];
-    model->geom_rgba[i * 4 + 3] = 1.0; // a is currently not randomised
+    // model->geom_rgba[i * 4 + 3] = 1.0; // a is currently not randomised
   }
 }
 

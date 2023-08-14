@@ -188,7 +188,10 @@ class MjEnv():
     # gripper_details[c]["xy_base_rotation"] = self.load_next.  not added yet
     # gripper_details[c]["z_base_rotation"] = self.load_next.  not added yet
 
-    gripper_details[p]["finger_thickness"] = self.load_next.finger_thickness
+    # ignore finger thickness setting, do manual setting. Note that myfunctions.cpp
+    # also ignores this setting and requires a manual override
+    # gripper_details[p]["finger_thickness"] = self.load_next.finger_thickness
+
     gripper_details[p]["finger_width"] = self.load_next.finger_width
     gripper_details[p]["finger_E"] = self.load_next.finger_modulus
     gripper_details[p]["hook_angle_degrees"] = self.load_next.finger_hook_angle_degrees
@@ -1104,8 +1107,8 @@ class MjEnv():
     if depth_camera is not None: self.load_next.depth_camera = depth_camera
 
     # set the thickness/modulus (changes only applied upon reset(), causes hard_reset() if changed)
-    self.mj.set_finger_thickness(self.load_next.finger_thickness)
-    self.mj.set_finger_modulus(self.load_next.finger_modulus)
+    self.mj.set_finger_thickness(self.load_next.finger_thickness) # required as xml thickness ignored
+    self.mj.set_finger_modulus(self.load_next.finger_modulus) # duplicate xml setting
 
     self._load_object_set(name=object_set_name, mjcf_path=object_set_path,
                           auto_generate=auto_generate, use_hashes=use_hashes)
@@ -1235,9 +1238,24 @@ if __name__ == "__main__":
   # mj._set_rgbd_size(848, 480)
   # mj._set_rgbd_size(1000, 1000)
 
+  # widths = [24e-3, 28e-3]
+  # segments = [8]
+  # xy_base = [False, True]
+  # inertia = [1, 50]
+
+  # for w in widths:
+  #   for N in segments:
+  #     for xy in xy_base:
+  #       for i in inertia:
+  #         mj.load_next.finger_width = w
+  #         mj.load_next.num_segments = N
+  #         mj.load_next.XY_base_actions = xy
+  #         mj.load_next.segment_inertia_scaling = i
+  #         mj._auto_generate_xml_file("set8_fullset_1500", use_hashes=True)
+
   mj.params.test_objects = 20
   # mj.load_next.finger_hook_angle_degrees = 45.678
-  # mj.load_next.finger_width = 11.234e-3
+  mj.load_next.finger_width = 28e-3
   # mj.load_next.fingertip_clearance = 0.143e-3
   # mj.load_next.finger_length = 200e-3
   # mj.load_next.finger_thickness = 1.9e-3

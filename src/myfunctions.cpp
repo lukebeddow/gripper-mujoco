@@ -805,52 +805,113 @@ void read_gripper_dimensions(mjModel* model)
   int i = 0;
 
   i = mj_name2id(model, mjOBJ_NUMERIC, "finger_length");
-  j_.dim.finger_length = model->numeric_data[model->numeric_adr[i]];
-  if (debug_fcn) std::cout << "finger_length is set to " << j_.dim.finger_length << '\n';
+  if (i == -1) {
+    if (debug_fcn) std::cout << "finger_length is not found in read_gripper_dimensions(), ignoring\n";
+  }
+  else {
+    j_.dim.finger_length = model->numeric_data[model->numeric_adr[i]];
+    if (debug_fcn) std::cout << "finger_length is set to " << j_.dim.finger_length << '\n';
+  }
 
   i = mj_name2id(model, mjOBJ_NUMERIC, "finger_width");
-  j_.dim.finger_width = model->numeric_data[model->numeric_adr[i]];
-  if (debug_fcn) std::cout << "finger_width is set to " << j_.dim.finger_width << '\n';
+  if (i == -1) {
+    if (debug_fcn) std::cout << "finger_width is not found in read_gripper_dimensions(), ignoring\n";
+  }
+  else {
+    j_.dim.finger_width = model->numeric_data[model->numeric_adr[i]];
+    if (debug_fcn) std::cout << "finger_width is set to " << j_.dim.finger_width << '\n';
+  }
 
-  i = mj_name2id(model, mjOBJ_NUMERIC, "finger_thickness");
-  j_.dim.finger_thickness = model->numeric_data[model->numeric_adr[i]];
-  if (debug_fcn) std::cout << "finger_thickness is set to " << j_.dim.finger_thickness << '\n';
+  // // ignore finger thickness setting, set this manually in MjEnv or j_ struct above
+  // i = mj_name2id(model, mjOBJ_NUMERIC, "finger_thickness");
+  // if (i == -1) {
+  //   if (debug_fcn) std::cout << "finger_thickness is not found in read_gripper_dimensions(), ignoring\n";
+  // }
+  // else {
+  //   j_.dim.finger_thickness = model->numeric_data[model->numeric_adr[i]];
+  //   if (debug_fcn) std::cout << "finger_thickness is set to " << j_.dim.finger_thickness << '\n';
+  // }
 
   i = mj_name2id(model, mjOBJ_NUMERIC, "finger_E");
-  j_.dim.E = model->numeric_data[model->numeric_adr[i]];
-  if (debug_fcn) std::cout << "finger_E is set to " << j_.dim.E << '\n';
+  if (i == -1) {
+    if (debug_fcn) std::cout << "finger_E is not found in read_gripper_dimensions(), ignoring\n";
+  }
+  else {
+    j_.dim.E = model->numeric_data[model->numeric_adr[i]];
+    if (debug_fcn) std::cout << "finger_E is set to " << j_.dim.E << '\n';
+  }
 
   i = mj_name2id(model, mjOBJ_NUMERIC, "fingertip_clearance");
-  j_.dim.gripper_distance_above_ground = model->numeric_data[model->numeric_adr[i]];
-  if (debug_fcn) std::cout << "fingertip_clearance is set to " << j_.dim.gripper_distance_above_ground << '\n';
+  if (i == -1) {
+    if (debug_fcn) std::cout << "fingertip_clearance is not found in read_gripper_dimensions(), ignoring\n";
+  }
+  else {
+    j_.dim.gripper_distance_above_ground = model->numeric_data[model->numeric_adr[i]];
+    if (debug_fcn) std::cout << "fingertip_clearance is set to " << j_.dim.gripper_distance_above_ground << '\n';
+  }
 
   i = mj_name2id(model, mjOBJ_NUMERIC, "hook_angle_degrees");
-  j_.dim.hook_angle_degrees = model->numeric_data[model->numeric_adr[i]];
-  if (debug_fcn) std::cout << "hook_angle_degrees is set to " << j_.dim.hook_angle_degrees << '\n';
+  if (i == -1) {
+    if (debug_fcn) std::cout << "hook_angle_degrees is not found in read_gripper_dimensions(), ignoring\n";
+  }
+  else {
+    j_.dim.hook_angle_degrees = model->numeric_data[model->numeric_adr[i]];
+    if (debug_fcn) std::cout << "hook_angle_degrees is set to " << j_.dim.hook_angle_degrees << '\n';
+  }
 
   i = mj_name2id(model, mjOBJ_NUMERIC, "hook_length");
-  j_.dim.hook_length = model->numeric_data[model->numeric_adr[i]];
-  if (debug_fcn) std::cout << "hook_length is set to " << j_.dim.hook_length << '\n';
+  if (i == -1) {
+    if (debug_fcn) std::cout << "hook_length is not found in read_gripper_dimensions(), ignoring\n";
+  }
+  else {
+    j_.dim.hook_length = model->numeric_data[model->numeric_adr[i]];
+    if (debug_fcn) std::cout << "hook_length is set to " << j_.dim.hook_length << '\n';
+  }
 
   i = mj_name2id(model, mjOBJ_NUMERIC, "fixed_hook_segment");
-  j_.dim.fixed_hook_segment = model->numeric_data[model->numeric_adr[i]];
-  if (debug_fcn) std::cout << "fixed_hook_segment is set to " << j_.dim.fixed_hook_segment << '\n';
+  if (i == -1) {
+    if (debug_fcn) std::cout << "fixed_hook_segment is not found in read_gripper_dimensions(), ignoring\n";
+  }
+  else {
+    j_.dim.fixed_hook_segment = model->numeric_data[model->numeric_adr[i]];
+    if (debug_fcn) std::cout << "fixed_hook_segment is set to " << j_.dim.fixed_hook_segment << '\n';
+  }
 
   i = mj_name2id(model, mjOBJ_NUMERIC, "fixed_first_segment");
-  j_.dim.fixed_first_segment = model->numeric_data[model->numeric_adr[i]];
-  if (debug_fcn) std::cout << "fixed_first_segment is set to " << j_.dim.fixed_first_segment << '\n';
+  if (i == -1) {
+    if (debug_fcn) std::cout << "fixed_first_segment is not found in read_gripper_dimensions(), ignoring\n";
+  }
+  else {
+    j_.dim.fixed_first_segment = model->numeric_data[model->numeric_adr[i]];
+    if (debug_fcn) std::cout << "fixed_first_segment is set to " << j_.dim.fixed_first_segment << '\n';
+  }
 
   i = mj_name2id(model, mjOBJ_NUMERIC, "xy_base_joint");
-  j_.dim.xy_base_joint = model->numeric_data[model->numeric_adr[i]];
-  if (debug_fcn) std::cout << "xy_base_joint is set to " << j_.dim.xy_base_joint << '\n';
+  if (i == -1) {
+    if (debug_fcn) std::cout << "xy_base_joint is not found in read_gripper_dimensions(), ignoring\n";
+  }
+  else {
+    j_.dim.xy_base_joint = model->numeric_data[model->numeric_adr[i]];
+    if (debug_fcn) std::cout << "xy_base_joint is set to " << j_.dim.xy_base_joint << '\n';
+  }
 
   i = mj_name2id(model, mjOBJ_NUMERIC, "xy_base_rotation");
-  j_.dim.xy_base_rotation = model->numeric_data[model->numeric_adr[i]];
-  if (debug_fcn) std::cout << "xy_base_rotation is set to " << j_.dim.xy_base_rotation << '\n';
+  if (i == -1) {
+    if (debug_fcn) std::cout << "xy_base_rotation is not found in read_gripper_dimensions(), ignoring\n";
+  }
+  else {
+    j_.dim.xy_base_rotation = model->numeric_data[model->numeric_adr[i]];
+    if (debug_fcn) std::cout << "xy_base_rotation is set to " << j_.dim.xy_base_rotation << '\n';
+  }
 
   i = mj_name2id(model, mjOBJ_NUMERIC, "z_base_rotation");
-  j_.dim.z_base_rotation = model->numeric_data[model->numeric_adr[i]];
-  if (debug_fcn) std::cout << "z_base_rotation is set to " << j_.dim.z_base_rotation << '\n';
+  if (i == -1) {
+    if (debug_fcn) std::cout << "z_base_rotation is not found in read_gripper_dimensions(), ignoring\n";
+  }
+  else {
+    j_.dim.z_base_rotation = model->numeric_data[model->numeric_adr[i]];
+    if (debug_fcn) std::cout << "z_base_rotation is set to " << j_.dim.z_base_rotation << '\n';
+  }
 
 }
 
@@ -1340,6 +1401,20 @@ void calibrate_reset(mjModel* model, mjData* data)
   static std::vector<mjtNum> control_signals;
   static std::vector<mjtNum> qpos_positions;
 
+  static int num_panda = j_.num.panda;
+  static int num_base = j_.num.base;
+  static int num_gripper = j_.num.gripper;
+
+  // safety check in case we load a new model with different numbers of joints
+  if (num_panda != j_.num.panda or
+      num_base != j_.num.base or
+      num_gripper != j_.num.gripper) {
+    std::cout << "Old num vs new num for panda: " << num_panda << " / " << j_.num.panda << '\n';
+    std::cout << "Old num vs new num for base: " << num_base << " / " << j_.num.base << '\n';
+    std::cout << "Old num vs new num for gripper: " << num_gripper << " / " << j_.num.gripper << '\n';
+    throw std::runtime_error("calibrate_reset() found changed number of joints in the model");
+  }
+
   if (first_call) {
 
     constexpr int settle_number = 400; // found using mysimulate and visual inspection
@@ -1365,6 +1440,12 @@ void calibrate_reset(mjModel* model, mjData* data)
     }
 
     first_call = false;
+
+    if (debug_fcn) {
+      std::cout << "After calibrate reset, finger end z height is "
+        << get_fingerend_z_height(model, data) 
+        << " metres (ignores fingertip/finger angles)\n";
+    }
   }
 
   int k = 0;
@@ -1383,12 +1464,6 @@ void calibrate_reset(mjModel* model, mjData* data)
   for (int i = 0; i < j_.num.gripper; i++) {
     (*j_.to_qpos.gripper[i]) = qpos_positions[k]; 
     k += 1;
-  }
-
-  if (debug_fcn) {
-    std::cout << "After calibrate reset, finger end z height is "
-      << get_fingerend_z_height(model, data) 
-      << " metres (ignores fingertip/finger angles)\n";
   }
 }
 
