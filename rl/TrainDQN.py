@@ -750,7 +750,7 @@ class TrainDQN():
     # prepare environment, but don't load a model xml file yet
     self.env = MjEnv(noload=True, num_segments=num_segments, depth_camera=depth_camera,
                      finger_thickness=finger_thickness, finger_width=finger_width,
-                     finger_modulus=finger_modulus)
+                     finger_modulus=finger_modulus, log_level=log_level)
 
     # what machine are we on
     self.machine = self.env._get_machine()
@@ -2195,17 +2195,13 @@ class TrainDQN():
         # recursive call to load now we have the best id
         self.load(id=best_id, folderpath=folderpath, foldername=foldername)
         return
+      
+    # ensure we load the previous environment
+    self.env.load_next = deepcopy(self.env.params)
 
     # reseed and reload environment
     self.env.seed()      # reseeds with same seed as before (but not contiguous!)
     self.env._load_xml() # segfault without this
-
-    # # if we are using a camera, reinitialise
-    # self.env.params.depth_camera = True
-    # if self.env.params.depth_camera: self.env._init_rgbd()
-
-    # # delete this later: needed until wrist_z_offset is saved in bind.cpp
-    # self.env.reset(hard=True)
 
     # move to the current device
     self.memory.all_to(self.device)

@@ -2697,11 +2697,11 @@ if __name__ == "__main__":
 
     vary_1 = [250]
     vary_2 = [False, True]
-    vary_3 = [True, False]
+    vary_3 = [False, True]
     repeats = 1
     param_1_name = "iter_per_file"
     param_2_name = "random order"
-    param_3_name = "use_sensor_data"
+    param_3_name = "disable_sensor_data"
     param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
                                                 param_3=vary_3, repeats=repeats)
 
@@ -2718,6 +2718,8 @@ if __name__ == "__main__":
     # use the new object set
     model.params.object_set = "set8_fullset_1500"
 
+    model.params.no_sensor_data = param_3
+
     # normal testing
     model.params.test_freq = 4000
     model.params.save_freq = 4000
@@ -2725,21 +2727,24 @@ if __name__ == "__main__":
     # where is our offline data saved
     dataset = "/home/luke/luke-gripper-mujoco/rl/models/dqn/11-08-23/operator-PC_16:33_A1"
 
-    model = baseline_settings(model, **baseline_args)
-    model.train_offline(dataset, iter_per_file=param_1, random_order=param_2)
-    model = test(model, trials_per_obj=10, heuristic=args.heuristic, demo=args.demo)
+    if not args.print and not args.print_results:
 
-    # finishing time, how long did everything take
-    finishing_time = datetime.now()
-    time_taken = finishing_time - starting_time
-    d = divmod(time_taken.total_seconds(), 86400)
-    h = divmod(d[1], 3600)
-    m = divmod(h[1], 60)
-    s = m[1]
-    print("\nStarted at:", starting_time.strftime(datestr))
-    print("Finished at:", datetime.now().strftime(datestr))
-    print(f"Time taken was {d[0]:.0f} days {h[0]:.0f} hrs {m[0]:.0f} mins {s:.0f} secs\n")
+      model = baseline_settings(model, **baseline_args)
+      model.train_offline(dataset, iter_per_file=param_1, random_order=param_2)
+      model = test(model, trials_per_obj=10, heuristic=args.heuristic, demo=args.demo)
 
+      # finishing time, how long did everything take
+      finishing_time = datetime.now()
+      time_taken = finishing_time - starting_time
+      d = divmod(time_taken.total_seconds(), 86400)
+      h = divmod(d[1], 3600)
+      m = divmod(h[1], 60)
+      s = m[1]
+      print("\nStarted at:", starting_time.strftime(datestr))
+      print("Finished at:", datetime.now().strftime(datestr))
+      print(f"Time taken was {d[0]:.0f} days {h[0]:.0f} hrs {m[0]:.0f} mins {s:.0f} secs\n")
+
+      exit()
 
   elif training_type == "example_template":
 
