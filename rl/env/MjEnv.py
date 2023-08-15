@@ -496,7 +496,10 @@ class MjEnv():
     if not self.rgbd_enabled:
       if self.log_level > 0:
         print("MjClass rendering disabled by compilation, unabled to get RGBD image")
-      return
+      if self.params.depth_camera:
+        self._init_rgbd()
+        if not self.rgbd_enabled: return
+      else: return
 
     # get rgbd information out of the simulation (unit8, float)
     rgb, depth = self.mj.get_RGBD_numpy()

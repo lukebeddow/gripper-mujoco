@@ -72,6 +72,7 @@ class TrainDQN():
     use_images: bool = False
     image_collection_only: bool = False
     image_save_freq: int = 1000
+    no_sensor_data: bool = False
 
     # curriculum learning
     use_curriculum: bool = False
@@ -1525,6 +1526,9 @@ class TrainDQN():
 
     # TIDY THIS UP IN FUTURE! not very computationally efficient
     if self.params.use_images and not self.params.image_collection_only:
+      if self.params.no_sensor_data:
+        # wipe the sensor batch
+        state_batch = torch.zeros(state_batch.shape)
       # add in the images to the 'state' batches
       state_batch = (torch.cat(batch.img), torch.cat(batch.state))
       non_final_images = torch.cat([s for s in batch.next_img if s is not None])
@@ -2196,6 +2200,10 @@ class TrainDQN():
     self.env.seed()      # reseeds with same seed as before (but not contiguous!)
     self.env._load_xml() # segfault without this
 
+    # # if we are using a camera, reinitialise
+    # self.env.params.depth_camera = True
+    # if self.env.params.depth_camera: self.env._init_rgbd()
+
     # # delete this later: needed until wrist_z_offset is saved in bind.cpp
     # self.env.reset(hard=True)
 
@@ -2544,10 +2552,8 @@ if __name__ == "__main__":
   model.num_segments = 8
   model.finger_thickness = 0.9e-3
   model.params.num_episodes = 10000
-  model.params.object_set = "set7_fullset_1500_50i_updated"
-  model.params.min_memory_replay = 0
-  mem_folder = "/home/luke/luke-gripper-mujoco/rl/models/dqn/11-08-23/operator-PC_16:33_A1"
-  model.train_offline(mem_folder, network=net)
+  model.params.object_set = "set8_fullset_1500"
+  model.train(network=net)
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"

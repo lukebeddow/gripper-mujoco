@@ -2696,12 +2696,12 @@ if __name__ == "__main__":
   elif training_type == "offline_train_1":
 
     vary_1 = [250]
-    vary_2 = [False]
-    vary_3 = None
-    repeats = 3
+    vary_2 = [False, True]
+    vary_3 = [True, False]
+    repeats = 1
     param_1_name = "iter_per_file"
     param_2_name = "random order"
-    param_3_name = None
+    param_3_name = "use_sensor_data"
     param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
                                                 param_3=vary_3, repeats=repeats)
 

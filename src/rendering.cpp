@@ -295,8 +295,8 @@ void render_rgbd_feed()
 {
     /* render the rgbd images in the regular rendering window */
 
-    // double the depth values to show more colour variety, assumes depth never exceeds 1.0/x metres
-    constexpr float depthstretch = 2;
+    // scale the depth values to show more colour variety, assumes depth never exceeds 1.0/x metres
+    constexpr float depthstretch = 4;
 
     int W = camera_width;
     int H = camera_height;
