@@ -2731,7 +2731,7 @@ if __name__ == "__main__":
 
       model = baseline_settings(model, **baseline_args)
       model.train_offline(dataset, iter_per_file=param_1, random_order=param_2)
-      model = test(model, trials_per_obj=10, heuristic=args.heuristic, demo=args.demo)
+      # model = test(model, trials_per_obj=10, heuristic=args.heuristic, demo=args.demo)
 
       # finishing time, how long did everything take
       finishing_time = datetime.now()

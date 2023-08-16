@@ -1762,6 +1762,10 @@ class TrainDQN():
     if self.log_level > 0:
       print(f"\nBEGIN TRAINING, target is {self.params.num_episodes} episodes\n", flush=True)
 
+    # put the pytorch models in training mode
+    self.policy_net.train()
+    self.target_net.train()
+    
     # begin training episodes
     for i_episode in range(i_start + 1, self.params.num_episodes + 1):
 
@@ -1936,6 +1940,9 @@ class TrainDQN():
     # begin test mode
     self.env.start_test()
 
+    # switch the pytorch model into evaluation mode
+    self.target_net.eval()
+
     # begin testing
     for i_episode in count(1):
 
@@ -1970,6 +1977,9 @@ class TrainDQN():
     self.last_test_data = test_data
 
     if self.log_level > 0: print("Testing complete, finished", i_episode, "episodes")
+
+    # switch the network back into training mode
+    self.target_net.train()
 
     return test_data
 
