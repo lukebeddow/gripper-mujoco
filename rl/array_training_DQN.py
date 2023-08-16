@@ -1055,14 +1055,16 @@ def print_results(model, filename="results.txt", savefile="table.txt"):
       temp_headings.append("Input arg")
       done_first_elem = True
         
-
     elif line.startswith("\t"):
       if line.startswith("\tTraining time best"):
         splits = line.split(" = ")
         new_elem.append(float(splits[1].split(" at ")[0]))
-        new_elem.append(int(splits[-1]))
+        new_elem.append(int(splits[2].split(";")[0]))
         temp_headings.append("Train best SR")
         temp_headings.append("Train best episode")
+        if len(splits) == 4:
+          temp_headings.append("Trained to")
+          new_elem.append(int(splits[3]))
     
       elif line.startswith("\tFinal full test"):
         splits = line.split(" = ")
@@ -2798,8 +2800,9 @@ if __name__ == "__main__":
 
   # prepare to print final results, check if files exist which recorded best performance
   best_sr, best_ep = model.read_best_performance_from_text(silence=True)
+  test_performance = model.read_test_performance()
   if best_sr is not None:
-    extra_info_string += f"\tTraining time best success rate = {best_sr} at episode = {best_ep}\n"
+    extra_info_string += f"\tTraining time best success rate = {best_sr} at episode = {best_ep}; trained up to episode = {int(test_performance[0, -1])}\n"
   full_sr, _ = model.read_best_performance_from_text(silence=True, fulltest=True, heuristic=args.heuristic)
   if full_sr is not None:
     extra_info_string += f"\tFinal full test success rate = {full_sr}\n"

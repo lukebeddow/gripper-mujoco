@@ -2285,6 +2285,55 @@ class TrainDQN():
 
     return 
 
+  def read_test_performance(self):
+    """
+    Read the test performance into a numpy array
+    """
+
+    try:
+
+      readroot = self.savedir + self.group_name + "/"
+      readpath = readroot + self.run_name + "/"
+      readname = self.test_performance_txt_file_name + ".txt"
+
+      with open(readpath + readname, "r") as f:
+        txt = f.read()
+
+    except Exception as e:
+      print("TrainDQN.read_test_performance() error: {e}")
+      return np.array([[0],[0]])
+
+    lines = txt.splitlines()
+
+    episodes = []
+    success_rates = []
+
+    found_data = False
+
+    for l in lines:
+
+      if found_data:
+
+        splits = l.split("|")
+        ep = int(splits[0])
+        sr = float(splits[1])
+        episodes.append(ep)
+        success_rates.append(sr)
+
+      if l.startswith("Episode"):
+        found_data = True
+
+    if len(episodes) != len(success_rates):
+      raise RuntimeError("TrainDQN.read_test_performance() found episode length != success rate length")
+
+    if len(episodes) == 0: episodes.append(0)
+    if len(success_rates) == 0: success_rates.append(0)
+
+    ep_np = np.array([episodes])
+    sr_np = np.array([success_rates])
+
+    return np.concatenate((ep_np, sr_np), axis=0)
+
   def read_best_performance_from_text(self, silence=False, fulltest=False, heuristic=False):
     """
     Read a text file to get the best model performance. This function contains
