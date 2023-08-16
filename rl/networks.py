@@ -197,6 +197,75 @@ class MixedNetwork2(nn.Module):
     z = torch.cat((x, y), 1)
     z = self.combined_features_(z)
     return z
+  
+class CNN_only(nn.Module):
+
+  name = "CNN_only"
+
+  def __init__(self, image_size, outputs, device):
+
+    super(CNN_only, self).__init__()
+    self.device = device
+
+    (channel, width, height) = image_size
+    self.name += f"_{width}x{height}"
+
+    # calculate the size of the first fully connected layer (ensure settings match image_features_ below)
+    w, h, c = calc_conv_layer_size(width, height, channel, kernel_num=16, kernel_size=5, stride=2, padding=2, print=False)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, print=False)
+    w, h, c = calc_conv_layer_size(w, h, c, kernel_num=64, kernel_size=5, stride=2, padding=2, print=False)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, print=False)
+    w, h, c = calc_FC_layer_size(w, h, c, print=False)
+    fc_layer_num = c
+
+    # define the CNN to handle the images
+    self.image_features_ = nn.Sequential(
+
+      # input CxWxH, output 16xWxH
+      nn.Conv2d(channel, 16, kernel_size=5, stride=2, padding=2),
+      nn.ReLU(),
+      nn.MaxPool2d(kernel_size=3, stride=2),
+      # nn.Dropout(),
+      nn.Conv2d(16, 64, kernel_size=5, stride=2, padding=2),
+      nn.ReLU(),
+      nn.MaxPool2d(kernel_size=3, stride=2),
+      # nn.Dropout(),
+      nn.Flatten(),
+      nn.Linear(fc_layer_num, 128),
+      nn.ReLU(),
+      # nn.Linear(64*16, 64),
+      # nn.ReLU(),
+    )
+
+    # # define the MLP to handle the sensor data
+    # self.numeric_features_ = nn.Sequential(
+    #   nn.Linear(numeric_inputs, 128),
+    #   nn.ReLU(),
+    #   # nn.Linear(150, 100),
+    #   # nn.ReLU(),
+    #   # nn.Linear(100, 50),
+    #   # nn.ReLU(),
+    # )
+
+    # combine the image and MLP features
+    self.combined_features_ = nn.Sequential(
+      nn.Linear(128 + 0, 128),
+      nn.ReLU(),
+      nn.Linear(128, 64),
+      nn.ReLU(),
+      nn.Linear(64, outputs),
+      nn.Softmax(dim=1),
+    )
+
+  def forward(self, img):
+    image = img.to(self.device)
+    # sensors = tuple_img_sensors[1].to(self.device)
+    x = self.image_features_(image)
+    # x = x.view(-1, 64*64)
+    # y = self.numeric_features_(sensors)
+    # z = torch.cat((x, y), 1)
+    z = self.combined_features_(x)
+    return x
 
 class LeNet(nn.Module):
 
