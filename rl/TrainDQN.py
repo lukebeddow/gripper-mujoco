@@ -981,7 +981,7 @@ class TrainDQN():
     # load the object set and the first xml file
     self.env.load(object_set_name=object_set, num_segments=num_segments,
                   finger_thickness=finger_thickness, finger_width=finger_width,
-                  finger_modulus=None, depth_camera=None)
+                  finger_modulus=finger_modulus, depth_camera=depth_camera)
 
     # save the changes
     self.params.object_set = object_set

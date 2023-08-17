@@ -2811,6 +2811,42 @@ if __name__ == "__main__":
       print("Finished at:", datetime.now().strftime(datestr))
       print(f"Time taken was {d[0]:.0f} days {h[0]:.0f} hrs {m[0]:.0f} mins {s:.0f} secs\n")
 
+  elif training_type == "finger_angle_test":
+
+    vary_1 = [30, 45, 60, 75]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    param_1_name = "finger_angle"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    
+    if param_1:
+      # setup up a step size curriculum
+      levels_A = [
+        [8e-3, 0.025, 8e-3, 2e-3, 0.8],
+        [4e-3, 0.02,  6e-3, 2e-3, 0.4],
+        [2e-3, 0.015, 4e-3, 2e-3, 0.2],
+        [1e-3, 0.01,  2e-3, 2e-3, 0.2],
+      ]
+      thresholds_A = [10_000, 25_000, 50_000]
+      model.params.use_curriculum = True
+      model.curriculum_params["step_sizes"] = levels_A
+      model.curriculum_params["thresholds"] = thresholds_A
+      model.curriculum_params["metric"] = "episode_number"
+      model.curriculum_fcn = functools.partial(curriculum_step_size, model)
+    else:
+      model.params.use_curriculum = False
+
+    model.params.object_set = "set8_fullset_1500"
+    model.env.load_next.finger_hook_angle_degrees = param_1
+
+    baseline_args = {
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
 
   elif training_type == "example_template":
 

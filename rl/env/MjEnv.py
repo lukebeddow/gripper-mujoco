@@ -156,7 +156,7 @@ class MjEnv():
 
   # ----- semi-private functions, advanced use ----- #
 
-  def _auto_generate_xml_file(self, object_set, use_hashes=False):
+  def _auto_generate_xml_file(self, object_set, use_hashes=False, silent=True):
     """
     Automatically generate the xml file that we need. Note this function
     overrides the currently set mjcf path to the path that leads to the
@@ -199,9 +199,26 @@ class MjEnv():
     with open(yaml_path, "w") as outfile:
       yaml.dump(gripper_details, outfile, default_flow_style=False)
 
-    # now run make in order to generate the files for this object seto
+    # determine what machine we are running on to adjust the make command
+    machine = self._get_machine()
+    if machine == "luke-laptop":
+      m = "luke"
+    elif machine == "luke-PC":
+      m = "lab"
+    elif machine == "operator-PC":
+      m = "lab-op"
+    elif machine == "zotac-PC":
+      m = "zotac"
+    else:
+      raise RuntimeError(f"MjEnv()._auto_generate_xml_file() does not recognise this machine: {machine}")
+    
+    if self.log_level > 1:
+      print(f"MjEnv()._auto_generate_xml_file() found machine '{machine}'")
+
+    # now run make in order to generate the files for this object set
+    silence = "-s" if silent else ""
     hash_str = "yes" if use_hashes else "no"
-    make = f"make -s sets SET={object_set} EXTRA_COPY_TO_MERGE_SETS=yes USE_HASHES={hash_str}"
+    make = f"make {silence} {m} sets SET={object_set} EXTRA_COPY_TO_MERGE_SETS=yes USE_HASHES={hash_str}"
     subprocess.run([make], shell=True, cwd=repo_path)
 
     # override the current mjcf path with the new path
@@ -1087,7 +1104,7 @@ class MjEnv():
   def load(self, object_set_name=None, object_set_path=None, index=None, 
            num_segments=None, finger_width=None, finger_thickness=None,
            finger_modulus=None, depth_camera=None, auto_generate=True,
-           use_hashes=False):
+           use_hashes=True):
     """
     Load and prepare the mujoco environment, uses defaults if arguments are not given.
     This function sets the 'params' for the class as well.
@@ -1237,6 +1254,12 @@ if __name__ == "__main__":
   # xy_base = [False, True]
   # inertia = [1, 50]
 
+  mj.load_next.num_segments = 4
+  angles = [30]
+  for a in angles:
+    mj.load_next.finger_hook_angle_degrees = a
+    mj._auto_generate_xml_file("set8_fullset_1500", use_hashes=True, silent=False)
+
   # for w in widths:
   #   for N in segments:
   #     for xy in xy_base:
@@ -1246,6 +1269,8 @@ if __name__ == "__main__":
   #         mj.load_next.XY_base_actions = xy
   #         mj.load_next.segment_inertia_scaling = i
   #         mj._auto_generate_xml_file("set8_fullset_1500", use_hashes=True)
+
+  exit()
 
   mj.params.test_objects = 20
   # mj.load_next.finger_hook_angle_degrees = 45.678
