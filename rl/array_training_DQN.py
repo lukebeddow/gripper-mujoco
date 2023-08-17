@@ -2586,11 +2586,11 @@ if __name__ == "__main__":
   elif training_type == "image_collection":
 
     vary_1 = [True, False]
-    vary_2 = None
+    vary_2 = ["image_collection_100_100", "image_collection_50_50"]
     vary_3 = None
     repeats = 1
-    param_1_name = "network"
-    param_2_name = "learning rate"
+    param_1_name = "use_curriculum"
+    param_2_name = None
     param_3_name = None
     param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
                                                 param_3=vary_3, repeats=repeats)
@@ -2600,7 +2600,7 @@ if __name__ == "__main__":
     model.env.mj.set.stable_palm_force_lim = 100
 
     baseline_args = {
-      "network" : "image_collection_",
+      "network" : param_2,
       "sensor_steps" : 3,
       "state_steps" : 3,
     }
@@ -2630,7 +2630,7 @@ if __name__ == "__main__":
 
     # normal testing
     model.params.test_freq = 4000
-    model.params.save_freq = 4000 
+    model.params.save_freq = 4000
 
     # 75k -> 75000/200 = 375 episodes
     model.params.image_save_freq = 500 # save memory replay frequently
@@ -2747,6 +2747,70 @@ if __name__ == "__main__":
       print(f"Time taken was {d[0]:.0f} days {h[0]:.0f} hrs {m[0]:.0f} mins {s:.0f} secs\n")
 
       exit()
+
+  elif training_type == "cnn_from_pretrain":
+
+    vary_1 = None
+    vary_2 = None
+    vary_3 = None
+    repeats = None
+    param_1_name = None
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    baseline_args = {
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+    # use the new object set
+    model.params.object_set = "set8_fullset_1500"
+
+    if not args.print and not args.print_results:
+
+      model = baseline_settings(model, **baseline_args)
+
+      from ModelSaver import ModelSaver
+
+      # load the pretrained network
+      model.init(network="CNN2_100_100")
+
+      # # image only pretrained network
+      # path = "/home/luke/luke-gripper-mujoco/rl/models/dqn/15-08-23/operator-PC_16:52_A3"
+      # id = 3
+      
+      # both inputs pretrained network
+      path = "/home/luke/luke-gripper-mujoco/rl/models/dqn/14-08-23/operator-PC_17:50_A1"
+      id = 4
+
+      pretrain_loader = ModelSaver(path)
+      pretrain_model = pretrain_loader.load(id=id) # specifically chosen model
+      model.policy_net.load_state_dict(pretrain_model.policy_net.state_dict())
+      model.target_net.load_state_dict(pretrain_model.policy_net.state_dict())
+
+      # remove the pretrained model from memory
+      import gc
+      del pretrain_model
+      gc.collect()
+
+      # now proceed with training
+      model.train()
+
+      # test
+      model = test(model, trials_per_obj=10, heuristic=args.heuristic, demo=args.demo)
+
+      # finishing time, how long did everything take
+      finishing_time = datetime.now()
+      time_taken = finishing_time - starting_time
+      d = divmod(time_taken.total_seconds(), 86400)
+      h = divmod(d[1], 3600)
+      m = divmod(h[1], 60)
+      s = m[1]
+      print("\nStarted at:", starting_time.strftime(datestr))
+      print("Finished at:", datetime.now().strftime(datestr))
+      print(f"Time taken was {d[0]:.0f} days {h[0]:.0f} hrs {m[0]:.0f} mins {s:.0f} secs\n")
+
 
   elif training_type == "example_template":
 

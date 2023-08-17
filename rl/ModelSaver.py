@@ -2,23 +2,38 @@
 
 from datetime import datetime
 import dill as pickle
-# import pickle
-import bz2
 import os
 import shutil
+import lz4framed
 
-def compressed_pickle(title, data):
+# old bz2 compression, very slow (75x time of pickle)
+import bz2
+def bz2_compressed_pickle(title, data):
  with bz2.BZ2File(title, 'w') as f: 
   pickle.dump(data, f)
 
-def decompress_pickle(file):
+def bz2_decompress_pickle(file):
   data = bz2.BZ2File(file, 'rb')
   data = pickle.load(data)
   return data
 
+# new faster compression with lz4 (2x time of pickle)
+def lz4_compressed_pickle(title, data):
+  byte_data = pickle.dumps(data)
+  compressed_data = lz4framed.compress(byte_data)
+  with open(title, 'wb') as f:
+    pickle.dump(compressed_data, f)
+
+def lz4_decompress_pickle(file):
+  with open(file, 'rb') as f:
+    compressed_data = pickle.load(f)
+  byte_data = lz4framed.decompress(compressed_data)
+  data = pickle.loads(byte_data)
+  return data
+
 class ModelSaver:
 
-  def __init__(self, path, root=None, use_compression=True):
+  def __init__(self, path, root=None, use_compression=True, compressor="lz4"):
     """
     Saves learned models at relative path
     """
@@ -27,7 +42,9 @@ class ModelSaver:
     self.default_num = 1                    # starting number for saving files with numbers
     self.use_compression = use_compression  # do we compress files
     self.uncompressed_extension = ".pickle" # file extension for normal pickle files
-    self.compressed_extension = ".pbz2"     # file extension for compressed files
+    self.bz2_extension = ".pbz2"
+    self.lz4_extension = ".lz4"
+    self.compressor = compressor
     self.file_num = "{:03d}"                # digit format for saving files with numbers
     self.date_str = "%d-%m-%y-%H:%M"        # date string, must be seperated by '-'
     self.folder_names = "train_{}/"         # default name of created folders, then formatted with date
@@ -82,11 +99,14 @@ class ModelSaver:
     """
 
     # check if we should remove the file extension
-    if file[-len(self.compressed_extension):] == self.compressed_extension:
-      file = file[:-len(self.compressed_extension)]
-
-    elif file[-len(self.uncompressed_extension):] == self.uncompressed_extension:
+    if file[-len(self.uncompressed_extension):] == self.uncompressed_extension:
       file = file[:-len(self.uncompressed_extension)]
+
+    elif file[-len(self.bz2_extension):] == self.bz2_extension:
+      file = file[:-len(self.bz2_extension)]
+
+    elif file[-len(self.lz4_extension):] == self.lz4_extension:
+      file = file[:-len(self.lz4_extension)]
 
     # extract the file numbering
     num_len = len(self.file_num.format(0))
@@ -103,7 +123,9 @@ class ModelSaver:
 
     # get all files with pickle extension in the target directory
     pkl_files = [x for x in os.listdir(path) 
-      if x.endswith(self.compressed_extension) or x.endswith(self.uncompressed_extension)]
+      if x.endswith(self.uncompressed_extension) or 
+         x.endswith(self.bz2_extension) or
+         x.endswith(self.lz4_extension)]
 
     # if given a name to check for, remove any files that don't match the name
     if name is not None:
@@ -115,10 +137,12 @@ class ModelSaver:
     # remove the file extension
     files = []
     for f in pkl_files:
-      if f.endswith(self.compressed_extension):
-        files.append(f[:-len(self.compressed_extension)])
-      elif f.endswith(self.uncompressed_extension):
+      if f.endswith(self.uncompressed_extension):
         files.append(f[:-len(self.uncompressed_extension)])
+      elif f.endswith(self.bz2_extension):
+        files.append(f[:-len(self.bz2_extension)])
+      elif f.endswith(self.lz4_extension):
+        files.append(f[:-len(self.lz4_extension)])
 
     imax = -1
     num_max = -1
@@ -383,7 +407,10 @@ class ModelSaver:
     if compression is None: compression = self.use_compression
 
     if compression:
-      file_extension = self.compressed_extension
+      if self.compressor == "bz2":
+        file_extension = self.bz2_extension
+      else:
+        file_extension = self.lz4_extension
     else:
       file_extension = self.uncompressed_extension
 
@@ -415,7 +442,10 @@ class ModelSaver:
     # save
     print(f"Saving file {savepath + savename} with pickle ... ", end="", flush=True)
     if compression:
-      compressed_pickle(savepath + savename, pyobj)
+      if self.compressor == "bz2":
+        bz2_compressed_pickle(savepath + savename, pyobj)
+      else:
+        lz4_compressed_pickle(savepath + savename, pyobj)
     else:
       with open(savepath + savename, 'wb') as openfile:
         pickle.dump(pyobj, openfile)
@@ -478,12 +508,15 @@ class ModelSaver:
         if file_extension is not None:
           loadpath += filenamestarts + file_extension
         elif (filenamestarts is not None and
-              (filenamestarts.endswith(self.compressed_extenstion) or
-               filenamestarts.endswith(self.uncompressed_extension))):
+              (filenamestarts.endswith(self.uncompressed_extenstion) or
+               filenamestarts.endswith(self.bz2_extension) or
+               filenamestarts.endswith(self.lz4_extension))):
           loadpath += filenamestarts
         else:
           if self.use_compression:
-            loadpath += filenamestarts + self.compressed_extension
+            if self.compressor == "bz2":
+              loadpath += filenamestarts + self.bz2_extension
+            else: loadpath += filenamestarts + self.lz4_extension
           else:
             loadpath += filenamestarts + self.uncompressed_extension
       
@@ -499,12 +532,15 @@ class ModelSaver:
         if file_extension is not None:
           loadpath += filenamestarts + file_extension
         elif (filenamestarts is not None and
-              (filenamestarts.endswith(self.compressed_extenstion) or
-               filenamestarts.endswith(self.uncompressed_extension))):
+              (filenamestarts.endswith(self.uncompressed_extenstion) or
+               filenamestarts.endswith(self.bz2_extension) or
+               filenamestarts.endswith(self.lz4_extension))):
           loadpath += filenamestarts
         else:
           if self.use_compression:
-            loadpath += filenamestarts + self.compressed_extension
+            if self.compressor == "bz2":
+              loadpath += filenamestarts + self.bz2_extension
+            else: loadpath += filenamestarts + self.lz4_extension
           else:
             loadpath += filenamestarts + self.uncompressed_extension
 
@@ -514,10 +550,12 @@ class ModelSaver:
     # determine how to load the file in question
     if compression_override is not None:
       compressed = compression_override
-    elif loadpath.endswith(self.compressed_extension):
-      compressed = True
     elif loadpath.endswith(self.uncompressed_extension):
       compressed = False
+    elif loadpath.endswith(self.bz2_extension):
+      compressed = True
+    elif loadpath.endswith(self.lz4_extension):
+      compressed = True
     else:
       print(f"loadpath does NOT end with a recognised file extension: {loadpath}")
       print(f"Trying to load using current compression setting of {self.use_compression}")
@@ -526,7 +564,10 @@ class ModelSaver:
     print(f"Loading file {loadpath} with pickle ... ", end="", flush=True)
 
     if compressed:
-      loaded_obj = decompress_pickle(loadpath)
+      if loadpath.endswith(self.bz2_extension):
+        loaded_obj = bz2_decompress_pickle(loadpath)
+      else:
+        loaded_obj = lz4_decompress_pickle(loadpath)
     else:
       with open(loadpath, 'rb') as f:
         loaded_obj = pickle.load(f)

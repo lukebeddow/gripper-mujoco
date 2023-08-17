@@ -866,10 +866,9 @@ class TrainDQN():
         
       elif network.startswith("image_collection"):
 
-        # we can always downsample later
-        # beware large images cause v. large RAM usage
-        width = 100
-        height = 100
+        splits = network.split("_")
+        width = int(splits[-2])
+        height = int(splits[-1])
 
         self.params.image_collection_only = True
 
@@ -2300,7 +2299,7 @@ class TrainDQN():
         txt = f.read()
 
     except Exception as e:
-      print("TrainDQN.read_test_performance() error: {e}")
+      # print(f"TrainDQN.read_test_performance() error: {e}")
       return np.array([[0],[0]])
 
     lines = txt.splitlines()
@@ -2601,14 +2600,27 @@ if __name__ == "__main__":
   # ----- train ----- #
 
   # train
-  net = "CNN2_100_100"
-  model.env.disable_rendering = False
+  net = [5000,5000,5000]
+  model.set_device("cpu")
+  model.env.disable_rendering = True
   model.env.mj.set.debug = False
   model.num_segments = 8
   model.finger_thickness = 0.9e-3
-  model.params.num_episodes = 10000
+  model.params.num_episodes = 1
   model.params.object_set = "set8_fullset_1500"
   model.train(network=net)
+
+  t1 = time.time()
+  model.save()
+  t2 = time.time()
+  model.modelsaver.load()
+  t3 = time.time()
+
+
+  print(f"Time taken for save was {t2 - t1:.3f}s")
+  print(f"Time taken for load was {t3 - t2:.3f}s")
+
+  exit()
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
