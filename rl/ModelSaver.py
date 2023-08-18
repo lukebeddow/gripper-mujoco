@@ -6,7 +6,7 @@ import os
 import shutil
 import lz4framed
 
-# old bz2 compression, very slow (75x time of pickle)
+# bz2 compression, compresses up to 5x more than lz4, up to 50x slower than lz4
 import bz2
 def bz2_compressed_pickle(title, data):
  with bz2.BZ2File(title, 'w') as f: 
@@ -17,7 +17,7 @@ def bz2_decompress_pickle(file):
   data = pickle.load(data)
   return data
 
-# new faster compression with lz4 (2x time of pickle)
+# lz4 compression, preferred
 def lz4_compressed_pickle(title, data):
   byte_data = pickle.dumps(data)
   compressed_data = lz4framed.compress(byte_data)
@@ -497,6 +497,8 @@ class ModelSaver:
     # if a different path to a file is specified
     if folderpath != None:
       loadpath = folderpath
+
+    if loadpath[-1] != "/": loadpath += "/"
 
     # if the folder name is specified
     if foldername != None:
