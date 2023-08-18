@@ -2580,13 +2580,41 @@ if __name__ == "__main__":
 
   # ----- load ----- #
 
-  # # load
-  # folder = "mujoco-devel"
-  # group = "24-07-23"
-  # run = "operator-PC_15:10_A2"
-  # folderpath = f"/home/luke/{folder}/rl/models/dqn/{group}/"
-  # # model.set_device("cuda")
-  # model.load(id=None, folderpath=folderpath, foldername=run, best_id=False)
+  # load
+  folder = "mujoco-devel"
+  group = "24-07-23"
+  run = "operator-PC_15:10_A2"
+  folderpath = f"/home/luke/{folder}/rl/models/dqn/{group}/"
+  model.load(id=None, folderpath=folderpath, foldername=run, best_id=False)
+
+  t1 = time.time()
+  model.modelsaver.load(id=13, folderpath=folderpath, foldername=run)
+  t2 = time.time()
+  model.modelsaver.load(id=14, folderpath=folderpath, foldername=run)
+  t3 = time.time()
+
+
+  t4 = time.time()
+  model.modelsaver.compressor = "bz2"
+  model.save()
+  t5 = time.time()
+  model.modelsaver.compressor = "lz4"
+  model.save()
+  t6 = time.time()
+
+  print(f"Load time for bz2 was {t2 - t1}")
+  print(f"Load time for lz4 was {t3 - t2}")
+
+  print(f"Save time for bz2 was {t5 - t4}")
+  print(f"Save time for lz4 was {t6 - t5}")
+  exit()
+
+  # model.set_device("cuda")
+  model.load(id=None, folderpath=folderpath, foldername=run, best_id=False)
+
+  model.save()
+
+  exit()
 
   # # save only the policy network
   # folder = "mymujoco"
