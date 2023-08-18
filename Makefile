@@ -128,7 +128,8 @@ sets:
 	$(info $(shell mkdir -p $(MJCF_FOLDER)))
 	$(MAKE) -C $(DESCRIPTION_MODULE) sets $(ARGS) EXTRA_COPY_TO="../../$(MJCF_FOLDER)" \
 		MUJOCO_PATH=$(MUJOCO_PATH) EXTRA_COPY_YES_TO_ALL=yes \
-		EXTRA_COPY_TO_OVERRIDE_EXISTING=yes
+		EXTRA_COPY_TO_OVERRIDE_EXISTING=yes \
+		PYTHON=$(PYTHON_PATH)
 
 # compile the uitools object file which is used by both cpp and python targets
 # ADDED -fPIC FOR CLUSTER TO WORK

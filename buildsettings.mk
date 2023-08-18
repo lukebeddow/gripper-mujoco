@@ -154,7 +154,7 @@ MACHINE = operator-PC
 MJCF_PATH = /home/luke/luke-gripper-mujoco/mjcf
 
 # local machine library locations
-PYTHON_PATH = /usr/include/python3.8
+PYTHON_PATH = /home/luke/pyenv/py3.8_mujoco/bin/python
 PYBIND_PATH = /home/luke/luke-gripper-mujoco/libs/pybind11
 ARMA_PATH = # none, use system library
 MUJOCO_PATH = /home/luke/luke-gripper-mujoco/libs/mujoco/mujoco-2.1.5
