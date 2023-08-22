@@ -2848,6 +2848,50 @@ if __name__ == "__main__":
       "state_steps" : 3,
     }
 
+  elif training_type == "set8_baseline_extended":
+
+    thresholds_A = [10_000, 25_000, 50_000]
+    thresholds_B = [10_000, 25_000, 75_000]
+    thresholds_C = [25_000, 50_000, 75_000]
+    thresholds_D = [50_000, 75_000, 101_000]
+
+    vary_1 = [thresholds_A, thresholds_B, thresholds_C, thresholds_D]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    param_1_name = "threshold"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    
+    if param_1:
+      # setup up a step size curriculum
+      levels_A = [
+        [8e-3, 0.025, 8e-3, 2e-3, 0.8],
+        [4e-3, 0.02,  6e-3, 2e-3, 0.4],
+        [2e-3, 0.015, 4e-3, 2e-3, 0.2],
+        [1e-3, 0.01,  2e-3, 2e-3, 0.2],
+      ]
+      model.params.use_curriculum = True
+      model.curriculum_params["step_sizes"] = levels_A
+      model.curriculum_params["thresholds"] = param_1
+      model.curriculum_params["metric"] = "episode_number"
+      model.curriculum_fcn = functools.partial(curriculum_step_size, model)
+    else:
+      model.params.use_curriculum = False
+
+    model.params.object_set = "set8_fullset_1500"
+    model.env.load_next.finger_hook_angle_degrees = 90
+
+    # long trainings
+    model.params.num_episodes = 100_000
+
+    baseline_args = {
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
   elif training_type == "example_template":
 
     vary_1 = None
