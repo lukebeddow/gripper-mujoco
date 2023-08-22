@@ -728,15 +728,26 @@ namespace MjType
     // data that is reset
     float cumulative_reward = 0;
     int num_action_steps = 0;
-    luke::QPos start_qpos;
+    // luke::QPos start_qpos;
 
     // track important events in the environment
     EventTrack cnt;
+
+    struct SpawnObj {
+      int index;
+      double model_x;
+      double model_y;
+      double model_z;
+      double x_centre;
+      double y_centre;
+      double z_rotation;
+    };
 
     // track the state of the object at this step
     struct Obj {
       std::string name;
       luke::QPos qpos;
+      luke::QPos start_qpos;
       luke::rawNum finger1_force;
       luke::rawNum finger2_force;
       luke::rawNum finger3_force;
@@ -744,7 +755,45 @@ namespace MjType
       luke::rawNum ground_force;
       float palm_axial_force;
       float avg_finger_force;
-    } obj;
+      float peak_finger_axial_force;
+      float peak_finger_lateral_force;
+      float ground_force_mag;
+      float finger1_force_mag;
+      float finger2_force_mag;
+      float finger3_force_mag;
+      float palm_force_mag;
+      float lift_height;
+      bool lifted;
+      bool oob;
+      bool target_height;
+      bool contact;
+      bool stable;
+      bool stable_height;
+
+      void print() {
+        std::cout << "Obj name = " << name
+          << "; lft(" << lifted
+          << "); oob(" << oob
+          << "); con(" << contact
+          << "); t.h(" << target_height
+          << "); stb(" << stable
+          << "); s.h(" << stable_height
+          << ")\n";
+      }
+    };
+
+    std::vector<Obj> obj;
+
+    struct ObjValues {
+      float avg_finger_force {};
+      float palm_axial_force {};
+      float peak_finger_axial_force {};
+      float peak_finger_lateral_force {};
+      float highest_lift {};
+      float lowest_gnd_force_mag {};
+    };
+
+    ObjValues obj_values;
 
     // track the state of the gripper
     struct Grp {
@@ -758,15 +807,22 @@ namespace MjType
 
     void reset() {
       // reset to initialised values
-      Obj blank_obj;
       Grp blank_grp;
-      obj = blank_obj;
       grp = blank_grp;
+      ObjValues blank_obj;
+      obj_values = blank_obj;
+      obj.clear();
       // reset data
       cumulative_reward = 0;
       num_action_steps = 0;
-      start_qpos.reset();
+      // start_qpos.reset();
       cnt.reset();
+    }
+
+    void print_objects() {
+      for (int i = 0; i < obj.size(); i++) {
+        obj[i].print();
+      }
     }
 
   };
@@ -1419,6 +1475,7 @@ public:
   void reset_object();
   void spawn_object(int index);
   void spawn_object(int index, double xpos, double ypos, double zrot);
+  int spawn_scene(int num_objects, double xrange, double yrange, double smallest_gap);
   void randomise_every_colour();
   void randomise_object_colour(bool all_objects=false);
   void randomise_ground_colour();
@@ -1455,7 +1512,7 @@ public:
   // misc
   void forward() { mj_forward(model, data); }
   int get_number_of_objects() { return env_.object_names.size(); }
-  std::string get_current_object_name() { return env_.obj.name; }
+  std::string get_current_object_name() { return env_.obj[0].name; }
   float get_fingertip_z_height();
   MjType::TestReport get_test_report();
   void set_finger_thickness(double thickness);

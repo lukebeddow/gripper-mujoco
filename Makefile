@@ -63,7 +63,7 @@ COMMON = $(OPTIM) -std=c++11 -mavx -pthread $(DEFINE_VAR) \
 		 -I$(MUJOCO_PATH)/include \
 		 -I$(PYBIND_PATH)/include \
 		 -I$(ARMA_PATH)/include \
-		 -I$(PYTHON_PATH) \
+		 -I$(PYTHON_INCLUDE) \
 		 -I$(RENDER_PATH)/include
 
 PYBIND = $(COMMON) -fPIC -Wall -shared
@@ -129,7 +129,7 @@ sets:
 	$(MAKE) -C $(DESCRIPTION_MODULE) sets $(ARGS) EXTRA_COPY_TO="../../$(MJCF_FOLDER)" \
 		MUJOCO_PATH=$(MUJOCO_PATH) EXTRA_COPY_YES_TO_ALL=yes \
 		EXTRA_COPY_TO_OVERRIDE_EXISTING=yes \
-		PYTHON=$(PYTHON_PATH)
+		PYTHON=$(PYTHON_EXE)
 
 # compile the uitools object file which is used by both cpp and python targets
 # ADDED -fPIC FOR CLUSTER TO WORK
