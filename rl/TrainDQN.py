@@ -2206,8 +2206,13 @@ class TrainDQN():
     try:
       x = self.memory.imagedata
     except AttributeError as e:
-      print(f"self.memory error: {e}")
+      print(f"TrainDQN.load() warning: {e}")
       self.memory.imagedata = False
+    try:
+      x = self.env.prevent_reload
+    except AttributeError as e:
+      print(f"TrainDQN.load() warning: {e}")
+      self.env.prevent_reload = False
 
     # CATCH failures above, so compatible with old code. This double check could be deleted but it is quite handy
     if best_id:
