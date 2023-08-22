@@ -2695,24 +2695,35 @@ if __name__ == "__main__":
       "state_steps" : param_2[1],
     }
 
-  elif training_type == "offline_train_1":
+  elif training_type.startswith("offline_train_v1-"):
 
-    vary_1 = [250]
+    vary_1 = [
+      (50, 5), 
+      (125, 2),
+      (250, 1)
+    ]
     vary_2 = [False, True]
-    vary_3 = [False, True]
-    repeats = 1
+    vary_3 = None #[False, True]
+    repeats = 3
     param_1_name = "iter_per_file"
     param_2_name = "random order"
-    param_3_name = "disable_sensor_data"
+    param_3_name = None #"disable_sensor_data"
     param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
                                                 param_3=vary_3, repeats=repeats)
 
-    # do we limit stable grasps to a maximum allowable force
-    model.env.mj.set.stable_finger_force_lim = 100
-    model.env.mj.set.stable_palm_force_lim = 100
+    # which offline data are we loading
+    if training_type.endswith("v1-1"):
+      dataset = "/home/luke/luke-gripper-mujoco/rl/models/dqn/11-08-23/operator-PC_16:33_A1"
+      net = "CNN2_100_100"
+    elif training_type.endswith("v1-2"):
+      dataset = "/home/luke/luke-gripper-mujoco/rl/models/dqn/18-08-23/operator-PC_16:32_A1"
+      net = "CNN2_100_100"
+    elif training_type.endswith("v1-3"):
+      dataset = "/home/luke/luke-gripper-mujoco/rl/models/dqn/18-08-23/operator-PC_16:32_A3"
+      net = "CNN2_50_50"
 
     baseline_args = {
-      "network" : "CNN2_100_100",
+      "network" : net,
       "sensor_steps" : 3,
       "state_steps" : 3,
     }
@@ -2720,19 +2731,17 @@ if __name__ == "__main__":
     # use the new object set
     model.params.object_set = "set8_fullset_1500"
 
-    model.params.no_sensor_data = param_3
+    model.params.no_sensor_data = False
 
     # normal testing
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-    # where is our offline data saved
-    dataset = "/home/luke/luke-gripper-mujoco/rl/models/dqn/11-08-23/operator-PC_16:33_A1"
-
     if not args.print and not args.print_results:
 
       model = baseline_settings(model, **baseline_args)
-      model.train_offline(dataset, iter_per_file=param_1, random_order=param_2)
+      model.train_offline(dataset, iter_per_file=param_1[0], random_order=param_2, 
+                          epochs=param_1[1])
       # model = test(model, trials_per_obj=10, heuristic=args.heuristic, demo=args.demo)
 
       # finishing time, how long did everything take
