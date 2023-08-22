@@ -1826,7 +1826,8 @@ class TrainDQN():
     self.env.close()
 
   def train_offline(self, replay_path, network=None, i_start=None, iter_per_file=250,
-                    replayfile="memory_with_image_data", random_order=False):
+                    replayfile="memory_with_image_data", random_order=False,
+                    epochs=1):
     """
     Perform an offline training
     """
@@ -1854,54 +1855,64 @@ class TrainDQN():
     num_memory = replay_loader.get_recent_file(name=replayfile, return_int=True)
 
     if self.log_level > 0:
-      print(f"\nBEGIN OFFLINE TRAINING, target is {num_memory * iter_per_file} episodes (files = {num_memory}, iter_per_file = {iter_per_file})\n", flush=True)
+      print(f"\nBEGIN OFFLINE TRAINING, target is {num_memory * iter_per_file * epochs} episodes (files = {num_memory}, iter_per_file = {iter_per_file}, epochs = {epochs})\n", flush=True)
 
-    ids = list(range(1, num_memory + 1))
+    per_epoch = num_memory * iter_per_file
 
-    if random_order:
-      randomiser = np.random.default_rng(self.env.myseed)
-      ids = randomiser.permutation(ids)
+    for e in range(epochs):
 
-    for i_file, id in enumerate(ids):
+      if self.log_level > 0:
+        print(f"Starting epoch {e + 1} of {epochs}")
 
-      # load the file into our replay memory
-      timenow = time.time()
-      self.memory = replay_loader.load(filenamestarts=replayfile, id=id)
-      print("Time taken for load was:", time.time() - timenow)
-      self.memory.all_to(self.device)
+      ids = list(range(1, num_memory + 1))
 
-      # train on this memory set
-      for j_episode in range(iter_per_file * i_file + 1, iter_per_file * (i_file + 1) + 1):
-      
-        if self.log_level == 1 and (j_episode - 1) % self.log_rate_for_episodes == 0:
-          print(f"Offline file {i_file + 1}/{num_memory} (num={id}), begin training episode {j_episode}", flush=True)
-        elif self.log_level > 1:
-          print(f"Begin training episode {j_episode} at {datetime.now().strftime('%H:%M')}", flush=True)
+      if random_order:
+        randomiser = np.random.default_rng(self.env.myseed)
+        ids = randomiser.permutation(ids)
 
-        # optimise using the replay memory 
-        self.offline_optimise_model()
-          
-        # update the target network at the end of the iteration
-        if j_episode % self.params.target_update == 0:
-          self.target_net.load_state_dict(self.policy_net.state_dict())
+      for i_file, id in enumerate(ids):
 
-        # test the target network and then save it
-        if j_episode % self.params.test_freq == 0 and j_episode != 0:
-          test_data = self.test()
-          # process test data
-          test_report = self.create_test_report(test_data, i_episode=j_episode)
-          additional_data = (test_data)
-          # save the result
-          timenow = time.time()
-          self.save(txtstring=test_report, txtlabel="test_results", 
-                    tupledata=additional_data)
-          print("Time taken for save was:", time.time() - timenow)
+        # load the file into our replay memory
+        timenow = time.time()
+        self.memory = replay_loader.load(filenamestarts=replayfile, id=id)
+        print("Time taken for load was:", time.time() - timenow)
+        self.memory.all_to(self.device)
 
-        # or only save the network
-        elif j_episode % self.params.save_freq == 0:
-          timenow = time.time()
-          self.save()
-          print("Time taken for save was:", time.time() - timenow)
+        j_start = iter_per_file * i_file + 1 + (per_epoch * e)
+        j_end = iter_per_file * (i_file + 1) + 1 + (per_epoch * e)
+
+        # train on this memory set
+        for j_episode in range(j_start, j_end):
+        
+          if self.log_level == 1 and (j_episode - 1) % self.log_rate_for_episodes == 0:
+            print(f"Offline file {i_file + 1}/{num_memory} (num={id}), begin training episode {j_episode}", flush=True)
+          elif self.log_level > 1:
+            print(f"Begin training episode {j_episode} at {datetime.now().strftime('%H:%M')}", flush=True)
+
+          # optimise using the replay memory 
+          self.offline_optimise_model()
+            
+          # update the target network at the end of the iteration
+          if j_episode % self.params.target_update == 0:
+            self.target_net.load_state_dict(self.policy_net.state_dict())
+
+          # test the target network and then save it
+          if j_episode % self.params.test_freq == 0 and j_episode != 0:
+            test_data = self.test()
+            # process test data
+            test_report = self.create_test_report(test_data, i_episode=j_episode)
+            additional_data = (test_data)
+            # save the result
+            timenow = time.time()
+            self.save(txtstring=test_report, txtlabel="test_results", 
+                      tupledata=additional_data)
+            print("Time taken for save was:", time.time() - timenow)
+
+          # or only save the network
+          elif j_episode % self.params.save_freq == 0:
+            timenow = time.time()
+            self.save()
+            print("Time taken for save was:", time.time() - timenow)
 
     # update the target network at the end
     self.target_net.load_state_dict(self.policy_net.state_dict())
@@ -2108,10 +2119,13 @@ class TrainDQN():
       env = self.env,
       track = self.track,
       modelsaver = self.modelsaver,
-      extra = tupledata
+      extra = {
+        "tupledata" : tupledata,
+        "optimiser_state_dict" : self.optimiser.state_dict(),
+      }
     )
 
-    savepath = self.modelsaver.save(self.policy_net.name, pyobj=save_data, 
+    savepath = self.modelsaver.save("model" + self.policy_net.name, pyobj=save_data, 
                                     txtstr=txtstring, txtlabel=txtlabel)
 
     # also save the best performance in txt file for fast lookup later
@@ -2180,15 +2194,25 @@ class TrainDQN():
     self.env = load_data.env
     self.track = load_data.track
       
+    reload_optimiser = False
     if load_data.extra != None:
-      self.last_test_data = load_data.extra
+      if isinstance(load_data.extra, dict):
+        self.last_test_data = load_data.extra["tupledata"]
+        reload_optimiser = True
+      else:
+        self.last_test_data = load_data.extra
 
     # backwards compatibility fix, check for imagedata field
     try:
       x = self.memory.imagedata
     except AttributeError as e:
-      print(f"self.memory error: {e}")
+      print(f"TrainDQN.load() warning: {e}")
       self.memory.imagedata = False
+    try:
+      x = self.env.prevent_reload
+    except AttributeError as e:
+      print(f"TrainDQN.load() warning: {e}")
+      self.env.prevent_reload = False
 
     # CATCH failures above, so compatible with old code. This double check could be deleted but it is quite handy
     if best_id:
@@ -2224,6 +2248,10 @@ class TrainDQN():
 
     # re-initialise the class
     self.init(network="loaded")
+
+    # if we saved the state dict of the optimiser
+    if reload_optimiser:
+      self.optimiser.load_state_dict(load_data.extra["optimiser_state_dict"])
 
     # return the path of the loaded model
     return self.modelsaver.last_loadpath
