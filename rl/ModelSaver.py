@@ -92,6 +92,19 @@ class ModelSaver:
     if path[-1] != "/": path += "/"
 
     return path
+  
+  def file_ext(self):
+    """
+    Get the currently used file extension
+    """
+
+    if self.use_compression:
+      if self.compressor == "bz2":
+        return self.bz2_extension
+      else:
+        return self.lz4_extension
+    else:
+      return self.uncompressed_extension
 
   def get_file_num(self, file):
     """
