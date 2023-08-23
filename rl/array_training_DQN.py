@@ -2757,7 +2757,7 @@ if __name__ == "__main__":
 
       exit()
 
-  elif training_type == "cnn_from_pretrain":
+  elif training_type.startswith("cnn_from_pretrain_v1"):
 
     vary_1 = None
     vary_2 = None
@@ -2780,28 +2780,41 @@ if __name__ == "__main__":
 
       model = baseline_settings(model, **baseline_args)
 
-      from ModelSaver import ModelSaver
+      # which offline data are we loading
+      if training_type.endswith("v1-1"):
+        # # image only pretrained network
+        # path = "/home/luke/luke-gripper-mujoco/rl/models/dqn/15-08-23/operator-PC_16:52_A3"
+        # id = 3
+        # both inputs pretrained network
+        path = "/home/luke/luke-gripper-mujoco/rl/models/dqn/14-08-23/operator-PC_17:50_A1"
+        net = "CNN2_100_100"
+        id = 4
+      elif training_type.endswith("v1-2"):
+        path = "/home/luke/luke-gripper-mujoco/rl/models/dqn/22-08-23/operator-PC_09:55_A5"
+        net = "CNN2_50_50"
+        folderpath = "/home/luke/luke-gripper-mujoco/rl/models/dqn/22-08-23/"
+        foldername = "operator-PC_09:55_A5"
+        id = 8
 
       # load the pretrained network
-      model.init(network="CNN2_100_100")
+      model.init(network=net)
 
-      # # image only pretrained network
-      # path = "/home/luke/luke-gripper-mujoco/rl/models/dqn/15-08-23/operator-PC_16:52_A3"
-      # id = 3
-      
-      # both inputs pretrained network
-      path = "/home/luke/luke-gripper-mujoco/rl/models/dqn/14-08-23/operator-PC_17:50_A1"
-      id = 4
+      # from ModelSaver import ModelSaver
+      # pretrain_loader = ModelSaver(path)
+      # pretrain_model = pretrain_loader.load(id=id) # specifically chosen model
+      # model.policy_net.load_state_dict(pretrain_model.policy_net.state_dict())
+      # model.target_net.load_state_dict(pretrain_model.policy_net.state_dict())
 
-      pretrain_loader = ModelSaver(path)
-      pretrain_model = pretrain_loader.load(id=id) # specifically chosen model
-      model.policy_net.load_state_dict(pretrain_model.policy_net.state_dict())
-      model.target_net.load_state_dict(pretrain_model.policy_net.state_dict())
+      model.load(id=id, folderpath=folderpath, foldername=foldername)
 
-      # remove the pretrained model from memory
-      import gc
-      del pretrain_model
-      gc.collect()
+      # optional: enable this for some trainings for monitoring
+      # model.params.test_freq = 500 # close eye on performance
+      # model.params.save_freq = 4000
+
+      # # remove the pretrained model from memory
+      # import gc
+      # del pretrain_model
+      # gc.collect()
 
       # now proceed with training
       model.train()
