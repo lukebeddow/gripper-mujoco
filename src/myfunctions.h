@@ -179,6 +179,7 @@ std::vector<double> get_base_max();
 double get_finger_thickness();
 double get_finger_width();
 double get_finger_length();
+double get_finger_hook_length();
 double get_finger_hook_angle_degrees();
 bool is_finger_hook_fixed();
 double get_fingertip_clearance();
@@ -191,7 +192,7 @@ float calc_yield_point_load();
 float calc_yield_point_load(float thickness, float width);
 float get_fingertip_z_height();
 float get_fingerend_z_height(mjModel* model, mjData* data);
-std::vector<luke::Vec3> get_fingerend_locations();
+std::vector<luke::Vec3> get_finger_hook_locations();
 std::vector<luke::gfloat> get_stiffnesses();
 void print_stiffnesses();
 

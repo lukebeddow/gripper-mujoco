@@ -2552,7 +2552,7 @@ void uiEvent(mjuiState* state)
             }
             case 30: {          // spawn object scene
                 std::cout << "Spawning a scene with " << settings.scene_objects << " objects\n";
-                myMjClass.spawn_scene(settings.scene_objects, 0.5, 0.5, 0.0);
+                myMjClass.spawn_scene(settings.scene_objects, 0.2, 0.2, 0.0);
                 break;
             }
             }

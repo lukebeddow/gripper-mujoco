@@ -1654,7 +1654,40 @@ int MjClass::spawn_scene(int num_objects, double xrange, double yrange,
   /* spawn a scene of objects in the simulation in the given range. Returns the
   number of spawned objects in case some cannot be spawned */
 
+  // // remove any live objects
+  // reset_object();
+
+  // 0=off, 1=key info, 2=all info
+  constexpr int debug_level = 0;
+
+  double origin_x = 0.0;
+  double origin_y = 0.0;
+
   std::uniform_real_distribution<double> rotation_dist(0.0, M_PI);
+
+  // determine the spawning bounds
+  double xmin = origin_x - xrange;
+  double xmax = origin_x + xrange;
+  double ymin = origin_y - yrange;
+  double ymax = origin_y + yrange;
+
+  // determine the gripper fingertip positions
+  std::vector<luke::Vec3> tip_pos = luke::get_finger_hook_locations();
+  std::vector<luke::Box2d> tip_boxes;
+  for (int i = 0; i < 3; i++) {
+    luke::Box2d tip;
+    tip.initCentre(tip_pos[i].x, tip_pos[i].y, tip_pos[3 + i].y, tip_pos[3 + i].x);
+    tip.rotate(-tip_pos[3 + i].z);
+    tip_boxes.push_back(tip);
+
+    if (debug_level > 1)
+      std::cout << "Gripper fingertip " << i << " has (x, y) >> ("
+        << tip_pos[i].x << ", " << tip_pos[i].y
+        << "; width = " << tip_pos[3 + i].x
+        << " and height = " << tip_pos[3 + i].y
+        << "; rotation = " << tip_pos[3 + i].z
+        << "\n";
+  }
 
   // create a grid of possible points to spawn in an object
   constexpr double xy_increment = 2e-3; // 2mm
@@ -1665,8 +1698,8 @@ int MjClass::spawn_scene(int num_objects, double xrange, double yrange,
   // loop through and set the xy values
   for (int ix = 0; ix < num_x; ix++) {
     for (int iy = 0; iy < num_y; iy++) {
-      xy_points[ix * num_x + iy][0] = -xrange + ix * xy_increment;
-      xy_points[ix * num_x + iy][1] = -yrange + iy * xy_increment;
+      xy_points[ix * num_x + iy][0] = -xrange + ix * xy_increment + origin_x;
+      xy_points[ix * num_x + iy][1] = -yrange + iy * xy_increment + origin_y;
     }
   }
 
@@ -1689,22 +1722,24 @@ int MjClass::spawn_scene(int num_objects, double xrange, double yrange,
 
     // get object size from the centre point
     luke::Vec3 obj_xyz = luke::get_object_xyz_bounding_box(obj_idx[i]);
-    objects[i].model_x = obj_xyz.x;// * 0.5;
-    objects[i].model_y = obj_xyz.y;// * 0.5;
-    objects[i].model_z = obj_xyz.z;// * 0.5;
+    objects[i].model_x = obj_xyz.x;
+    objects[i].model_y = obj_xyz.y;
+    objects[i].model_z = obj_xyz.z;
 
-    std::cout << "Adding object " << objects[i].index << ", with (x,y,z) bounding >> ("
-      << objects[i].model_x << ", " << objects[i].model_y
-      << ", " << objects[i].model_z << ")\n";
+    if (debug_level > 0)
+      std::cout << "Adding object " << objects[i].index << ", with (x,y,z) bounding >> ("
+        << objects[i].model_x << ", " << objects[i].model_y
+        << ", " << objects[i].model_z << ")\n";
   }
 
   // now loop over our scene and add objects where we can
   std::vector<MjType::Env::SpawnObj> spawned_objects;
   int spawn_idx = 0;
   for (int i = 0; i < xy_points.size(); i++) {
-
-    std::cout << "Now at point (x, y) >> ("
-      << xy_points[i][0] << ", " << xy_points[i][1] << ")\n";
+    
+    if (debug_level > 1)
+      std::cout << "Now at point (x, y) >> ("
+        << xy_points[i][0] << ", " << xy_points[i][1] << ")\n";
 
     bool good_spawn_point = true;
 
@@ -1717,27 +1752,11 @@ int MjClass::spawn_scene(int num_objects, double xrange, double yrange,
     double rand_rot = rotation_dist(*MjType::generator);
     ourBox.rotate(rand_rot);
 
-    // double our_x_min = xy_points[i][0] - objects[spawn_idx].model_x;
-    // double our_x_max = xy_points[i][0] + objects[spawn_idx].model_x;
-    // double our_y_min = xy_points[i][1] - objects[spawn_idx].model_y;
-    // double our_y_max = xy_points[i][1] + objects[spawn_idx].model_y;
-
-    // now see if the object remains within the bounds
-    // if (our_x_max > xrange or 
-    //     our_x_min < -xrange or
-    //     our_y_max > yrange or
-    //     our_y_min < -yrange) {
-    if (not ourBox.inbounds(-xrange, -yrange, xrange, yrange)) {
+    if (not ourBox.inbounds(xmin, ymin, xmax, ymax)) {
         
-      std::cout << "Can't spawn here, exceed outer bounds\n";
+      if (debug_level > 1) std::cout << "Can't spawn here, exceed outer bounds\n";
       continue;
     }
-
-    // std::cout << "Our object (x1, y1, x2, y2) >> ("
-    //   << our_x_min << ", " << our_y_min << ", "
-    //   << our_x_max << ", " << our_y_max << ")\n";
-    // std::cout << "Our object has corners:\n";
-    // ourBox.printCorners();
 
     // see if we can spawn an object at this point
     for (MjType::Env::SpawnObj& spawned : spawned_objects) {
@@ -1746,25 +1765,22 @@ int MjClass::spawn_scene(int num_objects, double xrange, double yrange,
       luke::Box2d spawnBox;
       spawnBox.initCentre(spawned.x_centre, spawned.y_centre, spawned.model_x,
         spawned.model_y);
-      // std::cout << "Spawn object has corners:\n";
-      // spawnBox.printCorners();
-      // double obj_x_min = spawned.x_centre - spawned.model_x;
-      // double obj_x_max = spawned.x_centre + spawned.model_x;
-      // double obj_y_min = spawned.y_centre - spawned.model_y;
-      // double obj_y_max = spawned.y_centre + spawned.model_y;
+      spawnBox.rotate(spawned.z_rotation);
 
-      // std::cout << "\tSpawned object (x1, y1, x2, y2) >> ("
-      //   << obj_x_min << ", " << obj_y_min << ", "
-      //   << obj_x_max << ", " << obj_y_max << ")\n";
-
-      // if (our_x_min < obj_x_max and
-      //     our_x_max > obj_x_min and
-      //     our_y_min < obj_y_max and
-      //     our_y_max > obj_y_min) {
-      double minGap = 0e-3;
-      if (ourBox.overlapsWith(spawnBox, minGap)) {
+      if (ourBox.overlapsWith(spawnBox, smallest_gap)) {
         good_spawn_point = false;
-        std::cout << "Can't spawn here, exceed object bounds\n";
+        if (debug_level > 1) std::cout << "Can't spawn here, exceed object bounds\n";
+        break;
+      }
+    }
+
+    if (not good_spawn_point) continue;
+
+    // see if this spawn point clashes with the gripper fingers
+    for (luke::Box2d& finger_box : tip_boxes) {
+      if (ourBox.overlapsWith(finger_box, smallest_gap)) {
+        good_spawn_point = false;
+        if (debug_level > 1) std::cout << "Can't spawn here, hits gripper fingers\n";
         break;
       }
     }
@@ -1778,22 +1794,26 @@ int MjClass::spawn_scene(int num_objects, double xrange, double yrange,
     new_spawn.z_rotation = rand_rot;
     spawned_objects.push_back(new_spawn);
 
-    std::cout << "Spawning object " << new_spawn.index << " at (x, y) >> ("
-      << new_spawn.x_centre << ", " << new_spawn.y_centre << ")\n";
-
     spawn_idx += 1;
 
     if (spawn_idx == num_objects) break;
   }
 
   // finally, we can loop over the objects and spawn them
-  std::cout << "Spawning the following:\n";
+  if (debug_level > 0) std::cout << "Spawning the following:\n";
   for (MjType::Env::SpawnObj& to_spawn : spawned_objects) {
 
-    std::cout << "Object " << to_spawn.index << ", at (x,y) >> ("
-      << to_spawn.x_centre << ", " << to_spawn.y_centre << ") with rotation "
-      << to_spawn.z_rotation << '\n';
-    spawn_object(to_spawn.index, to_spawn.x_centre, to_spawn.y_centre, to_spawn.z_rotation);
+    if (debug_level > 0)
+      std::cout << "Spawning object " << to_spawn.index 
+        << " called " << env_.object_names[to_spawn.index]
+        << " at (x, y) >> (" << to_spawn.x_centre << ", " << to_spawn.y_centre << ")"
+        << " with rotation " << to_spawn.z_rotation
+        << "; this object has (x, y, z) sizes of (" << to_spawn.model_x
+        << ", " << to_spawn.model_y << ", " << to_spawn.model_z << ")"
+        << "\n";
+
+    // spawn the object: NOTE! different sign convenstion so we make the rotation negative
+    spawn_object(to_spawn.index, to_spawn.x_centre, to_spawn.y_centre, -to_spawn.z_rotation);
   }
 
   return spawned_objects.size();
@@ -2606,6 +2626,13 @@ double MjClass::get_finger_length()
   /* get the current saved finger length */
 
   return luke::get_finger_length();
+}
+
+double MjClass::get_finger_hook_length()
+{
+  /* return the gripper finger hook length in mm */
+
+  return luke::get_finger_hook_length();
 }
 
 double MjClass::get_finger_hook_angle_degrees()

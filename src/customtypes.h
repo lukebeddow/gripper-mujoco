@@ -78,134 +78,63 @@ public:
     x[3] = x1; y[3] = y2; // Top-left corner
   }
 
+  // Function to calculate the dot product of two vectors
+  static double dotProduct(double x1, double y1, double x2, double y2) {
+    return x1 * x2 + y1 * y2;
+  }
 
-  // // Function to check if this region overlaps with another region
-  // bool overlapsWith(const Box2d& other) {
-  //   for (int i = 0; i < 4; ++i) {
-  //     double x1 = x[i];
-  //     double y1 = y[i];
-  //     double x2 = x[(i + 1) % 4];
-  //     double y2 = y[(i + 1) % 4];
+  bool overlapsWith(const Box2d& other, double minDistance) const {
 
-  //     for (int j = 0; j < 4; ++j) {
-  //       double x3 = other.x[j];
-  //       double y3 = other.y[j];
-  //       double x4 = other.x[(j + 1) % 4];
-  //       double y4 = other.y[(j + 1) % 4];
+    bool containsOther = true; // Assume this region contains the other initially
+    
+    for (int i = 0; i < 4; ++i) {
 
-  //       double crossProduct1 = (x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1);
-  //       double crossProduct2 = (x2 - x1) * (y4 - y1) - (y2 - y1) * (x4 - x1);
-  //       double crossProduct3 = (x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3);
-  //       double crossProduct4 = (x4 - x3) * (y2 - y3) - (y4 - y3) * (x2 - x3);
+      int j = (i + 1) % 4; // Get the index of the next point
 
-  //       // Check if the edges intersect
-  //       if (((crossProduct1 * crossProduct2) <= 0) && ((crossProduct3 * crossProduct4) <= 0)) {
-  //         return true; // There is an intersection
-  //       }
-  //     }
-  //   }
+      // Calculate the edge vector for this region
+      double edgeX1 = x[j] - x[i];
+      double edgeY1 = y[j] - y[i];
 
-  //   return false; // No intersection found
-  // }
+      // Calculate the perpendicular vector to the edge
+      double perpX1 = -edgeY1;
+      double perpY1 = edgeX1;
 
- // Function to calculate the dot product of two vectors
-    static double dotProduct(double x1, double y1, double x2, double y2) {
-        return x1 * x2 + y1 * y2;
+      // Normalize the perpendicular vector
+      double length1 = std::sqrt(dotProduct(perpX1, perpY1, perpX1, perpY1));
+      perpX1 /= length1;
+      perpY1 /= length1;
+
+      // Project the corners of both regions onto the perpendicular vector
+      double min1 = dotProduct(x[0], y[0], perpX1, perpY1);
+      double max1 = min1;
+
+      double min2 = dotProduct(other.x[0], other.y[0], perpX1, perpY1);
+      double max2 = min2;
+
+      for (int k = 1; k < 4; ++k) {
+        double projection1 = dotProduct(x[k], y[k], perpX1, perpY1);
+        double projection2 = dotProduct(other.x[k], other.y[k], perpX1, perpY1);
+
+        if (projection1 < min1) min1 = projection1;
+        if (projection1 > max1) max1 = projection1;
+        if (projection2 < min2) min2 = projection2;
+        if (projection2 > max2) max2 = projection2;
+      }
+
+      // Check for overlap on this axis with minimum separation distance
+      if (max1 + minDistance < min2 || max2 + minDistance < min1) {
+        return false; // Separating axis found
+      }
+      
+      // Check if this edge of 'this' region is entirely contained within 'other'
+      if (max1 < min2 || max2 < min1) {
+        containsOther = false;
+      }
     }
 
-    // Member function to check if two rotated regions overlap using SAT with a minimum separation distance
-    bool overlapsWith(const Box2d& other, double minDistance) const {
-        for (int i = 0; i < 4; ++i) {
-            int j = (i + 1) % 4; // Get the index of the next point
-
-            // Calculate the edge vector for this region
-            double edgeX1 = x[j] - x[i];
-            double edgeY1 = y[j] - y[i];
-
-            // Calculate the perpendicular vector to the edge
-            double perpX1 = -edgeY1;
-            double perpY1 = edgeX1;
-
-            // Normalize the perpendicular vector
-            double length1 = std::sqrt(dotProduct(perpX1, perpY1, perpX1, perpY1));
-            perpX1 /= length1;
-            perpY1 /= length1;
-
-            // Project the corners of both regions onto the perpendicular vector
-            double min1 = dotProduct(x[0], y[0], perpX1, perpY1);
-            double max1 = min1;
-
-            double min2 = dotProduct(other.x[0], other.y[0], perpX1, perpY1);
-            double max2 = min2;
-
-            for (int k = 1; k < 4; ++k) {
-                double projection1 = dotProduct(x[k], y[k], perpX1, perpY1);
-                double projection2 = dotProduct(other.x[k], other.y[k], perpX1, perpY1);
-
-                if (projection1 < min1) min1 = projection1;
-                if (projection1 > max1) max1 = projection1;
-                if (projection2 < min2) min2 = projection2;
-                if (projection2 > max2) max2 = projection2;
-            }
-
-            // Check for overlap on this axis with minimum separation distance
-            if (max1 + minDistance < min2 || max2 + minDistance < min1) {
-                return false; // Separating axis found
-            }
-        }
-
-        return true; // No separating axis found, overlap detected
-    }
-  
-
-  // bool overlapsWith(const Box2d& other, double minDistance) {
-  //   for (int i = 0; i < 4; ++i) {
-  //       // Get the vertices of this region
-  //       double x1 = x[i];
-  //       double y1 = y[i];
-
-  //       // Get the next vertex
-  //       int nextIdx = (i + 1) % 4;
-  //       double x2 = x[nextIdx];
-  //       double y2 = y[nextIdx];
-
-  //       // Calculate the edge vector
-  //       double edgeX = x2 - x1;
-  //       double edgeY = y2 - y1;
-
-  //       // Calculate the perpendicular vector
-  //       double perpX = -edgeY;
-  //       double perpY = edgeX;
-
-  //       // Normalize the perpendicular vector
-  //       double length = sqrt(perpX * perpX + perpY * perpY);
-  //       perpX /= length;
-  //       perpY /= length;
-
-  //       // Project the vertices of both regions onto the perpendicular vector
-  //       double minThis = 1e9;
-  //       double maxThis = -1e9;
-  //       double minOther = 1e9;
-  //       double maxOther = -1e9;
-
-  //       for (int j = 0; j < 4; ++j) {
-  //           double dotThis = (x[j] - x1) * perpX + (y[j] - y1) * perpY;
-  //           minThis = std::min(minThis, dotThis);
-  //           maxThis = std::max(maxThis, dotThis);
-
-  //           double dotOther = (other.x[j] - x1) * perpX + (other.y[j] - y1) * perpY;
-  //           minOther = std::min(minOther, dotOther);
-  //           maxOther = std::max(maxOther, dotOther);
-  //       }
-
-  //       // Check for overlap on the projected axis with minimum separation distance
-  //       if (!(maxThis + minDistance >= minOther && maxOther + minDistance >= minThis)) {
-  //           return false; // No overlap with the specified minimum distance
-  //       }
-  //   }
-
-  //   return true; // Overlap with the specified minimum distance on all axes
-  // }
+    // If all edges checked and 'this' region contains 'other', return true
+    return containsOther;
+  }
 
   bool inbounds(double xmin, double ymin, double xmax, double ymax)
   {
@@ -221,7 +150,7 @@ public:
     return true;
   }
 
-// Function to rotate the region by a specified angle (in radians) around its center
+  // Function to rotate the region by a specified angle (in radians) around its center
   void rotate(double theta) {
     double centerX = (x[0] + x[1] + x[2] + x[3]) / 4.0;
     double centerY = (y[0] + y[1] + y[2] + y[3]) / 4.0;
@@ -241,214 +170,6 @@ public:
     }
   }
 };
-
-// class Box2d {
-
-// private:
-//   double x1 {}, y1 {}; // Bottom-left corner
-//   double x2 {}, y2 {}; // Bottom-right corner
-//   double x3 {}, y3 {}; // Top-right corner
-//   double x4 {}, y4 {}; // Top-left corner
-
-// public:
-//   // Constructor to initialize the region's corners
-//   Region() {}
-//   Region(double x1, double y1, double x2, double y2, double x3, double y3, double x4, double y4)
-//     : x1(x1), y1(y1), x2(x2), y2(y2), x3(x3), y3(y3), x4(x4), y4(y4) {}
-
-//   void initCentre(double x, double y, double xlength, double ylength)
-//   {
-//     /* initialise a Box2d given a centre point, and the length of the two sides */
-
-//     x1 = x - 0.5 * xlength;
-//     x2 = x + 0.5 * xlength;
-//     x3 = x + 0.5 * xlength;
-//     x4 = x - 0.5 * xlength;
-
-//     y1 = y - 0.5 * ylength;
-//     y2 = y - 0.5 * ylength;
-//     y3 = y + 0.5 * ylength;
-//     y4 = y + 0.5 * ylength;
-//   }
-
-//   void initCorners(double x1_, double y1_, double x2_, double y2_)
-//   {
-//     /* initialise a Box2d given two opposite corners */
-
-//     x1 = x1_;
-//     x2 = x2_;
-//     x3 = x2_;
-//     x4 = x1_;
-
-//     y1 = y1_;
-//     y2 = y1_;
-//     y3 = y2_;
-//     y4 = y2_;
-//   }
-
-//   // Function to rotate the region about its center by a given angle (in radians)
-//   void rotate(double theta) {
-//     // Calculate the center of the region
-//     double centerX = (x1 + x2 + x3 + x4) / 4.0;
-//     double centerY = (y1 + y2 + y3 + y4) / 4.0;
-
-//     // Rotate each corner about the center
-//     double cosTheta = cos(theta);
-//     double sinTheta = sin(theta);
-
-//     double newX1 = centerX + (x1 - centerX) * cosTheta - (y1 - centerY) * sinTheta;
-//     double newY1 = centerY + (x1 - centerX) * sinTheta + (y1 - centerY) * cosTheta;
-
-//     double newX2 = centerX + (x2 - centerX) * cosTheta - (y2 - centerY) * sinTheta;
-//     double newY2 = centerY + (x2 - centerX) * sinTheta + (y2 - centerY) * cosTheta;
-
-//     double newX3 = centerX + (x3 - centerX) * cosTheta - (y3 - centerY) * sinTheta;
-//     double newY3 = centerY + (x3 - centerX) * sinTheta + (y3 - centerY) * cosTheta;
-
-//     double newX4 = centerX + (x4 - centerX) * cosTheta - (y4 - centerY) * sinTheta;
-//     double newY4 = centerY + (x4 - centerX) * sinTheta + (y4 - centerY) * cosTheta;
-
-//     // Update the corner positions
-//     x1 = newX1; y1 = newY1;
-//     x2 = newX2; y2 = newY2;
-//     x3 = newX3; y3 = newY3;
-//     x4 = newX4; y4 = newY4;
-//   }
-
-//   // Function to check if this region overlaps with another region
-//   bool overlapsWith(const Box2d& other) {
-//     for (int i = 0; i < 4; ++i) {
-//       int j = (i + 1) % 4; // Get the index of the next point for this region
-//       int k = (i + 2) % 4; // Get the index of the next-next point for this region
-
-//       double crossProduct1 = (x2 - x1) * (other.y1 - y1) - (y2 - y1) * (other.x1 - x1);
-//       double crossProduct2 = (x2 - x1) * (other.y2 - y1) - (y2 - y1) * (other.x2 - x1);
-//       double crossProduct3 = (other.x2 - other.x1) * (y1 - other.y1) - (other.y2 - other.y1) * (x1 - other.x1);
-//       double crossProduct4 = (other.x2 - other.x1) * (y2 - other.y1) - (other.y2 - other.y1) * (x2 - other.x1);
-
-//       // Check if the edges intersect
-//       if (((crossProduct1 * crossProduct2) <= 0) && ((crossProduct3 * crossProduct4) <= 0)) {
-//         return true; // There is an intersection
-//       }
-//     }
-
-//     return false; // No intersection found
-//   }
-// };
-
-// struct Box2d {
-
-//   double x1 {};
-//   double x2 {};
-//   double y1 {};
-//   double y2 {};
-
-//   struct Region {
-//     Vec3 points[4]; // Four corner points of the region
-//   };
-
-//   // Function to check if two rotated 2D regions are overlapping
-//   bool areRotatedRegionsOverlapping(const Region &region1, const Region &region2) 
-//   {
-//     /* chatGPT function to determine if two regions overlap */
-
-//     for (int i = 0; i < 4; ++i) {
-
-//       int j = (i + 1) % 4; // Get the index of the next point
-
-//       // Check if any of the edges of region1 intersect with any of the edges of region2
-//       double x1 = region1.points[i].x;
-//       double y1 = region1.points[i].y;
-//       double x2 = region1.points[j].x;
-//       double y2 = region1.points[j].y;
-
-//       for (int k = 0; k < 4; ++k) {
-
-//         int l = (k + 1) % 4; // Get the index of the next point in the other region
-
-//         double x3 = region2.points[k].x;
-//         double y3 = region2.points[k].y;
-//         double x4 = region2.points[l].x;
-//         double y4 = region2.points[l].y;
-
-//         // Calculate the cross products to check if the edges intersect
-//         double crossProduct1 = (x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1);
-//         double crossProduct2 = (x2 - x1) * (y4 - y1) - (y2 - y1) * (x4 - x1);
-
-//         double crossProduct3 = (x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3);
-//         double crossProduct4 = (x4 - x3) * (y2 - y3) - (y4 - y3) * (x2 - x3);
-
-//         // Check if the edges intersect
-//         if (((crossProduct1 * crossProduct2) < 0) && ((crossProduct3 * crossProduct4) < 0)) {
-//           return true; // There is an intersection
-//         }
-//       }
-//     }
-
-//     return false; // No intersection found
-//   }
-
-//   bool overlap(Box2d& box2)
-//   {
-//     /* determine whether two boxes overlap*/
-
-//     // convert each box into a region
-
-//     Region r1;
-//     Region r2;
-
-//     r1.points[0].x = x1;
-//     r1.points[0].y = y1;
-//     r1.points[1].x = x1;
-//     r1.points[1].y = y2;
-//     r1.points[2].x = x2;
-//     r1.points[2].y = y2;
-//     r1.points[3].x = x2;
-//     r1.points[3].y = y1;
-
-//     r2.points[0].x = box2.x1;
-//     r2.points[0].y = box2.y1;
-//     r2.points[1].x = box2.x1;
-//     r2.points[1].y = box2.y2;
-//     r2.points[2].x = box2.x2;
-//     r2.points[2].y = box2.y2;
-//     r2.points[3].x = box2.x2;
-//     r2.points[3].y = box2.y1;
-
-//     return areRotatedRegionsOverlapping(r1, r2);
-//   }
-
-//   void rotate(double theta_rad)
-//   {
-//     /* rotate the box about its centre point by theta in radians */
-
-//     double centre_x = 0.5 * (x2 + x1);
-//     double centre_y = 0.5 * (y2 + y1);
-
-//     double local_x1 = x1 - centre_x;
-//     double local_x2 = x2 - centre_x;
-//     double local_y1 = y1 - centre_y;
-//     double local_y2 = y2 - centre_y;
-
-//     double cth = cos(theta_rad);
-//     double sth = sin(theta_rad);
-
-//     // do the rotation
-//     x1 = cth * local_x1 - sth * local_y1 + centre_x;
-//     y1 = sth * local_x1 + cth * local_y1 + centre_y;
-//     x2 = cth * local_x2 - sth * local_y2 + centre_x;
-//     y2 = sth * local_x2 + cth * local_y2 + centre_y;
-//   }
-
-//   void print()
-//   {
-//     /* print out the coordinates of the box */
-
-//     std::cout << "(x1, y1, x2, y2) >> ("
-//       << x1 << ", " << y1 << ", "
-//       << x2 << ", " << y2 << ")\n";
-//   }
-// };
 
 struct Forces {
 

@@ -820,7 +820,7 @@ namespace MjType
     }
 
     void print_objects() {
-      for (int i = 0; i < obj.size(); i++) {
+      for (uint i = 0; i < obj.size(); i++) {
         obj[i].print();
       }
     }
@@ -1526,6 +1526,7 @@ public:
   double get_finger_modulus();
   double get_finger_rigidity();
   double get_finger_length();
+  double get_finger_hook_length();
   double get_finger_hook_angle_degrees();
   bool is_finger_hook_fixed();
   double get_fingertip_clearance();
