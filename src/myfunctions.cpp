@@ -2956,8 +2956,8 @@ std::vector<gfloat> get_target_state_vector()
   std::vector<gfloat> state_vec;
 
   state_vec.push_back(state.gripper_x);
-  state_vec.push_back(state.gripper_x);
-  state_vec.push_back(state.gripper_x);
+  state_vec.push_back(state.gripper_y);
+  state_vec.push_back(state.gripper_z);
   if (j_.in_use.base_xyz) {
     state_vec.push_back(state.base_x);
     state_vec.push_back(state.base_y);

@@ -2891,7 +2891,7 @@ if __name__ == "__main__":
       model.params.use_curriculum = False
 
     model.params.object_set = "set8_fullset_1500"
-    model.env.load_next.finger_hook_angle_degrees = 90
+    # model.env.load_next.finger_hook_angle_degrees = 90
 
     # long trainings
     model.params.num_episodes = 100_000

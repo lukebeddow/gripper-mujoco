@@ -820,7 +820,7 @@ namespace MjType
     }
 
     void print_objects() {
-      for (int i = 0; i < obj.size(); i++) {
+      for (uint i = 0; i < obj.size(); i++) {
         obj[i].print();
       }
     }
@@ -1484,6 +1484,7 @@ public:
   bool is_done();
   std::vector<luke::gfloat> get_observation();
   std::vector<luke::gfloat> get_observation(MjType::SensorData sensors);
+  std::vector<luke::gfloat> debug_observation(std::vector<luke::gfloat> state_vector);
   std::vector<float> get_event_state();
   std::vector<float> get_goal();
   std::vector<float> assess_goal();

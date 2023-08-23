@@ -134,7 +134,6 @@ MACHINE = luke-PC
 MJCF_PATH = /home/luke/mymujoco/mjcf
 
 # path to python executable (eg venv) and header files
-PYTHON =
 PYTHON_EXE = python3
 PYTHON_INCLUDE = /usr/include/python3.6m
 
@@ -202,7 +201,6 @@ MACHINE = zotac-PC
 MJCF_PATH = /home/luke/mymujoco/mjcf
 
 # path to python executable (eg venv) and header files
-PYTHON =
 PYTHON_EXE = python3
 PYTHON_INCLUDE = /usr/include/python3.6m
 

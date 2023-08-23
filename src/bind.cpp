@@ -92,6 +92,7 @@ PYBIND11_MODULE(bind, m) {
     .def("is_done", &MjClass::is_done)
     .def("get_observation", static_cast<std::vector<luke::gfloat> (MjClass::*)()>(&MjClass::get_observation))
     .def("get_observation", static_cast<std::vector<luke::gfloat> (MjClass::*)(MjType::SensorData)>(&MjClass::get_observation))
+    .def("debug_observation", &MjClass::debug_observation)
     .def("get_observation_numpy",
       [](MjClass &mj) {
         std::vector<luke::gfloat> obs = mj.get_observation();

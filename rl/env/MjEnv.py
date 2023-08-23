@@ -212,7 +212,10 @@ class MjEnv():
       taskname = f"gripper_N{N}_{W*1e3:.0f}"
 
     # generate if the task folder does not already exist
-    if not os.path.exists(f"{repo_path}/{mjcf_folder}/{taskname}") or force:
+    if not os.path.exists(f"{repo_path}/{mjcf_folder}/{object_set}/{taskname}") or force:
+
+      if self.log_level > 1:
+        print(f"Target not found, generating: {repo_path}/{mjcf_folder}/{object_set}/{taskname}")
 
       # determine what machine we are running on to adjust the make command
       machine = self._get_machine()
@@ -238,7 +241,7 @@ class MjEnv():
 
     else:
       if self.log_level > 0:
-        print(f"MjEnv._auto_generate_xml_file() found that '{repo_path}/{mjcf_folder}/{taskname}' already exists. Nothing generated - use force=True to force generation.")
+        print(f"MjEnv._auto_generate_xml_file() found that '{repo_path}/{mjcf_folder}/{object_set}/{taskname}' already exists. Nothing generated - use force=True to force generation.")
 
     # override the current mjcf path with the new path
     self.mj.model_folder_path = f"{repo_path}/{mjcf_folder}"
@@ -1258,7 +1261,7 @@ if __name__ == "__main__":
   # xy_base = [False, True]
   # inertia = [1, 50]
 
-  mj.load_next.num_segments = 8
+  mj.load_next.num_segments = 7
   angles = [30]
   for a in angles:
     mj.load_next.finger_hook_angle_degrees = a

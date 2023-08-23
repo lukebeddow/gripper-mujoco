@@ -1519,6 +1519,206 @@ std::vector<luke::gfloat> MjClass::get_observation(MjType::SensorData sensors)
   return observation;
 }
 
+void copy_into(std::vector<luke::gfloat>& large, std::vector<luke::gfloat>& small, int idx)
+{
+  int size = small.size();
+
+  small.clear();
+
+  for (int i = 0; i < size; i++) {
+    small[i] = large[i + idx];
+  }
+}
+
+std::vector<luke::gfloat> MjClass::debug_observation(std::vector<luke::gfloat> observation)
+{
+  /* get an observation from a provided set of sensors */
+
+  // use for printing detailed observation debug information
+  constexpr bool debug_obs = true;
+
+  std::vector<luke::gfloat> real_obs = get_observation();
+
+  if (real_obs.size() != observation.size()) {
+    std::cout << "WARNING from MjClass::debug_observation()\n";
+    std::cout << "Observation given to function has length = " << observation.size()
+      << ", while MjClass::get_observation returns a size = " << real_obs.size()
+      << ", therefore settings do not match and the information from this function will be WRONG\n";
+    std::cout << "WARNING DEBUG_OBSERVATION WILL NOT WORK PROPERLY\n";
+
+    if (real_obs.size() > observation.size()) {
+      std::cout << "The given observation is not long enough, MjClass::debug_observation()"
+        << " is returning to avoid a seg fault\n";
+    }
+  }
+
+  // use the sensor data to generate vectors of correct length
+  MjType::SensorData sensors = sim_sensors_;
+  int sidx = 0; // index of the state vector
+
+  if (debug_obs) {
+    std::cout << "Observation information:\n";
+  }
+
+  // get bending strain gauge sensor output
+  if (s_.bending_gauge.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> f1 = 
+      (s_.bending_gauge.*sampleFcnPtr)(sensors.finger1_gauge);
+    std::vector<luke::gfloat> f2 = 
+      (s_.bending_gauge.*sampleFcnPtr)(sensors.finger2_gauge);
+    std::vector<luke::gfloat> f3 = 
+      (s_.bending_gauge.*sampleFcnPtr)(sensors.finger3_gauge);
+
+    // copy our observation into these vectors instead
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + f1.size(), f1.begin()); sidx += f1.size();
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + f2.size(), f2.begin()); sidx += f2.size();
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + f3.size(), f3.begin()); sidx += f3.size();
+
+    if (debug_obs) {
+      luke::print_vec(f1, "Bending gauge 1");
+      luke::print_vec(f2, "Bending gauge 2");
+      luke::print_vec(f3, "Bending gauge 3");
+    }
+  }
+
+  // get axial strain gauge sensor output
+  if (s_.axial_gauge.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> a1 = 
+      (s_.axial_gauge.*sampleFcnPtr)(sensors.finger1_axial_gauge);
+    std::vector<luke::gfloat> a2 = 
+      (s_.axial_gauge.*sampleFcnPtr)(sensors.finger2_axial_gauge);
+    std::vector<luke::gfloat> a3 = 
+      (s_.axial_gauge.*sampleFcnPtr)(sensors.finger3_axial_gauge);
+
+    // copy our observation into these vectors instead
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + a1.size(), a1.begin()); sidx += a1.size();
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + a2.size(), a2.begin()); sidx += a2.size();
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + a3.size(), a3.begin()); sidx += a3.size();
+
+    if (debug_obs) {
+      luke::print_vec(a1, "Axial gauge 1");
+      luke::print_vec(a2, "Axial gauge 2");
+      luke::print_vec(a3, "Axial gauge 3");
+    }
+  }
+
+  // get palm sensor output
+  if (s_.palm_sensor.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> p1 = 
+      (s_.palm_sensor.*sampleFcnPtr)(sensors.palm_sensor);
+
+    // copy our observation into these vectors instead
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + p1.size(), p1.begin()); sidx += p1.size();
+
+    if (debug_obs) {
+      luke::print_vec(p1, "Palm gauge");
+    }
+  }
+
+  // get wrist sensor XY output
+  if (s_.wrist_sensor_XY.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> wX =
+      (s_.wrist_sensor_XY.*sampleFcnPtr)(sensors.wrist_X_sensor);
+    std::vector<luke::gfloat> wY =
+      (s_.wrist_sensor_XY.*sampleFcnPtr)(sensors.wrist_Y_sensor);
+
+    // copy our observation into these vectors instead
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + wX.size(), wX.begin()); sidx += wX.size();
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + wY.size(), wY.begin()); sidx += wY.size();
+
+    if (debug_obs) {
+      luke::print_vec(wX, "Wrist X");
+      luke::print_vec(wY, "Wrist Y");
+    }
+  }
+
+  // get wrist sensor Z output
+  if (s_.wrist_sensor_Z.in_use) {
+    
+    // sample data
+    std::vector<luke::gfloat> wZ =
+      (s_.wrist_sensor_XY.*sampleFcnPtr)(sensors.wrist_Z_sensor);
+
+    // copy our observation into these vectors instead
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + wZ.size(), wZ.begin()); sidx += wZ.size();
+
+    if (debug_obs) {
+      luke::print_vec(wZ, "Wrist Z");
+    }
+  }
+
+  // get motor state output
+  if (s_.motor_state_sensor.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> s1 = 
+      (s_.motor_state_sensor.*stateFcnPtr)(sensors.x_motor_position);
+    std::vector<luke::gfloat> s2 = 
+      (s_.motor_state_sensor.*stateFcnPtr)(sensors.y_motor_position);
+    std::vector<luke::gfloat> s3 = 
+      (s_.motor_state_sensor.*stateFcnPtr)(sensors.z_motor_position);
+
+    // copy our observation into these vectors instead
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + s1.size(), s1.begin()); sidx += s1.size();
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + s2.size(), s2.begin()); sidx += s2.size();
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + s3.size(), s3.begin()); sidx += s3.size();
+    
+    if (debug_obs) {
+      luke::print_vec(s1, "Motor state X");
+      luke::print_vec(s2, "Motor state Y");
+      luke::print_vec(s3, "Motor state Z");
+    }
+  }
+
+  // get base XY state
+  if (s_.base_state_sensor_XY.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> bX = 
+      (s_.base_state_sensor_XY.*stateFcnPtr)(sensors.x_base_position);
+    std::vector<luke::gfloat> bY = 
+      (s_.base_state_sensor_XY.*stateFcnPtr)(sensors.y_base_position);
+
+    // copy our observation into these vectors instead
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + bX.size(), bX.begin()); sidx += bX.size();
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + bY.size(), bY.begin()); sidx += bY.size();
+
+    if (debug_obs) {
+      luke::print_vec(bX, "Base state X");
+      luke::print_vec(bY, "Base state Y");
+    }
+  }
+
+  // get base Z state
+  if (s_.base_state_sensor_Z.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> bZ = 
+      (s_.base_state_sensor_Z.*stateFcnPtr)(sensors.z_base_position);
+
+    // copy our observation into these vectors instead
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + bZ.size(), bZ.begin()); sidx += bZ.size();
+
+    if (debug_obs) {
+      luke::print_vec(bZ, "Base state Z");
+    }
+  }
+
+  if (debug_obs) {
+    std::cout << "End of observation (n_obs = " << observation.size() << ")\n";
+  }
+  
+  return observation;
+}
+
 std::vector<float> MjClass::get_event_state()
 {
   /* get the full state of the simulation */
