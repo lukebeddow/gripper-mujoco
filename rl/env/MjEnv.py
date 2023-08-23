@@ -89,6 +89,7 @@ class MjEnv():
     XY_base_actions: bool = False
     fixed_finger_hook: bool = True
     finger_hook_angle_degrees: float = 90.0
+    finger_hook_length: float = 35e-3
     segment_inertia_scaling: float = 50.0
     fingertip_clearance: float = 10e-3
 
@@ -197,6 +198,7 @@ class MjEnv():
     gripper_details[p]["segment_inertia_scaling"] = self.load_next.segment_inertia_scaling
     gripper_details[p]["fingertip_clearance"] = self.load_next.fingertip_clearance
     gripper_details[p]["finger_length"] = self.load_next.finger_length
+    gripper_details[p]["hook_length"] = self.load_next.finger_hook_length
 
     # now override the existing file with our new changes
     with open(yaml_path, "w") as outfile:
@@ -346,6 +348,7 @@ class MjEnv():
     self.params.fixed_finger_hook = self.mj.is_finger_hook_fixed()
     self.params.fingertip_clearance = self.mj.get_fingertip_clearance()
     self.params.XY_base_actions = self.mj.using_xyz_base_actions()
+    self.params.finger_hook_length = self.mj.get_finger_hook_length()
 
     # assume loading is correct and directly copy
     self.params.segment_inertia_scaling = self.load_next.segment_inertia_scaling
@@ -1261,10 +1264,12 @@ if __name__ == "__main__":
   # xy_base = [False, True]
   # inertia = [1, 50]
 
-  mj.load_next.num_segments = 7
-  angles = [30]
+  mj.load_next.num_segments = 8
+  angles = [90]
   for a in angles:
     mj.load_next.finger_hook_angle_degrees = a
+    mj.load_next.finger_hook_length = 100e-3
+    mj.load_next.XY_base_actions = True
     mj._auto_generate_xml_file("set_test_large", use_hashes=True, silent=True)
 
   # for w in widths:

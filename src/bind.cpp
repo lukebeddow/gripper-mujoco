@@ -85,6 +85,7 @@ PYBIND11_MODULE(bind, m) {
     .def("reset_object", &MjClass::reset_object)
     .def("spawn_object", static_cast<void (MjClass::*)(int)>(&MjClass::spawn_object)) /* see bottom */
     .def("spawn_object", static_cast<void (MjClass::*)(int, double, double, double)>(&MjClass::spawn_object))
+    .def("spawn_scene", &MjClass::spawn_scene)
     .def("randomise_every_colour", &MjClass::randomise_every_colour)
     .def("randomise_object_colour", &MjClass::randomise_object_colour)
     .def("randomise_ground_colour", &MjClass::randomise_ground_colour)
@@ -137,6 +138,7 @@ PYBIND11_MODULE(bind, m) {
     .def("get_finger_modulus", &MjClass::get_finger_modulus)
     .def("get_finger_rigidity", &MjClass::get_finger_rigidity)
     .def("get_finger_length", &MjClass::get_finger_length)
+    .def("get_finger_hook_length", &MjClass::get_finger_hook_length)
     .def("get_finger_hook_angle_degrees", &MjClass::get_finger_hook_angle_degrees)
     .def("is_finger_hook_fixed", &MjClass::is_finger_hook_fixed)
     .def("get_fingertip_clearance", &MjClass::get_fingertip_clearance)

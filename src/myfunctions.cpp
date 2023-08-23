@@ -3021,6 +3021,13 @@ double get_finger_hook_angle_degrees()
   return j_.dim.hook_angle_degrees;
 }
 
+double get_finger_hook_length()
+{
+  /* return the length of the finger hook in mm */
+
+  return j_.dim.hook_length;
+}
+
 bool is_finger_hook_fixed()
 {
   /* return whether the finger hook is fixed */
@@ -3232,11 +3239,13 @@ float get_fingerend_z_height(mjModel* model, mjData* data)
   return z;
 }
 
-std::vector<luke::Vec3> get_fingerend_locations()
+std::vector<luke::Vec3> get_finger_hook_locations()
 {
-  /* get the current fingerend target locations */
+  /* get the current finger hook target locations and dimensions
+  ASSUMES STRAIGHT FINGER! Run this function only when the environment is reset
+  for spawning objects which don't collide with the finger/finger hook */
 
-  std::vector<std::vector<double>> pos(3, std::vector<double>(3));
+  std::vector<luke::Vec3> pos(6);
 
   double base_x = target_.base.x;
   double base_y = target_.base.y;
@@ -3244,14 +3253,36 @@ std::vector<luke::Vec3> get_fingerend_locations()
   double base_z_rot = target_.base.yaw;
 
   double fing_x = target_.end.get_x_m();
-  double fing_th = target_.end.get_th_rad();
-
-  double fing_L = j_.dim.finger_length;
-  double hook_L = j_.dim.hook_length;
   double hook_th = j_.dim.hook_angle_degrees * (M_PI / 180.000);
 
-  // find the position of the first finger
+  constexpr double PI_23 = M_PI * (2.0 / 3.0);
+  constexpr double angles[3] = { 0.0, PI_23, 2 * PI_23 };
 
+  for (int i = 0; i < 3; i++) {
+
+    // get (x, y) position of the centre of the finger hook
+    double hook_x = 0.5 * j_.dim.hook_length * sin(hook_th);
+    double x = -(fing_x - hook_x) * sin(angles[i]) + base_x;
+    double y = -(fing_x - hook_x) * cos(angles[i]) + base_y;
+
+    // save the finger hook centre position
+    luke::Vec3 tippos;
+    tippos.x = x;
+    tippos.y = y;
+    tippos.z = 0.0;
+
+    // save also the finger hook dimension and angle
+    luke::Vec3 tipinfo;
+    tipinfo.x = j_.dim.hook_length;
+    tipinfo.y = j_.dim.finger_width;
+    tipinfo.z = angles[i];
+
+    // return both the position and hook information
+    pos[i] = tippos;
+    pos[3 + i] = tipinfo;
+  }
+
+  return pos;
 }
 
 /* ----- environment ----- */

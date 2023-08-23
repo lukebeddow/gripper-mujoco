@@ -1527,6 +1527,7 @@ public:
   double get_finger_modulus();
   double get_finger_rigidity();
   double get_finger_length();
+  double get_finger_hook_length();
   double get_finger_hook_angle_degrees();
   bool is_finger_hook_fixed();
   double get_fingertip_clearance();

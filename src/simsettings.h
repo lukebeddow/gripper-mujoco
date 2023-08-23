@@ -111,8 +111,8 @@
   AA(  gripper_Y,               false,     false,     1.0e-3,  -1)        /* move gripper Y motor by m */\
   AA(  gripper_revolute_Y,      true,     false,     0.01,    -1)        /* move gripper Y motor with angular motions/targets in radians */\
   AA(  gripper_Z,               true,     false,     2.0e-3,   1)        /* move gripper Z motor by m */\
-  AA(  base_X,                  false,     false,     2.0e-3,   1)        /* move gripper base X by m */\
-  AA(  base_Y,                  false,     false,     2.0e-3,   1)        /* move gripper base Y by m */\
+  AA(  base_X,                  true,     false,     2.0e-3,   1)        /* move gripper base X by m */\
+  AA(  base_Y,                  true,     false,     2.0e-3,   1)        /* move gripper base Y by m */\
   AA(  base_Z,                  true,     false,     2.0e-3,   1)        /* move gripper base Z by m */\
   AA(  base_roll,               false,    false,     0.01,     1)        /* rotate gripper base about X in radians */\
   AA(  base_pitch,              false,    false,     0.01,     1)        /* rotate gripper base about Y in radians */\
