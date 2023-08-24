@@ -1353,6 +1353,7 @@ std::vector<luke::gfloat> MjClass::get_observation(MjType::SensorData sensors)
 
   // use for printing detailed observation debug information
   constexpr bool debug_obs = false;
+  constexpr bool debug_data = false;
 
   std::vector<luke::gfloat> observation;
 
@@ -1515,22 +1516,25 @@ std::vector<luke::gfloat> MjClass::get_observation(MjType::SensorData sensors)
   if (debug_obs) {
     std::cout << "End of observation (n_obs = " << observation.size() << ")\n";
   }
+
+  if (debug_data) {
+      int data_num = 20;
+      std::cout << "Raw values:\n";
+      std::cout << "X Motor: "; sensors.x_motor_position.print(data_num);
+      std::cout << "Y Motor: "; sensors.y_motor_position.print(data_num);
+      std::cout << "Z Motor: "; sensors.z_motor_position.print(data_num);
+      std::cout << "Z Base: "; sensors.z_base_position.print(data_num);
+      std::cout << "SI real data values:\n";
+      std::cout << "X Motor: "; real_sensors_.SI.x_motor_position.print(data_num);
+      std::cout << "Y Motor: "; real_sensors_.SI.y_motor_position.print(data_num);
+      std::cout << "Z Motor: "; real_sensors_.SI.z_motor_position.print(data_num);
+      std::cout << "Z Base: "; real_sensors_.SI.z_base_position.print(data_num);
+    }
   
   return observation;
 }
 
-void copy_into(std::vector<luke::gfloat>& large, std::vector<luke::gfloat>& small, int idx)
-{
-  int size = small.size();
-
-  small.clear();
-
-  for (int i = 0; i < size; i++) {
-    small[i] = large[i + idx];
-  }
-}
-
-std::vector<luke::gfloat> MjClass::debug_observation(std::vector<luke::gfloat> observation)
+std::string MjClass::debug_observation(std::vector<luke::gfloat> observation)
 {
   /* get an observation from a provided set of sensors */
 
@@ -1539,6 +1543,8 @@ std::vector<luke::gfloat> MjClass::debug_observation(std::vector<luke::gfloat> o
 
   std::vector<luke::gfloat> real_obs = get_observation();
 
+  std::string info;
+
   if (real_obs.size() != observation.size()) {
     std::cout << "WARNING from MjClass::debug_observation()\n";
     std::cout << "Observation given to function has length = " << observation.size()
@@ -1546,9 +1552,12 @@ std::vector<luke::gfloat> MjClass::debug_observation(std::vector<luke::gfloat> o
       << ", therefore settings do not match and the information from this function will be WRONG\n";
     std::cout << "WARNING DEBUG_OBSERVATION WILL NOT WORK PROPERLY\n";
 
+    info += "INVALID MjClass::debug_observation() due to non-matching sizes\n";
+
     if (real_obs.size() > observation.size()) {
       std::cout << "The given observation is not long enough, MjClass::debug_observation()"
         << " is returning to avoid a seg fault\n";
+      return info;
     }
   }
 
@@ -1581,6 +1590,9 @@ std::vector<luke::gfloat> MjClass::debug_observation(std::vector<luke::gfloat> o
       luke::print_vec(f2, "Bending gauge 2");
       luke::print_vec(f3, "Bending gauge 3");
     }
+
+    std::string n = std::to_string(f1.size());
+    info += "Bend gauge 1 = " + n + " | Bend gauge 2 = " + n + " | Bend gauge 3 = " + n + " | ";
   }
 
   // get axial strain gauge sensor output
@@ -1604,6 +1616,9 @@ std::vector<luke::gfloat> MjClass::debug_observation(std::vector<luke::gfloat> o
       luke::print_vec(a2, "Axial gauge 2");
       luke::print_vec(a3, "Axial gauge 3");
     }
+
+    std::string n = std::to_string(a1.size());
+    info += "Axial gauge 1 = " + n + " | Axial gauge 2 = " + n + " | Axial gauge 3 = " + n + " | ";
   }
 
   // get palm sensor output
@@ -1619,6 +1634,9 @@ std::vector<luke::gfloat> MjClass::debug_observation(std::vector<luke::gfloat> o
     if (debug_obs) {
       luke::print_vec(p1, "Palm gauge");
     }
+
+    std::string n = std::to_string(p1.size());
+    info += "Palm gauge = " + n + " | ";
   }
 
   // get wrist sensor XY output
@@ -1638,6 +1656,9 @@ std::vector<luke::gfloat> MjClass::debug_observation(std::vector<luke::gfloat> o
       luke::print_vec(wX, "Wrist X");
       luke::print_vec(wY, "Wrist Y");
     }
+
+    std::string n = std::to_string(wX.size());
+    info += "Wrist X = " + n + " | Wrist Y = " + n + " | ";
   }
 
   // get wrist sensor Z output
@@ -1653,6 +1674,9 @@ std::vector<luke::gfloat> MjClass::debug_observation(std::vector<luke::gfloat> o
     if (debug_obs) {
       luke::print_vec(wZ, "Wrist Z");
     }
+
+    std::string n = std::to_string(wZ.size());
+    info += "Wrist Z = " + n + " | ";
   }
 
   // get motor state output
@@ -1676,6 +1700,9 @@ std::vector<luke::gfloat> MjClass::debug_observation(std::vector<luke::gfloat> o
       luke::print_vec(s2, "Motor state Y");
       luke::print_vec(s3, "Motor state Z");
     }
+
+    std::string n = std::to_string(s1.size());
+    info += "Motor state X = " + n + " | Motor state Y = " + n + " | Motor state Z = " + n + " | ";
   }
 
   // get base XY state
@@ -1695,6 +1722,9 @@ std::vector<luke::gfloat> MjClass::debug_observation(std::vector<luke::gfloat> o
       luke::print_vec(bX, "Base state X");
       luke::print_vec(bY, "Base state Y");
     }
+
+    std::string n = std::to_string(bX.size());
+    info += "Base state X = " + n + " | Base state Y = " + n + " | ";
   }
 
   // get base Z state
@@ -1710,13 +1740,18 @@ std::vector<luke::gfloat> MjClass::debug_observation(std::vector<luke::gfloat> o
     if (debug_obs) {
       luke::print_vec(bZ, "Base state Z");
     }
+
+    std::string n = std::to_string(bZ.size());
+    info += "Base state Z = " + n + " | ";
   }
 
   if (debug_obs) {
     std::cout << "End of observation (n_obs = " << observation.size() << ")\n";
   }
+
+  info += " Observation length = " + std::to_string(observation.size()) + "\n";
   
-  return observation;
+  return info;
 }
 
 std::vector<float> MjClass::get_event_state()

@@ -360,7 +360,7 @@ class MjEnv():
     This functions does NOT load a new XML file from this object set.
     """
 
-    debug_fcn = True
+    debug_fcn = False
 
     # if a mjcf_path is given, override, otherwise we use default
     if mjcf_path != None: self.mj.model_folder_path = mjcf_path
@@ -399,7 +399,7 @@ class MjEnv():
                                                         and x.endswith(".xml")]
     self.training_xmls = len(xml_files) - self.testing_xmls
 
-    if debug_fcn:
+    if debug_fcn or self.log_level >= 2:
       print("_load_object_set() gives xml path:", self.xml_path)
       print(f"Training xmls: {self.training_xmls}, testing xmls: {self.testing_xmls}")
 
