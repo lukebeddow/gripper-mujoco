@@ -547,7 +547,7 @@ class ModelSaver:
         if file_extension is not None:
           loadpath += filenamestarts + file_extension
         elif (filenamestarts is not None and
-              (filenamestarts.endswith(self.uncompressed_extenstion) or
+              (filenamestarts.endswith(self.uncompressed_extension) or
                filenamestarts.endswith(self.bz2_extension) or
                filenamestarts.endswith(self.lz4_extension))):
           loadpath += filenamestarts
