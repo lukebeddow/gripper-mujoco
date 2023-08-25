@@ -992,7 +992,7 @@ class TrainDQN():
     """
     if dtype == None: dtype = torch.float32
 
-    return torch.tensor(np.array([data]), device=self.device, dtype=dtype)
+    return torch.tensor(data, device=self.device, dtype=dtype).unsqueeze(0)
 
   def select_action(self, state, decay_num, test=None):
 
