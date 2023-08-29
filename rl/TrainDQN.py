@@ -46,7 +46,7 @@ class TrainDQN():
   class Parameters:
 
     # key learning hyperparameters
-    object_set: str = "set7_fullset_1500_50i"
+    object_set: str = "set8_fullset_1500"
     batch_size: int = 128  
     learning_rate: float = 5e-5
     gamma: float = 0.999 

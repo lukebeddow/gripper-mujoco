@@ -2759,26 +2759,17 @@ if __name__ == "__main__":
 
   elif training_type.startswith("cnn_from_pretrain_v1"):
 
-    vary_1 = None
+    vary_1 = [5e-5, 1e-5]
     vary_2 = None
     vary_3 = None
-    repeats = None
+    repeats = 3
     param_1_name = None
     param_2_name = None
     param_3_name = None
     param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
                                                 param_3=vary_3, repeats=repeats)
-    baseline_args = {
-      "sensor_steps" : 3,
-      "state_steps" : 3,
-    }
-
-    # use the new object set
-    model.params.object_set = "set8_fullset_1500"
 
     if not args.print and not args.print_results:
-
-      model = baseline_settings(model, **baseline_args)
 
       # which offline data are we loading
       if training_type.endswith("v1-1"):
@@ -2796,20 +2787,12 @@ if __name__ == "__main__":
         foldername = "operator-PC_09:55_A5"
         id = 8
 
-      # load the pretrained network
-      model.init(network=net)
-
-      # from ModelSaver import ModelSaver
-      # pretrain_loader = ModelSaver(path)
-      # pretrain_model = pretrain_loader.load(id=id) # specifically chosen model
-      # model.policy_net.load_state_dict(pretrain_model.policy_net.state_dict())
-      # model.target_net.load_state_dict(pretrain_model.policy_net.state_dict())
-
       model.load(id=id, folderpath=folderpath, foldername=foldername)
+      model.params.learning_rate = param_1
 
       # optional: enable this for some trainings for monitoring
-      # model.params.test_freq = 500 # close eye on performance
-      # model.params.save_freq = 4000
+      if inputarg % 3 == 1:
+        model.params.test_freq = 500 # close eye on performance
 
       # # remove the pretrained model from memory
       # import gc
@@ -2832,6 +2815,8 @@ if __name__ == "__main__":
       print("\nStarted at:", starting_time.strftime(datestr))
       print("Finished at:", datetime.now().strftime(datestr))
       print(f"Time taken was {d[0]:.0f} days {h[0]:.0f} hrs {m[0]:.0f} mins {s:.0f} secs\n")
+
+      exit()
 
   elif training_type == "finger_angle_test":
 
