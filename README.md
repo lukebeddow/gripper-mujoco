@@ -21,28 +21,35 @@ The c++ outputs will be put into a folder called ```bin```, the python module in
 
 In order to build, the locations of the dependent libraries needs to be specified. This is specified in the ```buildsettings.mk``` file. **You will need to edit ```buildsettings.mk``` in order to build**. This file contains library locations for a variety of compile locations, you will need to add your compile location to this file. The file is structured as an ```if ... else if ... else if ... endif```. Copy the following code to the bottom of the file:
 
-```make
+```
 ifeq ($(filter mybuild, $(MAKECMDGOALS)), mybuild)
 
 # set this command goal as a phony target (important)
 .PHONY: mybuild
 
 # what machine are we compiling for
-MACHINE = your-machine
+MACHINE = machine-name
 
 # mjcf files location (model files like gripper/objects)
-MJCF_PATH = /home/luke/mymujoco/mjcf
+MJCF_PATH = /path/to/repo/luke-gripper-mujoco/mjcf
+
+# path to python executable (eg venv) and header files
+# if using system python, simply 'PYTHON_EXE = python3'
+PYTHON = /home/luke/pyenv/py3.8_mujoco
+PYTHON_EXE = $(PYTHON)/bin/python
+PYTHON_INCLUDE = $(PYTHON)/include/python3.8
 
 # local machine library locations
-PYTHON_PATH = /usr/include/python3.6m
-PYBIND_PATH = /home/luke/pybind11
+# PYTHON_PATH = /home/luke/pyenv/py3.8_mujoco/bin/python
+PYBIND_PATH = /home/luke/luke-gripper-mujoco/libs/pybind11
 ARMA_PATH = # none, use system library
-MUJOCO_PATH = /home/luke/mujoco-2.1.5
+MUJOCO_PATH = /home/luke/luke-gripper-mujoco/libs/mujoco/mujoco-2.1.5
+MUJOCO_LIB = $(MUJOCO_PATH)/lib
 RENDER_PATH = # none, use system library
-CORE_LIBS = -L$(MUJOCO_PATH)/lib -lmujoco -larmadillo
+CORE_LIBS = -L$(MUJOCO_LIB) -lmujoco -larmadillo 
 RENDER_LIBS = -lglfw
 DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
-             -DLUKE_MACHINE='"$(MACHINE)"'
+						 -DLUKE_MACHINE='"$(MACHINE)"'
 
 # extras
 MAKEFLAGS += -j8 # jN => use N parallel cores
@@ -61,10 +68,19 @@ ifeq ($(filter <b>mybuild</b>, $(MAKECMDGOALS)), <b>mybuild</b>)
 
 Next, select the path to the mjcf files in ```$(MJCF_PATH)```. These are the models that are the robot models and object models that will be loaded into mujoco. They are contained in the ```mjcf``` folder of this repository. There are multiple object sets you can choose from. The object set can also be changed later in the code, here sets the default option.
 
+Next, configure python:
+* The ```$(PYTHON)``` variable is for convenience only (for the next two variables) and is not used. It does not need to be set.
+* ```$(PYTHON_EXE)``` indicates which python executable should be run, this is for ```make sets```. For system python, simply use ```python3```, otherwise, use the path to the python executable. Above shows this for a python ```venv```.
+* ```$(PYTHON_INCLUDE)``` should be the path to the python header files. Common examples:
+  * For a ```venv```, do as above. However, note that sometimes this include folder is empty, in which case make a symbolic link to the system python header files with:
+```ln -s /usr/include/python3.8 /path/to/venv/venvname/include/```
+  * For system python it will likely be ```/usr/include/python3.6``` or similar. 
+
 Finally, edit all of the library locations with the correct paths.
 * If you have the source of a header only library (eg pybind11 above), simply add the path to this
 * If you have a system library already (eg armadillo above), simply add the library with ```-l``` + ```libary-name```
 * If you have a local library (eg mujoco above), either add the full path to the library location (not shown above) or use ```-L``` to specify the library folder and then ```-l``` to specify the library name in that folder (shown above)
+* If using a python virtual environment, ensure the ```include``` folder for this virtual environment is not empty. If it is, you can create a symbolic link from the main python installation:
 
 **Build commands**
 
@@ -78,7 +94,24 @@ make py      # build only the python targets
 make cpp     # build only the cpp targets
 make clean   # wipe all build files
 make debug   # build targets in debug mode
+make sets    # build the mujoco model files and object sets
 ```
+
+## Build sets
+
+The repository requires a mujoco model file in order to work. The current build supports autogeneration of these model files, in which case you may be able to simply run. However, note that the ```luke-gripper-description``` submodule must be downloaded (check that the ```description``` folder is not empty). If clonining use:
+
+```git clone --recurse-submodules https/.....```
+
+If already cloned, you can pull the submodule with:
+
+```git submodule update --init```
+
+Finally, if you wish to manually build sets the usage is simple.
+* Choose your gripper settings by editing ```description/config/gripper.yaml```
+* Next, choose or create your object set. Look in the ```description/mujoco/object_sets``` folder. A valid set must be inside this folder, being a yaml file whose name begins with 'set' and will be found by the ```set*.yaml``` wildcard.
+* Run ```make sets SET=set_name```, replacing ```set_name``` with your desired set. You should see the set copied into the ```mjcf``` folder from the root of the repository.
+* Many additional options exist, for further usage look into the ```luke-gripper-description``` submodule.
 
 ## Run
 
@@ -96,13 +129,11 @@ Command line syntax:
   [-p, --path] path                 path to object set, default: /home/luke/mymujoco/mjcf
 ```
 
-Warning: to run you need an object set (for example default above is 'set6_fullset_800_50i'). This object set includes all of the gripper urdf files. This repository does NOT contain these files, you should get them from the ```luke-gripper-description``` repository.
-
 To run the python training, have a look at ```rl/TrainDQN.py``` and ```rl/array_training_DQN.py```.
 
 To run multiple trainings concurrently look at ```pc_job.sh``` or to run in queues look at ```queue_job.sh```.
 
-Note: in order to run you will need to tell the computer about the mujoco shared library which will be in the ```lib``` folder of you mujoco-2.1.5 installation. The computer checks for shared libraries listed in the ```LD_LIBRARY_PATH``` environment variable, so add the path to the mujoco library to this variable:
+If you get an error that the mujoco shared library ```libmujoco.so``` is not found, you will need to tell the computer where this library is:
 
 ```bash
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/mujoco-2.1.5/lib
