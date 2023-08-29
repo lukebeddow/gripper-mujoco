@@ -10,6 +10,7 @@
 # define key directory structure
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 path_to_mymujoco=$SCRIPT_DIR
+
 python_folder=rl
 mujoco_lib_path=~/mujoco-2.1.5/lib
 LOG_FOLDER=~/training_logs

@@ -1675,6 +1675,18 @@ void apply_UDL(double force_per_m)
   }
 }
 
+void apply_UDL_force_per_joint(double force_per_joint)
+{
+  /* apply a uniformally distributed load with a force per joint */
+
+  // std::cout << "force per joint applied in UDL is " << force_per_joint << '\n';
+
+  // add force also to first segment for visual consistency in mujoco, it has no effect
+  for (int i = 0; i < j_.segmentMatrices.idx_size; i++) {
+    set_segment_force(i, true, force_per_joint);
+  }
+}
+
 void wipe_segment_forces()
 {
   /* remove all segment fores */
@@ -3182,17 +3194,6 @@ float calc_yield_point_load()
   /* return the vertical point load to yield the cantilever */
 
   float M_max = (j_.dim.yield_stress * j_.dim.I) / (0.5 * j_.dim.finger_thickness);
-  float F_max = M_max / j_.dim.finger_length;
-
-  return F_max;
-}
-
-float calc_yield_point_load(float thickness, float width)
-{
-  /* calculate the yield load given a particular thickness and width */
-
-  float I = (width * std::pow(thickness, 3)) / 12.0;
-  float M_max = (j_.dim.yield_stress * I) / (0.5 * thickness);
   float F_max = M_max / j_.dim.finger_length;
 
   return F_max;

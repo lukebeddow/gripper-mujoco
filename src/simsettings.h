@@ -49,17 +49,17 @@
   XX(  reward_on_end_only,      bool,     true)     /* give goal reward only on episode end */\
   XX(  binary_goal_vector,      bool,     false)    /* do we use only binary goals */\
   /*
-  get_observation() settings    (NB: sample modes: 0=raw, 1=change, 2=average) */\
-  XX(  sensor_sample_mode,      int,      1)        /* how to sample sensor observations, see MjType::Sample*/\
-  XX(  state_sample_mode,       int,      0)        /* how to sample motor state, see MjType::Sample*/\
+  get_observation() settings    (NB: sample modes: 0=raw, 1=change, 2=average, 3=median, 4=binary marker) */\
+  XX(  sensor_sample_mode,      int,      2)        /* how to sample sensor observations, see MjType::Sample*/\
+  XX(  state_sample_mode,       int,      4)        /* how to sample motor state, see MjType::Sample*/\
   XX(  sensor_n_prev_steps,     int,      1)        /* how many steps back do we sample with sensors */\
-  XX(  state_n_prev_steps,      int,      1)        /* how many steps back do we sample with state sensors */\
+  XX(  state_n_prev_steps,      int,      5)        /* how many steps back do we sample with state sensors */\
   XX(  sensor_noise_mag,        double,   0.0)      /* noise magnitude if using uniform distribution (std <= 0) */\
-  XX(  sensor_noise_mu,         double,   0.0)      /* abs range of sensor mean shift */\
-  XX(  sensor_noise_std,        double,   0.05)     /* std deviation of noise, <= 0 means uniform */\
+  XX(  sensor_noise_mu,         double,   0.05)     /* abs range of sensor mean shift */\
+  XX(  sensor_noise_std,        double,   0.025)    /* std deviation of noise, <= 0 means uniform */\
   XX(  state_noise_mag,         double,   0.0)      /* noise magnitude if using uniform distribution (std <= 0)*/\
-  XX(  state_noise_mu,          double,   0.0)      /* abs range of state sensor mean shift*/\
-  XX(  state_noise_std,         double,   0.05)     /* std deviation of noise, <= 0 means uniform*/\
+  XX(  state_noise_mu,          double,   0.025)    /* abs range of state sensor mean shift*/\
+  XX(  state_noise_std,         double,   0.0)      /* std deviation of noise, <= 0 means uniform*/\
   /* 
   update_env() settings */\
   XX(  oob_distance,            double,   75e-3)    /* distance to consider object out of bounds */\
@@ -147,20 +147,11 @@
   LR(  exceed_axial,            -0.05,    false,    1,    2.0,  6.0,  -1)     /* exceed axial finger force limit */\
   LR(  exceed_lateral,          -0.05,    false,    1,    4.0,  6.0,  -1)     /* exceed lateral finger force limit */\
   LR(  exceed_palm,             -0.05,    false,    1,    6.0,  10.0, -1)     /* exceed palm force limit */\
-  /* new rewards based on direct sensor data */\
-  LR(  good_bend_sensor,        0.0,      false,    1,    0.2,  1.0,  -1)     /* encourage bending force, direct sensor reward */\
-  LR(  good_palm_sensor,        0.0,      false,    1,    0.2,  1.0,  -1)     /* encourage palm force, direct sensor reward */\
-  LR(  exceed_bend_sensor,      0.0,      false,    1,    5.0,  10.0, -1)     /* exceed bending force, direct sensor limit */\
-  LR(  exceed_wrist_sensor,     0.0,      false,    1,    5.0,  10.0, -1)     /* exceed wrist force, direct sensor limit */\
-  LR(  exceed_palm_sensor,      0.0,      false,    1,    10.0, 20.0, -1)     /* exceed palm force, direct sensor limit */\
-  LR(  dangerous_bend_sensor,   0.0,      true,     1,    10.0, 11.0, -1)     /* dangerous bending force, direct sensor limit */\
-  LR(  dangerous_wrist_sensor,  0.0,      true,     1,    12.0, 13.0, -1)     /* dangerous wrist force, direct sensor limit */\
-  LR(  dangerous_palm_sensor,   0.0,      true,     1,    20.0, 21.0, -1)     /* dangerous palm force, direct sensor limit */\
   /* testing extras for goals */\
   LR(  finger1_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 1 force */\
   LR(  finger2_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 2 force */\
   LR(  finger3_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 3 force */\
-  LR(  ground_force,            0.0,      false,    1,    0.0,  2.0,  -1)     /* ground force on object */\
+  LR(  ground_force,            0.0,      false,    1,    0.0,   2.0, -1)     /* ground force on object */\
   LR(  grasp_metric,            0.0,      false,    1,    0.0,  10.0, -1)     /* grasping metric score */\
 
 // end of user defined simulation settings

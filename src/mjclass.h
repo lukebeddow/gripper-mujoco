@@ -1350,7 +1350,6 @@ public:
   bool render_camera_init = false;              // have we initialised the rgbd camera
   bool render_window_init = false;              // have we initialised the rendering window
   bool render_reload = false;                   // have we reloaded and need to update rendering
-  double sim_gauge_raw_to_N_factor = 1.0;       // calibration factor, set by auto_calibrate
 
   // function pointers for sampling functions
   std::vector<luke::gfloat> (MjType::Sensor::*sampleFcnPtr)
@@ -1418,7 +1417,6 @@ public:
 
   // data structures
   MjType::SensorData sim_sensors_;
-  MjType::SensorData sim_sensors_SI_;
   MjType::RealSensorData real_sensors_;
   MjType::Env env_;
   MjType::TestReport testReport_;
@@ -1546,7 +1544,6 @@ public:
   float curve_area(std::vector<float> X, std::vector<float> Y);
   void calibrate_simulated_sensors(float bend_gauge_normalise);
   float yield_load();
-  float yield_load(float thickness, float width);
   void tick();
   float tock();
   MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2);

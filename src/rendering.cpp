@@ -264,7 +264,6 @@ bool render_window()
 
         // update scene and render
         mjv_updateScene(m, d, &opt, NULL, &cam, mjCAT_ALL, &scn);
-  
         mjr_render(viewport, &scn, &con);
 
         // added - render UIs
