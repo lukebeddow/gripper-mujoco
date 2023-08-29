@@ -728,15 +728,26 @@ namespace MjType
     // data that is reset
     float cumulative_reward = 0;
     int num_action_steps = 0;
-    luke::QPos start_qpos;
+    // luke::QPos start_qpos;
 
     // track important events in the environment
     EventTrack cnt;
+
+    struct SpawnObj {
+      int index;
+      double model_x;
+      double model_y;
+      double model_z;
+      double x_centre;
+      double y_centre;
+      double z_rotation;
+    };
 
     // track the state of the object at this step
     struct Obj {
       std::string name;
       luke::QPos qpos;
+      luke::QPos start_qpos;
       luke::rawNum finger1_force;
       luke::rawNum finger2_force;
       luke::rawNum finger3_force;
@@ -744,7 +755,45 @@ namespace MjType
       luke::rawNum ground_force;
       float palm_axial_force;
       float avg_finger_force;
-    } obj;
+      float peak_finger_axial_force;
+      float peak_finger_lateral_force;
+      float ground_force_mag;
+      float finger1_force_mag;
+      float finger2_force_mag;
+      float finger3_force_mag;
+      float palm_force_mag;
+      float lift_height;
+      bool lifted;
+      bool oob;
+      bool target_height;
+      bool contact;
+      bool stable;
+      bool stable_height;
+
+      void print() {
+        std::cout << "Obj name = " << name
+          << "; lft(" << lifted
+          << "); oob(" << oob
+          << "); con(" << contact
+          << "); t.h(" << target_height
+          << "); stb(" << stable
+          << "); s.h(" << stable_height
+          << ")\n";
+      }
+    };
+
+    std::vector<Obj> obj;
+
+    struct ObjValues {
+      float avg_finger_force {};
+      float palm_axial_force {};
+      float peak_finger_axial_force {};
+      float peak_finger_lateral_force {};
+      float highest_lift {};
+      float lowest_gnd_force_mag {};
+    };
+
+    ObjValues obj_values;
 
     // track the state of the gripper
     struct Grp {
@@ -758,15 +807,22 @@ namespace MjType
 
     void reset() {
       // reset to initialised values
-      Obj blank_obj;
       Grp blank_grp;
-      obj = blank_obj;
       grp = blank_grp;
+      ObjValues blank_obj;
+      obj_values = blank_obj;
+      obj.clear();
       // reset data
       cumulative_reward = 0;
       num_action_steps = 0;
-      start_qpos.reset();
+      // start_qpos.reset();
       cnt.reset();
+    }
+
+    void print_objects() {
+      for (uint i = 0; i < obj.size(); i++) {
+        obj[i].print();
+      }
     }
 
   };
@@ -1159,8 +1215,9 @@ namespace MjType
     Calibration g1_1p0_28 {3.1321e-6,   96596};
     Calibration g2_1p0_28 {3.1306e-6,   7583};
     Calibration g3_1p0_28 {3.1390e-6,   66733};
-    Calibration palm      {7.4626e-5,   0};         // offset set at runtime
-    Calibration wrist_Z   {-1,          0};         // offset set at runtime
+    Calibration palm      {7.4626e-5,   0};  // calibration used for pb4, TRO paper, etc
+    // Calibration palm      {2.831e-6,   0};  // new calibration 24 Aug 2023
+    Calibration wrist_Z   {-1,          0};
 
     // get the correct calibration for the fingers
     Calibration get_gauge_calibration(int gauge_num, double thickness, double width)
@@ -1419,6 +1476,7 @@ public:
   void reset_object();
   void spawn_object(int index);
   void spawn_object(int index, double xpos, double ypos, double zrot);
+  int spawn_scene(int num_objects, double xrange, double yrange, double smallest_gap);
   void randomise_every_colour();
   void randomise_object_colour(bool all_objects=false);
   void randomise_ground_colour();
@@ -1427,6 +1485,7 @@ public:
   bool is_done();
   std::vector<luke::gfloat> get_observation();
   std::vector<luke::gfloat> get_observation(MjType::SensorData sensors);
+  std::string debug_observation(std::vector<luke::gfloat> state_vector);
   std::vector<float> get_event_state();
   std::vector<float> get_goal();
   std::vector<float> assess_goal();
@@ -1455,7 +1514,7 @@ public:
   // misc
   void forward() { mj_forward(model, data); }
   int get_number_of_objects() { return env_.object_names.size(); }
-  std::string get_current_object_name() { return env_.obj.name; }
+  std::string get_current_object_name() { return env_.obj[0].name; }
   float get_fingertip_z_height();
   MjType::TestReport get_test_report();
   void set_finger_thickness(double thickness);
@@ -1469,6 +1528,7 @@ public:
   double get_finger_modulus();
   double get_finger_rigidity();
   double get_finger_length();
+  double get_finger_hook_length();
   double get_finger_hook_angle_degrees();
   bool is_finger_hook_fixed();
   double get_fingertip_clearance();

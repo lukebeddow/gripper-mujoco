@@ -37,9 +37,13 @@ struct ObjectHandler {
   std::vector<int> qposadr;
   std::vector<int> qveladr;
   std::vector<int> geom_id;
+  std::vector<Vec3> xyz_values;
 
-  int live_object;
-  std::string live_geom;
+  // int live_object;
+  // std::string live_geom;
+
+  std::vector<int> live_objects;
+  std::vector<std::string> live_geoms;
 
   // are we showing objects not being used (default: no)
   bool object_visibility = false;
@@ -76,7 +80,8 @@ struct ObjectHandler {
 
     // contact options
     struct {
-      bool object;
+      // bool object;
+      std::vector<bool> live_object;
       bool finger1;
       bool finger2;
       bool finger3;
@@ -84,8 +89,15 @@ struct ObjectHandler {
       bool ground;
     } with;
 
+    bool with_object() {
+      for (uint i = 0; i < with.live_object.size(); i++) {
+        if (with.live_object[i]) return true;
+      }
+      return false;
+    }
+
     bool with_any() {
-      if (with.object or 
+      if (with_object() or 
           with.finger1 or 
           with.finger2 or 
           with.finger3 or
@@ -102,8 +114,13 @@ struct ObjectHandler {
       }
       return false;
     }
-    void check_involves(std::string object_geom) {
-      with.object = involves(object_geom);
+    void check_involves(std::vector<std::string> object_geoms) {
+      // with.object = involves(object_geom);
+      with.live_object.clear();
+      with.live_object.resize(object_geoms.size());
+      for (uint i = 0; i < object_geoms.size(); i++) {
+        with.live_object[i] = involves(object_geoms[i]);
+      }
       with.finger1 = involves("finger_1");
       with.finger2 = involves("finger_2");
       with.finger3 = involves("finger_3");
@@ -117,11 +134,26 @@ struct ObjectHandler {
       std::cout << "global forces:\n"; global_force_vec.print();
     }
     void print_involves() {
+      std::string obj_bools;
+      for (bool x : with.live_object) obj_bools += (x ? " 1" : " 0");
       std::cout << "contact between " << name1 << " and " << name2
-        << ", which involves object = " << with.object << ", fingers " 
+        << ", which involves object =" << obj_bools << ", fingers " 
         << with.finger1 << " " << with.finger2 << " " << with.finger3
         << ", palm " << with.palm << ", ground " << with.ground << '\n';
     }
+  };
+
+  struct ObjSumMatrices {
+    mjtNum obj_glob_sum[6] = {};
+    mjtNum obj_glob_f1[6] = {};
+    mjtNum obj_glob_f2[6] = {};
+    mjtNum obj_glob_f3[6] = {};
+    mjtNum obj_glob_palm[6] = {};
+    mjtNum obj_glob_gnd[6] = {};
+    mjtNum obj_loc_f1[3] = {};
+    mjtNum obj_loc_f2[3] = {};
+    mjtNum obj_loc_f3[3] = {};
+    mjtNum obj_loc_palm[3] = {};
   };
 
   /* member functions */
@@ -134,22 +166,30 @@ struct ObjectHandler {
   void settle_objects(mjModel* model, mjData* data);
   void overwrite_keyframe(mjModel* model, mjData* data, int keyid = 0);
 
+private:
+
   // manipulate object in the scene
   bool check_idx(int idx);
   void set_live(mjModel* model, int idx);
+  int get_live_geom_index(int live_idx);
   void move_object(mjData* data, int idx, QPos pose);
-  void reset_object(mjModel* model, mjData* data, int idx) ;
+  void reset_object(mjModel* model, mjData* data, int idx);
+
+public:
+
+  bool is_live(int live_idx);
   void reset_live(mjModel* model, mjData* data);
-  void spawn_object(mjModel* model, mjData* data, int idx, QPos pose);
-  QPos get_live_qpos(mjModel* model, mjData* data);
+  QPos spawn_object(mjModel* model, mjData* data, int idx, QPos pose);
+  std::vector<QPos> get_live_qpos(mjModel* model, mjData* data);
+  Vec3 get_object_xyz(int obj_idx);
 
   // get object information
-  myNum get_object_net_force(const mjModel* model, mjData* data);
-  rawNum get_object_net_force_faster(const mjModel* model, mjData* data);
+  myNum get_object_net_force(const mjModel* model, mjData* data, int live_idx);
+  rawNum get_object_net_force_faster(const mjModel* model, mjData* data, int live_idx);
   std::vector<Contact> get_all_contacts(const mjModel* model, mjData* data);
   myNum rotate_vector(myNum force_vec, double x_rot, double y_rot, double z_rot);
   double get_palm_force(const mjModel* model, mjData* data);
-  Forces extract_forces(const mjModel* model, mjData* data);
+  // Forces extract_forces(const mjModel* model, mjData* data);
   Forces_faster extract_forces_faster(const mjModel* model, mjData* data);
   bool check_contact_forces(const mjModel* model, mjData* data);
 

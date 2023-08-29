@@ -2894,7 +2894,7 @@ std::vector<gfloat> get_gauge_data(const mjModel* model, mjData* data)
   }
   // use fingertip forces
   else {
-    Forces forces = get_object_forces(model, data);
+    Forces_faster forces = get_object_forces_faster(model, data);
     readings[0] = (gfloat) forces.all.finger1_local[1];
     readings[1] = (gfloat) forces.all.finger2_local[1];
     readings[2] = (gfloat) forces.all.finger3_local[1];
@@ -2956,8 +2956,8 @@ std::vector<gfloat> get_target_state_vector()
   std::vector<gfloat> state_vec;
 
   state_vec.push_back(state.gripper_x);
-  state_vec.push_back(state.gripper_x);
-  state_vec.push_back(state.gripper_x);
+  state_vec.push_back(state.gripper_y);
+  state_vec.push_back(state.gripper_z);
   if (j_.in_use.base_xyz) {
     state_vec.push_back(state.base_x);
     state_vec.push_back(state.base_y);
@@ -3019,6 +3019,13 @@ double get_finger_hook_angle_degrees()
   /* return the angle of the 'fixed' finger hook */
 
   return j_.dim.hook_angle_degrees;
+}
+
+double get_finger_hook_length()
+{
+  /* return the length of the finger hook in mm */
+
+  return j_.dim.hook_length;
 }
 
 bool is_finger_hook_fixed()
@@ -3232,6 +3239,52 @@ float get_fingerend_z_height(mjModel* model, mjData* data)
   return z;
 }
 
+std::vector<luke::Vec3> get_finger_hook_locations()
+{
+  /* get the current finger hook target locations and dimensions
+  ASSUMES STRAIGHT FINGER! Run this function only when the environment is reset
+  for spawning objects which don't collide with the finger/finger hook */
+
+  std::vector<luke::Vec3> pos(6);
+
+  double base_x = target_.base.x;
+  double base_y = target_.base.y;
+  double base_z = target_.base.z;
+  double base_z_rot = target_.base.yaw;
+
+  double fing_x = target_.end.get_x_m();
+  double hook_th = j_.dim.hook_angle_degrees * (M_PI / 180.000);
+
+  constexpr double PI_23 = M_PI * (2.0 / 3.0);
+  constexpr double angles[3] = { 0.0, PI_23, 2 * PI_23 };
+
+  for (int i = 0; i < 3; i++) {
+
+    // get (x, y) position of the centre of the finger hook
+    double hook_x = 0.5 * j_.dim.hook_length * sin(hook_th);
+    double x = -(fing_x - hook_x) * sin(angles[i]) + base_x;
+    double y = -(fing_x - hook_x) * cos(angles[i]) + base_y;
+
+    // save the finger hook centre position
+    luke::Vec3 tippos;
+    tippos.x = x;
+    tippos.y = y;
+    tippos.z = 0.0;
+
+    // save also the finger hook dimension and angle
+    luke::Vec3 tipinfo;
+    tipinfo.x = j_.dim.hook_length;
+    tipinfo.y = j_.dim.finger_width;
+    tipinfo.z = angles[i];
+
+    // return both the position and hook information
+    pos[i] = tippos;
+    pos[3 + i] = tipinfo;
+  }
+
+  return pos;
+}
+
 /* ----- environment ----- */
 
 Gripper get_gripper_target()
@@ -3263,39 +3316,45 @@ void reset_object(mjModel* model, mjData* data)
   oh_.reset_live(model, data);
 }
 
-void spawn_object(mjModel* model, mjData* data, std::string name, QPos pose)
+bool is_object_live(int idx)
+{
+  /* return whether a given object idx is the live object */
+
+  return oh_.is_live(idx);
+}
+
+luke::QPos spawn_object(mjModel* model, mjData* data, std::string name, QPos pose)
 {
   /* overload to pass object name not index */
 
   for (int i = 0; i < oh_.names.size(); i++) {
     if (oh_.names[i] == name and oh_.in_use[i]) {
-      spawn_object(model, data, i, pose);
-      return;
+      return spawn_object(model, data, i, pose);
     }
   }
 
   throw std::runtime_error("name not found");
 }
 
-void spawn_object(mjModel* model, mjData* data, int idx, QPos pose)
+luke::QPos spawn_object(mjModel* model, mjData* data, int idx, QPos pose)
 {
   /* spawn an object in the simulation with the given pose, and always wipes qvel */
 
-  oh_.spawn_object(model, data, idx, pose);
+  return oh_.spawn_object(model, data, idx, pose);
 }
 
-QPos get_object_qpos(mjModel* model, mjData* data)
+std::vector<QPos> get_object_qpos(mjModel* model, mjData* data)
 {
   /* returns the position of the live object in the simulation */
 
-  if (oh_.live_object == -1) {
-    QPos empty;
-    return empty;
-    throw std::runtime_error("no live object");
-  }
+  // if (oh_.live_object == -1) {
+  //   std::vector<QPos> empty;
+  //   return empty;
+  //   throw std::runtime_error("no live object");
+  // }
 
-  if (oh_.live_object >= oh_.names.size())
-    throw std::runtime_error("live object exceeds number of named objects");
+  // if (oh_.live_object >= oh_.names.size())
+  //   throw std::runtime_error("live object exceeds number of named objects");
 
   // // for testing
   // QPos test = get_object_qpos();
@@ -3307,13 +3366,20 @@ QPos get_object_qpos(mjModel* model, mjData* data)
   return oh_.get_live_qpos(model, data);
 }
 
-Forces get_object_forces(const mjModel* model, mjData* data)
+luke::Vec3 get_object_xyz_bounding_box(int idx)
 {
-  /* get the contact forces on the live object */
+  /* return the xyz bounding box of a given object */
 
-  // use the faster version of the extract_forces() function
-  return oh_.extract_forces(model, data);
+  return oh_.get_object_xyz(idx);
 }
+
+// Forces get_object_forces(const mjModel* model, mjData* data)
+// {
+//   /* get the contact forces on the live object */
+
+//   // use the faster version of the extract_forces() function
+//   return oh_.extract_forces(model, data);
+// }
 
 Forces_faster get_object_forces_faster(const mjModel* model, mjData* data)
 {

@@ -89,6 +89,7 @@ class MjEnv():
     XY_base_actions: bool = False
     fixed_finger_hook: bool = True
     finger_hook_angle_degrees: float = 90.0
+    finger_hook_length: float = 35e-3
     segment_inertia_scaling: float = 50.0
     fingertip_clearance: float = 10e-3
 
@@ -156,7 +157,7 @@ class MjEnv():
 
   # ----- semi-private functions, advanced use ----- #
 
-  def _auto_generate_xml_file(self, object_set, use_hashes=False, silent=True):
+  def _auto_generate_xml_file(self, object_set, use_hashes=False, silent=True, force=False):
     """
     Automatically generate the xml file that we need. Note this function
     overrides the currently set mjcf path to the path that leads to the
@@ -197,37 +198,13 @@ class MjEnv():
     gripper_details[p]["segment_inertia_scaling"] = self.load_next.segment_inertia_scaling
     gripper_details[p]["fingertip_clearance"] = self.load_next.fingertip_clearance
     gripper_details[p]["finger_length"] = self.load_next.finger_length
+    gripper_details[p]["hook_length"] = self.load_next.finger_hook_length
 
     # now override the existing file with our new changes
     with open(yaml_path, "w") as outfile:
       yaml.dump(gripper_details, outfile, default_flow_style=False)
 
-    # determine what machine we are running on to adjust the make command
-    machine = self._get_machine()
-    if machine == "luke-laptop":
-      m = "luke"
-    elif machine == "luke-PC":
-      m = "lab"
-    elif machine == "operator-PC":
-      m = "lab-op"
-    elif machine == "zotac-PC":
-      m = "zotac"
-    else:
-      raise RuntimeError(f"MjEnv()._auto_generate_xml_file() does not recognise this machine: {machine}")
-    
-    if self.log_level > 1:
-      print(f"MjEnv()._auto_generate_xml_file() found machine '{machine}'")
-
-    # now run make in order to generate the files for this object set
-    silence = "-s" if silent else ""
-    hash_str = "yes" if use_hashes else "no"
-    make = f"make {silence} {m} sets SET={object_set} EXTRA_COPY_TO_MERGE_SETS=yes USE_HASHES={hash_str}"
-    subprocess.run([make], shell=True, cwd=repo_path)
-
-    # override the current mjcf path with the new path
-    self.mj.model_folder_path = f"{repo_path}/{mjcf_folder}"
-
-    # now return the name of the xml files we just generated
+    # determine the task name
     N = self.load_next.num_segments
     W = self.load_next.finger_width
     if use_hashes:
@@ -235,6 +212,41 @@ class MjEnv():
       taskname = f"gripper_N{N}_H{yaml_hash}"
     else:
       taskname = f"gripper_N{N}_{W*1e3:.0f}"
+
+    # generate if the task folder does not already exist
+    if not os.path.exists(f"{repo_path}/{mjcf_folder}/{object_set}/{taskname}") or force:
+
+      if self.log_level > 1:
+        print(f"Target not found, generating: {repo_path}/{mjcf_folder}/{object_set}/{taskname}")
+
+      # determine what machine we are running on to adjust the make command
+      machine = self._get_machine()
+      if machine == "luke-laptop":
+        m = "luke"
+      elif machine == "luke-PC":
+        m = "lab"
+      elif machine == "operator-PC":
+        m = "lab-op"
+      elif machine == "zotac-PC":
+        m = "zotac"
+      else:
+        raise RuntimeError(f"MjEnv()._auto_generate_xml_file() does not recognise this machine: {machine}")
+      
+      if self.log_level > 1:
+        print(f"MjEnv()._auto_generate_xml_file() found machine '{machine}'")
+
+      # now run make in order to generate the files for this object set
+      silence = "-s" if silent else ""
+      hash_str = "yes" if use_hashes else "no"
+      make = f"make {silence} {m} sets SET={object_set} EXTRA_COPY_TO_MERGE_SETS=yes USE_HASHES={hash_str}"
+      subprocess.run([make], shell=True, cwd=repo_path)
+
+    else:
+      if self.log_level > 0:
+        print(f"MjEnv._auto_generate_xml_file() found that '{repo_path}/{mjcf_folder}/{object_set}/{taskname}' already exists. Nothing generated - use force=True to force generation.")
+
+    # override the current mjcf path with the new path
+    self.mj.model_folder_path = f"{repo_path}/{mjcf_folder}"
 
     # restore the gripper.yaml file to its original state
     with open(yaml_path, "w") as outfile:
@@ -336,6 +348,7 @@ class MjEnv():
     self.params.fixed_finger_hook = self.mj.is_finger_hook_fixed()
     self.params.fingertip_clearance = self.mj.get_fingertip_clearance()
     self.params.XY_base_actions = self.mj.using_xyz_base_actions()
+    self.params.finger_hook_length = self.mj.get_finger_hook_length()
 
     # assume loading is correct and directly copy
     self.params.segment_inertia_scaling = self.load_next.segment_inertia_scaling
@@ -347,7 +360,7 @@ class MjEnv():
     This functions does NOT load a new XML file from this object set.
     """
 
-    debug_fcn = True
+    debug_fcn = False
 
     # if a mjcf_path is given, override, otherwise we use default
     if mjcf_path != None: self.mj.model_folder_path = mjcf_path
@@ -386,7 +399,7 @@ class MjEnv():
                                                         and x.endswith(".xml")]
     self.training_xmls = len(xml_files) - self.testing_xmls
 
-    if debug_fcn:
+    if debug_fcn or self.log_level >= 2:
       print("_load_object_set() gives xml path:", self.xml_path)
       print(f"Training xmls: {self.training_xmls}, testing xmls: {self.testing_xmls}")
 
@@ -604,12 +617,6 @@ class MjEnv():
     """
     Spawn an object into the simulation randomly
     """
-
-    # OLD CODE COMPATIBLE: added 6/3/23, can delete in future
-    # if there is no angular noise parameter, set it to zero
-    if not hasattr(self.params, "object_rotation_noise_deg"):
-      print("OLD CODE: no angular position noise setting, creating one with 0deg")
-      self.params.object_rotation_noise_deg = 0
 
     global random_test
     global random_train
@@ -1257,11 +1264,13 @@ if __name__ == "__main__":
   # xy_base = [False, True]
   # inertia = [1, 50]
 
-  mj.load_next.num_segments = 4
-  angles = [30]
+  mj.load_next.num_segments = 8
+  angles = [90]
   for a in angles:
     mj.load_next.finger_hook_angle_degrees = a
-    mj._auto_generate_xml_file("set8_fullset_1500", use_hashes=True, silent=False)
+    mj.load_next.finger_hook_length = 100e-3
+    mj.load_next.XY_base_actions = True
+    mj._auto_generate_xml_file("set_test_large", use_hashes=True, silent=True)
 
   # for w in widths:
   #   for N in segments:

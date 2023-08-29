@@ -891,24 +891,94 @@ void MjClass::update_env()
   /* ----- get information from simulation (EDIT here to get extra information) ----- */
 
   // get information about the object from the simluation
-  env_.obj.qpos = luke::get_object_qpos(model, data);
+  // env_.obj.qpos 
+  std::vector<luke::QPos> qpos_vec = luke::get_object_qpos(model, data);
+
+  // how many live objects are in the simulation
+  if (env_.obj.size() != qpos_vec.size()) {
+    throw std::runtime_error("MjClass.update_env() found unexpected number of live objects");
+    env_.obj.clear();
+    env_.obj.resize(qpos_vec.size());
+  }
+  
+  int num_obj = env_.obj.size();
+
   env_.grp.target = luke::get_gripper_target();
   luke::Forces_faster forces = luke::get_object_forces_faster(model, data);
+
+  MjType::Env::ObjValues blank;
+  env_.obj_values = blank; // wipe object values
+
+  // loop over the objects and extract information
+  for (int i = 0; i < num_obj; i++) {
+
+    env_.obj[i].qpos = qpos_vec[i];
+
+    env_.obj[i].finger1_force = forces.obj[i].finger1_local;
+    env_.obj[i].finger2_force = forces.obj[i].finger2_local;
+    env_.obj[i].finger3_force = forces.obj[i].finger3_local;
+    env_.obj[i].palm_force = forces.obj[i].palm_local;
+    env_.obj[i].ground_force = forces.obj[i].ground;
+    env_.obj[i].palm_axial_force = forces.obj[i].palm_local[0]; // +ve for compression
+    env_.obj[i].finger1_force_mag = env_.obj[i].finger1_force.magnitude3();
+    env_.obj[i].finger2_force_mag = env_.obj[i].finger2_force.magnitude3();
+    env_.obj[i].finger3_force_mag = env_.obj[i].finger3_force.magnitude3();
+    env_.obj[i].palm_force_mag = env_.obj[i].palm_force.magnitude3();
+    env_.obj[i].ground_force_mag = env_.obj[i].ground_force.magnitude3();
+    env_.obj[i].lift_height = env_.obj[i].qpos.z - env_.obj[i].start_qpos.z;
+
+    env_.obj[i].avg_finger_force = 0.33333 * (
+      env_.obj[i].finger1_force_mag 
+      + env_.obj[i].finger2_force_mag
+      + env_.obj[i].finger3_force_mag);
+
+    // get highest outwards lateral force on finger
+    env_.obj[i].peak_finger_lateral_force = -1 * std::min({
+      forces.obj[i].finger1_local[1], 
+      forces.obj[i].finger2_local[1], 
+      forces.obj[i].finger3_local[1]
+    });
+
+    // see if these values are maximums
+    // if (finger1_force_mag > env_.obj_values.finger1_force_mag) {
+    //   env_.obj_values.finger1_force_mag = finger1_force_mag;
+    // }
+    // if (finger2_force_mag > env_.obj_values.finger2_force_mag) {
+    //   env_.obj_values.finger2_force_mag = finger2_force_mag;
+    // }
+    // if (finger3_force_mag > env_.obj_values.finger3_force_mag) {
+    //   env_.obj_values.finger3_force_mag = finger3_force_mag;
+    // }
+    // if (palm_force_mag > env_.obj_values.palm_force_mag) {
+    //   env_.obj_values.palm_force_mag = palm_force_mag;
+    // }
+
+    if (env_.obj[i].avg_finger_force > env_.obj_values.avg_finger_force) {
+      env_.obj_values.avg_finger_force = env_.obj[i].avg_finger_force;
+    }
+    if (env_.obj[i].palm_axial_force > env_.obj_values.palm_axial_force) {
+      env_.obj_values.palm_axial_force = env_.obj[i].palm_axial_force;
+    }
+    if (env_.obj[i].peak_finger_lateral_force > env_.grp.peak_finger_lateral_force) {
+      env_.grp.peak_finger_lateral_force = env_.obj[i].peak_finger_lateral_force;
+    }
+    if (env_.obj[i].lift_height > env_.obj_values.highest_lift) {
+      env_.obj_values.highest_lift = env_.obj[i].lift_height;
+    }
+  }
 
   // extract the gripper height (don't use object height for lifting as fingers tilt)
   luke::JointStates states = luke::get_target_state();
   float gripper_z_height = -1 * states.base_z;
-  float object_lift = env_.obj.qpos.z - env_.start_qpos.z; // how much have we lifted it
   
   // // for testing
   // forces.print();
-
-  // save the forces on the object in local frames (from gripper perspective)
-  env_.obj.finger1_force = forces.obj.finger1_local;
-  env_.obj.finger2_force = forces.obj.finger2_local;
-  env_.obj.finger3_force = forces.obj.finger3_local;
-  env_.obj.palm_force = forces.obj.palm_local;
-  env_.obj.ground_force = forces.obj.ground;
+  // // save the forces on the object in local frames (from gripper perspective)
+  // env_.obj.finger1_force = forces.obj.finger1_local;
+  // env_.obj.finger2_force = forces.obj.finger2_local;
+  // env_.obj.finger3_force = forces.obj.finger3_local;
+  // env_.obj.palm_force = forces.obj.palm_local;
+  // env_.obj.ground_force = forces.obj.ground;
 
   // save forces on the gripper fingers (include all contacts, not just object)
   env_.grp.finger1_force = forces.all.finger1_local;
@@ -916,28 +986,28 @@ void MjClass::update_env()
   env_.grp.finger3_force = forces.all.finger3_local;
 
   // calculate finger and palm force magnitudes on the object
-  float finger1_force_mag = env_.obj.finger1_force.magnitude3();
-  float finger2_force_mag = env_.obj.finger2_force.magnitude3();
-  float finger3_force_mag = env_.obj.finger3_force.magnitude3();
-  float palm_force_mag = env_.obj.palm_force.magnitude3();
-  float ground_force_mag = env_.obj.ground_force.magnitude3();
+  // float finger1_force_mag = env_.obj.finger1_force.magnitude3();
+  // float finger2_force_mag = env_.obj.finger2_force.magnitude3();
+  // float finger3_force_mag = env_.obj.finger3_force.magnitude3();
+  // float palm_force_mag = env_.obj.palm_force.magnitude3();
+  // float ground_force_mag = env_.obj.ground_force.magnitude3();
 
-  // get palm force on object (x = axial in local frame, +ve for compression)
-  env_.obj.palm_axial_force = +1 * env_.obj.palm_force[0];
+  // // get palm force on object (x = axial in local frame, +ve for compression)
+  // env_.obj.palm_axial_force = +1 * env_.obj.palm_force[0];
 
-  // get average finger force on object
-  env_.obj.avg_finger_force = 0.333 * (finger1_force_mag + finger2_force_mag
-    + finger3_force_mag);
+  // // get average finger force on object
+  // env_.obj.avg_finger_force = 0.333 * (finger1_force_mag + finger2_force_mag
+  //   + finger3_force_mag);
 
   // get the highest axial finger force (x = axial in local frame, -ve for comp.)
   env_.grp.peak_finger_axial_force = -1 * std::min({ 
     forces.gnd.finger1_local[0], forces.gnd.finger2_local[0], forces.gnd.finger3_local[0]
   });
 
-  // get highest outwards lateral force on finger
-  env_.grp.peak_finger_lateral_force = -1 * std::min({
-    forces.obj.finger1_local[1], forces.obj.finger2_local[1], forces.obj.finger3_local[1]
-  });
+  // // get highest outwards lateral force on finger
+  // env_.grp.peak_finger_lateral_force = -1 * std::min({
+  //   forces.obj.finger1_local[1], forces.obj.finger2_local[1], forces.obj.finger3_local[1]
+  // });
 
   // get information directly from the sensors
   luke::gfloat last_g1 = sim_sensors_SI_.read_finger1_gauge();
@@ -954,15 +1024,68 @@ void MjClass::update_env()
   // another step has been made
   env_.cnt.step_num.value = true;
 
-  // lifted is true if both the object and gripper have zero axial force from the ground
-  if (ground_force_mag < ftol and 
-      env_.grp.peak_finger_axial_force < ftol)
-    env_.cnt.lifted.value = true;
+  
+  for (int i = 0; i < num_obj; i++) {
 
-  // check if the object has gone out of bounds
-  if (env_.obj.qpos.x > s_.oob_distance or env_.obj.qpos.x < -s_.oob_distance or
-      env_.obj.qpos.y > s_.oob_distance or env_.obj.qpos.y < -s_.oob_distance)
-    env_.cnt.oob.value = true;
+    env_.obj[i].lifted = false;
+    env_.obj[i].oob = false;
+    env_.obj[i].target_height = false;
+    env_.obj[i].contact = false;
+    env_.obj[i].stable = false;
+    env_.obj[i].stable_height = false;
+
+    // lifted is true if both the object and gripper have zero axial force from the ground
+    if (env_.obj[i].ground_force_mag < ftol and 
+        env_.obj[i].peak_finger_axial_force < ftol) {
+      env_.cnt.lifted.value = true;
+      env_.obj[i].lifted = true;
+    }
+
+    // check if the object has gone out of bounds
+    if (env_.obj[i].qpos.x > s_.oob_distance or env_.obj[i].qpos.x < -s_.oob_distance or
+        env_.obj[i].qpos.y > s_.oob_distance or env_.obj[i].qpos.y < -s_.oob_distance) {
+      env_.cnt.oob.value = true;
+      env_.obj[i].oob = true;
+    }
+
+    // lifted above the target height and not oob (env_.cnt.lifted and env_.cnt.oob must be set)
+    if (env_.obj_values.highest_lift > s_.done_height and
+        gripper_z_height > s_.done_height and
+        env_.obj[i].lifted and not env_.obj[i].oob) { // newest version, lift object AND gripper
+      env_.cnt.target_height.value = true;
+      env_.obj[i].target_height = true;
+    }
+
+    // detect any gripper contact with the object
+    if (env_.obj[i].finger1_force_mag > ftol or
+        env_.obj[i].finger2_force_mag > ftol or
+        env_.obj[i].finger3_force_mag > ftol or
+        env_.obj[i].palm_force.magnitude3() > ftol) {
+      env_.cnt.object_contact.value = true;
+      env_.obj[i].contact = true;
+    }
+
+    // check if object is stable (must also be lifted and env_.cnt.lifted set)
+    if (env_.obj[i].finger1_force_mag > s_.stable_finger_force and
+        env_.obj[i].finger2_force_mag > s_.stable_finger_force and
+        env_.obj[i].finger3_force_mag > s_.stable_finger_force and
+        env_.obj[i].finger1_force_mag < s_.stable_finger_force_lim and
+        env_.obj[i].finger2_force_mag < s_.stable_finger_force_lim and
+        env_.obj[i].finger3_force_mag < s_.stable_finger_force_lim and
+        env_.obj[i].palm_force_mag > s_.stable_palm_force and
+        env_.obj[i].palm_force_mag < s_.stable_palm_force_lim and 
+        env_.cnt.lifted.value) {
+      env_.cnt.object_stable.value = true;
+      env_.obj[i].stable = true;
+    }
+
+    // if stable and lifted to target (need env_.cnt.object_stable and target_height set)
+    if (env_.obj[i].stable and env_.obj[i].target_height) {
+      env_.cnt.stable_height.value = true;
+      env_.obj[i].stable_height = true;
+    }
+  }
+
 
   // check if the object has been dropped (env_.cnt.lifted must already be set)
   env_.cnt.dropped.value = 
@@ -973,60 +1096,26 @@ void MjClass::update_env()
     // else if lastdropped==true +=1 to it, otherwise -> set dropped=0
     : (env_.cnt.dropped.row ? env_.cnt.dropped.row + 1 : 0)));
 
-  // lifted above the target height and not oob (env_.cnt.lifted and env_.cnt.oob must be set)
-  // if (env_.obj.qpos.z > env_.start_qpos.z + s_.done_height // old
-  // if (gripper_z_height > s_.done_height and env_.cnt.lifted.value // next tray
-  //     and not env_.cnt.oob.value)
-
-  if (object_lift > s_.done_height and
-      gripper_z_height > s_.done_height and
-      env_.cnt.lifted.value and
-      not env_.cnt.oob.value) // newest version, lift object AND gripper
-
-    env_.cnt.target_height.value = true;
 
   // for testing
-  // std::cout << "Object lift is: " << object_lift << '\n';
+  // std::cout << "Highest object lift is: " << env_.obj_values.highest_lift << '\n';
   // std::cout << "Gripper z height is: " << gripper_z_height << '\n';
   // std::cout << "Lifted is: " << env_.cnt.lifted.value << '\n';
   // std::cout << "Target height is: " << env_.cnt.target_height.value << '\n';
-
-  // detect any gripper contact with the object
-  if (finger1_force_mag > ftol or
-      finger2_force_mag > ftol or
-      finger3_force_mag > ftol or
-      palm_force_mag > ftol)
-    env_.cnt.object_contact.value = true;
-
-  // check if object is stable (must also be lifted and env_.cnt.lifted set)
-  if (finger1_force_mag > s_.stable_finger_force and
-      finger2_force_mag > s_.stable_finger_force and
-      finger3_force_mag > s_.stable_finger_force and
-      finger1_force_mag < s_.stable_finger_force_lim and
-      finger2_force_mag < s_.stable_finger_force_lim and
-      finger3_force_mag < s_.stable_finger_force_lim and
-      palm_force_mag > s_.stable_palm_force and
-      palm_force_mag < s_.stable_palm_force_lim and 
-      env_.cnt.lifted.value)
-    env_.cnt.object_stable.value = true;
-
-  // if stable and lifted to target (need env_.cnt.object_stable and target_height set)
-  if (env_.cnt.object_stable.value and env_.cnt.target_height.value)
-    env_.cnt.stable_height.value = true;
 
   /* ----- input state value of linear events (EDIT here to add a linear event) ----- */
 
   env_.cnt.exceed_axial.value = env_.grp.peak_finger_axial_force;
   env_.cnt.exceed_lateral.value = env_.grp.peak_finger_lateral_force;
-  env_.cnt.palm_force.value = env_.obj.palm_axial_force * env_.cnt.lifted.value; // must be lifted
-  env_.cnt.exceed_palm.value = env_.obj.palm_axial_force;
-  env_.cnt.finger_force.value = env_.obj.avg_finger_force;
+  env_.cnt.palm_force.value = env_.obj_values.palm_axial_force * env_.cnt.lifted.value; // must be lifted
+  env_.cnt.exceed_palm.value = env_.obj_values.palm_axial_force;
+  env_.cnt.finger_force.value = env_.obj_values.avg_finger_force;
   
   // testing: track info for linear goals
-  env_.cnt.finger1_force.value = finger1_force_mag;
-  env_.cnt.finger2_force.value = finger2_force_mag;
-  env_.cnt.finger3_force.value = finger3_force_mag;
-  env_.cnt.ground_force.value = ground_force_mag;
+  env_.cnt.finger1_force.value = env_.obj[0].finger1_force_mag;
+  env_.cnt.finger2_force.value = env_.obj[0].finger2_force_mag;
+  env_.cnt.finger3_force.value = env_.obj[0].finger3_force_mag;
+  env_.cnt.ground_force.value = env_.obj[0].ground_force_mag;
 
   // new: direct sensor rewards, based on measured sensor values from SIMULATED sensors
   env_.cnt.good_bend_sensor.value = avg_gauge_force;
@@ -1043,6 +1132,10 @@ void MjClass::update_env()
   update_events(env_.cnt, s_);
 
   if (s_.debug) env_.cnt.print();
+
+  if (s_.debug) {
+    env_.print_objects();
+  }
 
   // // for testing
   // std::cout << "Testing EventTrack\n";
@@ -1260,6 +1353,7 @@ std::vector<luke::gfloat> MjClass::get_observation(MjType::SensorData sensors)
 
   // use for printing detailed observation debug information
   constexpr bool debug_obs = false;
+  constexpr bool debug_data = false;
 
   std::vector<luke::gfloat> observation;
 
@@ -1422,8 +1516,242 @@ std::vector<luke::gfloat> MjClass::get_observation(MjType::SensorData sensors)
   if (debug_obs) {
     std::cout << "End of observation (n_obs = " << observation.size() << ")\n";
   }
+
+  if (debug_data) {
+      int data_num = 20;
+      std::cout << "Raw values:\n";
+      std::cout << "X Motor: "; sensors.x_motor_position.print(data_num);
+      std::cout << "Y Motor: "; sensors.y_motor_position.print(data_num);
+      std::cout << "Z Motor: "; sensors.z_motor_position.print(data_num);
+      std::cout << "Z Base: "; sensors.z_base_position.print(data_num);
+      std::cout << "SI real data values:\n";
+      std::cout << "X Motor: "; real_sensors_.SI.x_motor_position.print(data_num);
+      std::cout << "Y Motor: "; real_sensors_.SI.y_motor_position.print(data_num);
+      std::cout << "Z Motor: "; real_sensors_.SI.z_motor_position.print(data_num);
+      std::cout << "Z Base: "; real_sensors_.SI.z_base_position.print(data_num);
+    }
   
   return observation;
+}
+
+std::string MjClass::debug_observation(std::vector<luke::gfloat> observation)
+{
+  /* get an observation from a provided set of sensors */
+
+  // use for printing detailed observation debug information
+  constexpr bool debug_obs = true;
+
+  std::vector<luke::gfloat> real_obs = get_observation();
+
+  std::string info;
+
+  if (real_obs.size() != observation.size()) {
+    std::cout << "WARNING from MjClass::debug_observation()\n";
+    std::cout << "Observation given to function has length = " << observation.size()
+      << ", while MjClass::get_observation returns a size = " << real_obs.size()
+      << ", therefore settings do not match and the information from this function will be WRONG\n";
+    std::cout << "WARNING DEBUG_OBSERVATION WILL NOT WORK PROPERLY\n";
+
+    info += "INVALID MjClass::debug_observation() due to non-matching sizes\n";
+
+    if (real_obs.size() > observation.size()) {
+      std::cout << "The given observation is not long enough, MjClass::debug_observation()"
+        << " is returning to avoid a seg fault\n";
+      return info;
+    }
+  }
+
+  // use the sensor data to generate vectors of correct length
+  MjType::SensorData sensors = sim_sensors_;
+  int sidx = 0; // index of the state vector
+
+  if (debug_obs) {
+    std::cout << "Observation information:\n";
+  }
+
+  // get bending strain gauge sensor output
+  if (s_.bending_gauge.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> f1 = 
+      (s_.bending_gauge.*sampleFcnPtr)(sensors.finger1_gauge);
+    std::vector<luke::gfloat> f2 = 
+      (s_.bending_gauge.*sampleFcnPtr)(sensors.finger2_gauge);
+    std::vector<luke::gfloat> f3 = 
+      (s_.bending_gauge.*sampleFcnPtr)(sensors.finger3_gauge);
+
+    // copy our observation into these vectors instead
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + f1.size(), f1.begin()); sidx += f1.size();
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + f2.size(), f2.begin()); sidx += f2.size();
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + f3.size(), f3.begin()); sidx += f3.size();
+
+    if (debug_obs) {
+      luke::print_vec(f1, "Bending gauge 1");
+      luke::print_vec(f2, "Bending gauge 2");
+      luke::print_vec(f3, "Bending gauge 3");
+    }
+
+    std::string n = std::to_string(f1.size());
+    info += "Bend gauge 1 = " + n + " | Bend gauge 2 = " + n + " | Bend gauge 3 = " + n + " | ";
+  }
+
+  // get axial strain gauge sensor output
+  if (s_.axial_gauge.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> a1 = 
+      (s_.axial_gauge.*sampleFcnPtr)(sensors.finger1_axial_gauge);
+    std::vector<luke::gfloat> a2 = 
+      (s_.axial_gauge.*sampleFcnPtr)(sensors.finger2_axial_gauge);
+    std::vector<luke::gfloat> a3 = 
+      (s_.axial_gauge.*sampleFcnPtr)(sensors.finger3_axial_gauge);
+
+    // copy our observation into these vectors instead
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + a1.size(), a1.begin()); sidx += a1.size();
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + a2.size(), a2.begin()); sidx += a2.size();
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + a3.size(), a3.begin()); sidx += a3.size();
+
+    if (debug_obs) {
+      luke::print_vec(a1, "Axial gauge 1");
+      luke::print_vec(a2, "Axial gauge 2");
+      luke::print_vec(a3, "Axial gauge 3");
+    }
+
+    std::string n = std::to_string(a1.size());
+    info += "Axial gauge 1 = " + n + " | Axial gauge 2 = " + n + " | Axial gauge 3 = " + n + " | ";
+  }
+
+  // get palm sensor output
+  if (s_.palm_sensor.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> p1 = 
+      (s_.palm_sensor.*sampleFcnPtr)(sensors.palm_sensor);
+
+    // copy our observation into these vectors instead
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + p1.size(), p1.begin()); sidx += p1.size();
+
+    if (debug_obs) {
+      luke::print_vec(p1, "Palm gauge");
+    }
+
+    std::string n = std::to_string(p1.size());
+    info += "Palm gauge = " + n + " | ";
+  }
+
+  // get wrist sensor XY output
+  if (s_.wrist_sensor_XY.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> wX =
+      (s_.wrist_sensor_XY.*sampleFcnPtr)(sensors.wrist_X_sensor);
+    std::vector<luke::gfloat> wY =
+      (s_.wrist_sensor_XY.*sampleFcnPtr)(sensors.wrist_Y_sensor);
+
+    // copy our observation into these vectors instead
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + wX.size(), wX.begin()); sidx += wX.size();
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + wY.size(), wY.begin()); sidx += wY.size();
+
+    if (debug_obs) {
+      luke::print_vec(wX, "Wrist X");
+      luke::print_vec(wY, "Wrist Y");
+    }
+
+    std::string n = std::to_string(wX.size());
+    info += "Wrist X = " + n + " | Wrist Y = " + n + " | ";
+  }
+
+  // get wrist sensor Z output
+  if (s_.wrist_sensor_Z.in_use) {
+    
+    // sample data
+    std::vector<luke::gfloat> wZ =
+      (s_.wrist_sensor_XY.*sampleFcnPtr)(sensors.wrist_Z_sensor);
+
+    // copy our observation into these vectors instead
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + wZ.size(), wZ.begin()); sidx += wZ.size();
+
+    if (debug_obs) {
+      luke::print_vec(wZ, "Wrist Z");
+    }
+
+    std::string n = std::to_string(wZ.size());
+    info += "Wrist Z = " + n + " | ";
+  }
+
+  // get motor state output
+  if (s_.motor_state_sensor.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> s1 = 
+      (s_.motor_state_sensor.*stateFcnPtr)(sensors.x_motor_position);
+    std::vector<luke::gfloat> s2 = 
+      (s_.motor_state_sensor.*stateFcnPtr)(sensors.y_motor_position);
+    std::vector<luke::gfloat> s3 = 
+      (s_.motor_state_sensor.*stateFcnPtr)(sensors.z_motor_position);
+
+    // copy our observation into these vectors instead
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + s1.size(), s1.begin()); sidx += s1.size();
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + s2.size(), s2.begin()); sidx += s2.size();
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + s3.size(), s3.begin()); sidx += s3.size();
+    
+    if (debug_obs) {
+      luke::print_vec(s1, "Motor state X");
+      luke::print_vec(s2, "Motor state Y");
+      luke::print_vec(s3, "Motor state Z");
+    }
+
+    std::string n = std::to_string(s1.size());
+    info += "Motor state X = " + n + " | Motor state Y = " + n + " | Motor state Z = " + n + " | ";
+  }
+
+  // get base XY state
+  if (s_.base_state_sensor_XY.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> bX = 
+      (s_.base_state_sensor_XY.*stateFcnPtr)(sensors.x_base_position);
+    std::vector<luke::gfloat> bY = 
+      (s_.base_state_sensor_XY.*stateFcnPtr)(sensors.y_base_position);
+
+    // copy our observation into these vectors instead
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + bX.size(), bX.begin()); sidx += bX.size();
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + bY.size(), bY.begin()); sidx += bY.size();
+
+    if (debug_obs) {
+      luke::print_vec(bX, "Base state X");
+      luke::print_vec(bY, "Base state Y");
+    }
+
+    std::string n = std::to_string(bX.size());
+    info += "Base state X = " + n + " | Base state Y = " + n + " | ";
+  }
+
+  // get base Z state
+  if (s_.base_state_sensor_Z.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> bZ = 
+      (s_.base_state_sensor_Z.*stateFcnPtr)(sensors.z_base_position);
+
+    // copy our observation into these vectors instead
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + bZ.size(), bZ.begin()); sidx += bZ.size();
+
+    if (debug_obs) {
+      luke::print_vec(bZ, "Base state Z");
+    }
+
+    std::string n = std::to_string(bZ.size());
+    info += "Base state Z = " + n + " | ";
+  }
+
+  if (debug_obs) {
+    std::cout << "End of observation (n_obs = " << observation.size() << ")\n";
+  }
+
+  info += " Observation length = " + std::to_string(observation.size()) + "\n";
+  
+  return info;
 }
 
 std::vector<float> MjClass::get_event_state()
@@ -1492,8 +1820,38 @@ void MjClass::spawn_object(int index, double xpos, double ypos, double zrot)
     throw std::runtime_error("bad index to spawn_object()");
   }
 
+  int objvec_idx = -1;
+
+  // check if this object is already live
+  if (luke::is_object_live(index)) {
+    
+    // we want to find the existing entry and update it
+    for (int i = 0; i < env_.obj.size(); i++) {
+      if (env_.obj[i].name == env_.object_names[index]) {
+        objvec_idx = i;
+        break;
+      }
+    }
+    if (objvec_idx == -1) {
+      std::cout << "New object id = " << index << ", name = " << env_.object_names[index] << '\n';
+      std::cout << "Existing objects in the simulation:\n";
+      for (int i = 0; i < env_.obj.size(); i++) {
+        std::cout << "Object name = " << env_.obj[i].name << '\n';
+      }
+      throw std::runtime_error("MjClass::spawn_object() has is_object_live=true, but cannot find that object");
+    }
+  }
+  else {
+
+    // create and add a new object entry in the environment variable
+    MjType::Env::Obj new_obj;
+    env_.obj.push_back(new_obj);
+    objvec_idx = env_.obj.size() - 1;
+
+  }
+
   // save info on object to be spawned
-  env_.obj.name = env_.object_names[index];
+  env_.obj[objvec_idx].name = env_.object_names[index];
 
   // set the position to be spawned
   luke::QPos spawn_pos;
@@ -1506,21 +1864,194 @@ void MjClass::spawn_object(int index, double xpos, double ypos, double zrot)
   double y1 = spawn_pos.qy;
   double z1 = spawn_pos.qz;
   double w1 = spawn_pos.qw;
-  double x2 = 1 * 1 * sin(zrot / 2) - 0 * 0 * cos(zrot / 2);
-  double y2 = 0 * 1 * cos(zrot / 2) - 1 * 0 * sin(zrot / 2);
-  double z2 = 1 * 0 * cos(zrot / 2) + 0 * 1 * sin(zrot / 2);
-  double w2 = 1 * 1 * cos(zrot / 2) + 0 * 0 * sin(zrot / 2);
+  double x2 = 1 * 1 * sin(zrot / 2.0) - 0 * 0 * cos(zrot / 2.0);
+  double y2 = 0 * 1 * cos(zrot / 2.0) - 1 * 0 * sin(zrot / 2.0);
+  double z2 = 1 * 0 * cos(zrot / 2.0) + 0 * 1 * sin(zrot / 2.0);
+  double w2 = 1 * 1 * cos(zrot / 2.0) + 0 * 0 * sin(zrot / 2.0);
   spawn_pos.qw = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2;
   spawn_pos.qx = w1 * x2 + x1 * w2 - y1 * z2 + z1 * y2;
   spawn_pos.qy = w1 * y2 + x1 * z2 + y1 * w2 - z1 * x2;
   spawn_pos.qz = w1 * z2 - x1 * y2 + y1 * x2 + z1 * w2;
 
   // spawn the object and save its start position
-  luke::spawn_object(model, data, index, spawn_pos);
-  env_.start_qpos = luke::get_object_qpos(model, data);
+  env_.obj[objvec_idx].start_qpos = luke::spawn_object(model, data, index, spawn_pos);
+
+  // add the object to the environment variable
+  // env_.obj.push_back(new_obj);
 
   // update everything for rendering
   forward();
+}
+
+int MjClass::spawn_scene(int num_objects, double xrange, double yrange,
+  double smallest_gap)
+{
+  /* spawn a scene of objects in the simulation in the given range. Returns the
+  number of spawned objects in case some cannot be spawned */
+
+  // // remove any live objects
+  // reset_object();
+
+  // 0=off, 1=key info, 2=all info
+  constexpr int debug_level = 0;
+
+  double origin_x = 0.0;
+  double origin_y = 0.0;
+
+  std::uniform_real_distribution<double> rotation_dist(0.0, M_PI);
+
+  // determine the spawning bounds
+  double xmin = origin_x - xrange;
+  double xmax = origin_x + xrange;
+  double ymin = origin_y - yrange;
+  double ymax = origin_y + yrange;
+
+  // determine the gripper fingertip positions
+  std::vector<luke::Vec3> tip_pos = luke::get_finger_hook_locations();
+  std::vector<luke::Box2d> tip_boxes;
+  for (int i = 0; i < 3; i++) {
+    luke::Box2d tip;
+    tip.initCentre(tip_pos[i].x, tip_pos[i].y, tip_pos[3 + i].y, tip_pos[3 + i].x);
+    tip.rotate(-tip_pos[3 + i].z);
+    tip_boxes.push_back(tip);
+
+    if (debug_level > 1)
+      std::cout << "Gripper fingertip " << i << " has (x, y) >> ("
+        << tip_pos[i].x << ", " << tip_pos[i].y
+        << "; width = " << tip_pos[3 + i].x
+        << " and height = " << tip_pos[3 + i].y
+        << "; rotation = " << tip_pos[3 + i].z
+        << "\n";
+  }
+
+  // create a grid of possible points to spawn in an object
+  constexpr double xy_increment = 2e-3; // 2mm
+  int num_x = (2 * xrange) / xy_increment;
+  int num_y = (2 * yrange) / xy_increment;
+  std::vector<std::array<double, 2>> xy_points(num_x * num_y);
+
+  // loop through and set the xy values
+  for (int ix = 0; ix < num_x; ix++) {
+    for (int iy = 0; iy < num_y; iy++) {
+      xy_points[ix * num_x + iy][0] = -xrange + ix * xy_increment + origin_x;
+      xy_points[ix * num_x + iy][1] = -yrange + iy * xy_increment + origin_y;
+    }
+  }
+
+  // now shuffle the points into a random order
+  std::shuffle(std::begin(xy_points), std::end(xy_points), *MjType::generator);
+
+  // now generate a random order of objects
+  std::vector<int> obj_idx(env_.object_names.size());
+  for (int i = 0; i < obj_idx.size(); i++) {
+    obj_idx[i] = i;
+  }
+  std::shuffle(std::begin(obj_idx), std::end(obj_idx), *MjType::generator);
+
+  // now choose the objects and form them into a list
+  std::vector<MjType::Env::SpawnObj> objects(num_objects);
+
+  for (int i = 0; i < num_objects; i++) {
+    
+    objects[i].index = obj_idx[i];
+
+    // get object size from the centre point
+    luke::Vec3 obj_xyz = luke::get_object_xyz_bounding_box(obj_idx[i]);
+    objects[i].model_x = obj_xyz.x;
+    objects[i].model_y = obj_xyz.y;
+    objects[i].model_z = obj_xyz.z;
+
+    if (debug_level > 0)
+      std::cout << "Adding object " << objects[i].index << ", with (x,y,z) bounding >> ("
+        << objects[i].model_x << ", " << objects[i].model_y
+        << ", " << objects[i].model_z << ")\n";
+  }
+
+  // now loop over our scene and add objects where we can
+  std::vector<MjType::Env::SpawnObj> spawned_objects;
+  int spawn_idx = 0;
+  for (int i = 0; i < xy_points.size(); i++) {
+    
+    if (debug_level > 1)
+      std::cout << "Now at point (x, y) >> ("
+        << xy_points[i][0] << ", " << xy_points[i][1] << ")\n";
+
+    bool good_spawn_point = true;
+
+    // determine the space that we need
+    luke::Box2d ourBox;
+    ourBox.initCentre(xy_points[i][0], xy_points[i][1], objects[spawn_idx].model_x,
+      objects[spawn_idx].model_y);
+
+    // rotate by a random amount
+    double rand_rot = rotation_dist(*MjType::generator);
+    ourBox.rotate(rand_rot);
+
+    if (not ourBox.inbounds(xmin, ymin, xmax, ymax)) {
+        
+      if (debug_level > 1) std::cout << "Can't spawn here, exceed outer bounds\n";
+      continue;
+    }
+
+    // see if we can spawn an object at this point
+    for (MjType::Env::SpawnObj& spawned : spawned_objects) {
+
+      // determine the space taken up by the object
+      luke::Box2d spawnBox;
+      spawnBox.initCentre(spawned.x_centre, spawned.y_centre, spawned.model_x,
+        spawned.model_y);
+      spawnBox.rotate(spawned.z_rotation);
+
+      if (ourBox.overlapsWith(spawnBox, smallest_gap)) {
+        good_spawn_point = false;
+        if (debug_level > 1) std::cout << "Can't spawn here, exceed object bounds\n";
+        break;
+      }
+    }
+
+    if (not good_spawn_point) continue;
+
+    // see if this spawn point clashes with the gripper fingers
+    for (luke::Box2d& finger_box : tip_boxes) {
+      if (ourBox.overlapsWith(finger_box, smallest_gap)) {
+        good_spawn_point = false;
+        if (debug_level > 1) std::cout << "Can't spawn here, hits gripper fingers\n";
+        break;
+      }
+    }
+
+    if (not good_spawn_point) continue;
+
+    // this is a good place to spawn, record this
+    MjType::Env::SpawnObj new_spawn = objects[spawn_idx];
+    new_spawn.x_centre = xy_points[i][0];
+    new_spawn.y_centre = xy_points[i][1];
+    new_spawn.z_rotation = rand_rot;
+    spawned_objects.push_back(new_spawn);
+
+    spawn_idx += 1;
+
+    if (spawn_idx == num_objects) break;
+  }
+
+  // finally, we can loop over the objects and spawn them
+  if (debug_level > 0) std::cout << "Spawning the following:\n";
+  for (MjType::Env::SpawnObj& to_spawn : spawned_objects) {
+
+    if (debug_level > 0)
+      std::cout << "Spawning object " << to_spawn.index 
+        << " called " << env_.object_names[to_spawn.index]
+        << " at (x, y) >> (" << to_spawn.x_centre << ", " << to_spawn.y_centre << ")"
+        << " with rotation " << to_spawn.z_rotation
+        << "; this object has (x, y, z) sizes of (" << to_spawn.model_x
+        << ", " << to_spawn.model_y << ", " << to_spawn.model_z << ")"
+        << "\n";
+
+    // spawn the object: NOTE! different sign convenstion so we make the rotation negative
+    spawn_object(to_spawn.index, to_spawn.x_centre, to_spawn.y_centre, -to_spawn.z_rotation);
+  }
+
+  return spawned_objects.size();
 }
 
 void MjClass::randomise_every_colour()
@@ -2223,7 +2754,7 @@ MjType::TestReport MjClass::get_test_report()
 {
   /* fills out and returns the test report */
 
-  testReport_.object_name = env_.obj.name;
+  testReport_.object_name = env_.obj[0].name;
   testReport_.cumulative_reward = env_.cumulative_reward;
   testReport_.cnt = env_.cnt;
 
@@ -2330,6 +2861,13 @@ double MjClass::get_finger_length()
   /* get the current saved finger length */
 
   return luke::get_finger_length();
+}
+
+double MjClass::get_finger_hook_length()
+{
+  /* return the gripper finger hook length in mm */
+
+  return luke::get_finger_hook_length();
 }
 
 double MjClass::get_finger_hook_angle_degrees()

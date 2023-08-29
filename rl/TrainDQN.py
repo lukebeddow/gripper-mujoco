@@ -992,7 +992,7 @@ class TrainDQN():
     """
     if dtype == None: dtype = torch.float32
 
-    return torch.tensor(np.array([data]), device=self.device, dtype=dtype)
+    return torch.tensor(data, device=self.device, dtype=dtype).unsqueeze(0)
 
   def select_action(self, state, decay_num, test=None):
 
@@ -2155,7 +2155,8 @@ class TrainDQN():
                                     prevent_compression=not compressed)
     return savepath
 
-  def load(self, id=None, folderpath=None, foldername=None, overridelib=False, best_id=None):
+  def load(self, id=None, folderpath=None, foldername=None, overridelib=False, best_id=None,
+           filestarts=None, numbered=True):
     """
     Load the most recent model, overwrite current networks
     """
@@ -2185,8 +2186,8 @@ class TrainDQN():
         best_id = False # best_id has been found
 
     # load the model
-    load_data = self.modelsaver.load(id=id, folderpath=folderpath, 
-                                     foldername=foldername)
+    load_data = self.modelsaver.load(id=id, folderpath=folderpath, suffix_numbering=numbered,
+                                     foldername=foldername, filenamestarts=filestarts)
 
     self.policy_net = load_data.policy_net
     self.params = load_data.params
@@ -2195,12 +2196,13 @@ class TrainDQN():
     self.track = load_data.track
       
     reload_optimiser = False
-    if load_data.extra != None:
-      if isinstance(load_data.extra, dict):
-        self.last_test_data = load_data.extra["tupledata"]
-        reload_optimiser = True
-      else:
-        self.last_test_data = load_data.extra
+    if hasattr(load_data, "extra"):
+      if load_data.extra != None:
+        if isinstance(load_data.extra, dict):
+          self.last_test_data = load_data.extra["tupledata"]
+          reload_optimiser = True
+        else:
+          self.last_test_data = load_data.extra
 
     # backwards compatibility fix, check for imagedata field
     try:

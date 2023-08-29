@@ -44,10 +44,14 @@ MACHINE = luke-laptop
 # mjcf files location (model files like gripper/objects)
 MJCF_PATH = /home/luke/mymujoco/mjcf
 
+# path to python executable (eg venv) and header files
+PYTHON = /home/luke/pyenv/py38_mujoco
+PYTHON_EXE = $(PYTHON)/bin/python
+PYTHON_INCLUDE = $(PYTHON)/include/python3.8
+
 # local machine library locations
-PYTHON_PATH = /usr/include/python3.6m
 PYBIND_PATH = /home/luke/repo/pybind11
-ARMA_PATH = # none, use system library
+ARMA_PATH = /home/luke/mymujoco/libs/armadillo-code
 MUJOCO_PATH = /home/luke/repo/mujoco/mujoco-2.1.5
 MUJOCO_LIB = $(MUJOCO_PATH)/lib
 
@@ -73,7 +77,7 @@ MUJOCO_LIB = $(MUJOCO_PATH)/lib
 endif
 
 RENDER_PATH = # none, use system library
-CORE_LIBS = -L$(MUJOCO_LIB) -lmujoco -larmadillo
+CORE_LIBS = -L$(MUJOCO_LIB) -lmujoco -larmadillo -lblas -llapack
 RENDER_LIBS = -lglfw
 DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
 						 -DLUKE_MACHINE='"$(MACHINE)"'
@@ -94,8 +98,13 @@ MACHINE = cluster
 # cluster mjcf files location (model files like gripper/objects)
 MJCF_PATH = /home/lbeddow/mymujoco/mjcf
 
+# path to python executable (eg venv) and header files
+PYTHON = /share/apps/python-3.6.9
+PYTHON_EXE = $(PYTHON)/bin/python
+PYTHON_INCLUDE = $(PYTHON)/include/python3.6m
+
 # cluster library locations
-PYTHON_PATH = /share/apps/python-3.6.9/include/python3.6m
+# PYTHON_PATH = /share/apps/python-3.6.9/include/python3.6m
 PYBIND_PATH = /home/lbeddow/clusterlibs/pybind11
 ARMA_PATH = /home/lbeddow/clusterlibs/armadillo-code
 MUJOCO_PATH = /home/lbeddow/clusterlibs/mujoco/mujoco-2.1.5
@@ -123,6 +132,10 @@ MACHINE = luke-PC
 
 # mjcf files location (model files like gripper/objects)
 MJCF_PATH = /home/luke/mymujoco/mjcf
+
+# path to python executable (eg venv) and header files
+PYTHON_EXE = python3
+PYTHON_INCLUDE = /usr/include/python3.6m
 
 # local machine library locations
 PYTHON_PATH = /usr/include/python3.6m
@@ -153,8 +166,13 @@ MACHINE = operator-PC
 # mjcf files location (model files like gripper/objects)
 MJCF_PATH = /home/luke/luke-gripper-mujoco/mjcf
 
+# path to python executable (eg venv) and header files
+PYTHON = /home/luke/pyenv/py3.8_mujoco
+PYTHON_EXE = $(PYTHON)/bin/python
+PYTHON_INCLUDE = $(PYTHON)/include/python3.8
+
 # local machine library locations
-PYTHON_PATH = /home/luke/pyenv/py3.8_mujoco/bin/python
+# PYTHON_PATH = /home/luke/pyenv/py3.8_mujoco/bin/python
 PYBIND_PATH = /home/luke/luke-gripper-mujoco/libs/pybind11
 ARMA_PATH = # none, use system library
 MUJOCO_PATH = /home/luke/luke-gripper-mujoco/libs/mujoco/mujoco-2.1.5
@@ -182,8 +200,12 @@ MACHINE = zotac-PC
 # mjcf files location (model files like gripper/objects)
 MJCF_PATH = /home/luke/mymujoco/mjcf
 
+# path to python executable (eg venv) and header files
+PYTHON_EXE = python3
+PYTHON_INCLUDE = /usr/include/python3.6m
+
 # local machine library locations
-PYTHON_PATH = /usr/include/python3.6m
+# PYTHON_PATH = /usr/include/python3.6m
 PYBIND_PATH = /home/luke/mymujoco/libs/pybind11
 ARMA_PATH = # none, use system library
 MUJOCO_PATH = /home/luke/mymujoco/libs/mujoco/mujoco-2.1.5

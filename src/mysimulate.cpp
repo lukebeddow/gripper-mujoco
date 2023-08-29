@@ -104,6 +104,7 @@ struct
     double seg_moment = 0.0;        // added by luke
     int force_style = 0;            // added by luke
     int all_sensors_use_noise = 1;  // added by luke
+    int scene_objects = 0;
 
     // action flags
     mjtNum action_motor_mm = 2;
@@ -1634,6 +1635,8 @@ void makeObjectUI(int oldstate)
         // {mjITEM_BUTTON,    "Reset to key",  3},
         // {mjITEM_BUTTON,    "Set key",       3},
         {mjITEM_BUTTON,   "visibility",    2, NULL,                   " #317"},
+        {mjITEM_BUTTON,   "spawn scene",   2, NULL,                   " #318"},
+        {mjITEM_SLIDERINT, "scene obj",   3, &settings.scene_objects,    "0 20"},
         {mjITEM_END}
     };
 
@@ -2411,24 +2414,24 @@ void uiEvent(mjuiState* state)
                 break;
             }
             case 2: {            // Print forces
-                luke::Forces f = luke::get_object_forces(myMjClass.model, myMjClass.data);
+                luke::Forces_faster f = luke::get_object_forces_faster(myMjClass.model, myMjClass.data);
                 f.print();
                 break;
             }
             case 3: {            // Print ground forces
-                luke::Forces f = luke::get_object_forces(myMjClass.model, myMjClass.data);
+                luke::Forces_faster f = luke::get_object_forces_faster(myMjClass.model, myMjClass.data);
                 f.print_gnd_global();
                 f.print_gnd_local(); 
                 break;
             }
             case 4: {            // Print object forces
-                luke::Forces f = luke::get_object_forces(myMjClass.model, myMjClass.data);
+                luke::Forces_faster f = luke::get_object_forces_faster(myMjClass.model, myMjClass.data);
                 f.print_obj_global();
                 f.print_obj_local(); 
                 break;
             }
             case 5: {            // Print all forces
-                luke::Forces f = luke::get_object_forces(myMjClass.model, myMjClass.data);
+                luke::Forces_faster f = luke::get_object_forces_faster(myMjClass.model, myMjClass.data);
                 f.print_all_global();
                 f.print_all_local(); 
                 break;
@@ -2545,6 +2548,11 @@ void uiEvent(mjuiState* state)
                 visible = not visible;
                 luke::set_object_visibility(myMjClass.model, visible);
                 std::cout << "Setting hidden object visibility to: " << visible << "\n";
+                break;
+            }
+            case 30: {          // spawn object scene
+                std::cout << "Spawning a scene with " << settings.scene_objects << " objects\n";
+                myMjClass.spawn_scene(settings.scene_objects, 0.2, 0.2, 0.0);
                 break;
             }
             }
