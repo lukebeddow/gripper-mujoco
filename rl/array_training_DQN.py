@@ -11,6 +11,8 @@ from time import sleep
 from random import random
 import networks
 import argparse
+from dataclasses import dataclass
+import functools
 
 def set_penalties(model, value, done=False, trigger=1, make_binary=None,
                   exceed_lims_multiplier=1.0):
@@ -231,7 +233,7 @@ def create_reward_function(model, style="negative", options=[], scale_rewards=1,
   # termination on specific reward
   model.env.mj.set.quit_on_reward_below = -1.0 if "neg_cap" in options else -1e6
   model.env.mj.set.quit_on_reward_above = +1.0 if "pos_cap" in options else 1e6
-  model.env.mj.set.quit_reward_capped = True
+  model.env.mj.set.use_quit_on_reward = True
 
   model.wandb_note += f"Reward style: '{style}', options: [ "
   for extra in options: model.wandb_note += f"'{extra}' "
@@ -289,7 +291,7 @@ def add_sensors(model, num=None, sensor_mode=1, state_mode=0, sensor_steps=1,
   if num >= 4: model.env.mj.set.axial_gauge.in_use = True
 
   # know where z is in physical space (base z state sensor)
-  if num >= 5 or z_state is True: model.env.mj.set.base_state_sensor.in_use = True
+  if num >= 5 or z_state is True: model.env.mj.set.base_state_sensor_Z.in_use = True
 
   model.wandb_note += (
     f"Num sensors: {num}, state mode: {state_mode}, sensor mode: {sensor_mode}"
@@ -300,10 +302,115 @@ def add_sensors(model, num=None, sensor_mode=1, state_mode=0, sensor_steps=1,
 
   return model
 
+def set_actions(model, discrete=True, base_XY=False, action_values=None):
+  """
+  Configure the actions to use in training
+  """
+
+  if action_values == None:
+    action_values = [
+      1e-3, # [0] gripper_prismatic_X
+      0.01, # [1] gripper_revolute_Y
+      2e-3, # [2] gripper_Z
+      2e-3, # [3] base_Z
+      2e-3  # [4] base_XY
+    ]
+
+  # enable and configure the core actions with default settings
+  model.env.mj.set.gripper_prismatic_X.in_use = True
+  model.env.mj.set.gripper_revolute_Y.in_use = True
+  model.env.mj.set.gripper_Z.in_use = True
+  model.env.mj.set.base_Z.in_use = True
+  model.env.mj.set.gripper_prismatic_X.value = action_values[0]
+  model.env.mj.set.gripper_revolute_Y.value = action_values[1]
+  model.env.mj.set.gripper_Z.value = action_values[2]
+  model.env.mj.set.base_Z.value = action_values[3]
+  model.env.mj.set.gripper_prismatic_X.sign = -1
+  model.env.mj.set.gripper_revolute_Y.sign = -1
+  model.env.mj.set.gripper_Z.sign = 1
+  model.env.mj.set.base_Z.sign = 1
+
+  if base_XY:
+
+    # add in XY base movements
+    model.env.mj.set.base_Z.in_use = True
+    model.env.mj.set.base_Z.value = action_values[4]
+    model.env.mj.set.base_Z.sign = 1
+
+  # are we using continous actions
+  if not discrete: model.env.mj.set.set_all_action_continous(True)
+
+  return model
+
+def curriculum_step_size(self, i):
+  """
+  Curriculum which changes the step size over time
+  """
+
+  if self.curriculum_params["finished"]: return
+
+  stage = 0
+
+  # determine the curriculum metric
+  if self.curriculum_params["metric"] == "episode_number":
+
+    for t in self.curriculum_params["thresholds"]:
+      if i >= t:
+        stage += 1
+      else: break
+
+    if stage == self.curriculum_params["stage"]: return
+
+  elif self.curriculum_params["metric"] == "success_rate":
+
+    # get the most recent success rate
+    if len(self.track.avg_stable_height) > 0:
+      success_rate = self.track.avg_stable_height[-1]
+    else: success_rate = 0.0
+
+    # determine if we have passed the required threshold
+    for t in self.curriculum_params["thresholds"]:
+      if success_rate >= t:
+        stage += 1
+
+    if stage <= self.curriculum_params["stage"]: return
+
+  # if the metric is not recognised
+  else: return
+
+  # now set the step sizes
+  self.env.mj.set.gripper_prismatic_X.value = self.curriculum_params["step_sizes"][stage][0]
+  self.env.mj.set.gripper_revolute_Y.value = self.curriculum_params["step_sizes"][stage][1]
+  self.env.mj.set.gripper_Z.value = self.curriculum_params["step_sizes"][stage][2]
+  self.env.mj.set.base_Z.value = self.curriculum_params["step_sizes"][stage][3]
+
+  # now adjust the time per action to match the step sizes
+  self.env.mj.set.time_for_action = self.curriculum_params["step_sizes"][stage][4]
+
+  print(f"Episode = {i}, stage = {stage}, curriculum is changing")
+
+  self.curriculum_params["stage"] = stage
+  if stage == len(self.curriculum_params["thresholds"]): self.curriculum_params["finished"] = True
+
+  # now save a text file to reflect the changes
+  labelstr = f"Hyperparameters after curriculum change which occured at episode {i}\n"
+  name = f"hyperparameters_curriculum_stage_{stage}"
+  self.save_hyperparameters(labelstr, name, print_out=False)
+  
+  return
+
+def curriculum_punishments(self, i):
+  """
+  Curriculum which increases penalties for unsafe behaviour over time
+  """
+
+  pass
+
 def apply_to_all_models(model):
   """
   Settings we want to apply to every single running model. This can also be used
-  as a reference for which options are possible to change.
+  as a reference for which options are possible to change. Many options are first
+  wiped here and later set by 'baseline_settings'
   """
 
   # number of steps in an episode
@@ -317,14 +424,14 @@ def apply_to_all_models(model):
   model.params.eps_start = 0.9
   model.params.eps_end = 0.05
   model.params.eps_decay = 4000
-  model.params.target_update = 100
+  model.params.target_update = 50
   model.params.num_episodes = 60_000
   model.params.optimiser = "adam"
   model.params.adam_beta1 = 0.9
   model.params.adam_beta2 = 0.999
 
   # memory replay and HER
-  model.params.memory_replay = 50_000
+  model.params.memory_replay = 75_000
   model.params.min_memory_replay = 5_000
   model.params.use_HER = False # python setting OVERRIDES cpp
   model.params.HER_mode = "final"
@@ -332,12 +439,10 @@ def apply_to_all_models(model):
 
   # curriculum learning
   model.params.use_curriculum = False
-  model.params.curriculum_ep_num = 8000
-  model.params.curriculum_object_set = "set2_fullset_795"
 
   # data loggings
-  model.params.save_freq = 2_000
-  model.params.test_freq = 2_000
+  model.params.save_freq = 4_000
+  model.params.test_freq = 4_000
   model.params.plot_freq_s = 300
   model.params.wandb_freq_s = 900
 
@@ -355,33 +460,29 @@ def apply_to_all_models(model):
   model.env.mj.set.auto_calibrate_gauges = True
   model.env.mj.set.auto_sim_steps = True
   model.env.mj.set.auto_exceed_lateral_lim = True # THIS OVERRIDES LATERAL PUNISHMENT ONLY
-  # model.env.mj.set.bend_gauge_normalise = 5.0 # calibrate saturation to 5.0N # setting deleted
   model.env.mj.set.time_for_action = 0.2
   model.env.mj.set.saturation_yield_factor = 1.0
   model.env.mj.set.exceed_lat_min_factor = 0.75
   model.env.mj.set.exceed_lat_max_factor = 1.5
 
   # define lengths and forces
-  model.env.mj.set.finger_stiffness = -7.5 # finalised theory (101? 102?)
   model.env.mj.set.oob_distance = 75e-3
   model.env.mj.set.done_height = 15e-3
   model.env.mj.set.stable_finger_force = 1.0
   model.env.mj.set.stable_palm_force = 1.0
+  model.env.mj.set.stable_finger_force_lim = 100.0
+  model.env.mj.set.stable_palm_force_lim = 100.0
+  model.env.mj.set.fingertip_min_mm = -12.5 # below (from start position) sets within_limits=false;
 
-  # what actions are we using
-  model.env.mj.set.paired_motor_X_step = True
-  model.env.mj.set.use_palm_action = True
-  model.env.mj.set.use_height_action = True
-  model.env.mj.set.XYZ_action_mm_rad = True
-  model.env.mj.set.X_action_mm = 1.0
-  model.env.mj.set.Y_action_rad = 0.01
-  model.env.mj.set.Z_action_mm = 2.0
-  model.env.mj.set.base_action_mm = 2.0 # not used currently
-  model.env.mj.set.fingertip_min_mm = -12.5 # MOVEMENT BELOW THIS SETS within_limits=false;
+  # wipe and disable all actions, these can be set in the set_actions(...) function
+  model.env.mj.set.set_all_action_use(False)
+  model.env.mj.set.set_all_action_continous(False)
+  model.env.mj.set.set_all_action_value(0.0)
+  model.env.mj.set.set_all_action_sign(1)
 
-  # what sensing mode (0=raw data, 1=change, 2=average)
+  # what sensing mode (0=raw data, 1=change, 2=average, 3=median, 4=change)
   model.env.mj.set.sensor_sample_mode = 1
-  model.env.mj.set.state_sample_mode = 0
+  model.env.mj.set.state_sample_mode = 4
 
   # turn off all HER by default
   # model.env.mj.set.use_HER = False # this setting is OVERRIDEN by model.params.use_HER
@@ -394,23 +495,19 @@ def apply_to_all_models(model):
   model.env.mj.set.wipe_rewards()
   model.env.mj.set.quit_on_reward_below = -1e6
   model.env.mj.set.quit_on_reward_above = 1e6
-  model.env.mj.set.quit_reward_capped = False
+  model.env.mj.set.use_quit_on_reward = False
 
   # disable use of all sensors
   model.env.mj.set.disable_sensors()
   model.env.mj.set.sensor_n_prev_steps = 1 # lookback only 1 step
   model.env.mj.set.state_n_prev_steps = 1 # lookback only 1 step
 
-  # DONT ADD BACK DEFAULT SENSORS, leave to add_sensors(...) function
-  # # add back default sensors
-  # model.env.mj.set.motor_state_sensor.in_use = True
-  # model.env.mj.set.bending_gauge.in_use = True
-
   # ensure state sensors only give one reading per step (read_rate < 0)
   model.env.mj.set.motor_state_sensor.read_rate = -1
-  model.env.mj.set.base_state_sensor.read_rate = -1
+  model.env.mj.set.base_state_sensor_XY.read_rate = -1
+  model.env.mj.set.base_state_sensor_Z.read_rate = -1
 
-  # sensor noise options
+  # wipe sensor noise options
   model.env.mj.set.sensor_noise_mag = 0
   model.env.mj.set.sensor_noise_mu = 0
   model.env.mj.set.sensor_noise_std = 0
@@ -498,49 +595,32 @@ def logging_job(model, run_name, group_name):
   model.log_wandb(force=True, end=True)
   model.plot(force=True, end=True, hang=True)
 
-def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 100, 50], 
-                      memory=50_000, state_steps=1, sensor_steps=1, z_state=True, sensor_mode=2,
-                      state_mode=1, sensor_noise=0.025, state_noise=0.025, sensor_mu=0.0,
-                      state_mu=0.0, reward_style="mixed_v3", reward_options=[], 
-                      scale_rewards=2.5, scale_penalties=1.0, penalty_termination=False,
-                      finger_stiffness=-7.5, num_segments=8, finger_thickness=0.9e-3, finger_width=28e-3,
-                      max_episode_steps=250, XYZ_mm_rad=[1.0, 0.01, 2.0],
-                      exceed_lims_multiplier=2.0, eval_me=None):
-
+def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 100, 50], target_update=50, 
+                      memory_replay=75_000, state_steps=5, sensor_steps=1, z_state=True, sensor_mode=2,
+                      state_mode=4, sensor_noise=0.025, state_noise=0.0, sensor_mu=0.05,
+                      state_mu=0.025, reward_style="sensor_mixed", reward_options=[], 
+                      scale_rewards=1.0, scale_penalties=1.0, penalty_termination=False,
+                      num_segments=8, finger_thickness=0.9e-3, finger_width=28e-3,
+                      max_episode_steps=250, eval_me=None, base_XY_actions=False):
   """
-  Runs a baseline training on the model
+  Applies baseline settings to the model when run without any arguments
   """
 
-  # set parameters
-  model.env.params.max_episode_steps = max_episode_steps
+  # set key model hyperparameters
   model.params.learning_rate = lr
   model.params.eps_decay = eps_decay
-  model.params.memory_replay = memory
-  model.env.mj.set.finger_stiffness = finger_stiffness # -7.5 is final derivation
-  model.num_segments = num_segments                    # 6 gives fast training primarily
-  model.env.params.finger_thickness = finger_thickness # options are 0.8e-3, 0.9e-3, 1.0e-3
-  model.env.load_finger_width = finger_width           # options are 24e-3, 28e-3
+  model.params.memory_replay = memory_replay
+  model.params.target_update = target_update
 
-  # options for setting step size, see current defaults in this function
-  if XYZ_mm_rad is False: 
-    model.env.mj.set.XYZ_action_mm_rad = False
-  elif isinstance(XYZ_mm_rad, list) and len(XYZ_mm_rad) == 3:
-    model.env.mj.set.XYZ_action_mm_rad = True
-    model.env.mj.set.X_action_mm = XYZ_mm_rad[0]
-    model.env.mj.set.Y_action_rad = XYZ_mm_rad[1]
-    model.env.mj.set.Z_action_mm = XYZ_mm_rad[2]
-  elif XYZ_mm_rad is True:
-    # apply defaults
-    model.env.mj.set.X_action_mm = 1.0
-    model.env.mj.set.Y_action_rad = 0.01
-    model.env.mj.set.Z_action_mm = 2.0
-  else:
-    raise RuntimeError(f"array_training_DQN.baseline_settings(...) error with XYZ_mm_rad being: {XYZ_mm_rad}")
+  # set key environment parameters
+  model.env.params.max_episode_steps = max_episode_steps   # after this number of steps, is_done=True
+  model.env.load_next.num_segments = num_segments          # 8 gives good speed/accuracy balance
+  model.env.load_next.finger_thickness = finger_thickness  # options are 0.8e-3, 0.9e-3, 1.0e-3
+  model.env.load_next.finger_width = finger_width          # options are 24e-3, 28e-3
 
   # wandb notes
   model.wandb_note += f"Learning rate {lr}\n"
   model.wandb_note += f"eps_decay = {eps_decay}\n"
-  model.wandb_note += f"finger_stiffness = {finger_stiffness}\n"
   model.wandb_note += f"num_segments = {num_segments}\n"
   
   # configure rewards and sensors
@@ -553,6 +633,9 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 1
                       z_state=z_state, sensor_noise_std=sensor_noise, sensor_noise_mu=sensor_mu,
                       state_noise_std=state_noise, state_noise_mu=state_mu)
   model = setup_HER(model, use=False)
+
+  # configure actions
+  model = set_actions(model, base_XY=base_XY_actions)
 
   # can perform special operations here
   if eval_me is not None: 
@@ -730,8 +813,6 @@ def test_and_load(model, demo=False, render=False, pause=False, id=None, best_id
   Test overload where we load a specific model
   """
 
-  print(f"RENDER is {render} at start of test_and_load()")
-
   # set up the object set
   model.env.mj.model_folder_path = "/home/luke/mymujoco/mjcf"
 
@@ -756,14 +837,12 @@ def test(model, heuristic=False, trials_per_obj=10, render=False, pause=False, d
 
   print("\nPreparing to perform a model test, heuristic =", heuristic)
 
-  print(f"RENDER is {render} at start of test()")
-
   # load the best performing network
   if load and not heuristic: 
     if id is None: model.load(best_id=True)
     else: model.load(id=id)
 
-  # adjust settings
+  # adjust settingss
   if demo:
     model.env.params.test_trials_per_object = 1
     model.env.params.test_objects = 30
@@ -839,14 +918,16 @@ def print_results(model, filename="results.txt", savefile="table.txt"):
       temp_headings.append("Input arg")
       done_first_elem = True
         
-
     elif line.startswith("\t"):
       if line.startswith("\tTraining time best"):
         splits = line.split(" = ")
         new_elem.append(float(splits[1].split(" at ")[0]))
-        new_elem.append(int(splits[-1]))
+        new_elem.append(int(splits[2].split(";")[0]))
         temp_headings.append("Train best SR")
         temp_headings.append("Train best episode")
+        if len(splits) == 4:
+          temp_headings.append("Trained to")
+          new_elem.append(int(splits[3]))
     
       elif line.startswith("\tFinal full test"):
         splits = line.split(" = ")
@@ -1078,7 +1159,6 @@ if __name__ == "__main__":
     if args.test:
       test_and_load(model, best_id=True)
     elif args.demo:
-      print("RENDER is TRUE when we call test_and_load()")
       test_and_load(model, demo=True, render=True, pause=False, best_id=True)
     exit()
 
@@ -1087,7 +1167,7 @@ if __name__ == "__main__":
 
   # CONFIGURE KEY SETTINGS (take care that baseline_settings(...) does not overwrite)
   model.params.use_curriculum = False
-  model.params.num_episodes = 50_000
+  model.params.num_episodes = 60_000
   model.params.object_set = "set6_fullset_800_50i"
 
   if args.program is None:
@@ -1746,19 +1826,6 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  # only change is to go from 10 repeats to 20 repeats
-  # EI:1, Sensors:0 = 1:20        <- test this, running x20
-  # EI:2, Sensors:0 = 21:40
-  # EI:3, Sensors:0 = 41:60
-  # EI:1, Sensors:1 = 61:80       <- test this, done x20
-  # EI:2, Sensors:1 = 81:100
-  # EI:3, Sensors:1 = 101:120
-  # EI:1, Sensors:2 = 121:140     <- test this, done x20
-  # EI:2, Sensors:2 = 141:160
-  # EI:3, Sensors:2 = 161:180
-  # EI:1, Sensors:3 = 181:200     <- test this, done x20
-  # EI:2, Sensors:3 = 201:220     <- test this, done x20
-  # EI:3, Sensors:3 = 221:240     <- test this, done x20
   elif training_type == "paper_baseline_3.1":
 
     vary_1 = [
@@ -1956,19 +2023,6 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  # heuristic
-  # EI:1, Sensors:0 = 1:5
-  # EI:2, Sensors:0 = 6:10
-  # EI:3, Sensors:0 = 11:15
-  # EI:1, Sensors:1 = 16:20
-  # EI:2, Sensors:1 = 21:25
-  # EI:3, Sensors:1 = 26:30
-  # EI:1, Sensors:2 = 31:35
-  # EI:2, Sensors:2 = 36:40
-  # EI:3, Sensors:2 = 41:45
-  # EI:1, Sensors:3 = 46:50
-  # EI:2, Sensors:3 = 51:55
-  # EI:3, Sensors:3 = 56:60
   elif training_type == "paper_baseline_4_heuristic":
 
     vary_1 = [
@@ -2149,7 +2203,874 @@ if __name__ == "__main__":
     # prevent gripper from going lower than -12.5mm (see myfunctions.cpp for variable hardcoding)
     model.env.mj.prevent_table_impacts(True)
 
-  elif training_type == "vary_others":
+  elif training_type == "new_sensor_rewards":
+
+    vary_1 = [False, True]
+    vary_2 = [(100.0, 100), (3.0, 10.0)]
+    vary_3 = None
+    repeats = 10
+    param_1_name = "penalty termination"
+    param_2_name = "stable force limit"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    eval_me = []
+
+    # # half wrist noise as the normalisation has been doubled from 5 -> 10N
+    # wrist_mu = 0.01 * 0.5            # large chance of zero error with the wrist
+    # wrist_std = 0.075 * 0.5          # wrist has a lot of noise, this is 15% coverage +-2stdevs
+    # eval_me.append(f"model.env.mj.set.wrist_sensor_Z.set_gaussian_noise({wrist_mu}, {wrist_std})")
+
+    # do we limit stable grasps to a maximum allowable force
+    model.env.mj.set.stable_finger_force_lim = param_2[0]
+    model.env.mj.set.stable_palm_force_lim = param_2[1]
+
+    baseline_args = {
+
+      "finger_thickness" : 0.9e-3,
+      "finger_width" : 28e-3,
+      "sensors" : 3,
+
+      "penalty_termination" : param_1, # do we end episodes on dangerous readings
+
+      "sensor_noise" : 0.025,          # medium noise on sensor readings
+      "state_noise" : 0.0,             # no noise on state readings, this is required for sign mode
+      "sensor_mu" : 0.05,              # can be +- 5% from 0
+      "state_mu" : 0.025,              # just a gentle zero error noise on state readings
+      "sensor_steps" : 3,              # limit this since sensor data is unreliable
+      "state_steps" : 3,               # this data stream is clean, so take a lot of it
+      "sensor_mode" : 2,               # average sample, leave as before
+      "state_mode" : 4,                # state sign mode, -1,0,+1 for motor state change
+      "eval_me" : eval_me,             # extra settings tweaks
+      "scale_rewards" : 1.0,           # stronger reward signal aids training
+      "scale_penalties" : 1.0,         # we do want to discourage dangerous actions
+      "reward_style" : "sensor_mixed", # what reward function do we want
+
+
+      # FOR TESTING - delete before any proper trainings
+      "num_segments" : 8
+    }
+
+    # use the new object set
+    model.params.object_set = "set7_fullset_1500_50i"
+
+    # run medium length trainings
+    model.params.num_episodes = 60_000
+
+    # run slightly longer tests during training
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
+  elif training_type == "new_sensor_hypers":
+
+    vary_1 = [1e-5, 5e-5, 10e-5]
+    vary_2 = [1.0, 2.5]
+    vary_3 = None
+    repeats = 8
+    param_1_name = "learning rate"
+    param_2_name = "reward scaling"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    # do we limit stable grasps to a maximum allowable force
+    model.env.mj.set.stable_finger_force_lim = 100
+    model.env.mj.set.stable_palm_force_lim = 100
+
+    baseline_args = {
+
+      # key finger parameters
+      "finger_thickness" : 0.9e-3,
+      "finger_width" : 28e-3,
+      "sensors" : 3,
+      "num_segments" : 8, # dont forget to set to 8 for proper trainings
+
+      # hyperparemeters
+      "lr" : param_1,
+
+      # reward features
+      "penalty_termination" : False, # do we end episodes on dangerous readings
+      "scale_rewards" : param_2,           # stronger reward signal aids training
+      "scale_penalties" : 1.0,         # we do want to discourage dangerous actions
+      "reward_style" : "sensor_mixed", # what reward function do we want
+
+      # sensor details
+      "sensor_noise" : 0.025,          # medium noise on sensor readings
+      "state_noise" : 0.0,             # no noise on state readings, this is required for sign mode
+      "sensor_mu" : 0.05,              # can be +- 5% from 0
+      "state_mu" : 0.025,              # just a gentle zero error noise on state readings
+      "sensor_steps" : 3,              # limit this since sensor data is unreliable
+      "state_steps" : 3,               # this data stream is clean, so take a lot of it
+      "sensor_mode" : 2,               # average sample, leave as before
+      "state_mode" : 4,                # state sign mode, -1,0,+1 for motor state change 
+    }
+
+    # use the new object set
+    model.params.object_set = "set7_fullset_1500_50i"
+
+    # run medium length trainings
+    model.params.num_episodes = 60_000
+
+    # run slightly longer tests during training
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
+  elif training_type == "new_sensor_hypers_2":
+
+    vary_1 = [25_000, 50_000, 75_000, 100_000]
+    vary_2 = [50, 100, 200, 500]
+    vary_3 = None
+    repeats = 8
+    param_1_name = "memory replay"
+    param_2_name = "target update"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    # do we limit stable grasps to a maximum allowable force
+    model.env.mj.set.stable_finger_force_lim = 100
+    model.env.mj.set.stable_palm_force_lim = 100
+
+    baseline_args = {
+
+      # key finger parameters
+      "finger_thickness" : 0.9e-3,
+      "finger_width" : 28e-3,
+      "sensors" : 3,
+      "num_segments" : 8,
+
+      # hyperparemeters
+      "memory_replay" : param_1,
+      "target_update" : param_2,
+
+      # reward features
+      "penalty_termination" : False, # do we end episodes on dangerous readings
+      # "scale_rewards" : 1.0,           # stronger reward signal aids training
+      # "scale_penalties" : 1.0,         # we do want to discourage dangerous actions
+      "reward_style" : "sensor_mixed", # what reward function do we want
+
+      # sensor details
+      "sensor_noise" : 0.025,          # medium noise on sensor readings
+      "state_noise" : 0.0,             # no noise on state readings, this is required for sign mode
+      "sensor_mu" : 0.05,              # can be +- 5% from 0
+      "state_mu" : 0.025,              # just a gentle zero error noise on state readings
+      "sensor_steps" : 3,              # limit this since sensor data is unreliable
+      "state_steps" : 3,               # this data stream is clean, so take a lot of it
+      "sensor_mode" : 2,               # average sample, leave as before
+      "state_mode" : 4,                # state sign mode, -1,0,+1 for motor state change 
+    }
+
+    # use the new object set
+    model.params.object_set = "set7_fullset_1500_50i"
+
+    # run medium length trainings
+    model.params.num_episodes = 60_000
+
+    # run slightly longer tests during training
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
+  elif training_type == "new_sensor_hypers_2_extended":
+
+    vary_1 = [25_000, 50_000, 75_000, 100_000]
+    vary_2 = [1, 25]
+    vary_3 = None
+    repeats = 8
+    param_1_name = "memory replay"
+    param_2_name = "target update"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    # do we limit stable grasps to a maximum allowable force
+    model.env.mj.set.stable_finger_force_lim = 100
+    model.env.mj.set.stable_palm_force_lim = 100
+
+    baseline_args = {
+
+      # key finger parameters
+      "finger_thickness" : 0.9e-3,
+      "finger_width" : 28e-3,
+      "sensors" : 3,
+      "num_segments" : 8,
+
+      # hyperparemeters
+      "memory_replay" : param_1,
+      "target_update" : param_2,
+
+      # reward features
+      "penalty_termination" : False, # do we end episodes on dangerous readings
+      # "scale_rewards" : 1.0,           # stronger reward signal aids training
+      # "scale_penalties" : 1.0,         # we do want to discourage dangerous actions
+      "reward_style" : "sensor_mixed", # what reward function do we want
+
+      # sensor details
+      "sensor_noise" : 0.025,          # medium noise on sensor readings
+      "state_noise" : 0.0,             # no noise on state readings, this is required for sign mode
+      "sensor_mu" : 0.05,              # can be +- 5% from 0
+      "state_mu" : 0.025,              # just a gentle zero error noise on state readings
+      "sensor_steps" : 3,              # limit this since sensor data is unreliable
+      "state_steps" : 3,               # this data stream is clean, so take a lot of it
+      "sensor_mode" : 2,               # average sample, leave as before
+      "state_mode" : 4,                # state sign mode, -1,0,+1 for motor state change 
+    }
+
+    # use the new object set
+    model.params.object_set = "set7_fullset_1500_50i"
+
+    # run medium length trainings
+    model.params.num_episodes = 60_000
+
+    # run slightly longer tests during training
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
+  elif training_type == "heavy_test":
+
+    vary_1 = [1.0, 2.5]
+    vary_2 = [3, 5]
+    vary_3 = None
+    repeats = 15
+    param_1_name = "scale rewards"
+    param_2_name = "state steps"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    # do we limit stable grasps to a maximum allowable force
+    model.env.mj.set.stable_finger_force_lim = 100
+    model.env.mj.set.stable_palm_force_lim = 100
+
+    baseline_args = {
+
+      # key finger parameters
+      "finger_thickness" : 0.9e-3,
+      "finger_width" : 28e-3,
+      "sensors" : 3,
+      "num_segments" : 8,
+
+      # hyperparemeters
+      "memory_replay" : 50_000,
+      "target_update" : 25,
+
+      # reward features
+      "penalty_termination" : False, # do we end episodes on dangerous readings
+      "scale_rewards" : param_1,           # stronger reward signal aids training
+      # "scale_penalties" : 1.0,         # we do want to discourage dangerous actions
+      "reward_style" : "sensor_mixed", # what reward function do we want
+
+      # sensor details
+      "sensor_noise" : 0.025,          # medium noise on sensor readings
+      "state_noise" : 0.0,             # no noise on state readings, this is required for sign mode
+      "sensor_mu" : 0.05,              # can be +- 5% from 0
+      "state_mu" : 0.025,              # just a gentle zero error noise on state readings
+      "sensor_steps" : 3,              # limit this since sensor data is unreliable
+      "state_steps" : param_2,               # this data stream is clean, so take a lot of it
+      "sensor_mode" : 2,               # average sample, leave as before
+      "state_mode" : 4,                # state sign mode, -1,0,+1 for motor state change 
+    }
+
+    # use the new heavy object set
+    model.params.object_set = "set7_fullset_1500_heavy"
+
+    # run long length trainings
+    model.params.num_episodes = 100_000
+
+    # run slightly longer tests during training
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
+  elif training_type == "step_size_curriculum":
+
+    # define step size levels
+    levels_A = [
+      [8e-3, 0.025, 8e-3, 2e-3, 0.8],
+      [4e-3, 0.02,  6e-3, 2e-3, 0.4],
+      [2e-3, 0.015, 4e-3, 2e-3, 0.2],
+      [1e-3, 0.01,  2e-3, 2e-3, 0.2],
+    ]
+    levels_B = [
+      [4e-3, 0.025, 8e-3, 2e-3, 0.4],
+      [3e-3, 0.02,  6e-3, 2e-3, 0.3],
+      [2e-3, 0.015, 4e-3, 2e-3, 0.2],
+      [1e-3, 0.01,  2e-3, 2e-3, 0.2],
+    ]
+
+    thresholds_A = [10_000, 25_000, 40_000]
+    thresholds_B = [20_000, 30_000, 40_000]
+
+    vary_1 = [
+        (False, None, None),
+        (True, levels_A, thresholds_A),
+        (True, levels_A, thresholds_B),
+        (True, levels_B, thresholds_A),
+        (True, levels_B, thresholds_B),
+
+    ]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    param_1_name = "curriculum/levels/thresholds"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    # do we limit stable grasps to a maximum allowable force
+    model.env.mj.set.stable_finger_force_lim = 100
+    model.env.mj.set.stable_palm_force_lim = 100
+
+    # set up the curriculum
+    if param_1[0]:
+      model.params.use_curriculum = True
+      model.curriculum_params["step_sizes"] = param_1[1]
+      model.curriculum_params["thresholds"] = param_1[2]
+      model.curriculum_fcn = functools.partial(curriculum_step_size, model)
+
+    baseline_args = {
+
+      # key finger parameters
+      "finger_thickness" : 0.9e-3,
+      "finger_width" : 28e-3,
+      "sensors" : 3,
+      "num_segments" : 8,
+
+      # reward features
+      "penalty_termination" : False, # do we end episodes on dangerous readings
+      "reward_style" : "sensor_mixed", # use new sensor reward function
+
+      # sensor details
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+    # use the new object set
+    model.params.object_set = "set7_fullset_1500_50i"
+
+    # run medium length trainings
+    model.params.num_episodes = 60_000
+
+    # run slightly longer tests during training
+    model.env.params.test_trials_per_object = 3
+
+    # test less often
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
+  elif training_type == "step_size_curriculum_2":
+
+    # define step size levels
+    levels_A = [
+      [8e-3, 0.025, 8e-3, 2e-3, 0.8],
+      [4e-3, 0.02,  6e-3, 2e-3, 0.4],
+      [2e-3, 0.015, 4e-3, 2e-3, 0.2],
+      [1e-3, 0.01,  2e-3, 2e-3, 0.2],
+    ]
+    levels_B = [
+      [4e-3, 0.025, 8e-3, 2e-3, 0.4],
+      [3e-3, 0.02,  6e-3, 2e-3, 0.3],
+      [2e-3, 0.015, 4e-3, 2e-3, 0.2],
+      [1e-3, 0.01,  2e-3, 2e-3, 0.2],
+    ]
+
+    thresholds_A = [10_000, 25_000, 50_000]
+    thresholds_B = [20_000, 35_000, 50_000]
+
+    vary_1 = [levels_A, levels_B]
+    vary_2 = [thresholds_A, thresholds_B]
+    vary_3 = None
+    repeats = 10
+    param_1_name = "step size levels"
+    param_2_name = "episode thresholds"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    # do we limit stable grasps to a maximum allowable force
+    model.env.mj.set.stable_finger_force_lim = 100
+    model.env.mj.set.stable_palm_force_lim = 100
+
+    # set up the curriculum
+    model.params.use_curriculum = True
+    model.curriculum_params["step_sizes"] = param_1
+    model.curriculum_params["thresholds"] = param_2
+    model.curriculum_fcn = functools.partial(curriculum_step_size, model)
+
+    baseline_args = {
+
+      "reward_style" : "sensor_mixed", # use new sensor reward function
+
+      # sensor details
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+    # use the new object set
+    model.params.object_set = "set7_fullset_1500_50i"
+
+    # run medium length trainings
+    model.params.num_episodes = 60_000
+
+  elif training_type == "cnn_trial_1":
+
+    vary_1 = [
+      [150, 100, 50],
+      "CNN_25_25",
+      "CNN_50_50"
+    ]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    param_1_name = "network style"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    # do we limit stable grasps to a maximum allowable force
+    model.env.mj.set.stable_finger_force_lim = 100
+    model.env.mj.set.stable_palm_force_lim = 100
+
+    baseline_args = {
+
+      "network" : param_1,
+
+      "reward_style" : "sensor_mixed", # use new sensor reward function
+
+      # sensor details
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+    # use the new object set
+    model.params.object_set = "set7_xycamera_50i"
+
+  elif training_type == "cnn_trial_2":
+
+    # setup up a step size curriculum
+    levels_A = [
+      [8e-3, 0.025, 8e-3, 2e-3, 0.8],
+      [4e-3, 0.02,  6e-3, 2e-3, 0.4],
+      [2e-3, 0.015, 4e-3, 2e-3, 0.2],
+      [1e-3, 0.01,  2e-3, 2e-3, 0.2],
+    ]
+    thresholds_A = [10_000, 25_000, 50_000]
+    model.params.use_curriculum = True
+    model.curriculum_params["step_sizes"] = levels_A
+    model.curriculum_params["thresholds"] = thresholds_A
+    model.curriculum_params["metric"] = "episode_number"
+    model.curriculum_fcn = functools.partial(curriculum_step_size, model)
+
+    vary_1 = [
+      "CNN_25_25",
+      "CNN_50_50"
+    ]
+    vary_2 = None
+    vary_3 = None
+    repeats = 4
+    param_1_name = "network"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    # do we limit stable grasps to a maximum allowable force
+    model.env.mj.set.stable_finger_force_lim = 100
+    model.env.mj.set.stable_palm_force_lim = 100
+
+    baseline_args = {
+      "network" : param_1,
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+    # use the new object set
+    model.params.object_set = "set7_fullset_1500_50i_updated"
+
+    # test more often
+    model.params.test_freq = 2000
+    model.params.save_freq = 2000
+
+  elif training_type == "cnn_trial_3":
+
+    # setup up a step size curriculum
+    levels_A = [
+      [8e-3, 0.025, 8e-3, 2e-3, 0.8],
+      [4e-3, 0.02,  6e-3, 2e-3, 0.4],
+      [2e-3, 0.015, 4e-3, 2e-3, 0.2],
+      [1e-3, 0.01,  2e-3, 2e-3, 0.2],
+    ]
+    thresholds_A = [0.5, 0.65, 0.8]
+    model.params.use_curriculum = True
+    model.curriculum_params["step_sizes"] = levels_A
+    model.curriculum_params["thresholds"] = thresholds_A
+    model.curriculum_params["metric"] = "success_rate"
+    model.curriculum_fcn = functools.partial(curriculum_step_size, model)
+
+    vary_1 = [
+      "CNN_25_25",
+      # "CNN_50_50"
+    ]
+    vary_2 = [5e-5, 1e-4]
+    vary_3 = None
+    repeats = 5
+    param_1_name = "network"
+    param_2_name = "learning rate"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    # do we limit stable grasps to a maximum allowable force
+    model.env.mj.set.stable_finger_force_lim = 100
+    model.env.mj.set.stable_palm_force_lim = 100
+
+    baseline_args = {
+      "network" : param_1,
+      "lr" : param_2,
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+    # use the new object set
+    model.params.object_set = "set7_fullset_1500_50i_updated"
+
+    # normal testing
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
+  elif training_type == "image_collection":
+
+    vary_1 = [True, False]
+    vary_2 = ["image_collection_100_100", "image_collection_50_50"]
+    vary_3 = None
+    repeats = 1
+    param_1_name = "use_curriculum"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    # do we limit stable grasps to a maximum allowable force
+    model.env.mj.set.stable_finger_force_lim = 100
+    model.env.mj.set.stable_palm_force_lim = 100
+
+    baseline_args = {
+      "network" : param_2,
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+    # 100x100 images appear to be about 100MB each in memory replay
+    # the computer has 60GB RAM so I can store 600_000 maximum
+
+    if param_1:
+      # setup up a step size curriculum
+      levels_A = [
+        [8e-3, 0.025, 8e-3, 2e-3, 0.8],
+        [4e-3, 0.02,  6e-3, 2e-3, 0.4],
+        [2e-3, 0.015, 4e-3, 2e-3, 0.2],
+        [1e-3, 0.01,  2e-3, 2e-3, 0.2],
+      ]
+      thresholds_A = [10_000, 25_000, 50_000]
+      model.params.use_curriculum = True
+      model.curriculum_params["step_sizes"] = levels_A
+      model.curriculum_params["thresholds"] = thresholds_A
+      model.curriculum_params["metric"] = "episode_number"
+      model.curriculum_fcn = functools.partial(curriculum_step_size, model)
+    else:
+      model.params.use_curriculum = False
+
+    # use the new object set
+    model.params.object_set = "set8_fullset_1500"
+
+    # normal testing
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
+    # 75k -> 75000/200 = 375 episodes
+    model.params.image_save_freq = 500 # save memory replay frequently
+
+  elif training_type == "profile_cnn":
+
+    model = baseline_settings(model)
+    model.env.disable_rendering = True
+    model.params.object_set = "set7_fullset_1500_50i_updated"
+
+    # vary_1 = ["CNN_25_25", "CNN_50_50", "CNN_75_75", "CNN_100_100"]
+    vary_1 = [[150, 100, 50]]
+    vary_2 = ["cpu", "cuda"]
+    vary_3 = None
+    repeats = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    net = param_1
+    dev = param_2
+
+    model.set_device(dev)
+    model.profile(saveas=f"py_profile_150x100x50_{dev}.xyz", network=net, path="/home/luke/luke-gripper-mujoco")
+
+    exit()
+
+  elif training_type == "set8_baseline":
+
+    vary_1 = [False, True]
+    vary_2 = [(1, 5), (3, 3)]
+    vary_3 = None
+    repeats = 10
+    param_1_name = "use_curriculum"
+    param_2_name = "sensor/state steps"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    
+    if param_1:
+      # setup up a step size curriculum
+      levels_A = [
+        [8e-3, 0.025, 8e-3, 2e-3, 0.8],
+        [4e-3, 0.02,  6e-3, 2e-3, 0.4],
+        [2e-3, 0.015, 4e-3, 2e-3, 0.2],
+        [1e-3, 0.01,  2e-3, 2e-3, 0.2],
+      ]
+      thresholds_A = [10_000, 25_000, 50_000]
+      model.params.use_curriculum = True
+      model.curriculum_params["step_sizes"] = levels_A
+      model.curriculum_params["thresholds"] = thresholds_A
+      model.curriculum_params["metric"] = "episode_number"
+      model.curriculum_fcn = functools.partial(curriculum_step_size, model)
+    else:
+      model.params.use_curriculum = False
+
+    model.params.object_set = "set8_fullset_1500"
+
+    baseline_args = {
+      # I've used (3, 3) in all recent trainings despite not testing if it is better
+      # than the pb4 (1, 5) split
+      "sensor_steps" : param_2[0],
+      "state_steps" : param_2[1],
+    }
+
+  elif training_type.startswith("offline_train_v1-"):
+
+    vary_1 = [
+      (50, 5), 
+      (125, 2),
+      (250, 1)
+    ]
+    vary_2 = [False, True]
+    vary_3 = None #[False, True]
+    repeats = 3
+    param_1_name = "iter_per_file"
+    param_2_name = "random order"
+    param_3_name = None #"disable_sensor_data"
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    # which offline data are we loading
+    if training_type.endswith("v1-1"):
+      dataset = "/home/luke/luke-gripper-mujoco/rl/models/dqn/11-08-23/operator-PC_16:33_A1"
+      net = "CNN2_100_100"
+    elif training_type.endswith("v1-2"):
+      dataset = "/home/luke/luke-gripper-mujoco/rl/models/dqn/18-08-23/operator-PC_16:32_A1"
+      net = "CNN2_100_100"
+    elif training_type.endswith("v1-3"):
+      dataset = "/home/luke/luke-gripper-mujoco/rl/models/dqn/18-08-23/operator-PC_16:32_A3"
+      net = "CNN2_50_50"
+
+    baseline_args = {
+      "network" : net,
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+    # use the new object set
+    model.params.object_set = "set8_fullset_1500"
+
+    model.params.no_sensor_data = False
+
+    # normal testing
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
+    if not args.print and not args.print_results:
+
+      model = baseline_settings(model, **baseline_args)
+      model.train_offline(dataset, iter_per_file=param_1[0], random_order=param_2, 
+                          epochs=param_1[1])
+      # model = test(model, trials_per_obj=10, heuristic=args.heuristic, demo=args.demo)
+
+      # finishing time, how long did everything take
+      finishing_time = datetime.now()
+      time_taken = finishing_time - starting_time
+      d = divmod(time_taken.total_seconds(), 86400)
+      h = divmod(d[1], 3600)
+      m = divmod(h[1], 60)
+      s = m[1]
+      print("\nStarted at:", starting_time.strftime(datestr))
+      print("Finished at:", datetime.now().strftime(datestr))
+      print(f"Time taken was {d[0]:.0f} days {h[0]:.0f} hrs {m[0]:.0f} mins {s:.0f} secs\n")
+
+      exit()
+
+  elif training_type.startswith("cnn_from_pretrain_v1"):
+
+    vary_1 = [5e-5, 1e-5]
+    vary_2 = None
+    vary_3 = None
+    repeats = 3
+    param_1_name = None
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    if not args.print and not args.print_results:
+
+      # which offline data are we loading
+      if training_type.endswith("v1-1"):
+        # # image only pretrained network
+        # path = "/home/luke/luke-gripper-mujoco/rl/models/dqn/15-08-23/operator-PC_16:52_A3"
+        # id = 3
+        # both inputs pretrained network
+        path = "/home/luke/luke-gripper-mujoco/rl/models/dqn/14-08-23/operator-PC_17:50_A1"
+        net = "CNN2_100_100"
+        id = 4
+      elif training_type.endswith("v1-2"):
+        path = "/home/luke/luke-gripper-mujoco/rl/models/dqn/22-08-23/operator-PC_09:55_A5"
+        net = "CNN2_50_50"
+        folderpath = "/home/luke/luke-gripper-mujoco/rl/models/dqn/22-08-23/"
+        foldername = "operator-PC_09:55_A5"
+        id = 8
+
+      model.load(id=id, folderpath=folderpath, foldername=foldername)
+      model.params.learning_rate = param_1
+
+      # optional: enable this for some trainings for monitoring
+      if inputarg % 3 == 1:
+        model.params.test_freq = 500 # close eye on performance
+
+      # # remove the pretrained model from memory
+      # import gc
+      # del pretrain_model
+      # gc.collect()
+
+      # now proceed with training
+      model.train()
+
+      # test
+      model = test(model, trials_per_obj=10, heuristic=args.heuristic, demo=args.demo)
+
+      # finishing time, how long did everything take
+      finishing_time = datetime.now()
+      time_taken = finishing_time - starting_time
+      d = divmod(time_taken.total_seconds(), 86400)
+      h = divmod(d[1], 3600)
+      m = divmod(h[1], 60)
+      s = m[1]
+      print("\nStarted at:", starting_time.strftime(datestr))
+      print("Finished at:", datetime.now().strftime(datestr))
+      print(f"Time taken was {d[0]:.0f} days {h[0]:.0f} hrs {m[0]:.0f} mins {s:.0f} secs\n")
+
+      exit()
+
+  elif training_type == "finger_angle_test":
+
+    vary_1 = [30, 45, 60, 75]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    param_1_name = "finger_angle"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    
+    if param_1:
+      # setup up a step size curriculum
+      levels_A = [
+        [8e-3, 0.025, 8e-3, 2e-3, 0.8],
+        [4e-3, 0.02,  6e-3, 2e-3, 0.4],
+        [2e-3, 0.015, 4e-3, 2e-3, 0.2],
+        [1e-3, 0.01,  2e-3, 2e-3, 0.2],
+      ]
+      thresholds_A = [10_000, 25_000, 50_000]
+      model.params.use_curriculum = True
+      model.curriculum_params["step_sizes"] = levels_A
+      model.curriculum_params["thresholds"] = thresholds_A
+      model.curriculum_params["metric"] = "episode_number"
+      model.curriculum_fcn = functools.partial(curriculum_step_size, model)
+    else:
+      model.params.use_curriculum = False
+
+    model.params.object_set = "set8_fullset_1500"
+    model.env.load_next.finger_hook_angle_degrees = param_1
+
+    baseline_args = {
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+  elif training_type == "set8_baseline_extended":
+
+    thresholds_A = [10_000, 25_000, 50_000]
+    thresholds_B = [10_000, 25_000, 75_000]
+    thresholds_C = [25_000, 50_000, 75_000]
+    thresholds_D = [50_000, 75_000, 101_000]
+
+    vary_1 = [thresholds_A, thresholds_B, thresholds_C, thresholds_D]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    param_1_name = "threshold"
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    
+    if param_1:
+      # setup up a step size curriculum
+      levels_A = [
+        [8e-3, 0.025, 8e-3, 2e-3, 0.8],
+        [4e-3, 0.02,  6e-3, 2e-3, 0.4],
+        [2e-3, 0.015, 4e-3, 2e-3, 0.2],
+        [1e-3, 0.01,  2e-3, 2e-3, 0.2],
+      ]
+      model.params.use_curriculum = True
+      model.curriculum_params["step_sizes"] = levels_A
+      model.curriculum_params["thresholds"] = param_1
+      model.curriculum_params["metric"] = "episode_number"
+      model.curriculum_fcn = functools.partial(curriculum_step_size, model)
+    else:
+      model.params.use_curriculum = False
+
+    model.params.object_set = "set8_fullset_1500"
+    # model.env.load_next.finger_hook_angle_degrees = 90
+
+    # long trainings
+    model.params.num_episodes = 100_000
+
+    baseline_args = {
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+  elif training_type == "example_template":
 
     vary_1 = None
     vary_2 = None
@@ -2201,8 +3122,9 @@ if __name__ == "__main__":
 
   # prepare to print final results, check if files exist which recorded best performance
   best_sr, best_ep = model.read_best_performance_from_text(silence=True)
+  test_performance = model.read_test_performance()
   if best_sr is not None:
-    extra_info_string += f"\tTraining time best success rate = {best_sr} at episode = {best_ep}\n"
+    extra_info_string += f"\tTraining time best success rate = {best_sr} at episode = {best_ep}; trained up to episode = {int(test_performance[0, -1])}\n"
   full_sr, _ = model.read_best_performance_from_text(silence=True, fulltest=True, heuristic=args.heuristic)
   if full_sr is not None:
     extra_info_string += f"\tFinal full test success rate = {full_sr}\n"

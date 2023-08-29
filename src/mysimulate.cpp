@@ -58,6 +58,8 @@ mjvFigure figmotors;
 mjvFigure figstepperx;
 mjvFigure figsteppery;
 mjvFigure figstepperz;
+mjvFigure figbasex;
+mjvFigure figbasey;
 mjvFigure figbasez;
 
 // OpenGL rendering and UI
@@ -102,6 +104,13 @@ struct
     double seg_moment = 0.0;        // added by luke
     int force_style = 0;            // added by luke
     int all_sensors_use_noise = 1;  // added by luke
+    int scene_objects = 0;
+
+    // action flags
+    mjtNum action_motor_mm = 2;
+    mjtNum action_motor_rad = 0.01;
+    mjtNum action_base_mm = 2;
+    mjtNum action_base_rad = 0.01;
     int gram_force = 0;               // added by luke
 
     // figure show flags
@@ -114,8 +123,13 @@ struct
     int xstepfig = 0;              // added by luke
     int ystepfig = 0;              // added by luke
     int zstepfig = 0;              // added by luke
+    int xbasefig = 0;              // added by luke
+    int ybasefig = 0;              // added by luke
     int zbasefig = 0;              // added by luke
     int allactuators = 0;          // added by luke
+    int use_SI_sensors = 0;        // added by luke
+    int render_rgb = 0;
+    int render_depth = 0;
 
     float sensor_mag = 0;
     float sensor_mu = 0;
@@ -212,8 +226,13 @@ const mjuiDef defOption[] =
     {mjITEM_CHECKINT,  "x stepper",     2, &settings.xstepfig,      " #408"}, // added by luke
     {mjITEM_CHECKINT,  "y stepper",     2, &settings.ystepfig,      " #409"}, // added by luke
     {mjITEM_CHECKINT,  "z stepper",     2, &settings.zstepfig,      " #410"}, // added by luke
+    {mjITEM_CHECKINT,  "x base",        2, &settings.xbasefig,      " #411"}, // added by luke
+    {mjITEM_CHECKINT,  "y base",        2, &settings.ybasefig,      " #411"}, // added by luke
     {mjITEM_CHECKINT,  "z base",        2, &settings.zbasefig,      " #411"}, // added by luke
     {mjITEM_CHECKINT,  "all actuators", 2, &settings.allactuators,  " #412"}, // added by luke
+    {mjITEM_CHECKINT,  "SI values",     2, &settings.use_SI_sensors," #413"}, // added by luke
+    {mjITEM_CHECKINT,  "Render rgb",    2, &settings.render_rgb,    " #414"}, // added by luke
+    {mjITEM_CHECKINT,  "Render depth",  2, &settings.render_depth,  " #415"}, // added by luke
     {mjITEM_END}
 };
 
@@ -683,10 +702,13 @@ void lukesensorfigsinit(void)
     strcpy(figwrist.linename[0], "X");
     strcpy(figwrist.linename[1], "Y");
     strcpy(figwrist.linename[2], "Z");
-    strcpy(figmotors.linename[0], "X");
-    strcpy(figmotors.linename[1], "Y");
-    strcpy(figmotors.linename[2], "Z");
-    strcpy(figmotors.linename[3], "H");
+    strcpy(figmotors.linename[0], "gX");
+    strcpy(figmotors.linename[1], "gY");
+    strcpy(figmotors.linename[2], "gZ");
+    strcpy(figmotors.linename[3], "bZ");
+    strcpy(figmotors.linename[4], "bX");
+    strcpy(figmotors.linename[5], "bY");
+    
 }
 
 
@@ -701,21 +723,34 @@ void lukesensorfigsupdate(void)
         gnum = mjMAXLINEPNT;
     }
 
+    MjType::SensorData* data_ptr;
+
+    if (settings.use_SI_sensors) {
+        data_ptr = &myMjClass.sim_sensors_SI_;
+    }
+    else {
+        data_ptr = &myMjClass.sim_sensors_;
+    }
+
+    bool base_xyz = luke::use_base_xyz();
+
     // read the data    
-    std::vector<luke::gfloat> b1data = myMjClass.sim_sensors_.finger1_gauge.read(gnum);
-    std::vector<luke::gfloat> b2data = myMjClass.sim_sensors_.finger2_gauge.read(gnum);
-    std::vector<luke::gfloat> b3data = myMjClass.sim_sensors_.finger3_gauge.read(gnum);
-    std::vector<luke::gfloat> p1data = myMjClass.sim_sensors_.palm_sensor.read(gnum);
-    std::vector<luke::gfloat> a1data = myMjClass.sim_sensors_.finger1_axial_gauge.read(gnum);
-    std::vector<luke::gfloat> a2data = myMjClass.sim_sensors_.finger2_axial_gauge.read(gnum);
-    std::vector<luke::gfloat> a3data = myMjClass.sim_sensors_.finger3_axial_gauge.read(gnum);
-    std::vector<luke::gfloat> wXdata = myMjClass.sim_sensors_.wrist_X_sensor.read(gnum);
-    std::vector<luke::gfloat> wYdata = myMjClass.sim_sensors_.wrist_Y_sensor.read(gnum);
-    std::vector<luke::gfloat> wZdata = myMjClass.sim_sensors_.wrist_Z_sensor.read(gnum);
-    std::vector<luke::gfloat> mXdata = myMjClass.sim_sensors_.x_motor_position.read(gnum);
-    std::vector<luke::gfloat> mYdata = myMjClass.sim_sensors_.y_motor_position.read(gnum);
-    std::vector<luke::gfloat> mZdata = myMjClass.sim_sensors_.z_motor_position.read(gnum);
-    std::vector<luke::gfloat> mHdata = myMjClass.sim_sensors_.z_base_position.read(gnum);
+    std::vector<luke::gfloat> g1data = data_ptr->finger1_gauge.read(gnum);
+    std::vector<luke::gfloat> g2data = data_ptr->finger2_gauge.read(gnum);
+    std::vector<luke::gfloat> g3data = data_ptr->finger3_gauge.read(gnum);
+    std::vector<luke::gfloat> p1data = data_ptr->palm_sensor.read(gnum);
+    std::vector<luke::gfloat> a1data = data_ptr->finger1_axial_gauge.read(gnum);
+    std::vector<luke::gfloat> a2data = data_ptr->finger2_axial_gauge.read(gnum);
+    std::vector<luke::gfloat> a3data = data_ptr->finger3_axial_gauge.read(gnum);
+    std::vector<luke::gfloat> wXdata = data_ptr->wrist_X_sensor.read(gnum);
+    std::vector<luke::gfloat> wYdata = data_ptr->wrist_Y_sensor.read(gnum);
+    std::vector<luke::gfloat> wZdata = data_ptr->wrist_Z_sensor.read(gnum);
+    std::vector<luke::gfloat> mXdata = data_ptr->x_motor_position.read(gnum);
+    std::vector<luke::gfloat> mYdata = data_ptr->y_motor_position.read(gnum);
+    std::vector<luke::gfloat> mZdata = data_ptr->z_motor_position.read(gnum);
+    std::vector<luke::gfloat> bXdata = data_ptr->x_base_position.read(gnum);
+    std::vector<luke::gfloat> bYdata = data_ptr->y_base_position.read(gnum);
+    std::vector<luke::gfloat> bZdata = data_ptr->z_base_position.read(gnum);
 
     // get the corresponding timestamps
     std::vector<float> btdata = myMjClass.gauge_timestamps.read(gnum);
@@ -726,7 +761,7 @@ void lukesensorfigsupdate(void)
 
     // package sensor data pointers in iterable vectors
     std::vector<std::vector<luke::gfloat>*> bdata {
-        &b1data, &b2data, &b3data
+        &g1data, &g2data, &g3data
     };
     std::vector<std::vector<luke::gfloat>*> adata {
         &a1data, &a2data, &a3data
@@ -738,8 +773,12 @@ void lukesensorfigsupdate(void)
         &wXdata, &wYdata, &wZdata
     };
     std::vector<std::vector<luke::gfloat>*> mdata {
-        &mXdata, &mYdata, &mZdata, &mHdata  
+        &mXdata, &mYdata, &mZdata, &bZdata  
     };
+    if (base_xyz) {
+        mdata.push_back(&bXdata);
+        mdata.push_back(&bYdata);
+    }
 
     // package figures into iterable vector
     std::vector<mjvFigure*> myfigs {
@@ -851,19 +890,24 @@ void lukesensorfigshow(mjrRect rect)
 
 void lukestepperfigsinit(void)
 {
+    bool use_xyz = luke::use_base_xyz();
+
     mjv_defaultFigure(&figstepperx);
     mjv_defaultFigure(&figsteppery);
     mjv_defaultFigure(&figstepperz);
+    mjv_defaultFigure(&figbasex);
+    mjv_defaultFigure(&figbasey);
     mjv_defaultFigure(&figbasez);
 
     // what figures are we initialising
     std::vector<mjvFigure*> myfigs {
-        &figstepperx, &figsteppery, &figstepperz, &figbasez
+        &figstepperx, &figsteppery, &figstepperz, &figbasex, &figbasey, &figbasez
     };
     
     // what are the figure titles
     std::vector<std::string> titles {
-        "Stepper x / um", "Stepper y / um", "Stepper z / um", "Base z / um"
+        "Stepper x / um", "Stepper y / um", "Stepper z / um", 
+        "Base x / um", "Base y / um", "Base z / um"
     };
 
     // // figure limits
@@ -924,14 +968,20 @@ void lukestepperfigsupdate(void)
         gnum = mjMAXLINEPNT;
     }
 
+    bool base_xyz = luke::use_base_xyz();
+
     // read the data    
     std::vector<luke::gfloat> txsdata = luke::target_.target_stepperx.read(gnum);
     std::vector<luke::gfloat> tysdata = luke::target_.target_steppery.read(gnum);
     std::vector<luke::gfloat> tzsdata = luke::target_.target_stepperz.read(gnum);
+    std::vector<luke::gfloat> txbdata = luke::target_.target_basex.read(gnum);
+    std::vector<luke::gfloat> tybdata = luke::target_.target_basey.read(gnum);
     std::vector<luke::gfloat> tzbdata = luke::target_.target_basez.read(gnum);
     std::vector<luke::gfloat> axsdata = luke::target_.actual_stepperx.read(gnum);
     std::vector<luke::gfloat> aysdata = luke::target_.actual_steppery.read(gnum);
     std::vector<luke::gfloat> azsdata = luke::target_.actual_stepperz.read(gnum);
+    std::vector<luke::gfloat> axbdata = luke::target_.actual_basex.read(gnum);
+    std::vector<luke::gfloat> aybdata = luke::target_.actual_basey.read(gnum);
     std::vector<luke::gfloat> azbdata = luke::target_.actual_basez.read(gnum);
     std::vector<luke::gfloat> timedata = luke::target_.timedata.read(gnum);
 
@@ -945,6 +995,12 @@ void lukestepperfigsupdate(void)
     std::vector<std::vector<luke::gfloat>*> szdata {
         &tzsdata, &azsdata
     };
+    std::vector<std::vector<luke::gfloat>*> bxdata {
+        &txbdata, &axbdata
+    };
+    std::vector<std::vector<luke::gfloat>*> bydata {
+        &tybdata, &aybdata
+    };
     std::vector<std::vector<luke::gfloat>*> bzdata {
         &tzbdata, &azbdata
     };
@@ -953,11 +1009,21 @@ void lukestepperfigsupdate(void)
     std::vector<mjvFigure*> myfigs {
         &figstepperx, &figsteppery, &figstepperz, &figbasez
     };
+    if (base_xyz) {
+        myfigs[3] = &figbasex;
+        myfigs.push_back(&figbasey);
+        myfigs.push_back(&figbasez);
+    }
 
     // package sensor data in same order as figures
     std::vector< std::vector<std::vector<luke::gfloat>*>* > sensordata {
         &sxdata, &sydata, &szdata, &bzdata
     };
+    if (base_xyz) {
+        sensordata[3] = &bxdata;
+        sensordata.push_back(&bydata);
+        sensordata.push_back(&bzdata);
+    }
 
     // maximum number of lines on a figure
     static const int maxline = 10;
@@ -996,10 +1062,17 @@ void lukestepperfigsupdate(void)
 
 void lukestepperfigshow(mjrRect rect)
 {
+    bool base_xyz = luke::use_base_xyz();
+
     // what figures are showing
     std::vector<mjvFigure*> myfigs {
         &figstepperx, &figsteppery, &figstepperz, &figbasez
     };
+    if (base_xyz) {
+        myfigs[3] = &figbasex;
+        myfigs.push_back(&figbasey);
+        myfigs.push_back(&figbasez);
+    }
     // what settings determine if these are showing
     std::vector<int> flags {
         settings.xstepfig, 
@@ -1007,6 +1080,11 @@ void lukestepperfigshow(mjrRect rect)
         settings.zstepfig,
         settings.zbasefig
     };
+    if (base_xyz) {
+        flags[3] = settings.xbasefig;
+        flags.push_back(settings.ybasefig);
+        flags.push_back(settings.zbasefig);
+    }
 
     // how many graphs do we need to fit
     int num = myfigs.size();
@@ -1361,69 +1439,106 @@ void makeGripperUI(int oldstate)
         {mjITEM_SLIDERNUM, "", 2, NULL, "0 1"},
         {mjITEM_END}
     };
-
     mjui_add(&ui1, defGripper);
-    defSlider[0].state = 4;
 
-    // luke::UI_GRIPPER_SLIDER.in_use = true;
+    bool base_xyz = luke::use_base_xyz();
 
-    std::vector<std::string> slider_names {
-        "Prismatic", "Revolute", "Palm", "Base Z"
-    };
-    std::vector<void*> slider_values {
-        &luke::target_.end.x, &luke::target_.end.th, &luke::target_.end.z,
-        &luke::target_.base[0]
-        // &luke::UI_GRIPPER_SLIDER.x, &luke::UI_GRIPPER_SLIDER.th, &luke::UI_GRIPPER_SLIDER.z
-    };
-    std::vector<std::string> slider_ranges {
-        "0.05 0.14", "-0.6 0.6", "0.0 0.16", "-0.1 0.1"
-    };
+    if (not base_xyz) {
 
-    for (i = 0; i < slider_names.size(); i++) {
+        defSlider[0].state = 4;
 
-        // set the data address
-        defSlider[0].pdata = slider_values[i];
+        std::vector<std::string> slider_names {
+            "Prismatic", "Revolute", "Palm", "Base Z"
+        };
+        std::vector<void*> slider_values {
+            &luke::target_.end.x, &luke::target_.end.th, &luke::target_.end.z,
+            &luke::target_.base.z
+        };
+        std::vector<std::string> slider_ranges {
+            "0.05 0.14", "-0.6 0.6", "0.0 0.16", "-0.1 0.1"
+        };
 
-        mju_strncpy(defSlider[0].name, slider_names[i].c_str(), mjMAXUINAME);
-        mju_strncpy(defSlider[0].other, slider_ranges[i].c_str(), mjMAXUINAME);
+        for (i = 0; i < slider_names.size(); i++) {
 
-        // add
-        mjui_add(&ui1, defSlider);
+            // set the data address
+            defSlider[0].pdata = slider_values[i];
+
+            mju_strncpy(defSlider[0].name, slider_names[i].c_str(), mjMAXUINAME);
+            mju_strncpy(defSlider[0].other, slider_ranges[i].c_str(), mjMAXUINAME);
+
+            // add
+            mjui_add(&ui1, defSlider);
+        }
     }
-}
+    else if (base_xyz) {
+        defSlider[0].state = 6;
 
+        std::vector<std::string> slider_names {
+            "Prismatic", "Revolute", "Palm", "Base X", "Base Y", "Base Z"
+        };
+        std::vector<void*> slider_values {
+            &luke::target_.end.x, &luke::target_.end.th, &luke::target_.end.z,
+            &luke::target_.base.x, &luke::target_.base.y, &luke::target_.base.z
+        };
+        std::vector<std::string> slider_ranges {
+            "0.05 0.14", "-0.6 0.6", "0.0 0.16", "-0.1 0.1", "-0.1 0.1", "-0.1 0.1"
+        };
+
+        for (i = 0; i < slider_names.size(); i++) {
+
+            // set the data address
+            defSlider[0].pdata = slider_values[i];
+
+            mju_strncpy(defSlider[0].name, slider_names[i].c_str(), mjMAXUINAME);
+            mju_strncpy(defSlider[0].other, slider_ranges[i].c_str(), mjMAXUINAME);
+
+            // add
+            mjui_add(&ui1, defSlider);
+        }
+    }
+
+    // for (i = 0; i < slider_names.size(); i++) {
+
+    //     // set the data address
+    //     defSlider[0].pdata = slider_values[i];
+
+    //     mju_strncpy(defSlider[0].name, slider_names[i].c_str(), mjMAXUINAME);
+    //     mju_strncpy(defSlider[0].other, slider_ranges[i].c_str(), mjMAXUINAME);
+
+    //     // add
+    //     mjui_add(&ui1, defSlider);
+    // }
+}
 
 void makeActionsUI(int oldstate)
 {
     mjuiDef defActions[] =
     {
-        {mjITEM_SECTION, "Actions",         oldstate,  NULL,   " #303"},
-        {mjITEM_BUTTON, "Action 0 (X+)",           2,  NULL,   " #304"},
-        {mjITEM_BUTTON, "Action 1 (X-)",           2,  NULL,   " #305"},
-        {mjITEM_BUTTON, "Action 2 (Y+)",           2,  NULL,   " #306"},
-        {mjITEM_BUTTON, "Action 3 (Y-)",           2,  NULL,   " #307"},
-        {mjITEM_BUTTON, "Action 4 (Z+)",           2,  NULL,   " #308"},
-        {mjITEM_BUTTON, "Action 5 (Z-)",           2,  NULL,   " #309"},
-        {mjITEM_BUTTON, "Action 6 (H+)",           2,  NULL,   " #310"},
-        {mjITEM_BUTTON, "Action 7 (H-)",           2,  NULL,   " #310"},
-        {mjITEM_BUTTON, "Reward",                  2,  NULL,   " #311"},
-        {mjITEM_CHECKINT, "Debug",                 2,  &myMjClass.s_.debug,   " #312"},
-        {mjITEM_CHECKINT, "Env steps",             2,  &settings.env_steps, " #313"},
-        {mjITEM_CHECKINT, "Full step",             2,  &settings.complete_action_steps, " #314"},
-        {mjITEM_CHECKINT, "paired X",              2,  &myMjClass.s_.paired_motor_X_step, " #345"},
-        {mjITEM_CHECKINT, "mm_rad",                2,  &myMjClass.s_.XYZ_action_mm_rad,   " #346"},
-        {mjITEM_SLIDERINT, "No. steps",            2, 
-            &myMjClass.s_.action_motor_steps,             "0 2000"},
-        {mjITEM_SLIDERNUM, "Base trans.",          2, 
-            &myMjClass.s_.action_base_translation,        "0.0 0.035"},
-        {mjITEM_SLIDERINT, "Action steps",          2, 
-            &myMjClass.s_.sim_steps_per_action,           "0 2000"},
-        {mjITEM_SLIDERNUM, "X mm",          2, 
-            &myMjClass.s_.X_action_mm,        "0.0 30.0"},
-        {mjITEM_SLIDERNUM, "Y rad",          2, 
-            &myMjClass.s_.Y_action_rad,        "0.0 0.5"},
-        {mjITEM_SLIDERNUM, "Z mm",          2, 
-            &myMjClass.s_.Z_action_mm,        "0.0 30.0"},
+        {mjITEM_SECTION, "Actions",    oldstate,  NULL,   " #303"},
+        {mjITEM_BUTTON, "Gripper X+",         2,  NULL,   " #304"},
+        {mjITEM_BUTTON, "Gripper X-",         2,  NULL,   " #305"},
+        {mjITEM_BUTTON, "Gripper pX+",        2,  NULL,   " #306"},
+        {mjITEM_BUTTON, "Gripper pX-",        2,  NULL,   " #307"},
+        {mjITEM_BUTTON, "Gripper Y+",         2,  NULL,   " #308"},
+        {mjITEM_BUTTON, "Gripper Y-",         2,  NULL,   " #309"},
+        {mjITEM_BUTTON, "Gripper rY+",        2,  NULL,   " #310"},
+        {mjITEM_BUTTON, "Gripper rY-",        2,  NULL,   " #310"},
+        {mjITEM_BUTTON, "Gripper Z+",         2,  NULL,   " #304"},
+        {mjITEM_BUTTON, "Gripper Z-",         2,  NULL,   " #305"},
+        {mjITEM_BUTTON, "Base X+",            2,  NULL,   " #306"},
+        {mjITEM_BUTTON, "Base X-",            2,  NULL,   " #307"},
+        {mjITEM_BUTTON, "Base Y+",            2,  NULL,   " #308"},
+        {mjITEM_BUTTON, "Base Y-",            2,  NULL,   " #309"},
+        {mjITEM_BUTTON, "Base Z+",            2,  NULL,   " #310"},
+        {mjITEM_BUTTON, "Base Z-",            2,  NULL,   " #310"},
+        {mjITEM_SLIDERNUM, "Motor mm",        2,  &settings.action_motor_mm,        "0.0 20.0"},
+        {mjITEM_SLIDERNUM, "Motor rad",       2,  &settings.action_motor_rad,       "0.0 0.2"},
+        {mjITEM_SLIDERNUM, "Base mm",         2,  &settings.action_base_mm,         "0.0 20.0"},
+        {mjITEM_SLIDERNUM, "Base rad",        2,  &settings.action_base_rad,        "0.0 0.2"},
+        {mjITEM_BUTTON, "Reward",             2,  NULL,   " #311"},
+        {mjITEM_CHECKINT, "Debug",            2,  &myMjClass.s_.debug,   " #312"},
+        {mjITEM_CHECKINT, "Env steps",        2,  &settings.env_steps, " #313"},
+        {mjITEM_CHECKINT, "Full step",        2,  &settings.complete_action_steps, " #314"},
         {mjITEM_END}
     };
 
@@ -1439,7 +1554,6 @@ void makeSettingsUI(int oldstate)
         {mjITEM_SLIDERNUM,"mj timestep",       2, &myMjClass.s_.mujoco_timestep,   "0.00001 0.003"},
         {mjITEM_CHECKINT, "curve_validation",  2, &myMjClass.s_.curve_validation,  " #601"},
         {mjITEM_SLIDERNUM,"tip_force",         2, &myMjClass.s_.tip_force_applied, "-10 10"},
-        {mjITEM_SLIDERNUM,"finger_stiffness",  2, &myMjClass.s_.finger_stiffness,  "1.0 25.0"},
         {mjITEM_CHECKINT, "randomise_colours", 2, &myMjClass.s_.randomise_colours, " #602"},
         {mjITEM_SLIDERNUM,"finger_thickness",  2, &settings.finger_thickness,  "0.5 1.5"},
         {mjITEM_BUTTON,   "apply thickness",   2, NULL,                            " #602"},
@@ -1447,6 +1561,7 @@ void makeSettingsUI(int oldstate)
         {mjITEM_SLIDERINT,"sensor_prev_n",     2, &myMjClass.s_.sensor_n_prev_steps, "0 5"},
         {mjITEM_SLIDERINT,"state_mode",        2, &myMjClass.s_.state_sample_mode,   "0 5"},
         {mjITEM_SLIDERINT,"sensor_mode",       2, &myMjClass.s_.sensor_sample_mode,  "0 5"},
+        {mjITEM_SLIDERNUM,"time4action",       2, &myMjClass.s_.time_for_action,     "0.1 1.0"},
         {mjITEM_END}
     };
 
@@ -1522,9 +1637,9 @@ void makeObjectUI(int oldstate)
         {mjITEM_SLIDERINT, "z rotation",    3, &settings.object_z_rot_deg,  "0 360"},
         // {mjITEM_BUTTON,    "Reset to key",  3},
         // {mjITEM_BUTTON,    "Set key",       3},
-
-        
-
+        {mjITEM_BUTTON,   "visibility",    2, NULL,                   " #317"},
+        {mjITEM_BUTTON,   "spawn scene",   2, NULL,                   " #318"},
+        {mjITEM_SLIDERINT, "scene obj",   3, &settings.scene_objects,    "0 20"},
         {mjITEM_END}
     };
 
@@ -2184,7 +2299,7 @@ void uiEvent(mjuiState* state)
     {
         // process UI event
         mjuiItem* it = mjui_event(&ui1, state, &con);
-
+f
         // control section
         if( it && it->sectionid==SECT_CONTROL )
         {
@@ -2217,7 +2332,7 @@ void uiEvent(mjuiState* state)
 
             switch (it->itemid)
             {
-                case 7:
+                case 6:
                     std::cout << "Applying finger thickness of " << settings.finger_thickness << " mm\n";
                     myMjClass.set_finger_thickness(settings.finger_thickness * 1e-3);
                     myMjClass.reset();
@@ -2231,7 +2346,8 @@ void uiEvent(mjuiState* state)
             // std::cout << "case " << it->itemid << '\n';
             switch (it->itemid)
             {
-                case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7: {
+                case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7: 
+                case 8: case 9: case 10: case 11: case 12: case 13: case 14: case 15: {
                     myMjClass.set_action(it->itemid);
                     if (settings.complete_action_steps) {
                         myMjClass.action_step();
@@ -2239,11 +2355,29 @@ void uiEvent(mjuiState* state)
                     break;
                 }
 
-                case 8: {
+                case 16: case 17: case 18: case 19: {
+
+                    myMjClass.s_.gripper_X.value = settings.action_motor_mm * 1e-3;
+                    myMjClass.s_.gripper_prismatic_X.value = settings.action_motor_mm * 1e-3;
+                    myMjClass.s_.gripper_Y.value = settings.action_motor_mm * 1e-3;
+                    myMjClass.s_.gripper_revolute_Y.value = settings.action_motor_rad;
+                    myMjClass.s_.gripper_Z.value = settings.action_motor_mm * 1e-3;
+
+                    myMjClass.s_.base_X.value = settings.action_base_mm * 1e-3;
+                    myMjClass.s_.base_Y.value = settings.action_base_mm * 1e-3;
+                    myMjClass.s_.base_Z.value = settings.action_base_mm * 1e-3;
+                    myMjClass.s_.base_roll.value = settings.action_base_rad;
+                    myMjClass.s_.base_pitch.value = settings.action_base_rad;
+                    myMjClass.s_.base_yaw.value = settings.action_base_rad;
+                    break;
+                }
+
+                case 20: {
                     double reward = myMjClass.reward();
                     std::cout << "Reward is " << reward << '\n';
                     std::cout << "Cumulative reward is "
                         << myMjClass.env_.cumulative_reward << '\n';
+                    break;
                 }
             }
 
@@ -2283,24 +2417,24 @@ void uiEvent(mjuiState* state)
                 break;
             }
             case 2: {            // Print forces
-                luke::Forces f = luke::get_object_forces(myMjClass.model, myMjClass.data);
+                luke::Forces_faster f = luke::get_object_forces_faster(myMjClass.model, myMjClass.data);
                 f.print();
                 break;
             }
             case 3: {            // Print ground forces
-                luke::Forces f = luke::get_object_forces(myMjClass.model, myMjClass.data);
+                luke::Forces_faster f = luke::get_object_forces_faster(myMjClass.model, myMjClass.data);
                 f.print_gnd_global();
                 f.print_gnd_local(); 
                 break;
             }
             case 4: {            // Print object forces
-                luke::Forces f = luke::get_object_forces(myMjClass.model, myMjClass.data);
+                luke::Forces_faster f = luke::get_object_forces_faster(myMjClass.model, myMjClass.data);
                 f.print_obj_global();
                 f.print_obj_local(); 
                 break;
             }
             case 5: {            // Print all forces
-                luke::Forces f = luke::get_object_forces(myMjClass.model, myMjClass.data);
+                luke::Forces_faster f = luke::get_object_forces_faster(myMjClass.model, myMjClass.data);
                 f.print_all_global();
                 f.print_all_local(); 
                 break;
@@ -2336,7 +2470,7 @@ void uiEvent(mjuiState* state)
                 break;
             }
             case 12: {          // randomise all colours
-                luke::randomise_all_colours(myMjClass.model, MjType::generator);
+                luke::randomise_all_object_colours(myMjClass.model, MjType::generator);
                 myMjClass.randomise_ground_colour();
                 myMjClass.randomise_finger_colours();
                 break;
@@ -2407,6 +2541,7 @@ void uiEvent(mjuiState* state)
                 std::cout << "Wiping all segment forces\n";
                 break;
             }
+
             case 21: {          // apply gram force
                 if (not myMjClass.s_.curve_validation) {
                         myMjClass.s_.curve_validation = true;
@@ -2416,9 +2551,19 @@ void uiEvent(mjuiState* state)
                 std::cout << "Applying tip force of " << settings.gram_force * 100 << "grams\n";
                 break;
             }
-            // case 21: seg num int slider
-            // case 22: seg frc num slider
-            // case 23: seg frc moment slider
+            
+            case 30: {          // set object visibility
+                static bool visible = false; // default case is false
+                visible = not visible;
+                luke::set_object_visibility(myMjClass.model, visible);
+                std::cout << "Setting hidden object visibility to: " << visible << "\n";
+                break;
+            }
+            case 31: {          // spawn object scene
+                std::cout << "Spawning a scene with " << settings.scene_objects << " objects\n";
+                myMjClass.spawn_scene(settings.scene_objects, 0.2, 0.2, 0.0);
+                break;
+            }
             }
         }
 
@@ -2786,6 +2931,21 @@ void render_MS(GLFWwindow* window)
     // show sensor
     if( settings.sensor )
         sensorshow(smallrect);
+
+    // added by luke
+    if (settings.render_depth or settings.render_rgb) {
+        // // render::render_rgb(settings.render_rgb);
+        // // render::render_depth(settings.render_depth);
+        // static bool first_call = true;
+        // if (first_call) {
+        //     render::init_camera(myMjClass);
+        //     // render::init_window(myMjClass);
+        //     first_call = false;
+        // }
+        // render::read_rgbd();
+        // render::render_rgbd_feed();
+        std::cout << "render_depth and render_rgb are disabled\n";
+    }
 
     // added by luke
     lukesensorfigshow(smallrect);

@@ -2,6 +2,9 @@
 
 import os
 import sys
+import yaml
+import subprocess
+from copy import deepcopy
 
 # get the path to this file and insert it to python path (for mjpy.bind)
 pathhere = os.path.dirname(os.path.abspath(__file__))
@@ -17,6 +20,27 @@ from dataclasses import dataclass, asdict
 # random generators for training time and test time
 random_train = np.random.default_rng()
 random_test = np.random.default_rng() 
+
+def get_yaml_hash(filepath):
+  """
+  Get a simple hash of the text of the yaml file, stripping all whitespace
+  """
+
+  # simple string hash function which returns same hash each run (unlike Python hash())
+  def myHash(text:str):
+    hash=0
+    for ch in text:
+      hash = ( hash*281  ^ ord(ch)*997) & 0xFFFFFFFF
+    # return hash
+    return hex(hash)[2:].upper().zfill(8)
+
+  # read the yaml file as a string for hashing
+  with open(filepath, "r") as yamlfile:
+    yaml_string = yamlfile.read()
+    yaml_string = "".join(yaml_string.split())
+
+  # hash the yaml string for the task folder name
+  return myHash(yaml_string)
 
 class MjEnv():
 
@@ -43,25 +67,42 @@ class MjEnv():
 
   @dataclass
   class Parameters:
-    # key class parameters with default values
+
+    # training parameters
     max_episode_steps: int = 250
     object_position_noise_mm: int = 10
     object_rotation_noise_deg: int = 5
+
+    # file and testing parameters
     test_obj_per_file: int = 20
     task_reload_chance: float = 1.0 / float(test_obj_per_file)
-    test_trials_per_object: int = 1
+    test_trials_per_object: int = 3
     test_objects: int = 100
+
+    # model parameters (for loading xml files)
     num_segments: int = 8
     finger_thickness: float = 0.9e-3
+    finger_length: float = 235e-3
     finger_width: float = 28e-3
+    finger_modulus: float = 193e9
+    depth_camera: bool = False
+    XY_base_actions: bool = False
+    fixed_finger_hook: bool = True
+    finger_hook_angle_degrees: float = 90.0
+    finger_hook_length: float = 35e-3
+    segment_inertia_scaling: float = 50.0
+    fingertip_clearance: float = 10e-3
 
-  def __init__(self, seed=None, noload=None, num_segments=None, finger_width=None):
+  def __init__(self, seed=None, noload=None, num_segments=None, finger_width=None, 
+               depth_camera=None, finger_thickness=None, finger_modulus=None,
+               log_level=0):
     """
     A mujoco environment, optionally set the random seed or prevent loading a
     model, in which case the user should call load() before using the class
     """
 
     self.params = MjEnv.Parameters()
+    self.load_next = MjEnv.Parameters() # for xml loading, other params do nothing
 
     # define file structure
     self.task_xml_folder = "task"
@@ -69,20 +110,21 @@ class MjEnv():
     self.task_xml_template = "gripper_task_{}.xml"
 
     # general class settings
-    self.log_level = 0
+    self.log_level = log_level
     self.disable_rendering = True
+    self.prevent_reload = False
+    self.use_yaml_hashing = False
 
     # initialise class variables
     self.test_in_progress = False
     self.test_completed = False
 
-    # how many segments to load next time, default is params.num_segments
-    if num_segments == None: self.load_num_segments = self.params.num_segments
-    else: self.load_num_segments = num_segments
-
-    # what finger width to load, default is params.finger_width
-    if finger_width == None: self.load_finger_width = self.params.finger_width
-    else: self.load_finger_width = finger_width
+    # if not given values, set to defaults from the dataclass
+    if num_segments is not None: self.load_next.num_segments = num_segments
+    if finger_width is not None: self.load_next.finger_width = finger_width
+    if finger_thickness is not None: self.load_next.finger_thickness = finger_thickness
+    if finger_modulus is not None: self.load_next.finger_modulus = finger_modulus
+    if depth_camera is not None: self.load_next.depth_camera = depth_camera
 
     # calculate how many files we need to reserve for testing
     self.testing_xmls = int(np.ceil(self.params.test_objects / float(self.params.test_obj_per_file)))
@@ -90,13 +132,14 @@ class MjEnv():
     # create mujoco instance
     self.mj = MjClass()
     if self.log_level == 0: self.mj.set.debug = False
+    elif self.log_level >= 4: self.mj.set.debug = True
 
     # seed the environment
     self.myseed = None
     self.seed(seed)
 
     # load the mujoco models, if not then load() must be run by the user
-    if noload is not True: self.load(num_segments=self.load_num_segments)
+    if noload is not True: self.load()
 
     # initialise tracking variables
     self.track = MjEnv.Track()
@@ -106,21 +149,122 @@ class MjEnv():
     # initialise heuristic parameters
     self._initialise_heuristic_parameters()
 
+    # set default rgbd camera size
+    self.rgbd_width = 848
+    self.rgbd_height = 480
+
     return
 
   # ----- semi-private functions, advanced use ----- #
+
+  def _auto_generate_xml_file(self, object_set, use_hashes=False, silent=True, force=False):
+    """
+    Automatically generate the xml file that we need. Note this function
+    overrides the currently set mjcf path to the path that leads to the
+    autogenerated file.
+    """
+
+    # tempory fix for backwards compatibility
+    if object_set.startswith("set7"): use_hashes = False
+
+    # first we need to set the gripper.yaml file details
+    repo_path = os.path.dirname(os.path.dirname(pathhere))
+    description_path = repo_path + "/description"
+    config_folder = "config"
+    config_file = "gripper.yaml"
+    mjcf_folder = "mjcf"
+    yaml_path = f"{description_path}/{config_folder}/{config_file}"
+    with open(yaml_path) as file:
+      gripper_details = yaml.safe_load(file)
+
+    original_details = deepcopy(gripper_details)
+
+    # override with our settings
+    c = "gripper_config"
+    p = "gripper_params"
+    gripper_details[c]["fixed_hook_segment"] = self.load_next.fixed_finger_hook
+    gripper_details[c]["num_segments"] = self.load_next.num_segments
+    gripper_details[c]["xy_base_joint"] = self.load_next.XY_base_actions
+    # gripper_details[c]["xy_base_rotation"] = self.load_next.  not added yet
+    # gripper_details[c]["z_base_rotation"] = self.load_next.  not added yet
+
+    # ignore finger thickness setting, do manual setting. Note that myfunctions.cpp
+    # also ignores this setting and requires a manual override
+    # gripper_details[p]["finger_thickness"] = self.load_next.finger_thickness
+
+    gripper_details[p]["finger_width"] = self.load_next.finger_width
+    gripper_details[p]["finger_E"] = self.load_next.finger_modulus
+    gripper_details[p]["hook_angle_degrees"] = self.load_next.finger_hook_angle_degrees
+    gripper_details[p]["segment_inertia_scaling"] = self.load_next.segment_inertia_scaling
+    gripper_details[p]["fingertip_clearance"] = self.load_next.fingertip_clearance
+    gripper_details[p]["finger_length"] = self.load_next.finger_length
+    gripper_details[p]["hook_length"] = self.load_next.finger_hook_length
+
+    # now override the existing file with our new changes
+    with open(yaml_path, "w") as outfile:
+      yaml.dump(gripper_details, outfile, default_flow_style=False)
+
+    # determine the task name
+    N = self.load_next.num_segments
+    W = self.load_next.finger_width
+    if use_hashes:
+      yaml_hash = get_yaml_hash(yaml_path)
+      taskname = f"gripper_N{N}_H{yaml_hash}"
+    else:
+      taskname = f"gripper_N{N}_{W*1e3:.0f}"
+
+    # generate if the task folder does not already exist
+    if not os.path.exists(f"{repo_path}/{mjcf_folder}/{object_set}/{taskname}") or force:
+
+      if self.log_level > 1:
+        print(f"Target not found, generating: {repo_path}/{mjcf_folder}/{object_set}/{taskname}")
+
+      # determine what machine we are running on to adjust the make command
+      machine = self._get_machine()
+      if machine == "luke-laptop":
+        m = "luke"
+      elif machine == "luke-PC":
+        m = "lab"
+      elif machine == "operator-PC":
+        m = "lab-op"
+      elif machine == "zotac-PC":
+        m = "zotac"
+      else:
+        raise RuntimeError(f"MjEnv()._auto_generate_xml_file() does not recognise this machine: {machine}")
+      
+      if self.log_level > 1:
+        print(f"MjEnv()._auto_generate_xml_file() found machine '{machine}'")
+
+      # now run make in order to generate the files for this object set
+      silence = "-s" if silent else ""
+      hash_str = "yes" if use_hashes else "no"
+      make = f"make {silence} {m} sets SET={object_set} EXTRA_COPY_TO_MERGE_SETS=yes USE_HASHES={hash_str}"
+      subprocess.run([make], shell=True, cwd=repo_path)
+
+    else:
+      if self.log_level > 0:
+        print(f"MjEnv._auto_generate_xml_file() found that '{repo_path}/{mjcf_folder}/{object_set}/{taskname}' already exists. Nothing generated - use force=True to force generation.")
+
+    # override the current mjcf path with the new path
+    self.mj.model_folder_path = f"{repo_path}/{mjcf_folder}"
+
+    # restore the gripper.yaml file to its original state
+    with open(yaml_path, "w") as outfile:
+      yaml.dump(original_details, outfile, default_flow_style=False)
+
+    return taskname
 
   def _set_finger_variables(self, num_segments=None, width=None):
     """
     Set the number of segments in use and also the finger width. The available
     options will depend on the object set chosen, None means use the value in
-    params
+    params. This function is ignored if auto_generate=True in _load_object_set
     """
 
     debug_fcn = False
 
-    if num_segments is None: num_segments = self.params.num_segments
-    if width is None: width = self.params.finger_width
+    if num_segments is None: num_segments = self.load_next.num_segments
+    if width is None: width = self.load_next.finger_width
 
     # ensure width is in integer millimeters
     if width < 1:
@@ -148,23 +292,22 @@ class MjEnv():
 
     # apply the chosen width option
     if width_options == []:
-      self.load_finger_width = 28e-3 # hardcoded default
+      self.load_next.finger_width = 28e-3 # hardcoded default
       self.task_xml_folder = self.task_folder_template.format(num_segments)
       if width != 28:
         print(f"MjEnv warning: selected finger width of {width} is not available from this object set")
     else:
       if width in width_options:
-        self.load_finger_width = width * 1e-3 # convert from mm to m
+        self.load_next.finger_width = width * 1e-3 # convert from mm to m
         self.task_xml_folder = self.task_folder_template.format("{0}_{1}".format(num_segments, width))
       else:
         raise RuntimeError(f"chosen width of {width} not found amoung width options: {width_options}")
 
     # apply the selected finger width in mujoco (EI change requires reset to finalise)
-    self.mj.set_finger_width(self.load_finger_width)
-    self.params.finger_width = self.load_finger_width
+    self.mj.set_finger_width(self.load_next.finger_width)
 
     if debug_fcn:
-      print("the width which will be loaded is:", self.load_finger_width)
+      print("the width which will be loaded is:", self.load_next.finger_width)
       print("final task_xml_folder is:", self.task_xml_folder)
 
   def _load_xml(self, test=None, index=None):
@@ -184,10 +327,10 @@ class MjEnv():
       r = random_train.integers(self.testing_xmls, self.testing_xmls + self.training_xmls)
       filename = self.task_xml_template.format(r)
 
-    if self.log_level > 1: 
+    if self.log_level >= 3: 
       print("Load path: ", self.mj.model_folder_path
             + self.mj.object_set_name + "/" + self.task_xml_folder)
-    if self.log_level > 0: print("Loading xml: ", filename)
+    if self.log_level >= 2: print("Loading xml: ", filename)
 
     # load the new task xml (old model/data are deleted)
     self.mj.load_relative(self.task_xml_folder + '/' + filename)
@@ -195,12 +338,26 @@ class MjEnv():
 
     self.reload_flag = False
 
-    # get the number of segments currently in use
+    # get the parameters from the newly loaded file
     self.params.num_segments = self.mj.get_N()
+    self.params.finger_width = self.mj.get_finger_width()
+    self.params.finger_thickness = self.mj.get_finger_thickness()
+    self.params.finger_modulus = self.mj.get_finger_modulus()
+    self.params.finger_length = self.mj.get_finger_length()
+    self.params.finger_hook_angle_degrees = self.mj.get_finger_hook_angle_degrees()
+    self.params.fixed_finger_hook = self.mj.is_finger_hook_fixed()
+    self.params.fingertip_clearance = self.mj.get_fingertip_clearance()
+    self.params.XY_base_actions = self.mj.using_xyz_base_actions()
+    self.params.finger_hook_length = self.mj.get_finger_hook_length()
 
-  def _load_object_set(self, name=None, mjcf_path=None, num_segments=None, finger_width=None):
+    # assume loading is correct and directly copy
+    self.params.segment_inertia_scaling = self.load_next.segment_inertia_scaling
+
+  def _load_object_set(self, name=None, mjcf_path=None, num_segments=None, 
+                       finger_width=None, auto_generate=False, use_hashes=True):
     """
-    Load and determine how many model xml files are in the object set
+    Load in an object set and sort out details (like number of xml files).
+    This functions does NOT load a new XML file from this object set.
     """
 
     debug_fcn = False
@@ -211,8 +368,22 @@ class MjEnv():
     # if a object set name is given, override, otherwise we use default
     if name != None: self.mj.object_set_name = name
 
-    # how many segments and what finger width are in use
-    self._set_finger_variables(num_segments=num_segments, width=finger_width)
+    if auto_generate:
+
+      # warn the user that the given path value is going to be overriden
+      if mjcf_path is not None:
+        print(f"MjEnv() warning: given mjcf_path='{mjcf_path}' is about to be overriden by MjEnv._auto_generate_xml_file()")
+
+      # create the file we need
+      self.task_xml_folder = self._auto_generate_xml_file(self.mj.object_set_name, use_hashes=use_hashes)
+
+      # apply the selected finger width in mujoco (EI change requires reset to finalise)
+      self.mj.set_finger_width(self.load_next.finger_width)
+
+    else:
+
+      # manually set the task name we should look for
+      self._set_finger_variables(num_segments=num_segments, width=finger_width)
 
     # check the mjcf_path is correctly formatted
     if self.mj.model_folder_path[-1] != '/':
@@ -223,11 +394,13 @@ class MjEnv():
                       + '/' + self.task_xml_folder + '/')
 
     # find out how many xmls are available for training/testing
-    xml_files = [x for x in os.listdir(self.xml_path) if os.path.isdir(self.xml_path + "/" + x) is False]
+    self.testing_xmls = int(np.ceil(self.params.test_objects / float(self.params.test_obj_per_file)))
+    xml_files = [x for x in os.listdir(self.xml_path) if os.path.isdir(self.xml_path + "/" + x) is False
+                                                        and x.endswith(".xml")]
     self.training_xmls = len(xml_files) - self.testing_xmls
 
-    if debug_fcn:
-      print("_load_object_set gives xml path:", self.xml_path)
+    if debug_fcn or self.log_level >= 2:
+      print("_load_object_set() gives xml path:", self.xml_path)
       print(f"Training xmls: {self.training_xmls}, testing xmls: {self.testing_xmls}")
 
     if self.training_xmls < 1:
@@ -298,7 +471,7 @@ class MjEnv():
 
     # if we have exceeded our time limit
     if self.track.current_step >= self.params.max_episode_steps:
-      if self.log_level > 1 or self.mj.set.debug: 
+      if self.log_level >= 3 or self.mj.set.debug: 
         print("is_done() = true (in python) as max step number exceeded")
       return True
 
@@ -307,13 +480,107 @@ class MjEnv():
 
     return done
     
+  def _init_rgbd(self, width=None, height=None):
+    """
+    Initialise an rgbd camera in the simulation. Default size matches realsense.
+    """
+    
+    self.rgbd_enabled = self.mj.init_rgbd()
+    if self.rgbd_enabled:
+      self.params.depth_camera = True
+      self._set_rgbd_size(width, height)
+    else:
+      if self.log_level > 0:
+        print("MjEnv() failed to initialise an RGBD camera, not enabled in compilation")
+      self.params.depth_camera = False
+
+    # return if the camera is running or not
+    return self.params.depth_camera
+
+  def _set_rgbd_size(self, width=None, height=None):
+    """
+    Set the size of simulated RGBD images
+    """
+
+    if width is None: width = self.rgbd_width
+    if height is None: height = self.rgbd_height
+
+    self.rgbd_enabled = self.mj.rendering_enabled()
+    self.rgbd_width = width
+    self.rgbd_height = height
+
+    if self.rgbd_enabled:
+      self.mj.set_RGBD_size(width, height)
+    else:
+      if self.log_level > 0:
+        print("MjClass rendering is disabled in compilation settings, no RGBD images possible")
+      self.rgbd_enabled = False
+
+  def _get_rgbd_image(self):
+    """
+    Return rgbd data from the current state of the simulation, rescaled to match
+    the size of the rgbd data from real life.
+
+    Returns two numpy arrays ready for conversion into torch:
+      - rgb    (with shape 3 x width x height)
+      - depth  (with shape 1 x width x height)
+    """
+
+    if not self.rgbd_enabled:
+      if self.log_level > 0:
+        print("MjClass rendering not enabled, unabled to get RGBD image")
+      if self.params.depth_camera:
+        if self.log_level > 0:
+          print("self.params.depth_camera is True, running _init_rgbd()")
+        self._init_rgbd()
+        if not self.rgbd_enabled: 
+          print("Warning: MjClass rendering failed, disabled by compilation, _get_rgbd() is returning NONE")
+          return
+      else: 
+        print("Warning: MjClass rendering not enabled and self.params.depth_camera is false, unabled to get RGBD image, _get_rgbd() returning NONE")
+        return
+
+    # get rgbd information out of the simulation (unit8, float)
+    rgb, depth = self.mj.get_RGBD_numpy()
+
+    # reshape the numpy arrays to the correct aspect ratio
+    rgb = rgb.reshape(self.rgbd_height, self.rgbd_width, 3)
+    depth = depth.reshape(self.rgbd_height, self.rgbd_width, 1)
+
+    # numpy likes image arrays like this: width x height x channels
+    # torch likes image arrays like this: channels x width x height
+    rgb = np.einsum("ijk->kji", rgb)
+    depth = np.einsum("ijk->kji", depth)
+
+    return rgb, depth # ready for conversion to torch tensors
+  
+  def _plot_rgbd_image(self):
+    """
+    Get and then plot an rgbd image from the simulation. Use this for debugging only
+    """
+
+    import matplotlib.pyplot as plt
+    fig, axs = plt.subplots(2, 1)
+    
+    rgb, depth = self._get_rgbd_image()
+
+    # numpy likes image arrays like this: height x width x channels (ie rows x columns x dim)
+    # torch likes image arrays like this: channels x width x height
+    # hence convert from torch style back to numpy style for plotting
+    axs[0].imshow(np.einsum("ijk->kji", rgb)) # swap to numpy style rows/cols (eg 3x640x480 -> 480x640x3)
+    axs[1].imshow(np.transpose(depth[0])) # remove the depth 'channel' then swap (eg 1x640x480 -> 480x640)
+
+    plt.show()
+
   def _next_observation(self):
     """
     Returns the next observation from the simuation
     """
 
-    obs = self.mj.get_observation()
-    return np.array(obs)
+    # get an observation as a numpy array
+    obs = self.mj.get_observation_numpy()
+
+    return obs
 
   def _event_state(self):
     """
@@ -350,12 +617,6 @@ class MjEnv():
     """
     Spawn an object into the simulation randomly
     """
-
-    # OLD CODE COMPATIBLE: added 6/3/23, can delete in future
-    # if there is no angular noise parameter, set it to zero
-    if not hasattr(self.params, "object_rotation_noise_deg"):
-      print("OLD CODE: no angular position noise setting, creating one with 0deg")
-      self.params.object_rotation_noise_deg = 0
 
     global random_test
     global random_train
@@ -475,6 +736,23 @@ class MjEnv():
     }
 
   # ----- public functions ----- #
+
+  def yield_load(self):
+    """
+    Get the yield load of the current fingers, even if we have not fully loaded
+    them in yet
+    """
+
+    debug_fcn = False
+
+    loaded_yield = self.mj.yield_load()
+    if debug_fcn: print("The loaded yield is", loaded_yield)
+
+    to_load_yield = self.mj.yield_load(self.params.finger_thickness,
+                                       self.load_next.finger_width)
+    if debug_fcn: print("The to load yield is", to_load_yield)
+
+    return to_load_yield
 
   def start_heuristic_grasping(self, realworld=False):
     """
@@ -834,41 +1112,38 @@ class MjEnv():
     return asdict(self.params)
 
   def load(self, object_set_name=None, object_set_path=None, index=None, 
-           num_segments=None, finger_width=None, finger_thickness=None):
+           num_segments=None, finger_width=None, finger_thickness=None,
+           finger_modulus=None, depth_camera=None, auto_generate=True,
+           use_hashes=True):
     """
     Load and prepare the mujoco environment, uses defaults if arguments are not given.
     This function sets the 'params' for the class as well.
     """
 
-    # old code compatibility: can delete once all models have finger width options
-    try:
-      test1 = self.load_finger_width
-      test2 = self.params.finger_width
-    except AttributeError as e:
-      print("MjEnv old code catch, error is:", e)
-      self.load_finger_width = 28e-3
-      self.params.finger_width = 28e-3
+    # put inputs into the 'load_next' datastructure
+    if num_segments is not None: self.load_next.num_segments = num_segments
+    if finger_width is not None: self.load_next.finger_width = finger_width
+    if finger_thickness is not None: self.load_next.finger_thickness = finger_thickness
+    if finger_modulus is not None: self.load_next.finger_modulus = finger_modulus
+    if depth_camera is not None: self.load_next.depth_camera = depth_camera
 
-    # if not given an input, use class value
-    if num_segments is None: set_N = self.load_num_segments
-    else: set_N = num_segments
-
-    if finger_width is None: set_W = self.load_finger_width
-    else: set_W = finger_width
-
-    if finger_thickness is None: set_T = self.params.finger_thickness
-    else: set_T = finger_thickness
-
-    # set the finger thickness (changes only applied upon reset(), causes hard_reset() if changed)
-    self.mj.set_finger_thickness(set_T)
-    self.params.finger_thickness = self.mj.get_finger_thickness()
+    # set the thickness/modulus (changes only applied upon reset(), causes hard_reset() if changed)
+    self.mj.set_finger_thickness(self.load_next.finger_thickness) # required as xml thickness ignored
+    self.mj.set_finger_modulus(self.load_next.finger_modulus) # duplicate xml setting
 
     self._load_object_set(name=object_set_name, mjcf_path=object_set_path,
-                          num_segments=set_N, finger_width=set_W)
+                          auto_generate=auto_generate, use_hashes=use_hashes)
     self._load_xml(index=index)  
 
     # auto generated parameters
     self._update_n_actions_obs()
+
+    # check if the depth camera is included in the object set chosen
+    if self.load_next.depth_camera: 
+      self.load_next.depth_camera = self._init_rgbd()
+    else:
+      self.params.depth_camera = False
+      self.rgbd_enabled = False
 
     # reset any lingering goal defaults
     self.mj.reset_goal()
@@ -877,8 +1152,6 @@ class MjEnv():
     """
     Perform an action and step the simulation until it is resolved
     """
-
-    t0 = time.time()
 
     # safety check: if step is called when done=true
     if self.track.is_done:
@@ -912,10 +1185,6 @@ class MjEnv():
     if done and self.test_in_progress:
       self._monitor_test()
 
-    t1 = time.time()
-
-    if self.log_level > 2: print("MjEnv step() time was ", t1 - t0)
-
     return to_return
 
   def reset(self, hard=None, timestep=None, realworld=False):
@@ -929,7 +1198,7 @@ class MjEnv():
     self.track = MjEnv.Track()
 
     # there is a small chance we reload a new random task
-    if not self.test_in_progress and not realworld:
+    if not self.test_in_progress and not realworld and not self.prevent_reload:
       if (random_train.random() < self.params.task_reload_chance
           or self.reload_flag):
         self._load_xml()
@@ -946,6 +1215,9 @@ class MjEnv():
     if not realworld:
       self._spawn_object()
 
+    # if we are using a camera, randomise colours
+    if self.params.depth_camera: self.mj.randomise_every_colour()
+
     return self._next_observation()
 
   def render(self):
@@ -957,15 +1229,15 @@ class MjEnv():
 
       self.mj.render()
 
-      if self.log_level > 2:
-        print('MjEnv render update:')
-        print(f'\tStep: {self.track.current_step}')
-        print(f'\tLast action: {self.track.last_action}')
-        print(f'\tLast reward: {self.track.last_reward:.3f}')
-        print(f'\tCumulative reward: {self.track.cumulative_reward:.3f}')
-        print(f'\tDone: {self.track.is_done}')
-        print(f'\tTesting: {self.test_in_progress}')
-        print()
+    if self.log_level >= 3:
+      print('MjEnv render update:')
+      print(f'\tStep: {self.track.current_step}')
+      print(f'\tLast action: {self.track.last_action}')
+      print(f'\tLast reward: {self.track.last_reward:.3f}')
+      print(f'\tCumulative reward: {self.track.cumulative_reward:.3f}')
+      print(f'\tDone: {self.track.is_done}')
+      print(f'\tTesting: {self.test_in_progress}')
+      print()
 
   def close(self):
     """
@@ -977,14 +1249,150 @@ if __name__ == "__main__":
 
   # import pickle
 
-  mj = MjEnv(noload=True)
+  mj = MjEnv(noload=True, depth_camera=True, log_level=2, seed=122)
+  mj.disable_rendering = True
+  mj.mj.set.mujoco_timestep = 3.187e-3
+  mj.mj.set.auto_set_timestep = False
 
-  mj.load_finger_width = 24e-3
+  # mj.load("set7_fullset_1500_50i_updated", num_segments=8, finger_width=28, finger_thickness=0.9e-3)
+  # mj._spawn_object()
+  # mj._set_rgbd_size(848, 480)
+  # mj._set_rgbd_size(1000, 1000)
 
-  mj.load("set_fullset_795", num_segments=7, finger_width=None, finger_thickness=1.0e-3)
+  # widths = [24e-3, 28e-3]
+  # segments = [8]
+  # xy_base = [False, True]
+  # inertia = [1, 50]
+
+  mj.load_next.num_segments = 8
+  angles = [90]
+  for a in angles:
+    mj.load_next.finger_hook_angle_degrees = a
+    mj.load_next.finger_hook_length = 100e-3
+    mj.load_next.XY_base_actions = True
+    mj._auto_generate_xml_file("set_test_large", use_hashes=True, silent=True)
+
+  # for w in widths:
+  #   for N in segments:
+  #     for xy in xy_base:
+  #       for i in inertia:
+  #         mj.load_next.finger_width = w
+  #         mj.load_next.num_segments = N
+  #         mj.load_next.XY_base_actions = xy
+  #         mj.load_next.segment_inertia_scaling = i
+  #         mj._auto_generate_xml_file("set8_fullset_1500", use_hashes=True)
 
   exit()
 
+  mj.params.test_objects = 20
+  # mj.load_next.finger_hook_angle_degrees = 45.678
+  mj.load_next.finger_width = 28e-3
+  # mj.load_next.fingertip_clearance = 0.143e-3
+  # mj.load_next.finger_length = 200e-3
+  # mj.load_next.finger_thickness = 1.9e-3
+
+  mj.load("set_test", depth_camera=True)
+  mj._spawn_object()
+  mj.reset()
+
+  print(mj.get_parameters())
+
+  mj._plot_rgbd_image()
+
+  mj.reset()
+  mj._plot_rgbd_image()
+
+  # name = mj._auto_generate_xml_file("set_test", use_hashes=True)
+
+  # print(name)
+
+  exit()
+
+  num = 10000
+  mj.mj.tick()
+
+  for i in range(num):
+    mj._get_rgbd_image()
+
+  time_taken = mj.mj.tock()
+  print(f"Time taken for {num} fcn calls was {time_taken:.3f} seconds")
+
+  rgb, depth = mj._get_rgbd_image()
+  print(f"rgb size is {rgb.shape}")
+  print(f"depth size is {depth.shape}")
+
+  mj._plot_rgbd_image()
+
+  mj._set_rgbd_size(250, 150)
+  mj._plot_rgbd_image()
+
+  exit()
+
+  import sys
+
+  # sizes of python lists (rgb, depth) = (25.9, 8.6) MB
+  rgbd = mj.mj.get_RGBD()
+  print(f"Size of rgb is: {sys.getsizeof(rgbd.rgb) * 1e-6:.3f} MB")
+  print(f"Size of depth is: {sys.getsizeof(rgbd.depth) * 1e-6:.3f} MB")
+
+  # sizes of numpy arrays -> (3.2, 4.3) MB, uint8 is the same as uint_fast8
+  rgb, depth = mj.mj.get_RGBD_numpy()
+  print(f"Size of numpy rgb is: {sys.getsizeof(rgb) * 1e-6:.3f} MB")
+  print(f"Size of numpy depth is: {sys.getsizeof(depth) * 1e-6:.3f} MB")
+
+  exit()
+
+  # sizes = [(720, 740), (200, 740), (720, 200),
+  #          (1500, 1500)]
+  
+  # sizes = [(900, 1200)]
+
+  # import matplotlib.pyplot as plt
+  # fig, axs = plt.subplots(len(sizes), 1)
+
+  # for i, (h, w) in enumerate(sizes):
+  #   rgb, d = mj.mj.get_RGBD_numpy(h, w)
+  #   axs.imshow(rgb.reshape(h, w, 3))
+
+  # fig2, axs2 = plt.subplots(3, 1)
+
+  # from torch.nn.functional import interpolate
+  # import torch
+  # from torchvision import transforms
+
+  # resizes= [0.5, 0.1, 0.01]
+  # for i, x in enumerate(resizes):
+
+    # rgbarr = interpolate(torch.tensor([np.transpose(rgb.reshape(h, w, 3))]), scale_factor=x)
+    # axs2[i].imshow(np.array(rgbarr[0]).T)
+    
+    # trans = transforms.Compose([transforms.Resize((100, 100))])
+    # img = trans(torch.tensor(np.transpose(rgb.reshape(h, w, 3))))
+    # axs2[i].imshow(np.array(img).T)
+
+    # trans = transforms.Compose([transforms.Resize((100, 100))])
+    # img = trans(torch.tensor(rgb.reshape(3, h, w)))
+    # axs2[i].imshow(np.array(img).T)
+
+  # rgbnp, depthnp = mj.mj.get_RGBD_numpy()
+  # print(f"Size of numpy rgb is: {sys.getsizeof(rgbnp) * 1e-6:.3f} MB")
+  # print(f"Size of numpy depth is: {sys.getsizeof(depthnp) * 1e-6:.3f} MB")
+
+  # print("The rgb information is", rgbd.rgb[:10])
+  # print("The depth information is", rgbd.depth[:10])
+
+  # print(rgbnp)
+
+  # print(isinstance(rgbnp, np.ndarray))
+  # print(rgbnp.dtype)
+
+  # import matplotlib.pyplot as plt
+
+  # plt.imshow(rgbnp.reshape(720, 740, 3))
+  # plt.show()
+
+  # plt.imshow(depthnp.reshape(720, 740))
+  # plt.show()
 
   # mj.mj.set.set_sensor_prev_steps_to(3)
   mj.mj.set.sensor_n_prev_steps = 1

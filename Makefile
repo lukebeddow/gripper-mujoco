@@ -33,6 +33,12 @@ OUTPY := rl/env/mjpy
 # default object set name
 DEFAULT_OBJECTSET = set6_fullset_800_50i
 
+# where is the gripper-description submodule (if we have it)
+DESCRIPTION_MODULE := description
+
+# where are we storing mjcf files
+MJCF_FOLDER := mjcf
+
 # do we want to prevent any rendering libraries from compiling (1=True, 0=false)
 PREVENT_RENDERING = 0
 
@@ -46,18 +52,18 @@ OPTIM = -O2
 endif
 
 # define library locations - this file contains user specified options
-PREVENT_BOOST = 1 # always disable boost, in future remove boost files from repo
+DEPENDS_BOOST = 0 # by default do not depend on boost
 include buildsettings.mk
 
 # ----- compilation settings ----- #
 
-# define compiler flags and libraries
-COMMON = $(OPTIM) -std=c++11 -mavx -pthread -Wl,-rpath,'$$ORIGIN' $(DEFINE_VAR) \
+COMMON = $(OPTIM) -std=c++11 -mavx -pthread $(DEFINE_VAR) \
+		 -Wl,-rpath='$(MUJOCO_LIB)' \
 		 -DLUKE_DEFAULTOBJECTS='"$(DEFAULT_OBJECTSET)"' \
 		 -I$(MUJOCO_PATH)/include \
 		 -I$(PYBIND_PATH)/include \
 		 -I$(ARMA_PATH)/include \
-		 -I$(PYTHON_PATH) \
+		 -I$(PYTHON_INCLUDE) \
 		 -I$(RENDER_PATH)/include
 
 PYBIND = $(COMMON) -fPIC -Wall -shared
@@ -74,8 +80,8 @@ else
 UITOOLS = $(BUILDDIR)/uitools.o
 endif
 
-# are we going to prevent any boost libraries compiling
-ifeq ($(PREVENT_BOOST), 1)
+# if we don't depend on boost, remove boost from src files
+ifeq ($(DEPENDS_BOOST), 0)
 SOURCES := $(filter-out $(SOURCEDIR)/boostdep.cpp, $(SOURCES))
 endif
 
@@ -116,6 +122,17 @@ debug: cpp
 
 .PHONY: cluster
 cluster: py $(OUTCPP)/test
+
+.PHONY: pc
+pc: cpp py lab
+
+.PHONY: sets
+sets:
+	$(info $(shell mkdir -p $(MJCF_FOLDER)))
+	$(MAKE) -C $(DESCRIPTION_MODULE) sets $(ARGS) EXTRA_COPY_TO="../../$(MJCF_FOLDER)" \
+		MUJOCO_PATH=$(MUJOCO_PATH) EXTRA_COPY_YES_TO_ALL=yes \
+		EXTRA_COPY_TO_OVERRIDE_EXISTING=yes \
+		PYTHON=$(PYTHON_EXE)
 
 # compile the uitools object file which is used by both cpp and python targets
 # ADDED -fPIC FOR CLUSTER TO WORK

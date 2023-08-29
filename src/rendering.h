@@ -5,7 +5,6 @@
 #include "uitools.h"
 #include "stdio.h"
 #include "string.h"
-// #include "glfw3.h"
 #include "stdlib.h"
 #include "GLFW/glfw3.h"
 
@@ -27,15 +26,23 @@ namespace render
 void mouse_button(GLFWwindow* window, int button, int act, int mods);
 void mouse_move(GLFWwindow* window, double xpos, double ypos);
 void scroll(GLFWwindow* window, double xoffset, double yoffset);
-void init(MjClass& myMjClass);
+void init_camera(MjClass& myMjClass);
+void init_window(MjClass& myMjClass);
+void resize_camera_window(int width, int height);
+void create_camera_window(int width, int height);
 void uiLayout(mjuiState* state);
 void reload_for_rendering(MjClass& myMjClass);
-bool render();
-void finish();
+bool render_window();
+bool render_camera();
+void render_rgbd_feed();
+void finish_window();
+void finish_camera();
 
 void lukesensorfigsinit();
 void lukesensorfigsupdate();
 void lukesensorfigshow(mjrRect rect);
+
+luke::RGBD read_rgbd();
 
 }
 

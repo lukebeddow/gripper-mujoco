@@ -31,7 +31,7 @@ public:
   // gripper physical constants - user set
   constexpr static double leadscrew_dist = 35e-3;
   constexpr static double finger_length = 235e-3;
-  constexpr static double hook_length = 39.5e-3;
+  constexpr static double hook_length = 35.0e-3;
 
   constexpr static double xy_lead = 4;
   constexpr static double xy_gear = 1.5;

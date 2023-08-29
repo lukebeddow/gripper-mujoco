@@ -13,7 +13,9 @@ from dataclasses import dataclass, asdict
 from copy import deepcopy
 import cProfile
 
-import wandb
+# import wandb # only imported if needed
+# import matplotlib # only imported if needed
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -44,21 +46,21 @@ class TrainDQN():
   class Parameters:
 
     # key learning hyperparameters
-    object_set: str = "set4_fullset_795"
+    object_set: str = "set8_fullset_1500"
     batch_size: int = 128  
     learning_rate: float = 5e-5
     gamma: float = 0.999 
     eps_start: float = 0.9
     eps_end: float = 0.05
     eps_decay: int = 4000
-    target_update: int = 100
+    target_update: int = 50
     num_episodes: int = 60000
     optimiser: str = "adam" # or "rmsprop"
     adam_beta1: float = 0.9
     adam_beta2: float = 0.999
 
     # memory replay
-    memory_replay: int = 50_000
+    memory_replay: int = 75_000
     min_memory_replay: int = 5000
 
     # HER settings
@@ -66,19 +68,26 @@ class TrainDQN():
     HER_mode: str = "final" # 'final' or 'future' or 'episode'
     HER_k: int = 4
 
+    # image training settings
+    use_images: bool = False
+    image_collection_only: bool = False
+    image_save_freq: int = 1000
+    no_sensor_data: bool = False
+
     # curriculum learning
     use_curriculum: bool = False
-    curriculum_ep_num: int = 8000
-    curriculum_object_set: str = "set4_fullset_795"
 
     # data logging settings
-    save_freq: int = 2000
-    test_freq: int = 2000
+    save_freq: int = 4000
+    test_freq: int = 4000
     plot_freq_s: int = 900
     wandb_freq_s: int = 900
 
   Transition = namedtuple('Transition',
                           ('state', 'action', 'next_state', 'reward'))
+  
+  ImgTransition = namedtuple('Transition',
+                          ('state', 'img', 'action', 'next_state', 'next_img', 'reward'))
 
   HER_Transition = namedtuple('Transition',
                     ('obs', 'action', 'next_obs', 'reward', 'goal', 'state'))                        
@@ -88,10 +97,11 @@ class TrainDQN():
 
   class ReplayMemory(object):
 
-    def __init__(self, capacity, device, HER=None, HERMethod="final", k=4):
+    def __init__(self, capacity, device, HER=None, HERMethod="final", k=4, imagedata=False):
       self.memory = deque([], maxlen=capacity)
       self.device = device
       self.HER = True if HER is True else False
+      self.imagedata = imagedata
       if self.HER:
         self.temp_memory = []
         self.HER_method = HERMethod
@@ -105,6 +115,8 @@ class TrainDQN():
       """Save a transition"""
       if self.HER:
         self.temp_memory.append(TrainDQN.HER_Transition(*args))
+      elif self.imagedata:
+        self.memory.append(TrainDQN.ImgTransition(*args))
       else:
         self.memory.append(TrainDQN.Transition(*args))
 
@@ -128,6 +140,18 @@ class TrainDQN():
         return HER_sample
       else: return random.sample(self.memory, batch_size)
 
+    def batch(self, batch_size):
+      # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
+      # detailed explanation). This converts batch-array of Transitions
+      # to Transition of batch-arrays.
+      transitions = self.sample(batch_size)
+      if self.HER:
+        return TrainDQN.HER_Transition(*zip(*transitions))
+      elif self.imagedata:
+        return TrainDQN.ImgTransition(*zip(*transitions))
+      else:
+        return TrainDQN.Transition(*zip(*transitions))
+
     def __len__(self):
       return len(self.memory)
 
@@ -137,6 +161,7 @@ class TrainDQN():
       for item in tuple_of_tensors:
         lst.append(item.to(self.device))
       if self.HER: return TrainDQN.HER_Transition(*tuple(lst))
+      elif self.imagedata: return TrainDQN.ImgTransition(*tuple(lst))
       else: return TrainDQN.Transition(*tuple(lst))
 
     def all_to(self, device):
@@ -706,9 +731,10 @@ class TrainDQN():
 
       return
 
-  def __init__(self, run_name=None, group_name=None, device=None, use_wandb=None, 
-               no_plot=None, log_level=None, object_set=None, use_curriculum=None,
-               num_segments=None, finger_thickness=None, finger_width=None):
+  def __init__(self, run_name=None, group_name=None, device=None, use_wandb=False, 
+               no_plot=True, log_level=1, object_set=None, use_curriculum=None,
+               num_segments=None, finger_thickness=None, finger_width=None,
+               depth_camera=None, finger_modulus=None):
 
     # define key training parameters
     self.params = TrainDQN.Parameters()
@@ -719,12 +745,12 @@ class TrainDQN():
     self.last_test_data = None
     self.best_performance_txt_file_name = "best_performance"
     self.best_performance_template = "Best success rate = {0}\nOccured at episode = {1}"
+    self.test_performance_txt_file_name = "test_performance"
 
     # prepare environment, but don't load a model xml file yet
-    self.env = MjEnv(noload=True, num_segments=num_segments)
-    self.num_segments = num_segments
-    self.finger_thickness = finger_thickness
-    self.finger_width = finger_width
+    self.env = MjEnv(noload=True, num_segments=num_segments, depth_camera=depth_camera,
+                     finger_thickness=finger_thickness, finger_width=finger_width,
+                     finger_modulus=finger_modulus, log_level=log_level)
 
     # what machine are we on
     self.machine = self.env._get_machine()
@@ -741,13 +767,13 @@ class TrainDQN():
     self.savedir = "models/dqn/"
     if device is None: device = "cuda"
     self.set_device(device)
-    self.log_level = 1 if log_level is None else log_level
+    self.log_level = log_level
     self.params.use_curriculum = True if use_curriculum is True else False
     if object_set is not None: self.params.object_set = object_set
 
     # wandb options
     self.wandb_init_flag = False
-    self.use_wandb = use_wandb if use_wandb is not None else True
+    self.use_wandb = use_wandb
     self.wandb_note = ""
     self.wandb_project = "luke-gripper-mujoco"
     self.wandb_entity = "lbeddow"
@@ -756,8 +782,12 @@ class TrainDQN():
     self.HER_mode = None
     self.HER_k = None
 
-    # curriculum defaults
-    self.curriculum_applied = None
+    # curriculum defaults, add parameters to this dictionary
+    self.curriculum_params = {
+      "finished" : False,
+      "stage" : -1,
+      "metric" : None
+    }
 
     # if we are plotting graphs during this training
     if no_plot == True:
@@ -776,11 +806,7 @@ class TrainDQN():
     # are we using HER (python OVERRIDES cpp)
     self.env.mj.set.use_HER = self.params.use_HER
 
-    # apply any thickness changes and then load the object set from params
-    # if self.finger_thickness is not None: 
-    #   self.env.params.finger_thickness = self.finger_thickness
-    self.load_object_set(num_segments=self.num_segments, finger_thickness=self.finger_thickness,
-                         finger_width=self.finger_width)
+    self.load_object_set()
 
     # now update the environment with correct numbers of actions and observations
     self.env._update_n_actions_obs()
@@ -791,6 +817,80 @@ class TrainDQN():
     elif network == "loaded":
       # no need to load networks
       pass
+
+    elif isinstance(network, str):
+
+      if network.startswith("CNN_"):
+
+        splits = network.split("_")
+        width = int(splits[-2])
+        height = int(splits[-1])
+
+        print(f"image width = {width} and height = {height}")
+
+        # hardcoded for now!
+        if width == 25 and height == 25:
+          fcn_size = 256
+        elif width == 50 and height == 50:
+          fcn_size = 1600
+        elif width == 75 and height == 75:
+          fcn_size = 4096
+        elif width == 100 and height == 100:
+          fcn_size = 7744
+        else:
+          raise RuntimeError(f"CNN image width = {width} and height = {height} not recognised")
+
+        img_channels = 3
+        self.policy_net = networks.MixedNetwork(self.env.n_obs, img_channels, 
+                                                self.env.n_actions,
+                                                self.device, fcn_size).to(self.device)
+        self.target_net = networks.MixedNetwork(self.env.n_obs, img_channels, 
+                                                self.env.n_actions,
+                                                self.device, fcn_size).to(self.device)
+
+      elif network.startswith("CNN2_"):
+
+        splits = network.split("_")
+        width = int(splits[-2])
+        height = int(splits[-1])
+
+        img_channels = 3
+        img_size = (img_channels, width, height)
+
+        self.policy_net = networks.MixedNetwork2(self.env.n_obs, img_size, 
+                                                self.env.n_actions,
+                                                self.device).to(self.device)
+        self.target_net = networks.MixedNetwork2(self.env.n_obs, img_size, 
+                                                self.env.n_actions,
+                                                self.device).to(self.device)
+        
+      elif network.startswith("image_collection"):
+
+        splits = network.split("_")
+        width = int(splits[-2])
+        height = int(splits[-1])
+
+        self.params.image_collection_only = True
+
+        network = [150, 100, 50]
+        layers = [self.env.n_obs, *network, self.env.n_actions]
+        self.policy_net = networks.DQN_variable(layers, self.device).to(self.device)
+        self.target_net = networks.DQN_variable(layers, self.device).to(self.device)
+        self.target_net.load_state_dict(self.policy_net.state_dict())
+
+      # prepare to use image data
+      self.params.use_images = True
+      self.env._init_rgbd(width, height)
+
+      self.target_net.load_state_dict(self.policy_net.state_dict())
+
+      self.memory = TrainDQN.ReplayMemory(self.params.memory_replay, self.device,
+                      HER=self.params.use_HER, HERMethod=self.params.HER_mode,
+                      k=self.params.HER_k, imagedata=True)
+      
+      # prepare for saving and loading
+      self.modelsaver = ModelSaver(self.savedir + self.group_name)
+
     elif isinstance(network, list):
 
       # we have been given a list of hidden layer sizes
@@ -837,6 +937,8 @@ class TrainDQN():
 
     # save weights and biases
     if self.use_wandb:
+      global wandb
+      import wandb
       wandb.init(project=self.wandb_project, entity=self.wandb_entity, 
                  name=self.run_name, config=self.get_params_dictionary(),
                  notes=self.wandb_note, group=self.group_name)
@@ -869,7 +971,7 @@ class TrainDQN():
       raise RuntimeError("device should be 'cuda' or 'cpu'")
 
   def load_object_set(self, object_set=None, num_segments=None, finger_thickness=None,
-                      finger_width=None):
+                      finger_width=None, finger_modulus=None, depth_camera=None):
     """
     Load an object set into the simulation
     """
@@ -878,11 +980,11 @@ class TrainDQN():
 
     # load the object set and the first xml file
     self.env.load(object_set_name=object_set, num_segments=num_segments,
-                  finger_thickness=finger_thickness, finger_width=finger_width)
+                  finger_thickness=finger_thickness, finger_width=finger_width,
+                  finger_modulus=finger_modulus, depth_camera=depth_camera)
 
     # save the changes
     self.params.object_set = object_set
-    self.num_segments = num_segments
 
   def to_torch(self, data, dtype=None):
     """
@@ -890,7 +992,7 @@ class TrainDQN():
     """
     if dtype == None: dtype = torch.float32
 
-    return torch.tensor(np.array([data]), device=self.device, dtype=dtype)
+    return torch.tensor(data, device=self.device, dtype=dtype).unsqueeze(0)
 
   def select_action(self, state, decay_num, test=None):
 
@@ -958,7 +1060,8 @@ class TrainDQN():
 
     if not self.wandb_init_flag:
       if self.use_wandb:
-
+        global wandb
+        import wandb
         wandb.init(project=self.wandb_project, entity=self.wandb_entity, 
                   name=self.run_name, config=self.get_params_dictionary(),
                   notes=self.wandb_note, group=self.group_name)
@@ -1326,12 +1429,14 @@ class TrainDQN():
     if (len(self.memory)) < self.params.min_memory_replay: # self.params.batch_size
       return
 
-    transitions = self.memory.sample(self.params.batch_size)
+    # transitions = self.memory.sample(self.params.batch_size)
 
-    # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
-    # detailed explanation). This converts batch-array of Transitions
-    # to Transition of batch-arrays.
-    batch = TrainDQN.Transition(*zip(*transitions))
+    # # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
+    # # detailed explanation). This converts batch-array of Transitions
+    # # to Transition of batch-arrays.
+    # batch = TrainDQN.Transition(*zip(*transitions))
+
+    batch = self.memory.batch(self.params.batch_size)
 
     # Compute a mask of non-final states and concatenate the batch elements
     # (a final state would've been the one after which simulation ended)
@@ -1345,6 +1450,13 @@ class TrainDQN():
     state_batch = torch.cat(batch.state)
     action_batch = torch.cat(batch.action)
     reward_batch = torch.cat(batch.reward)
+
+    # TIDY THIS UP IN FUTURE! not very computationally efficient
+    if self.params.use_images and not self.params.image_collection_only:
+      # add in the images to the 'state' batches
+      state_batch = (torch.cat(batch.img), torch.cat(batch.state))
+      non_final_images = torch.cat([s for s in batch.next_img if s is not None])
+      non_final_next_states = (non_final_images, non_final_next_states)
 
     # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
     # columns of actions taken. These are the actions which would've been taken
@@ -1377,12 +1489,100 @@ class TrainDQN():
 
     return
 
-  def curriculum_fcn(self, i_episode):
+  def offline_optimise_model(self):
     """
-    Implement a learning curriculum
+    Implement conservative q-learning on offline data in self.memory
     """
 
-    if not self.params.use_curriculum: return
+    # only proceed if we have enough memory for a batch
+    if len(self.memory) < self.params.batch_size: return
+
+    # only begin to optimise when enough memory is built up
+    if (len(self.memory)) < self.params.min_memory_replay: # self.params.batch_size
+      return
+
+    # transitions = self.memory.sample(self.params.batch_size)
+
+    # # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
+    # # detailed explanation). This converts batch-array of Transitions
+    # # to Transition of batch-arrays.
+    # batch = TrainDQN.Transition(*zip(*transitions))
+
+    batch = self.memory.batch(self.params.batch_size)
+
+    # Compute a mask of non-final states and concatenate the batch elements
+    # (a final state would've been the one after which simulation ended)
+    non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
+                                          batch.next_state)), device=self.device,
+                                          dtype=torch.bool)
+
+    non_final_next_states = torch.cat([s for s in batch.next_state
+                                                if s is not None])
+                                                
+    state_batch = torch.cat(batch.state)
+    action_batch = torch.cat(batch.action)
+    reward_batch = torch.cat(batch.reward)
+
+    # TIDY THIS UP IN FUTURE! not very computationally efficient
+    if self.params.use_images and not self.params.image_collection_only:
+      if self.params.no_sensor_data:
+        # wipe the sensor batch
+        state_batch = torch.zeros(state_batch.shape)
+      # add in the images to the 'state' batches
+      state_batch = (torch.cat(batch.img), torch.cat(batch.state))
+      non_final_images = torch.cat([s for s in batch.next_img if s is not None])
+      non_final_next_states = (non_final_images, non_final_next_states)
+
+    # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
+    # columns of actions taken. These are the actions which would've been taken
+    # for each batch state according to policy_net
+    state_action_values = self.policy_net(state_batch).gather(1, action_batch)
+
+    # Compute V(s_{t+1}) for all next states.
+    # Expected values of actions for non_final_next_states are computed based
+    # on the "older" target_net; selecting their best reward with max(1)[0].
+    # This is merged based on the mask, such that we'll have either the expected
+    # state value or 0 in case the state was final.
+    next_state_values = torch.zeros(self.params.batch_size, device=self.device)
+    next_state_values[non_final_mask] = self.target_net(
+        non_final_next_states).max(1)[0].detach()
+    
+    # Compute the expected Q values
+    expected_state_action_values = (next_state_values 
+                                        * self.params.gamma) + reward_batch
+
+    # Compute Huber loss
+    criterion = nn.SmoothL1Loss()
+    loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+
+    # Compute the conservative q-learning loss
+    cql_loss = torch.logsumexp(state_action_values, dim=1).mean() - state_action_values.mean()
+
+    # compute the overall loss
+    overall_loss = cql_loss + 0.5 * loss
+
+    # Optimize the model
+    self.optimiser.zero_grad()
+    overall_loss.backward()
+    for param in self.policy_net.parameters():
+        param.grad.data.clamp_(-1, 1)
+    self.optimiser.step()
+
+    return
+
+  def curriculum_fcn(self, i_episode):
+    """
+    Implement a learning curriculum. This function should almost certainly be
+    overriden for a curriculum training, here is only an example. This is how:
+
+    import functools
+    def my_curriculum_function(self, i_episode): ...
+    model.curriculum_fcn = functools.partial(my_curriculum_function, model)
+
+    Use the 'self.curriculums_params' dictionary and add to it if needed.
+    """
+
+    if self.curriculum_params["finished"]: return
 
     # if the curriculum has been applied, return (this disallows multi-stage curriculums)
     if self.curriculum_applied is not None and self.curriculum_applied > 0: return
@@ -1410,7 +1610,7 @@ class TrainDQN():
     if metric_value > threshold:
 
       if style == "object set":
-        self.load_object_set(object_set=self.params.curriculum_object_set, num_segments=self.num_segments)
+        self.load_object_set(object_set=self.params.curriculum_object_set)
 
       elif style == "learning rate":
         # reduce the learning rate by 75%, eg 50e-6 goes to 12.5e-6
@@ -1437,14 +1637,6 @@ class TrainDQN():
     Perform one episode of training or testing
     """
 
-    # # for debugging, show memory usage (heapy does not seem to be accurate)
-    # if i_episode % 1000 == 1 and not test:
-    #   theheap = guph.heap()
-    #   print("Heap total size is", theheap.size, "(", theheap.size / 1e6, "MB)")
-    #   print("The replay memory size is", asizeof.asizeof(self.memory) / 1e3, "kB",
-    #     "with length", len(self.memory))
-    #   print("The environment size is", asizeof.asizeof(self.env) / 1e3, "kB")
-
     # initialise environment and state
     obs = self.env.reset()
     obs = self.to_torch(obs)
@@ -1452,17 +1644,12 @@ class TrainDQN():
     if self.params.use_HER:
       goal = self.env._get_desired_goal()
       goal = self.to_torch(goal)
+    elif self.params.use_images:
+      img, depth = self.env._get_rgbd_image()
+      img = self.to_torch(img)
+      depth = self.to_torch(depth)
 
     ep_start = time.time()
-
-    # # for testing: is noise certainly in use?
-    # def print_noise_details(sensor, sensor_name):
-    #   in_use = sensor.in_use
-    #   use_noise = sensor.use_noise
-    #   noise_std = sensor.noise_std
-    #   print(f"Sensor: {sensor_name}; in_use = {in_use}; use_noise = {use_noise}; noise_std = {noise_std}")
-    # print_noise_details(self.env.mj.set.bending_gauge, "bending_gauge")
-    # print_noise_details(self.env.mj.set.palm_sensor, "palm_sensor")
 
     # count up through actions
     for t in count():
@@ -1478,6 +1665,9 @@ class TrainDQN():
       elif self.params.use_HER:
         HER_obs = torch.cat((obs, goal), dim=1)
         action = self.select_action(HER_obs, decay_num=i_episode, test=test)
+      elif self.params.use_images and not self.params.image_collection_only:
+        image_obs = (img, obs)
+        action = self.select_action(image_obs, decay_num=i_episode, test=test)
       else:
         action = self.select_action(obs, decay_num=i_episode, test=test)
 
@@ -1492,6 +1682,12 @@ class TrainDQN():
       if self.params.use_HER:
         (new_obs, reward, done, state, goal) = step_data_torch
         transition_sample = (obs, action, new_obs, reward, goal, state)
+      elif self.params.use_images:
+        (new_obs, reward, done) = step_data_torch
+        new_img, new_depth = self.env._get_rgbd_image()
+        new_img = self.to_torch(new_img)
+        new_depth = self.to_torch(new_depth)
+        transition_sample = (obs, img, action, new_obs, new_img, reward)
       else:
         (new_obs, reward, done) = step_data_torch
         transition_sample = (obs, action, new_obs, reward)
@@ -1565,18 +1761,23 @@ class TrainDQN():
     if self.log_level > 0:
       print(f"\nBEGIN TRAINING, target is {self.params.num_episodes} episodes\n", flush=True)
 
+    # put the pytorch models in training mode
+    self.policy_net.train()
+    self.target_net.train()
+    
     # begin training episodes
     for i_episode in range(i_start + 1, self.params.num_episodes + 1):
 
-      if self.log_level == 1 and i_episode % self.log_rate_for_episodes == 1:
+      if self.log_level == 1 and (i_episode - 1) % self.log_rate_for_episodes == 0:
         print("Begin training episode", i_episode, flush=True)
       elif self.log_level > 1:
-        print("Begin training episode", i_episode, flush=True)
+        print(f"Begin training episode {i_episode} at {datetime.now().strftime('%H:%M')}", flush=True)
 
       self.run_episode(i_episode)
 
       # check if time to change curriculum
-      self.curriculum_fcn(i_episode)
+      if self.params.use_curriculum:
+        self.curriculum_fcn(i_episode)
 
       # update the target network every target_update episodes
       if i_episode % self.params.target_update == 0:
@@ -1596,6 +1797,13 @@ class TrainDQN():
       elif i_episode % self.params.save_freq == 0:
         self.save()
 
+      # saving for image collection
+      if (self.params.image_collection_only and 
+          i_episode % self.params.image_save_freq == 0):
+        p = self.modelsaver.save("memory_with_image_data", pyobj=self.memory)
+        if self.log_level > 1:
+          print(f"Saved image data at: {p}")
+
     # update the target network at the end
     self.target_net.load_state_dict(self.policy_net.state_dict())
 
@@ -1606,6 +1814,116 @@ class TrainDQN():
     # get some key details to save in a text file now training is finished
     best_sr, best_ep = self.track.calc_best_performance()
     finish_txt = f"Training finished after {i_episode} episodes"
+    finish_txt += f"\n\nBest performance was {best_sr} at episode {best_ep}"
+    self.modelsaver.save("training_finished", txtonly=True, txtstr=finish_txt)
+
+    # wrap up
+    self.env.render()
+    self.log_wandb(force=True, end=True)
+    self.plot(force=True, end=True, hang=True) # leave plots on screen if we are plotting
+
+    # end of training
+    self.env.close()
+
+  def train_offline(self, replay_path, network=None, i_start=None, iter_per_file=250,
+                    replayfile="memory_with_image_data", random_order=False,
+                    epochs=1):
+    """
+    Perform an offline training
+    """
+
+    # if we have been given a network to train
+    if network != None: self.init(network)
+
+    # if this is a fresh, new training
+    if i_start == None or i_start == 0:
+      i_start = 0
+      # create a new folder to save training results in
+      self.modelsaver.new_folder(name=self.run_name, notimestamp=True)
+      # save record of the training time hyperparameters and important files
+      self.save_hyperparameters()
+      self.save_important_files()
+      self.save() # save starting network parameters
+    else:
+      # save a record of the training restart
+      continue_label = f"Training is continuing from episode {i_start} with these hyperparameters\n"
+      hypername = f"hyperparameters_from_ep_{i_start}"
+      self.save_hyperparameters(labelstr=continue_label, name=hypername)
+
+    # determine how many files of replay memory we have
+    replay_loader = ModelSaver(replay_path)
+    num_memory = replay_loader.get_recent_file(name=replayfile, return_int=True)
+
+    if self.log_level > 0:
+      print(f"\nBEGIN OFFLINE TRAINING, target is {num_memory * iter_per_file * epochs} episodes (files = {num_memory}, iter_per_file = {iter_per_file}, epochs = {epochs})\n", flush=True)
+
+    per_epoch = num_memory * iter_per_file
+
+    for e in range(epochs):
+
+      if self.log_level > 0:
+        print(f"Starting epoch {e + 1} of {epochs}")
+
+      ids = list(range(1, num_memory + 1))
+
+      if random_order:
+        randomiser = np.random.default_rng(self.env.myseed)
+        ids = randomiser.permutation(ids)
+
+      for i_file, id in enumerate(ids):
+
+        # load the file into our replay memory
+        timenow = time.time()
+        self.memory = replay_loader.load(filenamestarts=replayfile, id=id)
+        print("Time taken for load was:", time.time() - timenow)
+        self.memory.all_to(self.device)
+
+        j_start = iter_per_file * i_file + 1 + (per_epoch * e)
+        j_end = iter_per_file * (i_file + 1) + 1 + (per_epoch * e)
+
+        # train on this memory set
+        for j_episode in range(j_start, j_end):
+        
+          if self.log_level == 1 and (j_episode - 1) % self.log_rate_for_episodes == 0:
+            print(f"Offline file {i_file + 1}/{num_memory} (num={id}), begin training episode {j_episode}", flush=True)
+          elif self.log_level > 1:
+            print(f"Begin training episode {j_episode} at {datetime.now().strftime('%H:%M')}", flush=True)
+
+          # optimise using the replay memory 
+          self.offline_optimise_model()
+            
+          # update the target network at the end of the iteration
+          if j_episode % self.params.target_update == 0:
+            self.target_net.load_state_dict(self.policy_net.state_dict())
+
+          # test the target network and then save it
+          if j_episode % self.params.test_freq == 0 and j_episode != 0:
+            test_data = self.test()
+            # process test data
+            test_report = self.create_test_report(test_data, i_episode=j_episode)
+            additional_data = (test_data)
+            # save the result
+            timenow = time.time()
+            self.save(txtstring=test_report, txtlabel="test_results", 
+                      tupledata=additional_data)
+            print("Time taken for save was:", time.time() - timenow)
+
+          # or only save the network
+          elif j_episode % self.params.save_freq == 0:
+            timenow = time.time()
+            self.save()
+            print("Time taken for save was:", time.time() - timenow)
+
+    # update the target network at the end
+    self.target_net.load_state_dict(self.policy_net.state_dict())
+
+    # save, log and plot now we are finished
+    if self.log_level > 0:
+      print("\nTRAINING COMPLETE, finished", j_episode, "episodes\n")
+  
+    # get some key details to save in a text file now training is finished
+    best_sr, best_ep = self.track.calc_best_performance()
+    finish_txt = f"Training finished after {j_episode} episodes"
     finish_txt += f"\n\nBest performance was {best_sr} at episode {best_ep}"
     self.modelsaver.save("training_finished", txtonly=True, txtstr=finish_txt)
 
@@ -1631,6 +1949,9 @@ class TrainDQN():
 
     # begin test mode
     self.env.start_test()
+
+    # switch the pytorch model into evaluation mode
+    self.target_net.eval()
 
     # begin testing
     for i_episode in count(1):
@@ -1667,6 +1988,9 @@ class TrainDQN():
 
     if self.log_level > 0: print("Testing complete, finished", i_episode, "episodes")
 
+    # switch the network back into training mode
+    self.target_net.train()
+
     return test_data
 
   def test_heuristic_baseline(self, pause_each_episode=None, label=None):
@@ -1696,25 +2020,15 @@ class TrainDQN():
 
   def get_params_dictionary(self):
     """
-    Return a dictionary of parameters, this function is partly incompatible with old
-    code as MjEnv() did not used to have a parameter dictionary
+    Return a dictionary of parameters
     """
 
     params_dict = {}
     params_dict.update(asdict(self.params))
-
-    # OLD CODE COMPATIBLE: try to get mjenv parameters
-    try:
-      params_dict.update(self.env.get_parameters())
-    except AttributeError as e:
-      print("TrainDQN.get_params_dictionary() error with env params:", e)
+    params_dict.update(self.env.get_parameters())
 
     manual_params = {
       "Network name" : self.policy_net.name,
-      "Finger stiffness setting" : self.env.mj.set.finger_stiffness,
-      "Mujoco timestep" : self.env.mj.set.mujoco_timestep,
-      "Sim steps per action" : self.env.mj.set.sim_steps_per_action,
-      "Bend gauge normalise" : self.env.mj.set.bending_gauge.normalise,
       "n_obs" : self.env.n_obs,
       "n_actions" : self.env.n_actions
     }
@@ -1723,15 +2037,16 @@ class TrainDQN():
 
     return params_dict
 
-  def save_hyperparameters(self, labelstr=None, name=None, printonly=None):
+  def save_hyperparameters(self, labelstr=None, name=None, printonly=None, print_out=None):
     """
     Save a text file with the current hyperparameters
     """
 
-    if self.log_level > 0:
-      print_out = True
-    else:
-      print_out = False
+    if print_out is None:
+      if self.log_level > 0:
+        print_out = True
+      else:
+        print_out = False
 
     param_str = ""
     time_stamp = datetime.now().strftime("%d-%m-%y-%H:%M") # hardcoded date string
@@ -1804,16 +2119,28 @@ class TrainDQN():
       env = self.env,
       track = self.track,
       modelsaver = self.modelsaver,
-      extra = tupledata
+      extra = {
+        "tupledata" : tupledata,
+        "optimiser_state_dict" : self.optimiser.state_dict(),
+      }
     )
 
-    savepath = self.modelsaver.save(self.policy_net.name, pyobj=save_data, 
+    savepath = self.modelsaver.save("model" + self.policy_net.name, pyobj=save_data, 
                                     txtstr=txtstring, txtlabel=txtlabel)
 
     # also save the best performance in txt file for fast lookup later
     best_sr, best_ep = self.track.calc_best_performance()
     best_txt = self.best_performance_template.format(best_sr, best_ep)
     self.modelsaver.save(self.best_performance_txt_file_name, txtonly=True, txtstr=best_txt)
+
+    # new: save also a file indicating test performance
+    log_str = "Test time performance (success rate metric = stable height):\n\n"
+    top_row = "{0:<10} | {1:<15}\n".format("Episode", "Success rate")
+    log_str += top_row
+    row_str = "{0:<10} | {1:<15.3f}\n"
+    for i in range(len(self.track.test_episodes)):
+      log_str += row_str.format(self.track.test_episodes[i], self.track.avg_stable_height[i])
+    self.modelsaver.save(self.test_performance_txt_file_name, txtonly=True, txtstr=log_str)
 
     return savepath
   
@@ -1828,7 +2155,8 @@ class TrainDQN():
                                     prevent_compression=not compressed)
     return savepath
 
-  def load(self, id=None, folderpath=None, foldername=None, overridelib=False, best_id=None):
+  def load(self, id=None, folderpath=None, foldername=None, overridelib=False, best_id=None,
+           filestarts=None, numbered=True):
     """
     Load the most recent model, overwrite current networks
     """
@@ -1858,8 +2186,8 @@ class TrainDQN():
         best_id = False # best_id has been found
 
     # load the model
-    load_data = self.modelsaver.load(id=id, folderpath=folderpath, 
-                                     foldername=foldername)
+    load_data = self.modelsaver.load(id=id, folderpath=folderpath, suffix_numbering=numbered,
+                                     foldername=foldername, filenamestarts=filestarts)
 
     self.policy_net = load_data.policy_net
     self.params = load_data.params
@@ -1867,8 +2195,26 @@ class TrainDQN():
     self.env = load_data.env
     self.track = load_data.track
       
-    if load_data.extra != None:
-      self.last_test_data = load_data.extra
+    reload_optimiser = False
+    if hasattr(load_data, "extra"):
+      if load_data.extra != None:
+        if isinstance(load_data.extra, dict):
+          self.last_test_data = load_data.extra["tupledata"]
+          reload_optimiser = True
+        else:
+          self.last_test_data = load_data.extra
+
+    # backwards compatibility fix, check for imagedata field
+    try:
+      x = self.memory.imagedata
+    except AttributeError as e:
+      print(f"TrainDQN.load() warning: {e}")
+      self.memory.imagedata = False
+    try:
+      x = self.env.prevent_reload
+    except AttributeError as e:
+      print(f"TrainDQN.load() warning: {e}")
+      self.env.prevent_reload = False
 
     # CATCH failures above, so compatible with old code. This double check could be deleted but it is quite handy
     if best_id:
@@ -1884,13 +2230,13 @@ class TrainDQN():
         # recursive call to load now we have the best id
         self.load(id=best_id, folderpath=folderpath, foldername=foldername)
         return
+      
+    # ensure we load the previous environment
+    self.env.load_next = deepcopy(self.env.params)
 
     # reseed and reload environment
     self.env.seed()      # reseeds with same seed as before (but not contiguous!)
     self.env._load_xml() # segfault without this
-
-    # # delete this later: needed until wrist_z_offset is saved in bind.cpp
-    # self.env.reset(hard=True)
 
     # move to the current device
     self.memory.all_to(self.device)
@@ -1904,6 +2250,10 @@ class TrainDQN():
 
     # re-initialise the class
     self.init(network="loaded")
+
+    # if we saved the state dict of the optimiser
+    if reload_optimiser:
+      self.optimiser.load_state_dict(load_data.extra["optimiser_state_dict"])
 
     # return the path of the loaded model
     return self.modelsaver.last_loadpath
@@ -1941,7 +2291,7 @@ class TrainDQN():
 
     # load a new object set if we are told to
     if object_set is not None:
-      self.env._load_object_set(name=object_set, num_segments=self.num_segments)
+      self.env._load_object_set(name=object_set)
 
     # begin the training at the given starting point (always uses most recent pickle)
     self.train(i_start=self.track.episodes_done)
@@ -1964,13 +2314,60 @@ class TrainDQN():
 
     return 
 
+  def read_test_performance(self):
+    """
+    Read the test performance into a numpy array
+    """
+
+    try:
+
+      readroot = self.savedir + self.group_name + "/"
+      readpath = readroot + self.run_name + "/"
+      readname = self.test_performance_txt_file_name + ".txt"
+
+      with open(readpath + readname, "r") as f:
+        txt = f.read()
+
+    except Exception as e:
+      # print(f"TrainDQN.read_test_performance() error: {e}")
+      return np.array([[0],[0]])
+
+    lines = txt.splitlines()
+
+    episodes = []
+    success_rates = []
+
+    found_data = False
+
+    for l in lines:
+
+      if found_data:
+
+        splits = l.split("|")
+        ep = int(splits[0])
+        sr = float(splits[1])
+        episodes.append(ep)
+        success_rates.append(sr)
+
+      if l.startswith("Episode"):
+        found_data = True
+
+    if len(episodes) != len(success_rates):
+      raise RuntimeError("TrainDQN.read_test_performance() found episode length != success rate length")
+
+    if len(episodes) == 0: episodes.append(0)
+    if len(success_rates) == 0: success_rates.append(0)
+
+    ep_np = np.array([episodes])
+    sr_np = np.array([success_rates])
+
+    return np.concatenate((ep_np, sr_np), axis=0)
+
   def read_best_performance_from_text(self, silence=False, fulltest=False, heuristic=False):
     """
     Read a text file to get the best model performance. This function contains
     hardcoding
     """
-
-    print("entered the function")
 
     readroot = self.savedir + self.group_name + "/"
 
@@ -1993,7 +2390,7 @@ class TrainDQN():
         
         elif len(test_files) > 1: 
 
-          print(f"Multiple '{fulltest_str}.txt' files found in read_best_performance_from_text(...)")
+          if not silence: print(f"Multiple '{fulltest_str}.txt' files found in read_best_performance_from_text(...)")
 
           # hardcoded date string
           datestr = "%d-%m-%y-%H:%M"
@@ -2010,8 +2407,8 @@ class TrainDQN():
           try:
             dates = [datetime.strptime(x, datestr) for x in date_strings[:]]
           except ValueError as e:
-            print("read_best_performance_from_text() datetime error:", e)
-            print("Trying again with another datestring") # OLD CODE compatible
+            if not silence: print("read_best_performance_from_text() datetime error:", e)
+            if not silence: print("Trying again with another datestring") # OLD CODE compatible
             # try again with alternative datestring
             datestr = "%d-%m-%Y-%H:%M"
             ex_date = datetime.now().strftime(datestr)
@@ -2029,7 +2426,7 @@ class TrainDQN():
           # now finally select the most recent date
           readname = str(test_files[recent_ind])
 
-          print("Most recent fulltest selected:", readname)
+          if not silence: print("Most recent fulltest selected:", readname)
 
         else: readname = str(test_files[0])
 
@@ -2060,7 +2457,7 @@ class TrainDQN():
 
     # check for errors
     if len(lines) < 2:
-      print("Error in read_best_performance_from_text(), lines < 2")
+      if not silence: print("Error in read_best_performance_from_text(), lines < 2")
       return None, None
     
     try:
@@ -2074,6 +2471,79 @@ class TrainDQN():
       print(f"model.read_best_performance_from_text() gives best_sr={best_sr} and best_ep={best_ep}")
 
     return best_sr, best_ep
+
+  def seed(self, seed=None, strict=False):
+    """
+    Set a seed for the environment, if one is not given, select it randomly
+    """
+
+    # put the seed into MjEnv (if None its randomly generated)
+    self.env.seed(seed)
+
+    # now use this seed for pytorch
+    torch.manual_seed(self.env.myseed)
+
+    # if we want to ensure reproducitibilty at the cost of performance
+    if strict:
+      torch.backends.cudnn.benchmark = False
+      torch.use_deterministic_algorithms(mode=True)
+
+  def profile(self, saveas="python_profile_results.xyz", network=None, loadexisting=False, 
+              episodes=10, seed=1234, id=None, folderpath=None, foldername=None,
+              path="/home/luke/mymujoco"):
+    """
+    Profile the training using CProfile tools. If loadexisting=False, first it
+    trains long enough to fill the replay memory with enough samples, then
+    saves this. This step can be skipped with loadexisting=True and by giving
+    the correct id/folderpath/foldername for load(...).
+    """
+
+    # override MjEnv 'take_action' to do only random actions
+    # this should provide exact reproducibility
+    random_action_generator = np.random.default_rng(seed=seed)
+    def random_take_action(self, action):
+      """
+      Take an action in the simulation
+      """
+
+      rand_action = random_action_generator.integers(0, self.n_actions)
+
+      # set the action and step the simulation
+      self.mj.set_action(rand_action)
+      self.mj.action_step()
+
+      return
+
+    import functools
+    self.env._take_action = functools.partial(random_take_action, self.env)
+
+    # set a deterministic seed
+    self.seed(seed, strict=False)
+
+    # enable optimisation as fast as possible to profile this as well
+    self.params.min_memory_replay = 0
+    self.log_rate_for_episodes = 1
+
+    if not loadexisting:
+      self.params.num_episodes = 3
+      self.train(network=network)
+      i_episode = self.track.episodes_done
+    else:
+      self.load(id=id, folderpath=folderpath, foldername=foldername)
+      i_episode = self.track.episodes_done
+
+    # now do the profiling
+    self.params.num_episodes = i_episode + episodes
+    self.env.prevent_reload = True
+
+    self.env.mj.tick()
+    cProfile.run(f"model.train(i_start={i_episode})", f"{path}/{saveas}")
+    time_taken = self.env.mj.tock()
+
+    print(f"Profiling is now done, file saved at: {path}/{saveas}")
+    print(f"Time taken was {time_taken:.3f} seconds")
+
+    return time_taken
 
 if __name__ == "__main__":
   
@@ -2141,12 +2611,12 @@ if __name__ == "__main__":
   # ----- load ----- #
 
   # # load
-  # folder = "mymujoco"
-  # group = "paper_baseline_2/31-01-23"
-  # run = "luke-PC_10_54_A117"
+  # folder = "mujoco-devel"
+  # group = "24-07-23"
+  # run = "operator-PC_15:10_A2"
   # folderpath = f"/home/luke/{folder}/rl/models/dqn/{group}/"
-  # model.set_device("cuda")
-  # model.load(id=None, folderpath=folderpath, foldername=run, best_id=True)
+  # folderpath = "/home/luke/luke-gripper-mujoco/rl/models/dqn/24-07-23/"
+  # model.modelsaver.load(id=6, folderpath=folderpath, foldername=run, best_id=False)
 
   # # save only the policy network
   # folder = "mymujoco"
@@ -2159,14 +2629,30 @@ if __name__ == "__main__":
 
   # ----- train ----- #
 
-  # # train
-  # net = networks.DQN_3L60
-  # model.env.disable_rendering = True
-  # model.env.mj.set.debug = False
-  # model.num_segments = 8
-  # model.finger_thickness = 0.9e-3
-  # model.params.num_episodes = 100
-  # model.train(network=net)
+  # train
+  net = [5000,5000,5000]
+  model.set_device("cpu")
+  model.env.disable_rendering = True
+  model.env.mj.set.debug = False
+  model.num_segments = 8
+  model.finger_thickness = 0.9e-3
+  model.params.num_episodes = 1
+  model.params.object_set = "set8_fullset_1500"
+  model.train(network=net)
+
+  t1 = time.time()
+  model.modelsaver.use_compression = True
+  model.modelsaver.compressor = "bz2"
+  model.save()
+  t2 = time.time()
+  model.modelsaver.load()
+  t3 = time.time()
+
+
+  print(f"Time taken for save was {t2 - t1:.3f}s")
+  print(f"Time taken for load was {t3 - t2:.3f}s")
+
+  exit()
 
   # # continue training
   # folderpath = "/home/luke/mymujoco/rl/models/dqn/DQN_3L60/"# + model.policy_net.name + "/"
@@ -2174,14 +2660,18 @@ if __name__ == "__main__":
   # model.continue_training(foldername, folderpath)
 
   # ----- profile ----- #
-  # net = networks.DQN_3L60
-  # model.env.disable_rendering = True
-  # model.env.mj.set.debug = False
-  # model.params.num_episodes = 10
-  # cProfile.run("model.train(network=net)", "/home/luke/mymujoco/python_profile_results.xyz")
-  # # in order to read profile results, run: $ python3 -m pstats /path/to/results.xyz
-  # # do: $ sort cumtime OR $ sort tottime AND THEN $ stats
-  # exit()
+  # in order to read profile results, run: $ python3 -m pstats /path/to/results.xyz
+  # do: $ sort cumtime OR $ sort tottime AND THEN $ stats
+
+  model.env.disable_rendering = True
+  model.params.object_set = "set7_fullset_1500_50i_updated"
+
+  net = "CNN_50_50"
+  dev = "cuda"
+
+  model.set_device(dev)
+  model.profile(saveas=f"py_profile_{net}_{dev}.xyz", network=net)
+  exit()
 
   # ----- visualise ----- #
 

@@ -15,8 +15,8 @@ ObjectHandler::ObjectHandler()
 {
   /* constructor */
 
-  // set default - no live object
-  live_object = -1;
+  // // set default - no live object
+  // live_object = -1;
 }
 
 void ObjectHandler::init(mjModel* model, mjData* data)
@@ -32,10 +32,13 @@ void ObjectHandler::init(mjModel* model, mjData* data)
   qposadr.clear();
   qveladr.clear();
   geom_id.clear();
+  live_objects.clear();
+  live_geoms.clear();
+  xyz_values.clear();
 
-  // we cannot start with an object live
-  live_object = -1;
-  live_geom = "";
+  // // we cannot start with an object live
+  // live_object = -1;
+  // live_geom = "";
 
   // first, run the simluation to let all the objects settle
   settle_objects(model, data);
@@ -84,6 +87,24 @@ void ObjectHandler::init(mjModel* model, mjData* data)
     reset_qpos[i].qy = 0;
     reset_qpos[i].qz = 0;
     reset_qpos[i].qw = 1;
+
+    // get the xyz bounding box of the object
+    bool debug_xyz = false;
+    std::string numeric_name = "Task object " + std::to_string(i);
+    int numeric_i = mj_name2id(model, mjOBJ_NUMERIC, numeric_name.c_str());
+    if (numeric_i == -1) {
+      if (debug_xyz) std::cout << numeric_name << " not found in objecthandler, ignoring\n";
+    }
+    else {
+      double x = model->numeric_data[model->numeric_adr[numeric_i] + 0];
+      double y = model->numeric_data[model->numeric_adr[numeric_i] + 1];
+      double z = model->numeric_data[model->numeric_adr[numeric_i] + 2];
+      if (debug_xyz) std::cout << numeric_name 
+        << " has (x, y, z) >> (" << x << ", " << y << ", " << z << ")\n";
+      xyz_values[i].x = x;
+      xyz_values[i].y = y;
+      xyz_values[i].z = z;
+    }
   }
 
   // get the body ids for fingers and palm (for contact forces)
@@ -101,6 +122,9 @@ void ObjectHandler::init(mjModel* model, mjData* data)
   // set up collision types and affinities
   remove_collisions(model, data);
 
+  // apply default object visibility
+  set_object_visibility(model, object_visibility);
+  
   // for testing
   if (debug) print();
 }
@@ -223,13 +247,15 @@ void ObjectHandler::overwrite_keyframe(mjModel* model, mjData* data, int keyid)
 // helpful functions
 void ObjectHandler::resize() 
 {
-  in_use.resize(names.size());
-  idx.resize(names.size());
-  qpos.resize(names.size());
-  qposadr.resize(names.size());
-  qveladr.resize(names.size());
-  reset_qpos.resize(names.size());
-  geom_id.resize(names.size());
+  int size = names.size();
+  in_use.resize(size);
+  idx.resize(size);
+  qpos.resize(size);
+  qposadr.resize(size);
+  qveladr.resize(size);
+  reset_qpos.resize(size);
+  geom_id.resize(size);
+  xyz_values.resize(size);
 }
 
 bool ObjectHandler::check_idx(int idx) 
@@ -247,15 +273,53 @@ bool ObjectHandler::check_idx(int idx)
 
 void ObjectHandler::set_live(mjModel* model, int idx)
 {
-  /* set the live object - no safety checks! */
+  /* add another live object - no safety checks! */
 
-  live_object = idx;
-  live_geom = names[idx] + "_geom";
+  // live_object = idx;
+  // live_geom = names[idx] + "_geom";
+
+  live_objects.push_back(idx);
+  live_geoms.push_back(names[idx] + "_geom");
 
   // enable collisions, set to 01
   model->geom_contype[geom_id[idx]] = COL_main;
   model->geom_conaffinity[geom_id[idx]] = COL_main;
 
+  // turn on visibility
+  model->geom_rgba[geom_id[idx] * 4 + 3] = 1;
+}
+
+bool ObjectHandler::is_live(int live_idx)
+{
+  /* return if an object idx is included in the live objects */
+
+  for (int i = 0; i < live_objects.size(); i++) {
+    if (live_idx == live_objects[i]) return true;
+  }
+
+  return false;
+}
+
+int ObjectHandler::get_live_geom_index(int live_idx)
+{
+  /* get the index of the live geom for this live_idx
+  
+  so if we have live_objects [4, 2, 9] and
+                live_geoms ["x", "y", "z"]
+                
+  this function will return:
+    0 for live_idx = 4
+    1 for live_idx = 2
+    2 for live_idx = 9
+    error otherwise */
+
+  for (int i = 0; i < live_objects.size(); i++) {
+    if (live_idx == live_objects[i]) {
+      return i;
+    }
+  }
+
+  throw std::runtime_error("ObjectHandler::get_live_geom_index() was given a live_idx that is not a live object");
 }
 
 void ObjectHandler::move_object(mjData* data, int idx, QPos pose) 
@@ -285,60 +349,106 @@ void ObjectHandler::move_object(mjData* data, int idx, QPos pose)
 
 void ObjectHandler::reset_object(mjModel* model, mjData* data, int idx) 
 {
-  /* reset an object to its starting pose */
+  /* reset an object to its starting pose - does not check if its live! */
 
   if (not check_idx(idx)) return;
 
   move_object(data, idx, reset_qpos[idx]);
 
-  // if we have reset the live object
-  if (idx == live_object) {
-    live_object = -1;
-    live_geom = "";
+  // // if we have reset the live object
+  // if (idx == live_object) {
+  //   live_object = -1;
+  //   live_geom = "";
 
-    // disable collisions,set to 10
-    model->geom_contype[geom_id[idx]] = COL_dead;
-    model->geom_conaffinity[geom_id[idx]] = COL_dead;
-  }
+  //   // disable collisions,set to 10
+  //   model->geom_contype[geom_id[idx]] = COL_dead;
+  //   model->geom_conaffinity[geom_id[idx]] = COL_dead;
+
+  //   // check if we should make the object invisible
+  //   if (not object_visibility) {
+  //     model->geom_rgba[geom_id[idx] * 4 + 3] = 0;
+  //   }
+  // }
 }
 
 void ObjectHandler::reset_live(mjModel* model, mjData* data) 
 {
-  if (live_object == -1) return;
-  reset_object(model, data, live_object);
+  // if (live_object == -1) return;
+  // reset_object(model, data, live_object);
+
+  if (live_objects.size() == 0) return;
+
+  for (int live_idx : live_objects) {
+
+    reset_object(model, data, live_idx);
+
+    // disable collisions,set to 10
+    model->geom_contype[geom_id[live_idx]] = COL_dead;
+    model->geom_conaffinity[geom_id[live_idx]] = COL_dead;
+
+    // check if we should make the object invisible
+    if (not object_visibility) {
+      model->geom_rgba[geom_id[live_idx] * 4 + 3] = 0;
+    }
+  }
+
+  // remove all the live objects
+  live_objects.clear();
+  live_geoms.clear();
 }
 
-void ObjectHandler::spawn_object(mjModel* model, mjData* data, int idx, QPos pose) 
+QPos ObjectHandler::spawn_object(mjModel* model, mjData* data, int new_idx, QPos pose) 
 {
   /* spawn a new live object */
 
-  if (not check_idx(idx)) return;
+  if (not check_idx(new_idx)) {
+    QPos empty;
+    return empty;
+  }
 
-  // first reset the live object
-  reset_live(model, data);
+  // // first reset the live object
+  // reset_live(model, data);
 
   // override the z height of the given pose to use reset value
-  pose.z = reset_qpos[idx].z + z_spawn_tolerance;
+  pose.z = reset_qpos[new_idx].z + z_spawn_tolerance;
 
   // move this object into the given pose
-  move_object(data, idx, pose);
+  move_object(data, new_idx, pose);
 
-  // set our object as the live object
-  set_live(model, idx);
+  // make the object live if it isn't already
+  if (not is_live(new_idx)) set_live(model, new_idx);
+
+  QPos new_qpos;
+  new_qpos.update(model, data, qposadr[new_idx]);
+
+  return new_qpos;
 }
 
-QPos ObjectHandler::get_live_qpos(mjModel* model, mjData* data)
+std::vector<QPos> ObjectHandler::get_live_qpos(mjModel* model, mjData* data)
 {
-  /* get the qpos of the live object */
+  /* get the qpos of the live objects */
 
-  if (live_object == -1)
+  if (live_objects.size() == 0)
     throw std::runtime_error("ObjectHandler::get_live_qpos() failed as there is no live object\n");
 
-  QPos out;
+  std::vector<QPos> out(live_objects.size());
 
-  out.update(model, data, qposadr[live_object]);
-
+  for (int i = 0; i < live_objects.size(); i++) {
+    out[i].update(model, data, qposadr[live_objects[i]]);
+  }
+  
   return out;
+}
+
+Vec3 ObjectHandler::get_object_xyz(int obj_idx)
+{
+  /* return the xyz bounding box of a given object index */
+
+  if (not check_idx(obj_idx)) {
+    throw std::runtime_error("ObjectHandler::get_object_xyz() recieved out of bounds 'obj_idx'");
+  }
+
+  return xyz_values[obj_idx];
 }
 
 // print functions
@@ -349,7 +459,10 @@ void ObjectHandler::print()
     std::cout << "no named objects\n";
     return;
   }
-  std::cout << "live object is " << live_object;
+  std::cout << "live objects = ";
+  for (int i = 0; i < live_objects.size(); i++) {
+     std::cout << i + 1 << ". has idx " << live_objects[i] << "; ";
+  }
   for (int i = 0; i < names.size(); i++) {
     printf("\n\t%d. name: %s, in_use: %d, idx: %d, qposadr: %d, qveladr: %d, geom_id: %d, ", 
       i, names[i].c_str(), (int)in_use[i], idx[i], qposadr[i], qveladr[i], geom_id[i]);
@@ -361,17 +474,17 @@ void ObjectHandler::print()
 }
 
 // inspect contact forces
-myNum ObjectHandler::get_object_net_force(const mjModel* model, mjData* data)
+myNum ObjectHandler::get_object_net_force(const mjModel* model, mjData* data, int live_idx)
 {
   /* get the net force in world frame on the live object */
 
-  if (live_object == -1) {
-    myNum empty;
-    return empty;
-  }
+  // if (live_object == -1) {
+  //   myNum empty;
+  //   return empty;
+  // }
 
   // get the net forces (pointer encompasses whole array)
-  mjtNum* F = data->cfrc_ext + idx[live_object] * 6;
+  mjtNum* F = data->cfrc_ext + idx[live_idx] * 6;
 
   // cfrc_ext stores forces as [torque, force], so swap order
   mjtNum F_swap[6] = { F[3], F[4], F[5], F[0], F[1], F[2] };
@@ -385,17 +498,17 @@ myNum ObjectHandler::get_object_net_force(const mjModel* model, mjData* data)
   return out;
 }
 
-rawNum ObjectHandler::get_object_net_force_faster(const mjModel* model, mjData* data)
+rawNum ObjectHandler::get_object_net_force_faster(const mjModel* model, mjData* data, int live_idx)
 {
   /* get the net force in world frame on the live object */
 
-  if (live_object == -1) {
-    rawNum empty;
-    return empty;
-  }
+  // if (live_object == -1) {
+  //   rawNum empty;
+  //   return empty;
+  // }
 
   // get the net forces (pointer encompasses whole array)
-  mjtNum* F = data->cfrc_ext + idx[live_object] * 6;
+  mjtNum* F = data->cfrc_ext + idx[live_idx] * 6;
 
   // cfrc_ext stores forces as [torque, force], so swap order
   mjtNum F_swap[6] = { F[3], F[4], F[5], F[0], F[1], F[2] };
@@ -412,7 +525,7 @@ rawNum ObjectHandler::get_object_net_force_faster(const mjModel* model, mjData* 
 std::vector<ObjectHandler::Contact> 
 ObjectHandler::get_all_contacts(const mjModel* model, mjData* data)
 {
-  /* get all the contacts on the live object */
+  /* get all the contacts on the live objects */
 
   // create arrays (matrices) to store mujoco data
   mjtNum frame[9];            // contact frame rotation matrix wrt base (3x3)
@@ -427,8 +540,9 @@ ObjectHandler::get_all_contacts(const mjModel* model, mjData* data)
   Contact contact;
   std::vector<Contact> contact_vec;
 
-  // for testing
-  // std::cout << "the number of contacts is " << data->ncon << '\n';
+  constexpr bool debug_fcn = true;
+
+  if (debug_fcn) std::cout << "the number of contacts is " << data->ncon << '\n';
 
   // loop through all of the contacts at this time step
   for (int i = 0; i < data->ncon; i++) {
@@ -443,9 +557,12 @@ ObjectHandler::get_all_contacts(const mjModel* model, mjData* data)
     auto name1 = mj_id2name(model, mjOBJ_GEOM, data->contact[i].geom1);
     auto name2 = mj_id2name(model, mjOBJ_GEOM, data->contact[i].geom2);
 
-    // for testing: check the geom names
-    // std::printf("name1 is %s, name2 is %s, live_geom is %s\n", 
-    //   name1, name2, live_geom.c_str());
+    if (debug_fcn) {
+      std::printf("name1 is %s, name2 is %s, live_object_geoms are: ", 
+        name1, name2);
+      for (std::string x : live_geoms) std::cout << x << ", ";
+      std::cout << "\n";
+    }
 
     // if we have a null pointer (non-named geom)
     if (not name1 or not name2) {
@@ -461,7 +578,7 @@ ObjectHandler::get_all_contacts(const mjModel* model, mjData* data)
     contact.name2 = strname2;
 
     // check which objects/geoms this contact involves
-    contact.check_involves(live_geom);
+    contact.check_involves(live_geoms);
 
     // get the contact frame wrt to world frame (needs to be transposed)
     mju_transpose(frame, data->contact[i].frame, 3, 3);
@@ -498,9 +615,10 @@ ObjectHandler::get_all_contacts(const mjModel* model, mjData* data)
 
     contact_vec.push_back(contact);
 
-    // // for testing
-    // contact.print();
-    // contact.print_involves();
+    if (debug_fcn) {
+      contact.print();
+      contact.print_involves();
+    }
   }
 
   return contact_vec;
@@ -574,91 +692,91 @@ double ObjectHandler::get_palm_force(const mjModel* model, mjData* data)
   return palm_local[0];
 }
 
-Forces ObjectHandler::extract_forces(const mjModel* model, mjData* data)
-{
-  /* extract the forces on the live object */
+// Forces ObjectHandler::extract_forces(const mjModel* model, mjData* data)
+// {
+//   /* extract the forces on the live object */
 
-  if (live_object == -1) {
-    Forces empty;
-    return empty;
-  }
+//   if (live_object == -1) {
+//     Forces empty;
+//     return empty;
+//   }
 
-  Forces out;
-  out.obj.net = get_object_net_force(model, data);
-  std::vector<Contact> contacts = get_all_contacts(model, data);
+//   Forces out;
+//   out.obj.net = get_object_net_force(model, data);
+//   std::vector<Contact> contacts = get_all_contacts(model, data);
 
-  // sum the contact forces in global frame
-  for (int i = 0; i < contacts.size(); i++) {
+//   // sum the contact forces in global frame
+//   for (int i = 0; i < contacts.size(); i++) {
 
-    // if the contact involves the object
-    if (contacts[i].with.object) {
-      out.obj.sum += contacts[i].global_force_vec;
-      if (contacts[i].with.finger1) 
-        out.obj.finger1 += contacts[i].global_force_vec;
-      if (contacts[i].with.finger2) 
-        out.obj.finger2 += contacts[i].global_force_vec;
-      if (contacts[i].with.finger3) 
-        out.obj.finger3 += contacts[i].global_force_vec;
-      if (contacts[i].with.palm) 
-        out.obj.palm += contacts[i].global_force_vec;
-      if (contacts[i].with.ground) 
-        out.obj.ground += contacts[i].global_force_vec;
-    }
+//     // if the contact involves the object
+//     if (contacts[i].with.object) {
+//       out.obj.sum += contacts[i].global_force_vec;
+//       if (contacts[i].with.finger1) 
+//         out.obj.finger1 += contacts[i].global_force_vec;
+//       if (contacts[i].with.finger2) 
+//         out.obj.finger2 += contacts[i].global_force_vec;
+//       if (contacts[i].with.finger3) 
+//         out.obj.finger3 += contacts[i].global_force_vec;
+//       if (contacts[i].with.palm) 
+//         out.obj.palm += contacts[i].global_force_vec;
+//       if (contacts[i].with.ground) 
+//         out.obj.ground += contacts[i].global_force_vec;
+//     }
 
-    // if the contact involves the gripper
-    if (contacts[i].with.finger1) {
-      out.all.finger1 += contacts[i].global_force_vec;
-      // testing! seperate out contacts with the ground
-      if (contacts[i].with.ground) {
-        out.gnd.finger1 += contacts[i].global_force_vec;
-      }
-    }
-    if (contacts[i].with.finger2) {
-      out.all.finger2 += contacts[i].global_force_vec;
-      if (contacts[i].with.ground) {
-        out.gnd.finger2 += contacts[i].global_force_vec;
-      }
-    }
-    if (contacts[i].with.finger3) {
-      out.all.finger3 += contacts[i].global_force_vec;
-      if (contacts[i].with.ground) {
-        out.gnd.finger3 += contacts[i].global_force_vec;
-      }
-    }
-    if (contacts[i].with.palm) {
-      out.all.palm += contacts[i].global_force_vec;
-    }
+//     // if the contact involves the gripper
+//     if (contacts[i].with.finger1) {
+//       out.all.finger1 += contacts[i].global_force_vec;
+//       // testing! seperate out contacts with the ground
+//       if (contacts[i].with.ground) {
+//         out.gnd.finger1 += contacts[i].global_force_vec;
+//       }
+//     }
+//     if (contacts[i].with.finger2) {
+//       out.all.finger2 += contacts[i].global_force_vec;
+//       if (contacts[i].with.ground) {
+//         out.gnd.finger2 += contacts[i].global_force_vec;
+//       }
+//     }
+//     if (contacts[i].with.finger3) {
+//       out.all.finger3 += contacts[i].global_force_vec;
+//       if (contacts[i].with.ground) {
+//         out.gnd.finger3 += contacts[i].global_force_vec;
+//       }
+//     }
+//     if (contacts[i].with.palm) {
+//       out.all.palm += contacts[i].global_force_vec;
+//     }
 
-  }
+//   }
 
-  // get the rotation matrices for each finger body
-  myNum r1(&data->xmat[f1_idx * 9], 3, 3);
-  myNum r2(&data->xmat[f2_idx * 9], 3, 3);
-  myNum r3(&data->xmat[f3_idx * 9], 3, 3);
-  myNum r4(&data->xmat[pm_idx * 9], 3, 3);
+//   // get the rotation matrices for each finger body
+//   myNum r1(&data->xmat[f1_idx * 9], 3, 3);
+//   myNum r2(&data->xmat[f2_idx * 9], 3, 3);
+//   myNum r3(&data->xmat[f3_idx * 9], 3, 3);
+//   myNum r4(&data->xmat[pm_idx * 9], 3, 3);
 
-  // rotate the finger vectors from the world frame to the finger body frame
-  // x = axial force, y = tangential force (ie strain gauge force)
-  // these forces are observed to all be +ve under object contact (outwards bend)
-  out.obj.finger1_local = out.obj.finger1.rotate3_by(r1.transpose());
-  out.obj.finger2_local = out.obj.finger2.rotate3_by(r2.transpose());
-  out.obj.finger3_local = out.obj.finger3.rotate3_by(r3.transpose());
-  out.all.finger1_local = out.all.finger1.rotate3_by(r1.transpose());
-  out.all.finger2_local = out.all.finger2.rotate3_by(r2.transpose());
-  out.all.finger3_local = out.all.finger3.rotate3_by(r3.transpose());
-  out.gnd.finger1_local = out.gnd.finger1.rotate3_by(r1.transpose());
-  out.gnd.finger2_local = out.gnd.finger2.rotate3_by(r2.transpose());
-  out.gnd.finger3_local = out.gnd.finger3.rotate3_by(r3.transpose());
+//   // rotate the finger vectors from the world frame to the finger body frame
+//   // x = axial force, y = tangential force (ie strain gauge force)
+//   // these forces are observed to all be +ve under object contact (outwards bend)
+//   out.obj.finger1_local = out.obj.finger1.rotate3_by(r1.transpose());
+//   out.obj.finger2_local = out.obj.finger2.rotate3_by(r2.transpose());
+//   out.obj.finger3_local = out.obj.finger3.rotate3_by(r3.transpose());
+//   out.all.finger1_local = out.all.finger1.rotate3_by(r1.transpose());
+//   out.all.finger2_local = out.all.finger2.rotate3_by(r2.transpose());
+//   out.all.finger3_local = out.all.finger3.rotate3_by(r3.transpose());
+//   out.gnd.finger1_local = out.gnd.finger1.rotate3_by(r1.transpose());
+//   out.gnd.finger2_local = out.gnd.finger2.rotate3_by(r2.transpose());
+//   out.gnd.finger3_local = out.gnd.finger3.rotate3_by(r3.transpose());
 
 
-  // rotate the palm global force vector into the local frame
-  // x = axial force, y/z unimportant
-  // x force observed to be -ve under object contact (compression)
-  out.obj.palm_local = out.obj.palm.rotate3_by(r4.transpose());
-  out.all.palm_local = out.all.palm.rotate3_by(r4.transpose());
+//   // rotate the palm global force vector into the local frame
+//   // x = axial force, y/z unimportant
+//   // x force observed to be -ve under object contact (compression)
+//   out.obj.palm_local = out.obj.palm.rotate3_by(r4.transpose());
+//   out.all.palm_local = out.all.palm.rotate3_by(r4.transpose());
 
-  return out;
-}
+//   return out;
+// }
 
 Forces_faster ObjectHandler::extract_forces_faster(const mjModel* model, mjData* data)
 {
@@ -670,7 +788,12 @@ Forces_faster ObjectHandler::extract_forces_faster(const mjModel* model, mjData*
           -> in this function, only relevant contacts are gathered
   this function will be more error prone but aims to increase speed */
 
-  if (live_object == -1) {
+  // if (live_object == -1) {
+  //   Forces_faster empty;
+  //   return empty;
+  // }
+
+  if (live_objects.size() == 0) {
     Forces_faster empty;
     return empty;
   }
@@ -687,17 +810,20 @@ Forces_faster ObjectHandler::extract_forces_faster(const mjModel* model, mjData*
   /* create raw arrays which will then be converted to myNum and outputed,
   these correspond to the fields of the Forces struct */
 
-  // contact vectors with the object
-  mjtNum obj_glob_sum[6] = {};
-  mjtNum obj_glob_f1[6] = {};
-  mjtNum obj_glob_f2[6] = {};
-  mjtNum obj_glob_f3[6] = {};
-  mjtNum obj_glob_palm[6] = {};
-  mjtNum obj_glob_gnd[6] = {};
-  mjtNum obj_loc_f1[3] = {};
-  mjtNum obj_loc_f2[3] = {};
-  mjtNum obj_loc_f3[3] = {};
-  mjtNum obj_loc_palm[3] = {};
+  // // contact vectors with the object
+  // mjtNum obj_glob_sum[6] = {};
+  // mjtNum obj_glob_f1[6] = {};
+  // mjtNum obj_glob_f2[6] = {};
+  // mjtNum obj_glob_f3[6] = {};
+  // mjtNum obj_glob_palm[6] = {};
+  // mjtNum obj_glob_gnd[6] = {};
+  // mjtNum obj_loc_f1[3] = {};
+  // mjtNum obj_loc_f2[3] = {};
+  // mjtNum obj_loc_f3[3] = {};
+  // mjtNum obj_loc_palm[3] = {};
+
+  // vector of the above for multiple live objects
+  std::vector<ObjSumMatrices> objfrc(live_objects.size());
 
   // contact vectors taking into account everything
   mjtNum all_glob_f1[6] = {};
@@ -749,7 +875,7 @@ Forces_faster ObjectHandler::extract_forces_faster(const mjModel* model, mjData*
     contact.name2 = name2;
 
     // check which objects/geoms this contact involves
-    contact.check_involves(live_geom);
+    contact.check_involves(live_geoms);
 
     // is this contact with entities we care about?
     if (not contact.with_any()) continue;
@@ -781,24 +907,26 @@ Forces_faster ObjectHandler::extract_forces_faster(const mjModel* model, mjData*
     global_force_vec[5] = torque_global[2];
 
     // if the contact involves the object
-    if (contact.with.object) {
-      // out.obj.sum += contact.global_force_vec;
-      mju_addTo(obj_glob_sum, global_force_vec, 6);
-      if (contact.with.finger1) 
-        // out.obj.finger1 += contact.global_force_vec;
-        mju_addTo(obj_glob_f1, global_force_vec, 6);
-      if (contact.with.finger2) 
-        // out.obj.finger2 += contact.global_force_vec;
-        mju_addTo(obj_glob_f2, global_force_vec, 6);
-      if (contact.with.finger3) 
-        // out.obj.finger3 += contact.global_force_vec;
-        mju_addTo(obj_glob_f3, global_force_vec, 6);
-      if (contact.with.palm) 
-        // out.obj.palm += contact.global_force_vec;
-        mju_addTo(obj_glob_palm, global_force_vec, 6);
-      if (contact.with.ground) 
-        // out.obj.ground += contact.global_force_vec;
-        mju_addTo(obj_glob_gnd, global_force_vec, 6);
+    for (int i = 0; i < live_objects.size(); i++) {
+      if (contact.with.live_object[i]) {
+        // out.obj.sum += contact.global_force_vec;
+        mju_addTo(objfrc[i].obj_glob_sum, global_force_vec, 6);
+        if (contact.with.finger1) 
+          // out.obj.finger1 += contact.global_force_vec;
+          mju_addTo(objfrc[i].obj_glob_f1, global_force_vec, 6);
+        if (contact.with.finger2) 
+          // out.obj.finger2 += contact.global_force_vec;
+          mju_addTo(objfrc[i].obj_glob_f2, global_force_vec, 6);
+        if (contact.with.finger3) 
+          // out.obj.finger3 += contact.global_force_vec;
+          mju_addTo(objfrc[i].obj_glob_f3, global_force_vec, 6);
+        if (contact.with.palm) 
+          // out.obj.palm += contact.global_force_vec;
+          mju_addTo(objfrc[i].obj_glob_palm, global_force_vec, 6);
+        if (contact.with.ground) 
+          // out.obj.ground += contact.global_force_vec;
+          mju_addTo(objfrc[i].obj_glob_gnd, global_force_vec, 6);
+      }
     }
 
     // if the contact involves the gripper
@@ -850,10 +978,13 @@ Forces_faster ObjectHandler::extract_forces_faster(const mjModel* model, mjData*
   // x = axial force, y = tangential force (ie strain gauge force)
   // these forces are observed to all be +ve under object contact (outwards bend)
   // mju_mulMatMat(result, lhs, rhs, lhs.nr, lhs.nc, rhs.nc);
-  mju_mulMatMat(obj_loc_f1, r1, obj_glob_f1, 3, 3, 1);
-  mju_mulMatMat(obj_loc_f2, r2, obj_glob_f2, 3, 3, 1);
-  mju_mulMatMat(obj_loc_f3, r3, obj_glob_f3, 3, 3, 1);
-
+  for (int i = 0; i < live_objects.size(); i++) {
+    mju_mulMatMat(objfrc[i].obj_loc_f1, r1, objfrc[i].obj_glob_f1, 3, 3, 1);
+    mju_mulMatMat(objfrc[i].obj_loc_f2, r2, objfrc[i].obj_glob_f2, 3, 3, 1);
+    mju_mulMatMat(objfrc[i].obj_loc_f3, r3, objfrc[i].obj_glob_f3, 3, 3, 1);
+    mju_mulMatMat(objfrc[i].obj_loc_palm, r4, objfrc[i].obj_glob_palm, 3, 3, 1); // moved from below
+  }
+  
   mju_mulMatMat(all_loc_f1, r1, all_glob_f1, 3, 3, 1);
   mju_mulMatMat(all_loc_f2, r2, all_glob_f2, 3, 3, 1);
   mju_mulMatMat(all_loc_f3, r3, all_glob_f3, 3, 3, 1);
@@ -865,25 +996,31 @@ Forces_faster ObjectHandler::extract_forces_faster(const mjModel* model, mjData*
   // rotate the palm global force vector into the local frame
   // x = axial force, y/z unimportant
   // x force observed to be -ve under object contact (compression)
-  mju_mulMatMat(obj_loc_palm, r4, obj_glob_palm, 3, 3, 1);
+  // mju_mulMatMat(obj_loc_palm, r4, obj_glob_palm, 3, 3, 1);
   mju_mulMatMat(all_loc_palm, r4, all_glob_palm, 3, 3, 1);
 
   Forces_faster out;     // we will output this struct of force information
 
-  // get net force on object
-  out.obj.net = get_object_net_force_faster(model, data);
+  // how many objects do we have
+  out.obj.resize(live_objects.size());
 
-  // copy across data for output
-  out.obj.sum.init(obj_glob_sum, 6, 1);
-  out.obj.finger1.init(obj_glob_f1, 6, 1);
-  out.obj.finger2.init(obj_glob_f2, 6, 1);
-  out.obj.finger3.init(obj_glob_f3, 6, 1);
-  out.obj.palm.init(obj_glob_palm, 6, 1);
-  out.obj.ground.init(obj_glob_gnd, 6, 1);
-  out.obj.finger1_local.init(obj_loc_f1, 3, 1);
-  out.obj.finger2_local.init(obj_loc_f2, 3, 1);
-  out.obj.finger3_local.init(obj_loc_f3, 3, 1);
-  out.obj.palm_local.init(obj_loc_palm, 3, 1);
+  // get net force on object
+  for (int i = 0; i < live_objects.size(); i++) {
+
+    out.obj[i].net = get_object_net_force_faster(model, data, live_objects[i]);
+
+    // copy across data for output
+    out.obj[i].sum.init(objfrc[i].obj_glob_sum, 6, 1);
+    out.obj[i].finger1.init(objfrc[i].obj_glob_f1, 6, 1);
+    out.obj[i].finger2.init(objfrc[i].obj_glob_f2, 6, 1);
+    out.obj[i].finger3.init(objfrc[i].obj_glob_f3, 6, 1);
+    out.obj[i].palm.init(objfrc[i].obj_glob_palm, 6, 1);
+    out.obj[i].ground.init(objfrc[i].obj_glob_gnd, 6, 1);
+    out.obj[i].finger1_local.init(objfrc[i].obj_loc_f1, 3, 1);
+    out.obj[i].finger2_local.init(objfrc[i].obj_loc_f2, 3, 1);
+    out.obj[i].finger3_local.init(objfrc[i].obj_loc_f3, 3, 1);
+    out.obj[i].palm_local.init(objfrc[i].obj_loc_palm, 3, 1);
+  }
 
   out.all.finger1.init(all_glob_f1, 6, 1);
   out.all.finger2.init(all_glob_f2, 6, 1);
@@ -910,43 +1047,80 @@ bool ObjectHandler::check_contact_forces(const mjModel* model, mjData* data)
 {
   /* check that the sum of contact forces = net object force */
 
-  if (live_object == -1) return true;
+  // if (live_object == -1) return true;
 
-  myNum net_force = get_object_net_force(model, data);
+  bool good = true;
+
   std::vector<Contact> forces = get_all_contacts(model, data);
 
-  // sum the contact forces in the global frame
-  myNum sum_force(6, 1);
-  for (int i = 0; i < forces.size(); i++) {
-    sum_force += forces[i].global_force_vec;
+  for (int live_idx : live_objects) {
+
+    myNum net_force = get_object_net_force(model, data, live_idx);
+
+    // sum the contact forces in the global frame
+    myNum sum_force(6, 1);
+    for (int i = 0; i < forces.size(); i++) {
+      sum_force += forces[i].global_force_vec;
+    }
+
+    // for testing
+    std::cout << "net force is:\n";
+    net_force.print();
+    std::cout << "sum of forces is:\n";
+    sum_force.print();
+
+    // now determine the difference
+    sum_force -= net_force;
+    mjtNum mag = sum_force.magnitude();
+    constexpr double tol = 1e-5;
+
+    // for testing
+    std::cout << "the difference magnitude is " << mag << '\n';
+
+    if (mag > tol) good = false;
   }
 
-  // for testing
-  std::cout << "net force is:\n";
-  net_force.print();
-  std::cout << "sum of forces is:\n";
-  sum_force.print();
-
-  // now determine the difference
-  sum_force -= net_force;
-  mjtNum mag = sum_force.magnitude();
-  constexpr double tol = 1e-5;
-
-  // for testing
-  std::cout << "the difference magnitude is " << mag << '\n';
-
-  if (mag > tol) return false;
-
-  return true;
+  return good;
 }
 
 // change object parameters
+
+void ObjectHandler::set_object_visibility(mjModel* model, bool visible)
+{
+  /* set the visbility of all objects, except the live object which must
+  always be visible. Setting the background objects invisible speeds up
+  rendering times and is recommended when using a camera */
+
+  // set all objects to the given visibility (alpha=0 in rgba)
+  for (int i : geom_id) {
+    model->geom_rgba[i * 4 + 3] = visible;
+  }
+
+  // // finally, set the live object as visible (cannot be invisible)
+  // if (live_object != -1) {
+  //   int rgba_idx = geom_id[live_object] * 4;
+  //   model->geom_rgba[rgba_idx + 3] = 1;
+  // }
+
+  // finally, set the live objects as visible (cannot be invisible)
+  for (int live_idx : live_objects) {
+    int rgba_idx = geom_id[live_idx] * 4;
+    model->geom_rgba[rgba_idx + 3] = 1;
+  }
+
+  // save the change
+  object_visibility = visible;
+}
 
 void ObjectHandler::set_colour(mjModel* model, std::vector<float> rgba)
 {
   /* set the colour of the live object */
 
-  if (live_object == -1) {
+  // if (live_object == -1) {
+  //   return;
+  // }
+
+  if (live_objects.size() == 0) {
     return;
   }
 
@@ -954,16 +1128,20 @@ void ObjectHandler::set_colour(mjModel* model, std::vector<float> rgba)
     throw std::runtime_error("set_colour() must receive a 3 element rgb vector or a 4 element rgba vector");
   }
 
-  // index for rgba entries in mjModel
-  int rgba_idx = geom_id[live_object] * 4;
+  for (int live_idx : live_objects) {
 
-  // set the colour parameters
-  model->geom_rgba[rgba_idx + 0] = rgba[0];
-  model->geom_rgba[rgba_idx + 1] = rgba[1];
-  model->geom_rgba[rgba_idx + 2] = rgba[2];
+    // index for rgba entries in mjModel
+    int rgba_idx = geom_id[live_idx] * 4;
 
-  if (rgba.size() == 4)
-    model->geom_rgba[rgba_idx + 3] = rgba[3];
+    // set the colour parameters
+    model->geom_rgba[rgba_idx + 0] = rgba[0];
+    model->geom_rgba[rgba_idx + 1] = rgba[1];
+    model->geom_rgba[rgba_idx + 2] = rgba[2];
+
+    if (rgba.size() == 4)
+      model->geom_rgba[rgba_idx + 3] = rgba[3];
+
+  }
 
 }
 
@@ -1027,7 +1205,11 @@ void ObjectHandler::set_friction(mjModel* model, std::vector<mjtNum> friction_tr
   higher priority for the less friction geom.
   */
 
-  if (live_object == -1) {
+  // if (live_object == -1) {
+  //   return;
+  // }
+
+  if (live_objects.size() == 0) {
     return;
   }
 
@@ -1035,17 +1217,19 @@ void ObjectHandler::set_friction(mjModel* model, std::vector<mjtNum> friction_tr
     throw std::runtime_error("set_friction() must receive a vector from 1-3 elements");
   }
 
-  // index for friction entries in mjModel
-  int fidx = geom_id[live_object] * 3;
+  for (int live_idx : live_objects) {
 
-  model->geom_friction[fidx + 0] = friction_triple[0]; // sliding friction
+    // index for friction entries in mjModel
+    int fidx = geom_id[live_idx] * 3;
 
-  if (friction_triple.size() > 1)
-    model->geom_friction[fidx + 1] = friction_triple[1]; // torsional friction
+    model->geom_friction[fidx + 0] = friction_triple[0]; // sliding friction
 
-  if (friction_triple.size() > 2)
-    model->geom_friction[fidx + 2] = friction_triple[2]; // rolling friction
+    if (friction_triple.size() > 1)
+      model->geom_friction[fidx + 1] = friction_triple[1]; // torsional friction
 
+    if (friction_triple.size() > 2)
+      model->geom_friction[fidx + 2] = friction_triple[2]; // rolling friction
+  }
 }
 
 void ObjectHandler::randomise_all_colours(mjModel* model, 
@@ -1055,6 +1239,7 @@ void ObjectHandler::randomise_all_colours(mjModel* model,
 
   std::uniform_real_distribution<double> distribution(0.0, 1.0);
 
+  // we should ignore a as object_visibility handles this
   std::vector<float> rgba(4);
 
   for (int i : geom_id) {
@@ -1063,13 +1248,13 @@ void ObjectHandler::randomise_all_colours(mjModel* model,
     rgba[0] = distribution(*generator);
     rgba[1] = distribution(*generator);
     rgba[2] = distribution(*generator);
-    rgba[3] = distribution(*generator);
+    // rgba[3] = distribution(*generator);
 
     // set the colour parameters
     model->geom_rgba[i * 4 + 0] = rgba[0];
     model->geom_rgba[i * 4 + 1] = rgba[1];
     model->geom_rgba[i * 4 + 2] = rgba[2];
-    model->geom_rgba[i * 4 + 3] = 1.0; // a is currently not randomised
+    // model->geom_rgba[i * 4 + 3] = 1.0; // a is currently not randomised
   }
 }
 
