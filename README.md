@@ -49,7 +49,7 @@ RENDER_PATH = # none, use system library
 CORE_LIBS = -L$(MUJOCO_LIB) -lmujoco -larmadillo 
 RENDER_LIBS = -lglfw
 DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
-						 -DLUKE_MACHINE='"$(MACHINE)"'
+             -DLUKE_MACHINE='"$(MACHINE)"'
 
 # extras
 MAKEFLAGS += -j8 # jN => use N parallel cores
