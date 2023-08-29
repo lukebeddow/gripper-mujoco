@@ -107,7 +107,12 @@ If already cloned, you can pull the submodule with:
 
 ```git submodule update --init```
 
-Finally, if you wish to manually build sets the usage is simple.
+ Ensure the ```$(PYTHON_EXE)``` you have chosen has the following modules installed:
+* ```pip install xacro```
+* ```pip install lxml```
+* ```pip install pyyaml```
+
+Finally, if you wish to manually build sets:
 * Choose your gripper settings by editing ```description/config/gripper.yaml```
 * Next, choose or create your object set. Look in the ```description/mujoco/object_sets``` folder. A valid set must be inside this folder, being a yaml file whose name begins with 'set' and will be found by the ```set*.yaml``` wildcard.
 * Run ```make sets SET=set_name```, replacing ```set_name``` with your desired set. You should see the set copied into the ```mjcf``` folder from the root of the repository.
