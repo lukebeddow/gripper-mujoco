@@ -1513,6 +1513,11 @@ public:
 
   // misc
   void forward() { mj_forward(model, data); }
+  void tick();
+  float tock();
+  bool last_action_gripper();
+  bool last_action_panda();
+  std::string print_actions();
   int get_number_of_objects() { return env_.object_names.size(); }
   std::string get_current_object_name() { return env_.obj[0].name; }
   float get_fingertip_z_height();
@@ -1547,14 +1552,10 @@ public:
   void calibrate_simulated_sensors(float bend_gauge_normalise);
   float yield_load();
   float yield_load(float thickness, float width);
-  void tick();
-  float tock();
   MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2);
   void reset_goal();
   void print(std::string s) { std::printf("%s\n", s.c_str()); }
   void default_goal_event_triggering();
-  bool last_action_gripper();
-  bool last_action_panda();
   float find_highest_stable_timestep();
   void set_sensor_noise_and_normalisation_to(bool set_as);
 

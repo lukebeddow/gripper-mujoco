@@ -1233,6 +1233,14 @@ std::vector<float> MjClass::set_action(int action)
 
   bool wl = true; // within limits
 
+  if (action < 0 or action >= n_actions) {
+    std::cout << "MjClass::set_action() received action = " << action << " which is out of bounds.\n"
+      << "This function is now returning without doing anything. The possible actions are:\n";
+    print_actions();
+    std::vector<float> empty;
+    return empty;
+  }
+
   int action_code = action_options[action];
 
   // // for testing
@@ -1265,9 +1273,9 @@ std::vector<float> MjClass::set_action(int action)
     #undef AA
 
     default:
-    std::cout << "Action value received is " << action_code << '\n';
-    std::cout << "Number of actions is " << n_actions << '\n';
-    throw std::runtime_error("MjClass::set_action() received out of bounds int");
+      std::cout << "Action value received is " << action_code << '\n';
+      std::cout << "Number of actions is " << n_actions << '\n';
+      throw std::runtime_error("MjClass::set_action() received out of bounds int");
 
   }
 
@@ -2739,6 +2747,49 @@ bool MjClass::last_action_panda()
     return true;
   else 
     return false;
+}
+
+std::string MjClass::print_actions()
+{
+  /* print out (and return a string) for each possible action */
+
+  std::string str;
+
+  for (int i = 0; i < n_actions; i++) {
+
+    int action_code = action_options[i];
+
+    str += "Action number " + std::to_string(i) +  ", name = ";
+
+    switch (action_code) {
+
+      // define action behaviour for positive/negative/continous
+      // any new actions should be further defined in ActionSettings::update_action_function()
+      #define AA(NAME, USED, CONTINOUS, VALUE, SIGN)              \
+        case MjType::Action::TOKEN_CONCAT(NAME, POSITIVE_TOKEN):  \
+          str += s_.NAME.name + "_positive\n";  \
+          break;                                                  \
+        case MjType::Action::TOKEN_CONCAT(NAME, NEGATIVE_TOKEN):  \
+          str += s_.NAME.name + "_negative\n";  \
+          break;                                                  \
+        case MjType::Action::TOKEN_CONCAT(NAME, CONTINOUS_TOKEN): \
+          str += s_.NAME.name + "_continous\n"; \
+          break;                                                  \
+
+        // run the macro to create the code
+        LUKE_MJSETTINGS_ACTION
+
+      #undef AA
+
+      default:
+        throw std::runtime_error("MjClass::print_actions() received out of bounds int");
+
+    }
+  }
+
+  std::cout << str;
+
+  return str;
 }
 
 float MjClass::get_fingertip_z_height()
