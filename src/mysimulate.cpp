@@ -2299,7 +2299,7 @@ void uiEvent(mjuiState* state)
     {
         // process UI event
         mjuiItem* it = mjui_event(&ui1, state, &con);
-f
+
         // control section
         if( it && it->sectionid==SECT_CONTROL )
         {
