@@ -1806,6 +1806,9 @@ void MjClass::reset_object()
   /* remove any object from the scene */
 
   luke::reset_object(model, data);
+
+  // remove our record of any objects
+  env_.obj.clear();
 }
 
 void MjClass::spawn_object(int index)
@@ -1821,27 +1824,45 @@ void MjClass::spawn_object(int index)
 
 void MjClass::spawn_object(int index, double xpos, double ypos, double zrot)
 {
+  /* spawn an object at a give (x, y, rotation) */
+
+  MjType::Env::SpawnObj to_spawn;
+  to_spawn.index = index;
+  to_spawn.x_centre = xpos;
+  to_spawn.y_centre = ypos;
+  to_spawn.z_rotation = zrot;
+
+  luke::Vec3 bound = luke::get_object_xyz_bounding_box(index);
+  to_spawn.model_x = bound.x;
+  to_spawn.model_y = bound.y;
+  to_spawn.model_z = bound.z;
+
+  spawn_object(to_spawn);
+}
+
+void MjClass::spawn_object(MjType::Env::SpawnObj to_spawn)
+{
   /* spawn an object beneath the gripper at (xpos, ypos) with a given rotation
   zrot in radians about the vertical axis */
 
-  if (index < 0 or index >= env_.object_names.size()) {
+  if (to_spawn.index < 0 or to_spawn.index >= env_.object_names.size()) {
     throw std::runtime_error("bad index to spawn_object()");
   }
 
   int objvec_idx = -1;
 
   // check if this object is already live
-  if (luke::is_object_live(index)) {
+  if (luke::is_object_live(to_spawn.index)) {
     
     // we want to find the existing entry and update it
     for (int i = 0; i < env_.obj.size(); i++) {
-      if (env_.obj[i].name == env_.object_names[index]) {
+      if (env_.obj[i].name == env_.object_names[to_spawn.index]) {
         objvec_idx = i;
         break;
       }
     }
     if (objvec_idx == -1) {
-      std::cout << "New object id = " << index << ", name = " << env_.object_names[index] << '\n';
+      std::cout << "New object id = " << to_spawn.index << ", name = " << env_.object_names[to_spawn.index] << '\n';
       std::cout << "Existing objects in the simulation:\n";
       for (int i = 0; i < env_.obj.size(); i++) {
         std::cout << "Object name = " << env_.obj[i].name << '\n';
@@ -1859,12 +1880,13 @@ void MjClass::spawn_object(int index, double xpos, double ypos, double zrot)
   }
 
   // save info on object to be spawned
-  env_.obj[objvec_idx].name = env_.object_names[index];
+  env_.obj[objvec_idx].name = env_.object_names[to_spawn.index];
+  env_.obj[objvec_idx].spawn_info = to_spawn;
 
   // set the position to be spawned
   luke::QPos spawn_pos;
-  spawn_pos.x = xpos;
-  spawn_pos.y = ypos;
+  spawn_pos.x = to_spawn.x_centre;
+  spawn_pos.y = to_spawn.y_centre;
   spawn_pos.z = -1;     // will automatically be set to keyframe value
 
   // set the rotation to be spawned
@@ -1872,23 +1894,214 @@ void MjClass::spawn_object(int index, double xpos, double ypos, double zrot)
   double y1 = spawn_pos.qy;
   double z1 = spawn_pos.qz;
   double w1 = spawn_pos.qw;
-  double x2 = 1 * 1 * sin(zrot / 2.0) - 0 * 0 * cos(zrot / 2.0);
-  double y2 = 0 * 1 * cos(zrot / 2.0) - 1 * 0 * sin(zrot / 2.0);
-  double z2 = 1 * 0 * cos(zrot / 2.0) + 0 * 1 * sin(zrot / 2.0);
-  double w2 = 1 * 1 * cos(zrot / 2.0) + 0 * 0 * sin(zrot / 2.0);
+  double x2 = 1 * 1 * sin(-to_spawn.z_rotation / 2.0) - 0 * 0 * cos(-to_spawn.z_rotation / 2.0);
+  double y2 = 0 * 1 * cos(-to_spawn.z_rotation / 2.0) - 1 * 0 * sin(-to_spawn.z_rotation / 2.0);
+  double z2 = 1 * 0 * cos(-to_spawn.z_rotation / 2.0) + 0 * 1 * sin(-to_spawn.z_rotation / 2.0);
+  double w2 = 1 * 1 * cos(-to_spawn.z_rotation / 2.0) + 0 * 0 * sin(-to_spawn.z_rotation / 2.0);
   spawn_pos.qw = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2;
   spawn_pos.qx = w1 * x2 + x1 * w2 - y1 * z2 + z1 * y2;
   spawn_pos.qy = w1 * y2 + x1 * z2 + y1 * w2 - z1 * x2;
   spawn_pos.qz = w1 * z2 - x1 * y2 + y1 * x2 + z1 * w2;
 
   // spawn the object and save its start position
-  env_.obj[objvec_idx].start_qpos = luke::spawn_object(model, data, index, spawn_pos);
+  env_.obj[objvec_idx].start_qpos = luke::spawn_object(model, data, to_spawn.index, spawn_pos);
 
   // add the object to the environment variable
   // env_.obj.push_back(new_obj);
 
   // update everything for rendering
   forward();
+}
+
+bool MjClass::spawn_into_scene(int index, double xpos, double ypos) 
+{
+
+  /* spawn an object into a scene, given (x, y) and no range on these values,
+  then assume we want a random rotation. Return false if cannot spawn without
+  a collision */
+
+  // spawn at (xpos, ypos) with random rotation (-pi, pi)
+  return spawn_into_scene(index, xpos, ypos, 0.0, 0.0, 0.0, M_PI);
+}
+
+bool MjClass::spawn_into_scene(int index, double xpos, double ypos, double zrot) 
+{
+  /* spawn an object into a scene, given (x, y, rot) and no range on these values.
+  Return false if cannot spawn without a collision */
+
+  return spawn_into_scene(index, xpos, ypos, zrot, 0.0, 0.0, 0.0);
+}
+
+bool MjClass::spawn_into_scene(int index, double xpos, double ypos, double zrot,
+  double xrange, double yrange, double rotrange) 
+{
+  /* spawn an object into a scene, given (x, y, rot) and a range for these values.
+  Return false if cannot spawn without a collision */
+
+  double xmin = -10;
+  double xmax = 10;
+  double ymin = -10;
+  double ymax = 10;
+  double smallest_gap = 1e-3;
+  int debug_level = 2;
+
+  // create a grid of possible points to spawn in an object
+  constexpr double xy_increment = 2e-3; // 2mm
+  int num_x = ((2 * xrange) / xy_increment) + 1;
+  int num_y = ((2 * yrange) / xy_increment) + 1;
+  std::vector<std::array<double, 2>> xy_points(num_x * num_y);
+  for (int ix = 0; ix < num_x; ix++) {
+    for (int iy = 0; iy < num_y; iy++) {
+
+      // does our range exceed our increment
+      if (num_x > 1) xy_points[ix * num_y + iy][0] = -xrange + ix * xy_increment + xpos;
+      else xy_points[ix * num_y + iy][0] = xpos;
+
+      if (num_y > 1) xy_points[ix * num_y + iy][1] = -yrange + iy * xy_increment + ypos;
+      else xy_points[ix * num_y + iy][1] = ypos;
+    }
+  }
+
+  if (debug_level > 2) {
+    for (int i = 0; i < xy_points.size(); i++) {
+      std::cout << "raw (x, y) >> ("
+        << xy_points[i][0] << ", " << xy_points[i][1] << ")\n";
+    }
+  }
+
+  // create a vector of possible rotatations
+  constexpr double rot_increment = M_PI / 30.0; // 5 degrees
+  int num_r = ((2 * rotrange) / rot_increment) + 1;
+  std::vector<double> rot_points(num_r);
+  for (int ir = 0; ir < num_r; ir++) {
+
+    // does our range exceed our increment
+    if (num_r > 1) rot_points[ir] = -rotrange + ir * rot_increment + zrot;
+    else rot_points[ir] = zrot;
+  }
+
+  // now shuffle the points into a random order (if we have multiple options)
+  if (xy_points.size() > 1)
+    std::shuffle(std::begin(xy_points), std::end(xy_points), *MjType::generator);
+  if (rot_points.size() > 1)
+    std::shuffle(std::begin(rot_points), std::end(rot_points), *MjType::generator);
+
+  if (debug_level > 0) {
+    std::cout << "There are " << xy_points.size() << " xy points, and "
+      << rot_points.size() << " rotation points\n";
+    std::cout << "There are " << env_.obj.size() << " existing objects in the scene\n";
+    if (debug_level > 1) {
+      for (int i = 0; i < env_.obj.size(); i++) {
+        std::cout << "index = " << env_.obj[i].spawn_info.index
+          << ", name = " << env_.obj[i].name << "\n";
+      }
+    }
+  }
+
+  // determine how much space the new object to spawn needs
+  MjType::Env::SpawnObj to_spawn;
+  luke::Vec3 obj_xyz = luke::get_object_xyz_bounding_box(index);
+  to_spawn.index = index;
+  to_spawn.model_x = obj_xyz.x;
+  to_spawn.model_y = obj_xyz.y;
+  to_spawn.model_z = obj_xyz.z;
+
+  if (debug_level > 0)
+    std::cout << "Adding object " << to_spawn.index << ", with (x,y,z) bounding >> ("
+      << to_spawn.model_x << ", " << to_spawn.model_y
+      << ", " << to_spawn.model_z << ")\n";
+
+  // loop over our points and rotations and try to spawn
+  int i_xy = -1;
+  int i_rot = -1;
+  int total_tries = std::max(xy_points.size(), rot_points.size());
+  bool good_spawn_point = false;
+
+  for (int i = 0; i < total_tries; i++) {
+
+    i_xy += 1;
+    i_rot += 1;
+
+    if (i_xy >= xy_points.size()) i_xy = 0;
+    if (i_rot >= rot_points.size()) i_rot = 0;
+
+    if (debug_level > 1)
+      std::cout << "Point " << i << " (x, y, rot) >> ("
+        << xy_points[i_xy][0] << ", "
+        << xy_points[i_xy][1] << ", "
+        << rot_points[i_rot] << ")"
+        << " - i_xy is " << i_xy << " and i_rot is " << i_rot
+        << "\n";
+
+    good_spawn_point = true;
+
+    // make a box for our object at this point
+    luke::Box2d ourBox;
+    ourBox.initCentre(xy_points[i_xy][0], xy_points[i_xy][1], to_spawn.model_x,
+      to_spawn.model_y);
+    ourBox.rotate(rot_points[i_rot]);
+
+    // are we inbounds at the point
+    if (not ourBox.inbounds(xmin, ymin, xmax, ymax)) {
+      if (debug_level > 1) std::cout << "Can't spawn here, exceed outer bounds\n";
+      good_spawn_point = false;
+      continue;
+    }
+
+    // loop over existing objects and see if we collide with them
+    for (int i_obj = 0; i_obj < env_.obj.size(); i_obj++) {
+
+      // check to ensure this existing object is not us
+      if (env_.obj[i_obj].spawn_info.index == index) continue;
+
+      // determine the space taken up by the object
+      luke::Box2d spawnBox;
+      spawnBox.initCentre(env_.obj[i_obj].spawn_info.x_centre, env_.obj[i_obj].spawn_info.y_centre, 
+        env_.obj[i_obj].spawn_info.model_x, env_.obj[i_obj].spawn_info.model_y);
+      spawnBox.rotate(env_.obj[i_obj].spawn_info.z_rotation);
+
+      if (ourBox.overlapsWith(spawnBox, smallest_gap)) {
+        good_spawn_point = false;
+        if (debug_level > 1) {
+          std::cout << "Can't spawn here, collides with existing object\n";
+          std::cout << "This object has (x,y) >> ("
+            << env_.obj[i_obj].spawn_info.x_centre << ", " << env_.obj[i_obj].spawn_info.y_centre
+            << ") and size (mx, my) >> ("
+            << env_.obj[i_obj].spawn_info.model_x << ", " << env_.obj[i_obj].spawn_info.model_y
+            << ")\n";
+        }
+        break;
+      }
+    }
+
+    if (not good_spawn_point) continue;
+
+    // see if this spawn point clashes with the gripper fingers
+    for (luke::Box2d& finger_box : env_.init_fingertip_boxes) {
+      if (ourBox.overlapsWith(finger_box, smallest_gap)) {
+        good_spawn_point = false;
+        if (debug_level > 1) std::cout << "Can't spawn here, hits gripper fingers\n";
+        break;
+      }
+    }
+
+    // we can proceed to spawn the object
+    if (good_spawn_point) {
+      to_spawn.x_centre = xy_points[i_xy][0];
+      to_spawn.y_centre = xy_points[i_xy][1];
+      to_spawn.z_rotation = rot_points[i_rot];
+      if (debug_level > 0) std::cout << "Found a good spawn point\n";
+      break;
+    }
+  }
+
+  // did we find a point suitable for spawning?
+  if (not good_spawn_point) return false;
+
+  // spawn the object
+  spawn_object(to_spawn.index, to_spawn.x_centre, to_spawn.y_centre, to_spawn.z_rotation);
+  
+  return true;
 }
 
 int MjClass::spawn_scene(int num_objects, double xrange, double yrange,
@@ -2055,8 +2268,8 @@ int MjClass::spawn_scene(int num_objects, double xrange, double yrange,
         << ", " << to_spawn.model_y << ", " << to_spawn.model_z << ")"
         << "\n";
 
-    // spawn the object: NOTE! different sign convenstion so we make the rotation negative
-    spawn_object(to_spawn.index, to_spawn.x_centre, to_spawn.y_centre, -to_spawn.z_rotation);
+    // spawn the object
+    spawn_object(to_spawn.index, to_spawn.x_centre, to_spawn.y_centre, to_spawn.z_rotation);
   }
 
   return spawned_objects.size();

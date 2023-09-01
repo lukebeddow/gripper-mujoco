@@ -1634,7 +1634,7 @@ void makeObjectUI(int oldstate)
         {mjITEM_SLIDERINT,   "gram frc",      2, &settings.gram_force, "0 5"},
 
         // {mjITEM_BUTTON,    "Copy pose",     2, NULL,                    " #304"},
-        {mjITEM_SLIDERINT, "Live Object",   3, &settings.object_int,    "0 20"},
+        {mjITEM_SLIDERINT, "Live Object",   3, &settings.object_int,    "0 19"},
         {mjITEM_SLIDERINT, "x noise",       3, &settings.object_x_noise_mm, "-10 10"},
         {mjITEM_SLIDERINT, "y noise",       3, &settings.object_y_noise_mm, "-10 10"},
         {mjITEM_SLIDERINT, "z rotation",    3, &settings.object_z_rot_deg,  "0 360"},
@@ -1642,7 +1642,8 @@ void makeObjectUI(int oldstate)
         // {mjITEM_BUTTON,    "Set key",       3},
         {mjITEM_BUTTON,   "visibility",    2, NULL,                   " #317"},
         {mjITEM_BUTTON,   "spawn scene",   2, NULL,                   " #318"},
-        {mjITEM_SLIDERINT, "scene obj",   3, &settings.scene_objects,    "0 20"},
+        {mjITEM_BUTTON,   "spawn into",   2, NULL,                   " #318"},
+        {mjITEM_SLIDERINT, "scene obj",   3, &settings.scene_objects,    "1 20"},
         {mjITEM_SLIDERNUM,  "scene X",         2, &settings.scene_x, "0 1"},
         {mjITEM_SLIDERNUM,  "scene Y",         2, &settings.scene_y, "0 1"},
         {mjITEM_END}
@@ -2574,6 +2575,14 @@ void uiEvent(mjuiState* state)
                 myMjClass.reset_object();
                 int num_spawned = myMjClass.spawn_scene(settings.scene_objects, settings.scene_x, settings.scene_y, 0.0);
                 std::cout << "spawned " << num_spawned << " objects\n";
+                break;
+            }
+            case 33: {          // spawn into object scene
+                std::cout << "Spawning into scene object num " << settings.object_int << "\n";
+                bool success = myMjClass.spawn_into_scene(settings.object_int, settings.scene_x, settings.scene_y,
+                    settings.object_z_rot_deg, settings.object_x_noise_mm * 1e-3, settings.object_y_noise_mm * 1e-3,
+                    M_PI);
+                std::cout << "success flag is " << success << "\n";
                 break;
             }
             }
