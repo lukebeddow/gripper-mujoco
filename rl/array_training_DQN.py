@@ -453,6 +453,12 @@ def set_actions(model, discrete=True, base_XY=False, action_values=None):
       2e-3  # [4] base_XY
     ]
 
+  elif len(action_values) == 4 and not base_XY:
+    pass
+  elif len(action_values) == 5 and base_XY:
+    pass
+  else: raise RuntimeError(f"set_actions() got {len(action_values)} actions")
+
   # enable and configure the core actions with default settings
   model.env.mj.set.gripper_prismatic_X.in_use = True
   model.env.mj.set.gripper_revolute_Y.in_use = True
@@ -739,7 +745,7 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 1
                       state_mu=0.025, reward_style="sensor_mixed", reward_options=[], 
                       scale_rewards=1.0, scale_penalties=1.0, penalty_termination=False,
                       num_segments=8, finger_thickness=0.9e-3, finger_width=28e-3,
-                      max_episode_steps=250, eval_me=None, base_XY_actions=False):
+                      max_episode_steps=250, eval_me=None, base_XY_actions=False, action_values=None):
   """
   Applies baseline settings to the model when run without any arguments
   """
@@ -772,7 +778,7 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 1
   model = setup_HER(model, use=False)
 
   # configure actions
-  model = set_actions(model, base_XY=base_XY_actions)
+  model = set_actions(model, base_XY=base_XY_actions, action_values=action_values)
 
   # can perform special operations here
   if eval_me is not None: 
@@ -2934,7 +2940,7 @@ if __name__ == "__main__":
 
     # use the new object set
     model.params.object_set = "set8_fullset_1500"
-    
+
     # HARDCODED PARAMETERS BEWARE
     model.params.no_sensor_data = False
     model.params.offline_use_cql = False # test no CQL!
@@ -2986,6 +2992,55 @@ if __name__ == "__main__":
       print(f"Time taken was {d[0]:.0f} days {h[0]:.0f} hrs {m[0]:.0f} mins {s:.0f} secs\n")
 
       exit()
+
+  elif training_type == "cnn_trial_4":
+
+    vary_1 = [
+      "CNN_25_25",
+      # "CNN_50_50"
+    ]
+    vary_2 = [5e-6, 5e-5, 5e-4]
+    vary_3 = None
+    repeats = 3
+    param_1_name = "network"
+    param_2_name = "learning rate"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    baseline_args = {
+      "network" : param_1,
+      "lr" : param_2,
+      "action_values" : [2e-3, 0.015, 4e-3, 2e-3]
+    }
+
+    # use the new object set
+    model.params.object_set = "set8_fullset_1500"
+
+    # very long trainings
+    model.params.num_episodes = 200_000
+
+  elif training_type == "larger_actions":
+
+    vary_1 = None
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    param_1_name = None
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    baseline_args = {
+      "action_values" : [2e-3, 0.015, 4e-3, 2e-3]
+    }
+
+    # use the new object set
+    model.params.object_set = "set8_fullset_1500"
+
+    # very long trainings
+    model.params.num_episodes = 100_000
 
   elif training_type == "example_template":
 
