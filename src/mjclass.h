@@ -741,13 +741,19 @@ namespace MjType
       double x_centre;
       double y_centre;
       double z_rotation;
+      luke::Box2d box;
     };
 
-    // track the state of the object at this step
+    // initial profiles of gripper fingertips
+    std::vector<luke::Box2d> init_fingertip_boxes;
+
+    // track the state of objects in the environment
     struct Obj {
+
       std::string name;
       luke::QPos qpos;
       luke::QPos start_qpos;
+      SpawnObj spawn_info;
       luke::rawNum finger1_force;
       luke::rawNum finger2_force;
       luke::rawNum finger3_force;
@@ -806,17 +812,30 @@ namespace MjType
     } grp;
 
     void reset() {
+
       // reset to initialised values
       Grp blank_grp;
       grp = blank_grp;
       ObjValues blank_obj;
       obj_values = blank_obj;
       obj.clear();
+
       // reset data
       cumulative_reward = 0;
       num_action_steps = 0;
       // start_qpos.reset();
       cnt.reset();
+
+      // reset and redetermine the initial gripper fingertip positions
+      init_fingertip_boxes.clear();
+      init_fingertip_boxes.resize(3);
+      std::vector<luke::Vec3> tip_pos = luke::get_finger_hook_locations();
+      for (int i = 0; i < 3; i++) {
+        luke::Box2d tip;
+        tip.initCentre(tip_pos[i].x, tip_pos[i].y, tip_pos[3 + i].y, tip_pos[3 + i].x);
+        tip.rotate(-tip_pos[3 + i].z);
+        init_fingertip_boxes[i] = tip;
+      }
     }
 
     void print_objects() {
@@ -1476,6 +1495,11 @@ public:
   void reset_object();
   void spawn_object(int index);
   void spawn_object(int index, double xpos, double ypos, double zrot);
+  void spawn_object(MjType::Env::SpawnObj to_spawn);
+  bool spawn_into_scene(int index, double xpos, double ypos);
+  bool spawn_into_scene(int index, double xpos, double ypos, double zrot);
+  bool spawn_into_scene(int index, double xpos, double ypos, double zrot,
+    double xrange, double yrange, double rotrange);
   int spawn_scene(int num_objects, double xrange, double yrange, double smallest_gap);
   void randomise_every_colour();
   void randomise_object_colour(bool all_objects=false);
@@ -1513,6 +1537,11 @@ public:
 
   // misc
   void forward() { mj_forward(model, data); }
+  void tick();
+  float tock();
+  bool last_action_gripper();
+  bool last_action_panda();
+  std::string print_actions();
   int get_number_of_objects() { return env_.object_names.size(); }
   std::string get_current_object_name() { return env_.obj[0].name; }
   float get_fingertip_z_height();
@@ -1547,14 +1576,10 @@ public:
   void calibrate_simulated_sensors(float bend_gauge_normalise);
   float yield_load();
   float yield_load(float thickness, float width);
-  void tick();
-  float tock();
   MjType::EventTrack add_events(MjType::EventTrack& e1, MjType::EventTrack& e2);
   void reset_goal();
   void print(std::string s) { std::printf("%s\n", s.c_str()); }
   void default_goal_event_triggering();
-  bool last_action_gripper();
-  bool last_action_panda();
   float find_highest_stable_timestep();
   void set_sensor_noise_and_normalisation_to(bool set_as);
 

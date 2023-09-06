@@ -49,17 +49,17 @@
   XX(  reward_on_end_only,      bool,     true)     /* give goal reward only on episode end */\
   XX(  binary_goal_vector,      bool,     false)    /* do we use only binary goals */\
   /*
-  get_observation() settings    (NB: sample modes: 0=raw, 1=change, 2=average) */\
-  XX(  sensor_sample_mode,      int,      1)        /* how to sample sensor observations, see MjType::Sample*/\
-  XX(  state_sample_mode,       int,      0)        /* how to sample motor state, see MjType::Sample*/\
+  get_observation() settings    (NB: sample modes: 0=raw, 1=change, 2=average, 3=median, 4=binary marker) */\
+  XX(  sensor_sample_mode,      int,      2)        /* how to sample sensor observations, see MjType::Sample*/\
+  XX(  state_sample_mode,       int,      4)        /* how to sample motor state, see MjType::Sample*/\
   XX(  sensor_n_prev_steps,     int,      1)        /* how many steps back do we sample with sensors */\
-  XX(  state_n_prev_steps,      int,      1)        /* how many steps back do we sample with state sensors */\
+  XX(  state_n_prev_steps,      int,      5)        /* how many steps back do we sample with state sensors */\
   XX(  sensor_noise_mag,        double,   0.0)      /* noise magnitude if using uniform distribution (std <= 0) */\
-  XX(  sensor_noise_mu,         double,   0.0)      /* abs range of sensor mean shift */\
-  XX(  sensor_noise_std,        double,   0.05)     /* std deviation of noise, <= 0 means uniform */\
+  XX(  sensor_noise_mu,         double,   0.05)     /* abs range of sensor mean shift */\
+  XX(  sensor_noise_std,        double,   0.025)    /* std deviation of noise, <= 0 means uniform */\
   XX(  state_noise_mag,         double,   0.0)      /* noise magnitude if using uniform distribution (std <= 0)*/\
-  XX(  state_noise_mu,          double,   0.0)      /* abs range of state sensor mean shift*/\
-  XX(  state_noise_std,         double,   0.05)     /* std deviation of noise, <= 0 means uniform*/\
+  XX(  state_noise_mu,          double,   0.025)    /* abs range of state sensor mean shift*/\
+  XX(  state_noise_std,         double,   0.0)      /* std deviation of noise, <= 0 means uniform*/\
   /* 
   update_env() settings */\
   XX(  oob_distance,            double,   75e-3)    /* distance to consider object out of bounds */\

@@ -1675,6 +1675,18 @@ void apply_UDL(double force_per_m)
   }
 }
 
+void apply_UDL_force_per_joint(double force_per_joint)
+{
+  /* apply a uniformally distributed load with a force per joint */
+
+  // std::cout << "force per joint applied in UDL is " << force_per_joint << '\n';
+
+  // add force also to first segment for visual consistency in mujoco, it has no effect
+  for (int i = 0; i < j_.segmentMatrices.idx_size; i++) {
+    set_segment_force(i, true, force_per_joint);
+  }
+}
+
 void wipe_segment_forces()
 {
   /* remove all segment fores */
