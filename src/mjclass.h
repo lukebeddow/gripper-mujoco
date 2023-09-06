@@ -846,6 +846,24 @@ namespace MjType
 
   };
 
+  // information on how to spawn objects into the scene
+  struct SpawnParams {
+    int index = -1;
+    double x = 0.0;
+    double y = 0.0;
+    double zrot = 0.0;
+    double xrange = 0.0;
+    double yrange = 0.0;
+    double rotrange = 0.0;
+    double xmin = -100;
+    double xmax = 100;
+    double ymin = -100;
+    double ymax = 100;
+    double smallest_gap = 1e-3;
+    double xy_increment = 2e-3; // 2mm
+    double rot_increment = M_PI / 30.0; // 5 degrees
+  };
+
   // data structure for real gripper data
   struct Real {
     std::vector<float> gauge1_since_last_read;
@@ -1365,6 +1383,7 @@ public:
   mjData* data;
 
   MjType::Settings s_;                          // simulation settings
+  MjType::SpawnParams default_spawn_params;     // how objects are spawned into the scene
   std::chrono::time_point<time_> start_time_;   // time from tick() call
   bool render_camera_init = false;              // have we initialised the rgbd camera
   bool render_window_init = false;              // have we initialised the rendering window
@@ -1496,10 +1515,12 @@ public:
   void spawn_object(int index);
   void spawn_object(int index, double xpos, double ypos, double zrot);
   void spawn_object(MjType::Env::SpawnObj to_spawn);
+  bool spawn_into_scene(int index);
   bool spawn_into_scene(int index, double xpos, double ypos);
   bool spawn_into_scene(int index, double xpos, double ypos, double zrot);
   bool spawn_into_scene(int index, double xpos, double ypos, double zrot,
     double xrange, double yrange, double rotrange);
+  bool spawn_into_scene(MjType::SpawnParams params);
   int spawn_scene(int num_objects, double xrange, double yrange, double smallest_gap);
   void randomise_every_colour();
   void randomise_object_colour(bool all_objects=false);

@@ -1879,10 +1879,6 @@ void MjClass::spawn_object(MjType::Env::SpawnObj to_spawn)
 
   }
 
-  // save info on object to be spawned
-  env_.obj[objvec_idx].name = env_.object_names[to_spawn.index];
-  env_.obj[objvec_idx].spawn_info = to_spawn;
-
   // set the position to be spawned
   luke::QPos spawn_pos;
   spawn_pos.x = to_spawn.x_centre;
@@ -1906,22 +1902,36 @@ void MjClass::spawn_object(MjType::Env::SpawnObj to_spawn)
   // spawn the object and save its start position
   env_.obj[objvec_idx].start_qpos = luke::spawn_object(model, data, to_spawn.index, spawn_pos);
 
-  // add the object to the environment variable
-  // env_.obj.push_back(new_obj);
+  // save info on object to be spawned
+  env_.obj[objvec_idx].name = env_.object_names[to_spawn.index];
+  env_.obj[objvec_idx].spawn_info = to_spawn;
 
   // update everything for rendering
   forward();
+}
+
+bool MjClass::spawn_into_scene(int index)
+{
+  /* spawn object at index with all other parameters default */
+
+  MjType::SpawnParams p;
+  p = default_spawn_params;
+  p.index = index;
+  return spawn_into_scene(p);
 }
 
 bool MjClass::spawn_into_scene(int index, double xpos, double ypos) 
 {
 
   /* spawn an object into a scene, given (x, y) and no range on these values,
-  then assume we want a random rotation. Return false if cannot spawn without
-  a collision */
+  return false if cannot spawn without a collision */
 
-  // spawn at (xpos, ypos) with random rotation (-pi, pi)
-  return spawn_into_scene(index, xpos, ypos, 0.0, 0.0, 0.0, M_PI);
+  MjType::SpawnParams p;
+  p = default_spawn_params;
+  p.index = index;
+  p.x = xpos;
+  p.y = ypos;
+  return spawn_into_scene(p);
 }
 
 bool MjClass::spawn_into_scene(int index, double xpos, double ypos, double zrot) 
@@ -1929,24 +1939,55 @@ bool MjClass::spawn_into_scene(int index, double xpos, double ypos, double zrot)
   /* spawn an object into a scene, given (x, y, rot) and no range on these values.
   Return false if cannot spawn without a collision */
 
-  return spawn_into_scene(index, xpos, ypos, zrot, 0.0, 0.0, 0.0);
+  MjType::SpawnParams p;
+  p = default_spawn_params;
+  p.index = index;
+  p.x = xpos;
+  p.y = ypos;
+  p.zrot = zrot;
+  return spawn_into_scene(p);
 }
 
 bool MjClass::spawn_into_scene(int index, double xpos, double ypos, double zrot,
-  double xrange, double yrange, double rotrange) 
+  double xrange, double yrange, double rotrange)
+{
+  MjType::SpawnParams p;
+  p = default_spawn_params;
+  p.index = index;
+  p.x = xpos;
+  p.y = ypos;
+  p.zrot = zrot;
+  p.xrange = xrange;
+  p.yrange = yrange;
+  p.rotrange = rotrange;
+  return spawn_into_scene(p);
+}
+
+bool MjClass::spawn_into_scene(MjType::SpawnParams params)
 {
   /* spawn an object into a scene, given (x, y, rot) and a range for these values.
   Return false if cannot spawn without a collision */
 
-  double xmin = -10;
-  double xmax = 10;
-  double ymin = -10;
-  double ymax = 10;
-  double smallest_gap = 1e-3;
-  int debug_level = 2;
+  // extract object spawning information
+  int index = params.index;
+  double xpos = params.x;
+  double ypos = params.y;
+  double zrot = params.zrot;
+  double xrange = params.xrange;
+  double yrange = params.yrange;
+  double rotrange = params.rotrange;
+  double xmin = params.xmin;
+  double xmax = params.xmax;
+  double ymin = params.ymin;
+  double ymax = params.ymax;
+  double smallest_gap = params.smallest_gap;
+  double xy_increment = params.xy_increment;
+  double rot_increment = params.rot_increment;
+
+  // for debugging, 0=off, 1=key info, 2=most info, 3=excessive info
+  constexpr int debug_level = 0;
 
   // create a grid of possible points to spawn in an object
-  constexpr double xy_increment = 2e-3; // 2mm
   int num_x = ((2 * xrange) / xy_increment) + 1;
   int num_y = ((2 * yrange) / xy_increment) + 1;
   std::vector<std::array<double, 2>> xy_points(num_x * num_y);
@@ -1970,7 +2011,6 @@ bool MjClass::spawn_into_scene(int index, double xpos, double ypos, double zrot,
   }
 
   // create a vector of possible rotatations
-  constexpr double rot_increment = M_PI / 30.0; // 5 degrees
   int num_r = ((2 * rotrange) / rot_increment) + 1;
   std::vector<double> rot_points(num_r);
   for (int ir = 0; ir < num_r; ir++) {

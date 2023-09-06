@@ -85,6 +85,10 @@ PYBIND11_MODULE(bind, m) {
     .def("reset_object", &MjClass::reset_object)
     .def("spawn_object", static_cast<void (MjClass::*)(int)>(&MjClass::spawn_object)) /* see bottom */
     .def("spawn_object", static_cast<void (MjClass::*)(int, double, double, double)>(&MjClass::spawn_object))
+    .def("spawn_into_scene", static_cast<bool (MjClass::*)(int)>(&MjClass::spawn_into_scene))
+    .def("spawn_into_scene", static_cast<bool (MjClass::*)(int, double, double)>(&MjClass::spawn_into_scene))
+    .def("spawn_into_scene", static_cast<bool (MjClass::*)(int, double, double, double)>(&MjClass::spawn_into_scene))
+    .def("spawn_into_scene", static_cast<bool (MjClass::*)(int, double, double, double, double, double, double)>(&MjClass::spawn_into_scene))
     .def("spawn_scene", &MjClass::spawn_scene)
     .def("randomise_every_colour", &MjClass::randomise_every_colour)
     .def("randomise_object_colour", &MjClass::randomise_object_colour)
@@ -171,6 +175,7 @@ PYBIND11_MODULE(bind, m) {
     .def_readwrite("curve_validation_data", &MjClass::curve_validation_data_)
     .def_readwrite("real_sensors", &MjClass::real_sensors_)
     .def_readwrite("sim_sensors", &MjClass::sim_sensors_)
+    .def_readwrite("default_spawn_params", &MjClass::default_spawn_params)
 
     // pickle support
     .def(py::pickle(
@@ -182,12 +187,13 @@ PYBIND11_MODULE(bind, m) {
           mjobj.model_folder_path,    // path to the mjcf models folder
           mjobj.object_set_name,      // name of object set in use
           mjobj.machine,              // machine library is compiled for
-          mjobj.goal_                 // event goal, if using HER
+          mjobj.goal_,                // event goal, if using HER
+          mjobj.default_spawn_params  // object spawn parameters
         );
       },
       [](py::tuple t) { // __setstate__
 
-        if (t.size() != 5 and t.size() != 6) // 5 is OLD version, delete later
+        if (t.size() != 6 and t.size() != 7) // 6 is OLD version, delete later
           throw std::runtime_error("mjclass py::pickle got invalid state (tuple size wrong)");
 
         // create new c++ instance with old settings
@@ -199,6 +205,7 @@ PYBIND11_MODULE(bind, m) {
         if (t.size() >= 4) mjobj.object_set_name = t[3].cast<std::string>();
         // if (t.size() >= 5) mjobj.machine = t[4].cast<std::string>();
         if (t.size() >= 6) mjobj.goal_ = t[5].cast<MjType::Goal>();
+        if (t.size() >= 7) mjobj.default_spawn_params = t[6].cast<MjType::SpawnParams>();
 
         // disable automatic setting calibration as loading implies this is already done
         mjobj.resetFlags.flags_init = true;
@@ -367,6 +374,75 @@ PYBIND11_MODULE(bind, m) {
         if (debug_bind)
           std::cout << "unpickling MjType::EventTrack::BinaryEvent finished\n";
 
+        return out;
+      }
+    ))
+    ;
+  }
+
+  // set up sensor type so python can interact and change them
+  {py::class_<MjType::SpawnParams>(m, "SpawnParams")
+
+    .def(py::init<>())
+    .def_readwrite("index", &MjType::SpawnParams::index)
+    .def_readwrite("x", &MjType::SpawnParams::x)
+    .def_readwrite("y", &MjType::SpawnParams::y)
+    .def_readwrite("zrot", &MjType::SpawnParams::zrot)
+    .def_readwrite("xrange", &MjType::SpawnParams::xrange)
+    .def_readwrite("yrange", &MjType::SpawnParams::yrange)
+    .def_readwrite("rotrange", &MjType::SpawnParams::rotrange)
+    .def_readwrite("xmin", &MjType::SpawnParams::xmin)
+    .def_readwrite("xmax", &MjType::SpawnParams::xmax)
+    .def_readwrite("ymin", &MjType::SpawnParams::ymin)
+    .def_readwrite("ymax", &MjType::SpawnParams::ymax)
+    .def_readwrite("smallest_gap", &MjType::SpawnParams::smallest_gap)
+    .def_readwrite("xy_increment", &MjType::SpawnParams::xy_increment)
+    .def_readwrite("rot_increment", &MjType::SpawnParams::rot_increment)
+
+    // pickle support
+    .def(py::pickle(
+      [](const MjType::SpawnParams r) { // __getstate___
+        /* return a tuple that fully encodes the state of the object */
+        return py::make_tuple(
+          r.index, 
+          r.x, 
+          r.y,
+          r.zrot,
+          r.xrange,
+          r.yrange,
+          r.rotrange,
+          r.xmin,
+          r.xmax,
+          r.ymin,
+          r.ymax,
+          r.smallest_gap,
+          r.xy_increment,
+          r.rot_increment
+        );
+      },
+      [](py::tuple t) { // __setstate__
+
+        if (t.size() != 14)
+          throw std::runtime_error("MjType::SpawnParams py::pickle got invalid state");
+
+        // create new c++ instance with old data
+        MjType::SpawnParams out;
+
+        out.index = t[0].cast<int>();
+        out.x = t[1].cast<double>();
+        out.y = t[2].cast<double>();
+        out.zrot = t[3].cast<double>();
+        out.xrange = t[4].cast<double>();
+        out.yrange = t[5].cast<double>();
+        out.rotrange = t[6].cast<double>();
+        out.xmin = t[7].cast<double>();
+        out.xmax = t[8].cast<double>();
+        out.ymin = t[9].cast<double>();
+        out.ymax = t[10].cast<double>();
+        out.smallest_gap = t[11].cast<double>();
+        out.xy_increment = t[12].cast<double>();
+        out.rot_increment = t[13].cast<double>();
+        
         return out;
       }
     ))
