@@ -2899,6 +2899,94 @@ if __name__ == "__main__":
       "state_steps" : 3,
     }
 
+  elif training_type.startswith("full_offline_training_v1"):
+
+    # vary_1 = [
+    #   (50, 5), 
+    #   (125, 2),
+    #   (250, 1)
+    # ]
+    # vary_2 = [False, True]
+    # vary_3 = None #[False, True]
+    # repeats = 3
+    # param_1_name = "iter_per_file"
+    # param_2_name = "random order"
+    # param_3_name = None #"disable_sensor_data"
+    # param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+    #                                             param_3=vary_3, repeats=repeats)
+
+    # which offline data are we loading
+    if training_type.endswith("v1-1"):
+      dataset = "/home/luke/luke-gripper-mujoco/rl/models/dqn/11-08-23/operator-PC_16:33_A1"
+      net = "CNN2_100_100"
+    elif training_type.endswith("v1-2"):
+      dataset = "/home/luke/luke-gripper-mujoco/rl/models/dqn/18-08-23/operator-PC_16:32_A1"
+      net = "CNN2_100_100"
+    elif training_type.endswith("v1-3"):
+      dataset = "/home/luke/luke-gripper-mujoco/rl/models/dqn/18-08-23/operator-PC_16:32_A3"
+      net = "CNN2_50_50"
+
+    baseline_args = {
+      "network" : net,
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+    # use the new object set
+    model.params.object_set = "set8_fullset_1500"
+    
+    # HARDCODED PARAMETERS BEWARE
+    model.params.no_sensor_data = False
+    model.params.offline_use_cql = False # test no CQL!
+    iter_per_file = 125
+    random_order = False
+    epochs = 2
+    file_cap = None
+
+    # normal testing
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
+    if not args.print and not args.print_results:
+
+      model = baseline_settings(model, **baseline_args)
+      model.train_offline(dataset, iter_per_file=iter_per_file, random_order=random_order, 
+                          epochs=epochs, file_cap=file_cap)
+
+      # finishing time, how long did everything take
+      finishing_time = datetime.now()
+      time_taken = finishing_time - starting_time
+      d = divmod(time_taken.total_seconds(), 86400)
+      h = divmod(d[1], 3600)
+      m = divmod(h[1], 60)
+      s = m[1]
+      print("\nStarted at:", starting_time.strftime(datestr))
+      print("Finished at:", datetime.now().strftime(datestr))
+      print(f"Time taken was {d[0]:.0f} days {h[0]:.0f} hrs {m[0]:.0f} mins {s:.0f} secs\n")
+
+      # optional: enable this for some trainings for monitoring
+      if inputarg % 3 == 1:
+        model.params.test_freq = 500 # close eye on performance
+
+      # now proceed with online training
+      model.train()
+
+      # test
+      model = test(model, trials_per_obj=10, heuristic=args.heuristic, demo=args.demo)
+
+      # finishing time, how long did everything take
+      finishing_time = datetime.now()
+      time_taken = finishing_time - starting_time
+      d = divmod(time_taken.total_seconds(), 86400)
+      h = divmod(d[1], 3600)
+      m = divmod(h[1], 60)
+      s = m[1]
+      print("\nStarted at:", starting_time.strftime(datestr))
+      print("Finished at:", datetime.now().strftime(datestr))
+      print(f"Time taken was {d[0]:.0f} days {h[0]:.0f} hrs {m[0]:.0f} mins {s:.0f} secs\n")
+
+      exit()
+
   elif training_type == "example_template":
 
     vary_1 = None
