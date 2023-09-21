@@ -252,9 +252,11 @@ void MjClass::configure_settings()
     to different loading (point load in theory but 4/5th length loading in practice) */
     float bend_gauge_normalise = s_.saturation_yield_factor * yield_load();
     calibrate_simulated_sensors(bend_gauge_normalise);
+    // save the calibration ratio to estimate SI outputs from the gauges
+    sim_gauge_raw_to_N_factor = bend_gauge_normalise / s_.bending_gauge.normalise;
     if (echo_auto_changes) {
       std::cout << "MjClass auto-setting: Bending gauge normalisation set to: " 
-        << s_.bending_gauge.normalise << ", based on saturation load of " << bend_gauge_normalise <<'\n';
+        << s_.bending_gauge.normalise << " (NOT SI), based on saturation load of " << bend_gauge_normalise <<'\n';
       std::cout << "MjClass auto-setting: Wrist Z sensor offset set to: " 
         << s_.wrist_sensor_Z.raw_value_offset << '\n';
     }
@@ -405,6 +407,7 @@ void MjClass::reset()
   
   // reset sensor saved data
   sim_sensors_.reset();
+  sim_sensors_SI_.reset();
   real_sensors_.reset();
 
   // reset timestamps for sensor readings
@@ -603,7 +606,7 @@ bool MjClass::render()
     render_window_init = false;
     window_closed = true;
   }
-  
+
   return window_open;
 }
 
@@ -684,6 +687,11 @@ void MjClass::monitor_sensors()
     // read
     std::vector<luke::gfloat> gauges = luke::get_gauge_data(model, data);
 
+    // save SI (for gauges our raw data is NOT SI so we best approximate with calibration)
+    sim_sensors_SI_.finger1_gauge.add(gauges[0] * sim_gauge_raw_to_N_factor);
+    sim_sensors_SI_.finger2_gauge.add(gauges[1] * sim_gauge_raw_to_N_factor);
+    sim_sensors_SI_.finger3_gauge.add(gauges[2] * sim_gauge_raw_to_N_factor);
+
     // normalise
     gauges[0] = s_.bending_gauge.apply_normalisation(gauges[0]);
     gauges[1] = s_.bending_gauge.apply_normalisation(gauges[1]);
@@ -718,6 +726,11 @@ void MjClass::monitor_sensors()
       (luke::gfloat)forces.all.finger3_local[0]
     };
 
+    // save SI
+    sim_sensors_SI_.finger1_axial_gauge.add(axial_gauges[0]);
+    sim_sensors_SI_.finger2_axial_gauge.add(axial_gauges[1]);
+    sim_sensors_SI_.finger3_axial_gauge.add(axial_gauges[2]);
+
     // normalise
     axial_gauges[0] = s_.axial_gauge.apply_normalisation(axial_gauges[0]);
     axial_gauges[1] = s_.axial_gauge.apply_normalisation(axial_gauges[1]);
@@ -748,6 +761,9 @@ void MjClass::monitor_sensors()
     // read
     luke::gfloat palm_reading = forces.all.palm_local[0];
 
+    // save SI
+    sim_sensors_SI_.palm_sensor.add(palm_reading);
+
     // normalise
     palm_reading = s_.palm_sensor.apply_normalisation(palm_reading);
 
@@ -767,6 +783,10 @@ void MjClass::monitor_sensors()
     // read
     luke::gfloat x = data->userdata[0];
     luke::gfloat y = data->userdata[1];
+
+    // save SI
+    sim_sensors_SI_.wrist_X_sensor.add(x);
+    sim_sensors_SI_.wrist_Y_sensor.add(y);
 
     // normalise
     x = s_.wrist_sensor_XY.apply_normalisation(x);
@@ -789,6 +809,9 @@ void MjClass::monitor_sensors()
 
     // read
     luke::gfloat z = data->userdata[2];
+
+    // save SI
+    sim_sensors_SI_.wrist_Z_sensor.add(z);
 
     // zero the reading (this step is unique to wrist Z sensor)
     z -= s_.wrist_sensor_Z.raw_value_offset;
@@ -986,6 +1009,16 @@ void MjClass::update_env()
   //   forces.obj.finger1_local[1], forces.obj.finger2_local[1], forces.obj.finger3_local[1]
   // });
 
+  // get information directly from the sensors
+  luke::gfloat last_g1 = sim_sensors_SI_.read_finger1_gauge();
+  luke::gfloat last_g2 = sim_sensors_SI_.read_finger2_gauge();
+  luke::gfloat last_g3 = sim_sensors_SI_.read_finger3_gauge();
+  luke::gfloat last_palm_N = sim_sensors_SI_.read_palm_sensor();
+  luke::gfloat last_wrist_N = sim_sensors_SI_.read_wrist_Z_sensor();
+  luke::gfloat max_gauge_force = std::max(last_g1, last_g2);
+  max_gauge_force = std::max(max_gauge_force, last_g3);
+  luke::gfloat avg_gauge_force = (1.0/3.0) * (last_g1 + last_g2 + last_g3);
+
   /* ----- detect state of binary events (EDIT here to add a binary event) ----- */
 
   // another step has been made
@@ -1083,6 +1116,16 @@ void MjClass::update_env()
   env_.cnt.finger2_force.value = env_.obj[0].finger2_force_mag;
   env_.cnt.finger3_force.value = env_.obj[0].finger3_force_mag;
   env_.cnt.ground_force.value = env_.obj[0].ground_force_mag;
+
+  // new: direct sensor rewards, based on measured sensor values from SIMULATED sensors
+  env_.cnt.good_bend_sensor.value = avg_gauge_force;
+  env_.cnt.exceed_bend_sensor.value = max_gauge_force;
+  env_.cnt.dangerous_bend_sensor.value = max_gauge_force;
+  env_.cnt.good_palm_sensor.value = last_palm_N;
+  env_.cnt.exceed_palm_sensor.value = last_palm_N;
+  env_.cnt.dangerous_palm_sensor.value = last_palm_N;
+  env_.cnt.exceed_wrist_sensor.value = last_wrist_N;
+  env_.cnt.dangerous_wrist_sensor.value = last_wrist_N;
 
   /* ----- resolve linear events and update counts of all events (no editing needed) ----- */
 
@@ -1190,6 +1233,14 @@ std::vector<float> MjClass::set_action(int action)
 
   bool wl = true; // within limits
 
+  if (action < 0 or action >= n_actions) {
+    std::cout << "MjClass::set_action() received action = " << action << " which is out of bounds.\n"
+      << "This function is now returning without doing anything. The possible actions are:\n";
+    print_actions();
+    std::vector<float> empty;
+    return empty;
+  }
+
   int action_code = action_options[action];
 
   // // for testing
@@ -1222,9 +1273,9 @@ std::vector<float> MjClass::set_action(int action)
     #undef AA
 
     default:
-    std::cout << "Action value received is " << action_code << '\n';
-    std::cout << "Number of actions is " << n_actions << '\n';
-    throw std::runtime_error("MjClass::set_action() received out of bounds int");
+      std::cout << "Action value received is " << action_code << '\n';
+      std::cout << "Number of actions is " << n_actions << '\n';
+      throw std::runtime_error("MjClass::set_action() received out of bounds int");
 
   }
 
@@ -1755,6 +1806,9 @@ void MjClass::reset_object()
   /* remove any object from the scene */
 
   luke::reset_object(model, data);
+
+  // remove our record of any objects
+  env_.obj.clear();
 }
 
 void MjClass::spawn_object(int index)
@@ -1770,27 +1824,45 @@ void MjClass::spawn_object(int index)
 
 void MjClass::spawn_object(int index, double xpos, double ypos, double zrot)
 {
+  /* spawn an object at a give (x, y, rotation) */
+
+  MjType::Env::SpawnObj to_spawn;
+  to_spawn.index = index;
+  to_spawn.x_centre = xpos;
+  to_spawn.y_centre = ypos;
+  to_spawn.z_rotation = zrot;
+
+  luke::Vec3 bound = luke::get_object_xyz_bounding_box(index);
+  to_spawn.model_x = bound.x;
+  to_spawn.model_y = bound.y;
+  to_spawn.model_z = bound.z;
+
+  spawn_object(to_spawn);
+}
+
+void MjClass::spawn_object(MjType::Env::SpawnObj to_spawn)
+{
   /* spawn an object beneath the gripper at (xpos, ypos) with a given rotation
   zrot in radians about the vertical axis */
 
-  if (index < 0 or index >= env_.object_names.size()) {
+  if (to_spawn.index < 0 or to_spawn.index >= env_.object_names.size()) {
     throw std::runtime_error("bad index to spawn_object()");
   }
 
   int objvec_idx = -1;
 
   // check if this object is already live
-  if (luke::is_object_live(index)) {
+  if (luke::is_object_live(to_spawn.index)) {
     
     // we want to find the existing entry and update it
     for (int i = 0; i < env_.obj.size(); i++) {
-      if (env_.obj[i].name == env_.object_names[index]) {
+      if (env_.obj[i].name == env_.object_names[to_spawn.index]) {
         objvec_idx = i;
         break;
       }
     }
     if (objvec_idx == -1) {
-      std::cout << "New object id = " << index << ", name = " << env_.object_names[index] << '\n';
+      std::cout << "New object id = " << to_spawn.index << ", name = " << env_.object_names[to_spawn.index] << '\n';
       std::cout << "Existing objects in the simulation:\n";
       for (int i = 0; i < env_.obj.size(); i++) {
         std::cout << "Object name = " << env_.obj[i].name << '\n';
@@ -1807,13 +1879,10 @@ void MjClass::spawn_object(int index, double xpos, double ypos, double zrot)
 
   }
 
-  // save info on object to be spawned
-  env_.obj[objvec_idx].name = env_.object_names[index];
-
   // set the position to be spawned
   luke::QPos spawn_pos;
-  spawn_pos.x = xpos;
-  spawn_pos.y = ypos;
+  spawn_pos.x = to_spawn.x_centre;
+  spawn_pos.y = to_spawn.y_centre;
   spawn_pos.z = -1;     // will automatically be set to keyframe value
 
   // set the rotation to be spawned
@@ -1821,23 +1890,258 @@ void MjClass::spawn_object(int index, double xpos, double ypos, double zrot)
   double y1 = spawn_pos.qy;
   double z1 = spawn_pos.qz;
   double w1 = spawn_pos.qw;
-  double x2 = 1 * 1 * sin(zrot / 2.0) - 0 * 0 * cos(zrot / 2.0);
-  double y2 = 0 * 1 * cos(zrot / 2.0) - 1 * 0 * sin(zrot / 2.0);
-  double z2 = 1 * 0 * cos(zrot / 2.0) + 0 * 1 * sin(zrot / 2.0);
-  double w2 = 1 * 1 * cos(zrot / 2.0) + 0 * 0 * sin(zrot / 2.0);
+  double x2 = 1 * 1 * sin(-to_spawn.z_rotation / 2.0) - 0 * 0 * cos(-to_spawn.z_rotation / 2.0);
+  double y2 = 0 * 1 * cos(-to_spawn.z_rotation / 2.0) - 1 * 0 * sin(-to_spawn.z_rotation / 2.0);
+  double z2 = 1 * 0 * cos(-to_spawn.z_rotation / 2.0) + 0 * 1 * sin(-to_spawn.z_rotation / 2.0);
+  double w2 = 1 * 1 * cos(-to_spawn.z_rotation / 2.0) + 0 * 0 * sin(-to_spawn.z_rotation / 2.0);
   spawn_pos.qw = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2;
   spawn_pos.qx = w1 * x2 + x1 * w2 - y1 * z2 + z1 * y2;
   spawn_pos.qy = w1 * y2 + x1 * z2 + y1 * w2 - z1 * x2;
   spawn_pos.qz = w1 * z2 - x1 * y2 + y1 * x2 + z1 * w2;
 
   // spawn the object and save its start position
-  env_.obj[objvec_idx].start_qpos = luke::spawn_object(model, data, index, spawn_pos);
+  env_.obj[objvec_idx].start_qpos = luke::spawn_object(model, data, to_spawn.index, spawn_pos);
 
-  // add the object to the environment variable
-  // env_.obj.push_back(new_obj);
+  // save info on object to be spawned
+  env_.obj[objvec_idx].name = env_.object_names[to_spawn.index];
+  env_.obj[objvec_idx].spawn_info = to_spawn;
 
   // update everything for rendering
   forward();
+}
+
+bool MjClass::spawn_into_scene(int index)
+{
+  /* spawn object at index with all other parameters default */
+
+  MjType::SpawnParams p;
+  p = default_spawn_params;
+  p.index = index;
+  return spawn_into_scene(p);
+}
+
+bool MjClass::spawn_into_scene(int index, double xpos, double ypos) 
+{
+
+  /* spawn an object into a scene, given (x, y) and no range on these values,
+  return false if cannot spawn without a collision */
+
+  MjType::SpawnParams p;
+  p = default_spawn_params;
+  p.index = index;
+  p.x = xpos;
+  p.y = ypos;
+  return spawn_into_scene(p);
+}
+
+bool MjClass::spawn_into_scene(int index, double xpos, double ypos, double zrot) 
+{
+  /* spawn an object into a scene, given (x, y, rot) and no range on these values.
+  Return false if cannot spawn without a collision */
+
+  MjType::SpawnParams p;
+  p = default_spawn_params;
+  p.index = index;
+  p.x = xpos;
+  p.y = ypos;
+  p.zrot = zrot;
+  return spawn_into_scene(p);
+}
+
+bool MjClass::spawn_into_scene(int index, double xpos, double ypos, double zrot,
+  double xrange, double yrange, double rotrange)
+{
+  MjType::SpawnParams p;
+  p = default_spawn_params;
+  p.index = index;
+  p.x = xpos;
+  p.y = ypos;
+  p.zrot = zrot;
+  p.xrange = xrange;
+  p.yrange = yrange;
+  p.rotrange = rotrange;
+  return spawn_into_scene(p);
+}
+
+bool MjClass::spawn_into_scene(MjType::SpawnParams params)
+{
+  /* spawn an object into a scene, given (x, y, rot) and a range for these values.
+  Return false if cannot spawn without a collision */
+
+  // extract object spawning information
+  int index = params.index;
+  double xpos = params.x;
+  double ypos = params.y;
+  double zrot = params.zrot;
+  double xrange = params.xrange;
+  double yrange = params.yrange;
+  double rotrange = params.rotrange;
+  double xmin = params.xmin;
+  double xmax = params.xmax;
+  double ymin = params.ymin;
+  double ymax = params.ymax;
+  double smallest_gap = params.smallest_gap;
+  double xy_increment = params.xy_increment;
+  double rot_increment = params.rot_increment;
+
+  // for debugging, 0=off, 1=key info, 2=most info, 3=excessive info
+  constexpr int debug_level = 0;
+
+  // create a grid of possible points to spawn in an object
+  int num_x = ((2 * xrange) / xy_increment) + 1;
+  int num_y = ((2 * yrange) / xy_increment) + 1;
+  std::vector<std::array<double, 2>> xy_points(num_x * num_y);
+  for (int ix = 0; ix < num_x; ix++) {
+    for (int iy = 0; iy < num_y; iy++) {
+
+      // does our range exceed our increment
+      if (num_x > 1) xy_points[ix * num_y + iy][0] = -xrange + ix * xy_increment + xpos;
+      else xy_points[ix * num_y + iy][0] = xpos;
+
+      if (num_y > 1) xy_points[ix * num_y + iy][1] = -yrange + iy * xy_increment + ypos;
+      else xy_points[ix * num_y + iy][1] = ypos;
+    }
+  }
+
+  if (debug_level > 2) {
+    for (int i = 0; i < xy_points.size(); i++) {
+      std::cout << "raw (x, y) >> ("
+        << xy_points[i][0] << ", " << xy_points[i][1] << ")\n";
+    }
+  }
+
+  // create a vector of possible rotatations
+  int num_r = ((2 * rotrange) / rot_increment) + 1;
+  std::vector<double> rot_points(num_r);
+  for (int ir = 0; ir < num_r; ir++) {
+
+    // does our range exceed our increment
+    if (num_r > 1) rot_points[ir] = -rotrange + ir * rot_increment + zrot;
+    else rot_points[ir] = zrot;
+  }
+
+  // now shuffle the points into a random order (if we have multiple options)
+  if (xy_points.size() > 1)
+    std::shuffle(std::begin(xy_points), std::end(xy_points), *MjType::generator);
+  if (rot_points.size() > 1)
+    std::shuffle(std::begin(rot_points), std::end(rot_points), *MjType::generator);
+
+  if (debug_level > 0) {
+    std::cout << "There are " << xy_points.size() << " xy points, and "
+      << rot_points.size() << " rotation points\n";
+    std::cout << "There are " << env_.obj.size() << " existing objects in the scene\n";
+    if (debug_level > 1) {
+      for (int i = 0; i < env_.obj.size(); i++) {
+        std::cout << "index = " << env_.obj[i].spawn_info.index
+          << ", name = " << env_.obj[i].name << "\n";
+      }
+    }
+  }
+
+  // determine how much space the new object to spawn needs
+  MjType::Env::SpawnObj to_spawn;
+  luke::Vec3 obj_xyz = luke::get_object_xyz_bounding_box(index);
+  to_spawn.index = index;
+  to_spawn.model_x = obj_xyz.x;
+  to_spawn.model_y = obj_xyz.y;
+  to_spawn.model_z = obj_xyz.z;
+
+  if (debug_level > 0)
+    std::cout << "Adding object " << to_spawn.index << ", with (x,y,z) bounding >> ("
+      << to_spawn.model_x << ", " << to_spawn.model_y
+      << ", " << to_spawn.model_z << ")\n";
+
+  // loop over our points and rotations and try to spawn
+  int i_xy = -1;
+  int i_rot = -1;
+  int total_tries = std::max(xy_points.size(), rot_points.size());
+  bool good_spawn_point = false;
+
+  for (int i = 0; i < total_tries; i++) {
+
+    i_xy += 1;
+    i_rot += 1;
+
+    if (i_xy >= xy_points.size()) i_xy = 0;
+    if (i_rot >= rot_points.size()) i_rot = 0;
+
+    if (debug_level > 1)
+      std::cout << "Point " << i << " (x, y, rot) >> ("
+        << xy_points[i_xy][0] << ", "
+        << xy_points[i_xy][1] << ", "
+        << rot_points[i_rot] << ")"
+        << " - i_xy is " << i_xy << " and i_rot is " << i_rot
+        << "\n";
+
+    good_spawn_point = true;
+
+    // make a box for our object at this point
+    luke::Box2d ourBox;
+    ourBox.initCentre(xy_points[i_xy][0], xy_points[i_xy][1], to_spawn.model_x,
+      to_spawn.model_y);
+    ourBox.rotate(rot_points[i_rot]);
+
+    // are we inbounds at the point
+    if (not ourBox.inbounds(xmin, ymin, xmax, ymax)) {
+      if (debug_level > 1) std::cout << "Can't spawn here, exceed outer bounds\n";
+      good_spawn_point = false;
+      continue;
+    }
+
+    // loop over existing objects and see if we collide with them
+    for (int i_obj = 0; i_obj < env_.obj.size(); i_obj++) {
+
+      // check to ensure this existing object is not us
+      if (env_.obj[i_obj].spawn_info.index == index) continue;
+
+      // determine the space taken up by the object
+      luke::Box2d spawnBox;
+      spawnBox.initCentre(env_.obj[i_obj].spawn_info.x_centre, env_.obj[i_obj].spawn_info.y_centre, 
+        env_.obj[i_obj].spawn_info.model_x, env_.obj[i_obj].spawn_info.model_y);
+      spawnBox.rotate(env_.obj[i_obj].spawn_info.z_rotation);
+
+      if (ourBox.overlapsWith(spawnBox, smallest_gap)) {
+        good_spawn_point = false;
+        if (debug_level > 1) {
+          std::cout << "Can't spawn here, collides with existing object\n";
+          std::cout << "This object has (x,y) >> ("
+            << env_.obj[i_obj].spawn_info.x_centre << ", " << env_.obj[i_obj].spawn_info.y_centre
+            << ") and size (mx, my) >> ("
+            << env_.obj[i_obj].spawn_info.model_x << ", " << env_.obj[i_obj].spawn_info.model_y
+            << ")\n";
+        }
+        break;
+      }
+    }
+
+    if (not good_spawn_point) continue;
+
+    // see if this spawn point clashes with the gripper fingers
+    for (luke::Box2d& finger_box : env_.init_fingertip_boxes) {
+      if (ourBox.overlapsWith(finger_box, smallest_gap)) {
+        good_spawn_point = false;
+        if (debug_level > 1) std::cout << "Can't spawn here, hits gripper fingers\n";
+        break;
+      }
+    }
+
+    // we can proceed to spawn the object
+    if (good_spawn_point) {
+      to_spawn.x_centre = xy_points[i_xy][0];
+      to_spawn.y_centre = xy_points[i_xy][1];
+      to_spawn.z_rotation = rot_points[i_rot];
+      if (debug_level > 0) std::cout << "Found a good spawn point\n";
+      break;
+    }
+  }
+
+  // did we find a point suitable for spawning?
+  if (not good_spawn_point) return false;
+
+  // spawn the object
+  spawn_object(to_spawn.index, to_spawn.x_centre, to_spawn.y_centre, to_spawn.z_rotation);
+  
+  return true;
 }
 
 int MjClass::spawn_scene(int num_objects, double xrange, double yrange,
@@ -2004,8 +2308,8 @@ int MjClass::spawn_scene(int num_objects, double xrange, double yrange,
         << ", " << to_spawn.model_y << ", " << to_spawn.model_z << ")"
         << "\n";
 
-    // spawn the object: NOTE! different sign convenstion so we make the rotation negative
-    spawn_object(to_spawn.index, to_spawn.x_centre, to_spawn.y_centre, -to_spawn.z_rotation);
+    // spawn the object
+    spawn_object(to_spawn.index, to_spawn.x_centre, to_spawn.y_centre, to_spawn.z_rotation);
   }
 
   return spawned_objects.size();
@@ -2696,6 +3000,49 @@ bool MjClass::last_action_panda()
     return true;
   else 
     return false;
+}
+
+std::string MjClass::print_actions()
+{
+  /* print out (and return a string) for each possible action */
+
+  std::string str;
+
+  for (int i = 0; i < n_actions; i++) {
+
+    int action_code = action_options[i];
+
+    str += "Action number " + std::to_string(i) +  ", name = ";
+
+    switch (action_code) {
+
+      // define action behaviour for positive/negative/continous
+      // any new actions should be further defined in ActionSettings::update_action_function()
+      #define AA(NAME, USED, CONTINOUS, VALUE, SIGN)              \
+        case MjType::Action::TOKEN_CONCAT(NAME, POSITIVE_TOKEN):  \
+          str += s_.NAME.name + "_positive\n";  \
+          break;                                                  \
+        case MjType::Action::TOKEN_CONCAT(NAME, NEGATIVE_TOKEN):  \
+          str += s_.NAME.name + "_negative\n";  \
+          break;                                                  \
+        case MjType::Action::TOKEN_CONCAT(NAME, CONTINOUS_TOKEN): \
+          str += s_.NAME.name + "_continous\n"; \
+          break;                                                  \
+
+        // run the macro to create the code
+        LUKE_MJSETTINGS_ACTION
+
+      #undef AA
+
+      default:
+        throw std::runtime_error("MjClass::print_actions() received out of bounds int");
+
+    }
+  }
+
+  std::cout << str;
+
+  return str;
 }
 
 float MjClass::get_fingertip_z_height()
@@ -3533,6 +3880,13 @@ float MjClass::yield_load()
   /* return the yield force (end applied) for the current finger thickness */
 
   return luke::calc_yield_point_load();
+}
+
+float MjClass::yield_load(float thickness, float width)
+{
+  /* return the yield force (end applied) for a given thickness and width */
+
+  return luke::calc_yield_point_load(thickness, width);
 }
 
 MjType::EventTrack MjClass::add_events(MjType::EventTrack& e1, MjType::EventTrack& e2)

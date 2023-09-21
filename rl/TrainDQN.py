@@ -73,6 +73,7 @@ class TrainDQN():
     image_collection_only: bool = False
     image_save_freq: int = 1000
     no_sensor_data: bool = False
+    offline_use_cql: bool = True
 
     # curriculum learning
     use_curriculum: bool = False
@@ -1555,11 +1556,15 @@ class TrainDQN():
     criterion = nn.SmoothL1Loss()
     loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
 
-    # Compute the conservative q-learning loss
-    cql_loss = torch.logsumexp(state_action_values, dim=1).mean() - state_action_values.mean()
+    if self.params.offline_use_cql:
+      # Compute the conservative q-learning loss
+      cql_loss = torch.logsumexp(state_action_values, dim=1).mean() - state_action_values.mean()
 
-    # compute the overall loss
-    overall_loss = cql_loss + 0.5 * loss
+      # compute the overall loss
+      overall_loss = cql_loss + 0.5 * loss
+
+    # use vanilla DQN
+    else: overall_loss = loss
 
     # Optimize the model
     self.optimiser.zero_grad()
@@ -1827,7 +1832,7 @@ class TrainDQN():
 
   def train_offline(self, replay_path, network=None, i_start=None, iter_per_file=250,
                     replayfile="memory_with_image_data", random_order=False,
-                    epochs=1):
+                    epochs=1, file_cap=None):
     """
     Perform an offline training
     """
@@ -1854,10 +1859,13 @@ class TrainDQN():
     replay_loader = ModelSaver(replay_path)
     num_memory = replay_loader.get_recent_file(name=replayfile, return_int=True)
 
-    if self.log_level > 0:
-      print(f"\nBEGIN OFFLINE TRAINING, target is {num_memory * iter_per_file * epochs} episodes (files = {num_memory}, iter_per_file = {iter_per_file}, epochs = {epochs})\n", flush=True)
+    if file_cap is not None: num_files = min(num_memory, file_cap)
+    else: num_files = num_memory
 
-    per_epoch = num_memory * iter_per_file
+    if self.log_level > 0:
+      print(f"\nBEGIN OFFLINE TRAINING, target is {num_files * iter_per_file * epochs} episodes (files = {num_files}, iter_per_file = {iter_per_file}, epochs = {epochs})\n", flush=True)
+
+    per_epoch = num_files * iter_per_file
 
     for e in range(epochs):
 
@@ -1869,6 +1877,10 @@ class TrainDQN():
       if random_order:
         randomiser = np.random.default_rng(self.env.myseed)
         ids = randomiser.permutation(ids)
+
+      if num_files < len(ids): 
+        print(f"Note: Applying file cap to reduce file number from {len(ids)} to {num_files}")
+        ids = ids[:num_files]
 
       for i_file, id in enumerate(ids):
 

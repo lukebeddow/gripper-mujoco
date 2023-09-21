@@ -94,6 +94,9 @@ void ObjectHandler::init(mjModel* model, mjData* data)
     int numeric_i = mj_name2id(model, mjOBJ_NUMERIC, numeric_name.c_str());
     if (numeric_i == -1) {
       if (debug_xyz) std::cout << numeric_name << " not found in objecthandler, ignoring\n";
+      xyz_values[i].x = 0;
+      xyz_values[i].y = 0;
+      xyz_values[i].z = 0;
     }
     else {
       double x = model->numeric_data[model->numeric_adr[numeric_i] + 0];

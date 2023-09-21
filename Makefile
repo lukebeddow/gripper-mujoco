@@ -114,9 +114,6 @@ all: cpp py
 cpp: $(CPPTARGETS) $(DEPENDS)
 py: $(PYTARGETS) $(DEPENDS)
 
-.PHONY: everything
-everything: cpp py models
-
 .PHONY: debug
 debug: cpp
 

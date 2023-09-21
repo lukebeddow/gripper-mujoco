@@ -105,6 +105,8 @@ struct
     int force_style = 0;            // added by luke
     int all_sensors_use_noise = 1;  // added by luke
     int scene_objects = 0;
+    double scene_x = 0.5;
+    double scene_y = 0.5;
 
     // action flags
     mjtNum action_motor_mm = 2;
@@ -1515,27 +1517,28 @@ void makeActionsUI(int oldstate)
     mjuiDef defActions[] =
     {
         {mjITEM_SECTION, "Actions",    oldstate,  NULL,   " #303"},
-        {mjITEM_BUTTON, "Gripper X+",         2,  NULL,   " #304"},
-        {mjITEM_BUTTON, "Gripper X-",         2,  NULL,   " #305"},
-        {mjITEM_BUTTON, "Gripper pX+",        2,  NULL,   " #306"},
-        {mjITEM_BUTTON, "Gripper pX-",        2,  NULL,   " #307"},
-        {mjITEM_BUTTON, "Gripper Y+",         2,  NULL,   " #308"},
-        {mjITEM_BUTTON, "Gripper Y-",         2,  NULL,   " #309"},
-        {mjITEM_BUTTON, "Gripper rY+",        2,  NULL,   " #310"},
-        {mjITEM_BUTTON, "Gripper rY-",        2,  NULL,   " #310"},
-        {mjITEM_BUTTON, "Gripper Z+",         2,  NULL,   " #304"},
-        {mjITEM_BUTTON, "Gripper Z-",         2,  NULL,   " #305"},
-        {mjITEM_BUTTON, "Base X+",            2,  NULL,   " #306"},
-        {mjITEM_BUTTON, "Base X-",            2,  NULL,   " #307"},
-        {mjITEM_BUTTON, "Base Y+",            2,  NULL,   " #308"},
-        {mjITEM_BUTTON, "Base Y-",            2,  NULL,   " #309"},
-        {mjITEM_BUTTON, "Base Z+",            2,  NULL,   " #310"},
-        {mjITEM_BUTTON, "Base Z-",            2,  NULL,   " #310"},
+        {mjITEM_BUTTON, "Action 1",         2,  NULL,   " #304"},
+        {mjITEM_BUTTON, "Action 2",         2,  NULL,   " #305"},
+        {mjITEM_BUTTON, "Action 3",        2,  NULL,   " #306"},
+        {mjITEM_BUTTON, "Action 4",        2,  NULL,   " #307"},
+        {mjITEM_BUTTON, "Action 5",         2,  NULL,   " #308"},
+        {mjITEM_BUTTON, "Action 6",         2,  NULL,   " #309"},
+        {mjITEM_BUTTON, "Action 7",        2,  NULL,   " #310"},
+        {mjITEM_BUTTON, "Action 8",        2,  NULL,   " #310"},
+        {mjITEM_BUTTON, "Action 9",         2,  NULL,   " #304"},
+        {mjITEM_BUTTON, "Action 10",         2,  NULL,   " #305"},
+        {mjITEM_BUTTON, "Action 11",            2,  NULL,   " #306"},
+        {mjITEM_BUTTON, "Action 12",            2,  NULL,   " #307"},
+        {mjITEM_BUTTON, "Action 13",            2,  NULL,   " #308"},
+        {mjITEM_BUTTON, "Action 14",            2,  NULL,   " #309"},
+        {mjITEM_BUTTON, "Action 15",            2,  NULL,   " #310"},
+        {mjITEM_BUTTON, "Action 16",            2,  NULL,   " #310"},
         {mjITEM_SLIDERNUM, "Motor mm",        2,  &settings.action_motor_mm,        "0.0 20.0"},
         {mjITEM_SLIDERNUM, "Motor rad",       2,  &settings.action_motor_rad,       "0.0 0.2"},
         {mjITEM_SLIDERNUM, "Base mm",         2,  &settings.action_base_mm,         "0.0 20.0"},
         {mjITEM_SLIDERNUM, "Base rad",        2,  &settings.action_base_rad,        "0.0 0.2"},
         {mjITEM_BUTTON, "Reward",             2,  NULL,   " #311"},
+        {mjITEM_BUTTON, "Print actions",            2,  NULL,   " #310"},
         {mjITEM_CHECKINT, "Debug",            2,  &myMjClass.s_.debug,   " #312"},
         {mjITEM_CHECKINT, "Env steps",        2,  &settings.env_steps, " #313"},
         {mjITEM_CHECKINT, "Full step",        2,  &settings.complete_action_steps, " #314"},
@@ -1631,7 +1634,7 @@ void makeObjectUI(int oldstate)
         {mjITEM_SLIDERINT,   "gram frc",      2, &settings.gram_force, "0 5"},
 
         // {mjITEM_BUTTON,    "Copy pose",     2, NULL,                    " #304"},
-        {mjITEM_SLIDERINT, "Live Object",   3, &settings.object_int,    "0 20"},
+        {mjITEM_SLIDERINT, "Live Object",   3, &settings.object_int,    "0 19"},
         {mjITEM_SLIDERINT, "x noise",       3, &settings.object_x_noise_mm, "-10 10"},
         {mjITEM_SLIDERINT, "y noise",       3, &settings.object_y_noise_mm, "-10 10"},
         {mjITEM_SLIDERINT, "z rotation",    3, &settings.object_z_rot_deg,  "0 360"},
@@ -1639,7 +1642,10 @@ void makeObjectUI(int oldstate)
         // {mjITEM_BUTTON,    "Set key",       3},
         {mjITEM_BUTTON,   "visibility",    2, NULL,                   " #317"},
         {mjITEM_BUTTON,   "spawn scene",   2, NULL,                   " #318"},
-        {mjITEM_SLIDERINT, "scene obj",   3, &settings.scene_objects,    "0 20"},
+        {mjITEM_BUTTON,   "spawn into",   2, NULL,                   " #318"},
+        {mjITEM_SLIDERINT, "scene obj",   3, &settings.scene_objects,    "1 20"},
+        {mjITEM_SLIDERNUM,  "scene X",         2, &settings.scene_x, "0 1"},
+        {mjITEM_SLIDERNUM,  "scene Y",         2, &settings.scene_y, "0 1"},
         {mjITEM_END}
     };
 
@@ -2299,7 +2305,7 @@ void uiEvent(mjuiState* state)
     {
         // process UI event
         mjuiItem* it = mjui_event(&ui1, state, &con);
-f
+
         // control section
         if( it && it->sectionid==SECT_CONTROL )
         {
@@ -2348,8 +2354,8 @@ f
             {
                 case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7: 
                 case 8: case 9: case 10: case 11: case 12: case 13: case 14: case 15: {
-                    myMjClass.set_action(it->itemid);
-                    if (settings.complete_action_steps) {
+                    std::vector<float> obs = myMjClass.set_action(it->itemid);
+                    if (settings.complete_action_steps and obs.size() > 0) {
                         myMjClass.action_step();
                     }
                     break;
@@ -2377,6 +2383,11 @@ f
                     std::cout << "Reward is " << reward << '\n';
                     std::cout << "Cumulative reward is "
                         << myMjClass.env_.cumulative_reward << '\n';
+                    break;
+                }
+                case 21: {
+                    std::cout << "Printing the possible actions:\n";
+                    myMjClass.print_actions();
                     break;
                 }
             }
@@ -2552,16 +2563,26 @@ f
                 break;
             }
             
-            case 30: {          // set object visibility
+            case 31: {          // set object visibility
                 static bool visible = false; // default case is false
                 visible = not visible;
                 luke::set_object_visibility(myMjClass.model, visible);
                 std::cout << "Setting hidden object visibility to: " << visible << "\n";
                 break;
             }
-            case 31: {          // spawn object scene
-                std::cout << "Spawning a scene with " << settings.scene_objects << " objects\n";
-                myMjClass.spawn_scene(settings.scene_objects, 0.2, 0.2, 0.0);
+            case 32: {          // spawn object scene
+                std::cout << "Spawning a scene, goal is " << settings.scene_objects << " objects, ";
+                myMjClass.reset_object();
+                int num_spawned = myMjClass.spawn_scene(settings.scene_objects, settings.scene_x, settings.scene_y, 0.0);
+                std::cout << "spawned " << num_spawned << " objects\n";
+                break;
+            }
+            case 33: {          // spawn into object scene
+                std::cout << "Spawning into scene object num " << settings.object_int << "\n";
+                bool success = myMjClass.spawn_into_scene(settings.object_int, settings.scene_x, settings.scene_y,
+                    settings.object_z_rot_deg, settings.object_x_noise_mm * 1e-3, settings.object_y_noise_mm * 1e-3,
+                    M_PI);
+                std::cout << "success flag is " << success << "\n";
                 break;
             }
             }
