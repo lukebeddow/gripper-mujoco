@@ -339,16 +339,22 @@ class MjEnv():
     self.reload_flag = False
 
     # get the parameters from the newly loaded file
-    self.params.num_segments = self.mj.get_N()
-    self.params.finger_width = self.mj.get_finger_width()
-    self.params.finger_thickness = self.mj.get_finger_thickness()
-    self.params.finger_modulus = self.mj.get_finger_modulus()
-    self.params.finger_length = self.mj.get_finger_length()
-    self.params.finger_hook_angle_degrees = self.mj.get_finger_hook_angle_degrees()
-    self.params.fixed_finger_hook = self.mj.is_finger_hook_fixed()
-    self.params.fingertip_clearance = self.mj.get_fingertip_clearance()
-    self.params.XY_base_actions = self.mj.using_xyz_base_actions()
-    self.params.finger_hook_length = self.mj.get_finger_hook_length()
+    try:
+      self.params.num_segments = self.mj.get_N()
+      self.params.finger_width = self.mj.get_finger_width()
+      self.params.finger_thickness = self.mj.get_finger_thickness()
+      self.params.finger_modulus = self.mj.get_finger_modulus()
+      self.params.finger_length = self.mj.get_finger_length()
+      self.params.finger_hook_angle_degrees = self.mj.get_finger_hook_angle_degrees()
+      self.params.fixed_finger_hook = self.mj.is_finger_hook_fixed()
+      self.params.fingertip_clearance = self.mj.get_fingertip_clearance()
+      self.params.XY_base_actions = self.mj.using_xyz_base_actions()
+      self.params.finger_hook_length = self.mj.get_finger_hook_length()
+    except AttributeError as e:
+      print("WARNING: MjEnv.load_xml() failed to update parameters for gripper dimensions, you may be running an old policy")
+      print("Error is:", e)
+      print("Execution is continuing, beware saving this model will have incorrect params")
+      self.params = self.load_next
 
     # assume loading is correct and directly copy
     self.params.segment_inertia_scaling = self.load_next.segment_inertia_scaling
@@ -578,7 +584,11 @@ class MjEnv():
     """
 
     # get an observation as a numpy array
-    obs = self.mj.get_observation_numpy()
+    try:
+      obs = self.mj.get_observation_numpy()
+    except AttributeError as e:
+      print("Error is:", e)
+      obs = self.mj.get_observation()
 
     return obs
 
@@ -1128,8 +1138,14 @@ class MjEnv():
     if depth_camera is not None: self.load_next.depth_camera = depth_camera
 
     # set the thickness/modulus (changes only applied upon reset(), causes hard_reset() if changed)
-    self.mj.set_finger_thickness(self.load_next.finger_thickness) # required as xml thickness ignored
-    self.mj.set_finger_modulus(self.load_next.finger_modulus) # duplicate xml setting
+    try:
+      self.mj.set_finger_thickness(self.load_next.finger_thickness) # required as xml thickness ignored
+      self.mj.set_finger_modulus(self.load_next.finger_modulus) # duplicate xml setting
+    except AttributeError as e:
+      print("WARNING: MjEnv.load_xml() failed to update parameters for gripper dimensions, you may be running an old policy")
+      print("Error is:", e)
+      print("Execution is continuing, beware saving this model will have incorrect params")
+      self.params = self.load_next
 
     self._load_object_set(name=object_set_name, mjcf_path=object_set_path,
                           auto_generate=auto_generate, use_hashes=use_hashes)

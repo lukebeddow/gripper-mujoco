@@ -1215,8 +1215,8 @@ namespace MjType
     Calibration g1_1p0_28 {3.1321e-6,   96596};
     Calibration g2_1p0_28 {3.1306e-6,   7583};
     Calibration g3_1p0_28 {3.1390e-6,   66733};
-    Calibration palm      {7.4626e-5,   0};  // calibration used for pb4, TRO paper, etc
-    // Calibration palm      {2.831e-6,   0};  // new calibration 24 Aug 2023
+    // Calibration palm      {7.4626e-5,   0};  // calibration used for pb4, TRO paper, etc
+    Calibration palm      {2.793e-5,   0};  // new calibration 24 Aug 2023
     Calibration wrist_Z   {-1,          0};
 
     // get the correct calibration for the fingers
