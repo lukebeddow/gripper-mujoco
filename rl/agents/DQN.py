@@ -87,6 +87,11 @@ class Agent_DQN:
     use_grad_clamp: bool = True
     loss_criterion: str = "MSELoss" # smoothL1Loss/MSELoss/Huber
 
+    def update(self, newdict):
+      for key, value in newdict.items():
+        if hasattr(self, key):
+          setattr(self, key, value)
+
   Transition = namedtuple('Transition',
                           ('state', 'action', 'next_state', 'reward', 'terminal'))
   

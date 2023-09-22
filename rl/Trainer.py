@@ -256,13 +256,14 @@ class Trainer:
 
   def __init__(self, agent, env, rngseed=None, device="cpu", log_level=1, plot=False,
                render=False, group_name="default_%d-%m-%y", run_name="default_run_%H-%M",
-               save=True, savedir="models", episode_log_rate=10, strict_seed=False):
+               save=True, savedir="models", episode_log_rate=10, strict_seed=False,
+               track_avg_num=50):
     """
     Class that trains RL agents in an environment
     """
 
     # prepare class variables
-    self.track = TrackTraining()
+    self.track = TrackTraining(avg_num=track_avg_num)
     self.params = Trainer.Parameters()
     self.agent = agent
     self.env = env
@@ -443,12 +444,16 @@ class Trainer:
     # enter the run folder (exit if already in one)
     self.modelsaver.enter_folder(run_name)
 
+    # folderpath ignores the current folder, so add that if necessary
+    if path_to_run_folder is not None:
+      path_to_run_folder += "/" + run_name
+
     load_agent = self.modelsaver.load(id=id, folderpath=path_to_run_folder,
-                                      foldername=run_name, filenamestarts="Agent")
+                                      filenamestarts="Agent")
     load_track = self.modelsaver.load(id=id, folderpath=path_to_run_folder, 
-                                      foldername=run_name, filenamestarts=self.track_savename)
+                                      filenamestarts=self.track_savename)
     load_train = self.modelsaver.load(folderpath=path_to_run_folder,
-                                      foldername=run_name, filenamestarts=self.train_param_savename)
+                                      filenamestarts=self.train_param_savename)
     
     # extract loaded data
     self.params = load_train["parameters"]
@@ -594,7 +599,6 @@ class Trainer:
       self.track.plot(force=True, end=True, hang=True) # leave plots on screen if we are plotting
 
     # end of training
-    self.env.close()
     self.finish_training()
 
   def test(self):
@@ -617,9 +621,15 @@ class MujocoTrainer(Trainer):
     test_freq: int = 1000
     save_freq: int = 1000
 
+    def update(self, newdict):
+      for key, value in newdict.items():
+        if hasattr(self, key):
+          setattr(self, key, value)
+
   def __init__(self, agent, mjenv, rngseed=None, device="cpu", log_level=1, plot=False,
                render=False, group_name="default_%d-%m-%y", run_name="default_run_%H-%M",
-               save=True, savedir="models", episode_log_rate=10, strict_seed=False):
+               save=True, savedir="models", episode_log_rate=10, strict_seed=False,
+               track_avg_num=50):
     """
     Trainer class for the gripper mujoco RL environment
     """
@@ -627,7 +637,7 @@ class MujocoTrainer(Trainer):
     super().__init__(agent, mjenv, rngseed=rngseed, device=device, log_level=log_level, 
                      plot=plot, render=render, group_name=group_name, run_name=run_name,
                      save=save, savedir=savedir, episode_log_rate=episode_log_rate, 
-                     strict_seed=strict_seed)
+                     strict_seed=strict_seed, track_avg_num=track_avg_num)
 
     # override the parameters of the base class
     self.params = MujocoTrainer.Parameters()
@@ -711,7 +721,7 @@ class MujocoTrainer(Trainer):
           
         break
 
-  def test(self, pause_each_episode=None, heuristic=None):
+  def test(self, save=True, pause_each_episode=None, heuristic=None):
     """
     Test the target net performance, return a test report. Set heuristic to True
     in order to use a human written function for selecting actions.
@@ -765,23 +775,24 @@ class MujocoTrainer(Trainer):
     self.agent.training_mode()
 
     # process test data
-    test_report = self.create_test_report(test_data, i_episode=i_episode)
+    test_report = self.create_test_report(test_data, i_episode=self.track.episodes_done)
 
-    # save the network along with the test report
-    self.save(txtfilename=self.test_result_filename, txtfilestr=test_report, extra_data=(test_data))
+    if save:
+      # save the network along with the test report
+      self.save(txtfilename=self.test_result_filename, txtfilestr=test_report, extra_data=(test_data))
 
-    # save table of test performances
-    log_str = "Test time performance (success rate metric = stable height):\n\n"
-    top_row = "{0:<10} | {1:<15}\n".format("Episode", "Success rate")
-    log_str += top_row
-    row_str = "{0:<10} | {1:<15.3f}\n"
-    for i in range(len(self.track.test_episodes)):
-      log_str += row_str.format(self.track.test_episodes[i], self.track.avg_stable_height[i])
-    self.modelsaver.save(self.test_performances_filename, txtonly=True, txtstr=log_str)
+      # save table of test performances
+      log_str = "Test time performance (success rate metric = stable height):\n\n"
+      top_row = "{0:<10} | {1:<15}\n".format("Episode", "Success rate")
+      log_str += top_row
+      row_str = "{0:<10} | {1:<15.3f}\n"
+      for i in range(len(self.track.test_episodes)):
+        log_str += row_str.format(self.track.test_episodes[i], self.track.avg_stable_height[i])
+      self.modelsaver.save(self.test_performances_filename, txtonly=True, txtstr=log_str)
 
     return test_data
 
-  def create_test_report(self, test_data, i_episode=None):
+  def create_test_report(self, test_data, i_episode=None, print_out=True):
     """
     Process the test data from a finished test to get a test report string
     """
@@ -1106,11 +1117,11 @@ class MujocoTrainer(Trainer):
     output_str += "\n" + overall_avg_table
 
     # print out information based on flags at top of function
-    print_out = bool(print_objects + print_categories + print_overall)
-    if print_out: print(start_str + "\n")
-    if print_objects: print(object_table)
-    if print_categories: print(category_table)
-    if print_overall: print(overall_avg_table)
+    if print_out:
+      print(start_str + "\n")
+      if print_objects: print(object_table)
+      if print_categories: print(category_table)
+      if print_overall: print(overall_avg_table)
 
     # save a flag for final success rate
     self.last_test_success_rate = total_counter.object_stable.last_value / N
@@ -1160,6 +1171,56 @@ class MujocoTrainer(Trainer):
     if return_id: return best_sr, best_ep, best_id
 
     return best_sr, best_ep
+
+  def read_test_performance(self):
+    """
+    Read the test performance into a numpy array
+    """
+
+    try:
+
+      readroot = self.savedir + "/" + self.group_name + "/"
+      readpath = readroot + self.run_name + "/"
+      readname = self.test_performances_filename + ".txt"
+
+      with open(readpath + readname, "r") as f:
+        txt = f.read()
+
+    except Exception as e:
+      if self.log_level > 0:
+        print(f"TrainDQN.read_test_performance() error: {e}")
+      return np.array([[0],[0]])
+
+    lines = txt.splitlines()
+
+    episodes = []
+    success_rates = []
+
+    found_data = False
+
+    for l in lines:
+
+      if found_data:
+
+        splits = l.split("|")
+        ep = int(splits[0])
+        sr = float(splits[1])
+        episodes.append(ep)
+        success_rates.append(sr)
+
+      if l.startswith("Episode"):
+        found_data = True
+
+    if len(episodes) != len(success_rates):
+      raise RuntimeError("TrainDQN.read_test_performance() found episode length != success rate length")
+
+    if len(episodes) == 0: episodes.append(0)
+    if len(success_rates) == 0: success_rates.append(0)
+
+    ep_np = np.array([episodes])
+    sr_np = np.array([success_rates])
+
+    return np.concatenate((ep_np, sr_np), axis=0)
 
   def read_best_performance_from_text(self, silence=False, fulltest=False, heuristic=False):
     """
@@ -1228,7 +1289,11 @@ class MujocoTrainer(Trainer):
 
         else: readname = str(test_files[0])
 
-      else: readname = self.best_performance_txt_file_name + '.txt'
+      else: 
+        # return the best_sr, best_ep from the test performance file
+        best_np = self.read_test_performance()
+        best_index = np.argmax(best_np[1])
+        return best_np[1][best_index], int(best_np[0][best_index])
 
       if self.log_level > 0: print(f"Reading text file: {readpath + readname}")
       with open(readpath + readname, 'r') as openfile:
@@ -1270,6 +1335,42 @@ class MujocoTrainer(Trainer):
 
     return best_sr, best_ep
 
+  def load_best_id(self):
+    """
+    Try to find the best performing agent and load that
+    """
+
+    id = None
+    best_id_found = False
+
+    if self.log_level > 0: print("MujocoTrainer.load_best_id() is now trying to find the best agent id to load")
+
+    best_sr, best_ep = self.read_best_performance_from_text()
+    if best_sr is None or best_sr < 1e-5:
+      if self.log_level > 0: print("MujocoTrainer.load_best_id() cannot find best id as best success rate is zero")
+    elif best_ep % self.params.save_freq != 0:
+      if self.log_level > 0: print(f"MujocoTrainer.load_best_id() cannot find best id as best_episode = {best_ep} and save_freq = {self.params.save_freq}, these are incompatible")
+    else:
+      id = int((best_ep / self.params.save_freq) + 1)
+      if self.log_level > 0: print(f"id set to {id} with best_ep={best_ep}, save_freq={self.params.save_freq} and best_sr={best_sr}")
+      best_id_found = True
+
+    # try to load, if best id not found it loads most recent
+    self.load(self.run_name, id=id)
+
+    if not best_id_found:
+      best_sr, best_ep = self.calc_best_performance()
+      if self.log_level > 0: print(f"BEST_ID_FAILED  -> Preparing to reload with best id in model.load(...)")
+      if best_sr < 1e-5:
+        if self.log_level > 0: print("BEST_ID_FAILED  -> load(...) cannot find best id as best success rate is zero")
+      elif int(best_ep) % self.params.save_freq != 0:
+        if self.log_level > 0: print(f"BEST_ID_FAILED  -> load(...) cannot find best id as best_episode = {int(best_ep)} and save_freq = {self.params.save_freq}, these are incompatible")
+      else:
+        best_id = int((best_ep / self.params.save_freq) + 1)
+        if self.log_level > 0: print(f"BEST_ID_SUCCESS -> best_id set to {best_id} with best_ep={best_ep}, save_freq={self.params.save_freq} and best_sr={best_sr}")
+        # try to load again
+        self.load(id=best_id)
+
 if __name__ == "__main__":
 
   # master seed, torch seed must be set before network creation (random initialisation)
@@ -1302,5 +1403,5 @@ if __name__ == "__main__":
   trainer.params.num_episodes = 5
   trainer.params.save_freq = 5
   trainer.params.test_freq = 5
-  # trainer.load("run_14-26", path_to_run_folder="/home/luke/mujoco-devel/models/21-09-23", id=2)
-  trainer.train()
+  trainer.load("run_16-37", path_to_run_folder="/home/luke/mujoco-devel/models/22-09-23", id=2)
+  # trainer.train()

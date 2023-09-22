@@ -94,6 +94,11 @@ class MjEnv():
     segment_inertia_scaling: float = 50.0
     fingertip_clearance: float = 10e-3
 
+    def update(self, newdict):
+      for key, value in newdict.items():
+        if hasattr(self, key):
+          setattr(self, key, value)
+
   def __init__(self, object_set=None, seed=None, num_segments=None, finger_width=None, 
                depth_camera=None, finger_thickness=None, finger_modulus=None,
                log_level=0):
