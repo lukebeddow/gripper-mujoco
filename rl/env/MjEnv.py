@@ -80,6 +80,7 @@ class MjEnv():
     test_objects: int = 100
 
     # model parameters (for loading xml files)
+    object_set_name: str = "set8_fullset_1500"
     num_segments: int = 8
     finger_thickness: float = 0.9e-3
     finger_length: float = 235e-3
@@ -93,7 +94,7 @@ class MjEnv():
     segment_inertia_scaling: float = 50.0
     fingertip_clearance: float = 10e-3
 
-  def __init__(self, seed=None, noload=None, num_segments=None, finger_width=None, 
+  def __init__(self, object_set=None, seed=None, num_segments=None, finger_width=None, 
                depth_camera=None, finger_thickness=None, finger_modulus=None,
                log_level=0):
     """
@@ -131,7 +132,7 @@ class MjEnv():
     
     # create mujoco instance
     self.mj = MjClass()
-    if self.log_level == 0: self.mj.set.debug = False
+    if self.log_level <= 3: self.mj.set.debug = False
     elif self.log_level >= 4: self.mj.set.debug = True
 
     # seed the environment
@@ -139,7 +140,7 @@ class MjEnv():
     self.seed(seed)
 
     # load the mujoco models, if not then load() must be run by the user
-    if noload is not True: self.load()
+    if object_set is not None: self.load(object_set)
 
     # initialise tracking variables
     self.track = MjEnv.Track()
@@ -339,6 +340,7 @@ class MjEnv():
     self.reload_flag = False
 
     # get the parameters from the newly loaded file
+    self.params.object_set_name = self.mj.object_set_name
     self.params.num_segments = self.mj.get_N()
     self.params.finger_width = self.mj.get_finger_width()
     self.params.finger_thickness = self.mj.get_finger_thickness()
@@ -365,8 +367,13 @@ class MjEnv():
     # if a mjcf_path is given, override, otherwise we use default
     if mjcf_path != None: self.mj.model_folder_path = mjcf_path
 
-    # if a object set name is given, override, otherwise we use default
-    if name != None: self.mj.object_set_name = name
+    # if a object set name is given, override, otherwise we use default from load_next
+    if name != None: 
+      self.mj.object_set_name = name
+      self.load_next.object_set_name = name
+    else:
+      name = self.load_next.object_set_name
+      self.mj.object_set_name = self.load_next.object_set_name
 
     if auto_generate:
 
@@ -375,7 +382,7 @@ class MjEnv():
         print(f"MjEnv() warning: given mjcf_path='{mjcf_path}' is about to be overriden by MjEnv._auto_generate_xml_file()")
 
       # create the file we need
-      self.task_xml_folder = self._auto_generate_xml_file(self.mj.object_set_name, use_hashes=use_hashes)
+      self.task_xml_folder = self._auto_generate_xml_file(self.load_next.object_set_name, use_hashes=use_hashes)
 
       # apply the selected finger width in mujoco (EI change requires reset to finalise)
       self.mj.set_finger_width(self.load_next.finger_width)
@@ -1110,6 +1117,38 @@ class MjEnv():
     """
 
     return asdict(self.params)
+  
+  def get_params_dict(self):
+    """
+    Return a dictionary of class parameters
+    """
+    param_dict = asdict(self.params)
+    param_dict.update({
+      "n_actions" : self.n_actions,
+      "n_observation" : self.n_obs
+    })
+    # cpp_str = self._get_cpp_settings()
+    # param_dict.update({"cpp_settings" : cpp_str})
+    return param_dict
+
+  def get_save_state(self):
+    """
+    Return a saveable state of the environment
+    """
+    save_dict = {
+      "parameters" : self.params,
+      "mjcpp" : self.mj,
+    }
+    return save_dict
+  
+  def load_save_state(self, state_dict):
+    """
+    Load the environment from a saved state
+    """
+    self.params = state_dict["parameters"]
+    self.load_next = deepcopy(state_dict["parameters"])
+    self.mj = state_dict["mjcpp"]
+    self._load_xml() # segfault without this
 
   def load(self, object_set_name=None, object_set_path=None, index=None, 
            num_segments=None, finger_width=None, finger_thickness=None,
@@ -1121,6 +1160,7 @@ class MjEnv():
     """
 
     # put inputs into the 'load_next' datastructure
+    if object_set_name is not None: self.load_next.object_set_name = object_set_name
     if num_segments is not None: self.load_next.num_segments = num_segments
     if finger_width is not None: self.load_next.finger_width = finger_width
     if finger_thickness is not None: self.load_next.finger_thickness = finger_thickness
@@ -1131,7 +1171,7 @@ class MjEnv():
     self.mj.set_finger_thickness(self.load_next.finger_thickness) # required as xml thickness ignored
     self.mj.set_finger_modulus(self.load_next.finger_modulus) # duplicate xml setting
 
-    self._load_object_set(name=object_set_name, mjcf_path=object_set_path,
+    self._load_object_set(name=self.load_next.object_set_name, mjcf_path=object_set_path,
                           auto_generate=auto_generate, use_hashes=use_hashes)
     self._load_xml(index=index)  
 
@@ -1161,28 +1201,30 @@ class MjEnv():
     
     self._take_action(action)
     obs = self._next_observation()
-    done = self._is_done()
+    terminated = self._is_done()
+    truncated = False
+    info = {}
 
     # what method are we using
     if self.mj.set.use_HER:
       state = self._event_state()
       goal = self._assess_goal(state)
       reward = 0.0
-      if done or not self.mj.set.reward_on_end_only:
+      if terminated or not self.mj.set.reward_on_end_only:
         # do we only award a reward when the episode ends
         reward = self._goal_reward(goal, state)
-      to_return = (obs, reward, done, state, goal)
+      to_return = (obs, reward, terminated, state, goal)
     else:
       reward = self._reward()
-      to_return = (obs, reward, done)
+      to_return = (obs, reward, terminated, truncated, info)
 
     self.track.last_action = action
     self.track.last_reward = reward
-    self.track.is_done = done
+    self.track.is_done = terminated
     self.track.cumulative_reward += reward
 
     # track testing if this result has finished
-    if done and self.test_in_progress:
+    if terminated and self.test_in_progress:
       self._monitor_test()
 
     return to_return
