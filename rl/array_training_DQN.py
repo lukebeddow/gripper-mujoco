@@ -453,6 +453,12 @@ def set_actions(model, discrete=True, base_XY=False, action_values=None):
       2e-3  # [4] base_XY
     ]
 
+  elif len(action_values) == 4 and not base_XY:
+    pass
+  elif len(action_values) == 5 and base_XY:
+    pass
+  else: raise RuntimeError(f"set_actions() got {len(action_values)} actions")
+
   # enable and configure the core actions with default settings
   model.env.mj.set.gripper_prismatic_X.in_use = True
   model.env.mj.set.gripper_revolute_Y.in_use = True
@@ -739,7 +745,7 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 1
                       state_mu=0.025, reward_style="sensor_mixed", reward_options=[], 
                       scale_rewards=1.0, scale_penalties=1.0, penalty_termination=False,
                       num_segments=8, finger_thickness=0.9e-3, finger_width=28e-3,
-                      max_episode_steps=250, eval_me=None, base_XY_actions=False):
+                      max_episode_steps=250, eval_me=None, base_XY_actions=False, action_values=None):
   """
   Applies baseline settings to the model when run without any arguments
   """
@@ -772,7 +778,7 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 1
   model = setup_HER(model, use=False)
 
   # configure actions
-  model = set_actions(model, base_XY=base_XY_actions)
+  model = set_actions(model, base_XY=base_XY_actions, action_values=action_values)
 
   # can perform special operations here
   if eval_me is not None: 
@@ -2757,51 +2763,47 @@ if __name__ == "__main__":
 
       exit()
 
-  elif training_type == "cnn_from_pretrain":
+  elif training_type.startswith("cnn_from_pretrain_v1"):
 
-    vary_1 = None
+    vary_1 = [5e-5, 1e-5]
     vary_2 = None
     vary_3 = None
-    repeats = None
+    repeats = 3
     param_1_name = None
     param_2_name = None
     param_3_name = None
     param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
                                                 param_3=vary_3, repeats=repeats)
-    baseline_args = {
-      "sensor_steps" : 3,
-      "state_steps" : 3,
-    }
-
-    # use the new object set
-    model.params.object_set = "set8_fullset_1500"
 
     if not args.print and not args.print_results:
 
-      model = baseline_settings(model, **baseline_args)
+      # which offline data are we loading
+      if training_type.endswith("v1-1"):
+        # # image only pretrained network
+        # path = "/home/luke/luke-gripper-mujoco/rl/models/dqn/15-08-23/operator-PC_16:52_A3"
+        # id = 3
+        # both inputs pretrained network
+        path = "/home/luke/luke-gripper-mujoco/rl/models/dqn/14-08-23/operator-PC_17:50_A1"
+        net = "CNN2_100_100"
+        id = 4
+      elif training_type.endswith("v1-2"):
+        path = "/home/luke/luke-gripper-mujoco/rl/models/dqn/22-08-23/operator-PC_09:55_A5"
+        net = "CNN2_50_50"
+        folderpath = "/home/luke/luke-gripper-mujoco/rl/models/dqn/22-08-23/"
+        foldername = "operator-PC_09:55_A5"
+        id = 8
 
-      from ModelSaver import ModelSaver
+      model.load(id=id, folderpath=folderpath, foldername=foldername)
+      model.params.learning_rate = param_1
 
-      # load the pretrained network
-      model.init(network="CNN2_100_100")
+      # optional: enable this for some trainings for monitoring
+      if inputarg % 3 == 1:
+        model.params.test_freq = 500 # close eye on performance
 
-      # # image only pretrained network
-      # path = "/home/luke/luke-gripper-mujoco/rl/models/dqn/15-08-23/operator-PC_16:52_A3"
-      # id = 3
-      
-      # both inputs pretrained network
-      path = "/home/luke/luke-gripper-mujoco/rl/models/dqn/14-08-23/operator-PC_17:50_A1"
-      id = 4
-
-      pretrain_loader = ModelSaver(path)
-      pretrain_model = pretrain_loader.load(id=id) # specifically chosen model
-      model.policy_net.load_state_dict(pretrain_model.policy_net.state_dict())
-      model.target_net.load_state_dict(pretrain_model.policy_net.state_dict())
-
-      # remove the pretrained model from memory
-      import gc
-      del pretrain_model
-      gc.collect()
+      # # remove the pretrained model from memory
+      # import gc
+      # del pretrain_model
+      # gc.collect()
 
       # now proceed with training
       model.train()
@@ -2819,6 +2821,8 @@ if __name__ == "__main__":
       print("\nStarted at:", starting_time.strftime(datestr))
       print("Finished at:", datetime.now().strftime(datestr))
       print(f"Time taken was {d[0]:.0f} days {h[0]:.0f} hrs {m[0]:.0f} mins {s:.0f} secs\n")
+
+      exit()
 
   elif training_type == "finger_angle_test":
 
@@ -2900,6 +2904,143 @@ if __name__ == "__main__":
       "sensor_steps" : 3,
       "state_steps" : 3,
     }
+
+  elif training_type.startswith("full_offline_training_v1"):
+
+    # vary_1 = [
+    #   (50, 5), 
+    #   (125, 2),
+    #   (250, 1)
+    # ]
+    # vary_2 = [False, True]
+    # vary_3 = None #[False, True]
+    # repeats = 3
+    # param_1_name = "iter_per_file"
+    # param_2_name = "random order"
+    # param_3_name = None #"disable_sensor_data"
+    # param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+    #                                             param_3=vary_3, repeats=repeats)
+
+    # which offline data are we loading
+    if training_type.endswith("v1-1"):
+      dataset = "/home/luke/luke-gripper-mujoco/rl/models/dqn/11-08-23/operator-PC_16:33_A1"
+      net = "CNN2_100_100"
+    elif training_type.endswith("v1-2"):
+      dataset = "/home/luke/luke-gripper-mujoco/rl/models/dqn/18-08-23/operator-PC_16:32_A1"
+      net = "CNN2_100_100"
+    elif training_type.endswith("v1-3"):
+      dataset = "/home/luke/luke-gripper-mujoco/rl/models/dqn/18-08-23/operator-PC_16:32_A3"
+      net = "CNN2_50_50"
+
+    baseline_args = {
+      "network" : net,
+      "sensor_steps" : 3,
+      "state_steps" : 3,
+    }
+
+    # use the new object set
+    model.params.object_set = "set8_fullset_1500"
+
+    # HARDCODED PARAMETERS BEWARE
+    model.params.no_sensor_data = False
+    model.params.offline_use_cql = False # test no CQL!
+    iter_per_file = 125
+    random_order = False
+    epochs = 2
+    file_cap = None
+
+    # normal testing
+    model.params.test_freq = 4000
+    model.params.save_freq = 4000
+
+    if not args.print and not args.print_results:
+
+      model = baseline_settings(model, **baseline_args)
+      model.train_offline(dataset, iter_per_file=iter_per_file, random_order=random_order, 
+                          epochs=epochs, file_cap=file_cap)
+
+      # finishing time, how long did everything take
+      finishing_time = datetime.now()
+      time_taken = finishing_time - starting_time
+      d = divmod(time_taken.total_seconds(), 86400)
+      h = divmod(d[1], 3600)
+      m = divmod(h[1], 60)
+      s = m[1]
+      print("\nStarted at:", starting_time.strftime(datestr))
+      print("Finished at:", datetime.now().strftime(datestr))
+      print(f"Time taken was {d[0]:.0f} days {h[0]:.0f} hrs {m[0]:.0f} mins {s:.0f} secs\n")
+
+      # optional: enable this for some trainings for monitoring
+      if inputarg % 3 == 1:
+        model.params.test_freq = 500 # close eye on performance
+
+      # now proceed with online training
+      model.train()
+
+      # test
+      model = test(model, trials_per_obj=10, heuristic=args.heuristic, demo=args.demo)
+
+      # finishing time, how long did everything take
+      finishing_time = datetime.now()
+      time_taken = finishing_time - starting_time
+      d = divmod(time_taken.total_seconds(), 86400)
+      h = divmod(d[1], 3600)
+      m = divmod(h[1], 60)
+      s = m[1]
+      print("\nStarted at:", starting_time.strftime(datestr))
+      print("Finished at:", datetime.now().strftime(datestr))
+      print(f"Time taken was {d[0]:.0f} days {h[0]:.0f} hrs {m[0]:.0f} mins {s:.0f} secs\n")
+
+      exit()
+
+  elif training_type == "cnn_trial_4":
+
+    vary_1 = [
+      "CNN_25_25",
+      # "CNN_50_50"
+    ]
+    vary_2 = [5e-6, 5e-5, 5e-4]
+    vary_3 = None
+    repeats = 3
+    param_1_name = "network"
+    param_2_name = "learning rate"
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    baseline_args = {
+      "network" : param_1,
+      "lr" : param_2,
+      "action_values" : [2e-3, 0.015, 4e-3, 2e-3]
+    }
+
+    # use the new object set
+    model.params.object_set = "set8_fullset_1500"
+
+    # very long trainings
+    model.params.num_episodes = 200_000
+
+  elif training_type == "larger_actions":
+
+    vary_1 = None
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    param_1_name = None
+    param_2_name = None
+    param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+
+    baseline_args = {
+      "action_values" : [2e-3, 0.015, 4e-3, 2e-3]
+    }
+
+    # use the new object set
+    model.params.object_set = "set8_fullset_1500"
+
+    # very long trainings
+    model.params.num_episodes = 100_000
 
   elif training_type == "example_template":
 
