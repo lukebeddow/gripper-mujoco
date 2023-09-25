@@ -354,8 +354,6 @@ class TrainingManager():
     env.mj.set.randomise_colours = set["cpp"]["randomise_colours"]
     env.mj.set.time_for_action = set["cpp"]["time_for_action"]
     env.mj.set.saturation_yield_factor = set["cpp"]["saturation_yield_factor"]
-    env.mj.set.exceed_lat_min_factor = set["cpp"]["exceed_lat_min_factor"]
-    env.mj.set.exceed_lat_max_factor = set["cpp"]["exceed_lat_max_factor"]
 
     env.mj.set.sensor_sample_mode = set["cpp"]["sensor_sample_mode"]
     env.mj.set.state_sample_mode = set["cpp"]["state_sample_mode"]
