@@ -68,24 +68,26 @@ class Agent_DQN:
   class Parameters:
 
     # key learning hyperparameters
-    learning_rate: float = 3e-4
-    gamma: float = 0.999 
-    batch_size: int = 32 
+    learning_rate: float = 1e-4
+    gamma: float = 0.99
+    batch_size: int = 128 
     eps_start: float = 0.9
-    eps_end: float = 0.01
-    eps_decay: int = 500
-    target_update: int = 300
-    optimiser: str = "adam" # adam/RMSProp
-    adam_beta1: float = 0.9
-    adam_beta2: float = 0.999
+    eps_end: float = 0.05
+    eps_decay: int = 1000
 
     # memory replay
     min_memory_replay: int = 250
     memory_replay: int = 10_000
 
     # options
-    use_grad_clamp: bool = True
-    loss_criterion: str = "MSELoss" # smoothL1Loss/MSELoss/Huber
+    optimiser: str = "adamW" # adam/adamW/RMSProp
+    adam_beta1: float = 0.9
+    adam_beta2: float = 0.999
+    target_update: int = 250
+    soft_target_update: bool = True
+    soft_target_tau: float = 0.05
+    grad_clamp_value: bool = 100 # None to disable
+    loss_criterion: str = "smoothL1Loss" # smoothL1Loss/MSELoss/Huber
 
     def update(self, newdict):
       for key, value in newdict.items():
@@ -117,12 +119,18 @@ class Agent_DQN:
 
     if self.params.optimiser.lower() == "rmsprop":
       self.optimiser = torch.optim.RMSprop(self.policy_net.parameters(), 
-                                     lr=self.params.learning_rate)
+                                           lr=self.params.learning_rate)
     elif self.params.optimiser.lower() == "adam":
       self.optimiser = torch.optim.Adam(self.policy_net.parameters(),
-                                  lr=self.params.learning_rate,
-                                  betas=(self.params.adam_beta1,
-                                         self.params.adam_beta2))
+                                        lr=self.params.learning_rate,
+                                        betas=(self.params.adam_beta1,
+                                               self.params.adam_beta2))
+    elif self.params.optimiser.lower() == "adamw":
+      self.optimiser = torch.optim.AdamW(self.policy_net.parameters(),
+                                        lr=self.params.learning_rate,
+                                        betas=(self.params.adam_beta1,
+                                               self.params.adam_beta2),
+                                        amsgrad=True)
     else: raise RuntimeError(f"Invalid optimiser choice '{self.params.optimiser}', options are 'adam' or 'rmsprop'")
 
     if self.params.loss_criterion.lower() == "smoothl1loss":
@@ -133,6 +141,10 @@ class Agent_DQN:
       self.loss_criterion = nn.HuberLoss()
 
     self.seed()
+
+    if self.mode == "train": self.training_mode()
+    elif self.mode == "test": self.testing_mode()
+    else: raise RuntimeError(f"Agent_DQN given mode={self.mode} but valid options are 'test' and 'train'")
   
   def set_device(self, device):
     """
@@ -226,24 +238,22 @@ class Agent_DQN:
     return param_dict
 
   def optimise_model(self):
-    """
-    Optimise the model using a batch from the replay memory
-    """
 
     # only proceed if we have enough memory for a batch
-    if len(self.memory) < self.params.batch_size: return
+    if len(self.memory) < self.params.batch_size: 
+      return
 
     # only begin to optimise when enough memory is built up
     if (len(self.memory)) < self.params.min_memory_replay:
       return
-
+    
     # transitions = self.memory.sample(self.params.batch_size)
-
     # # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
     # # detailed explanation). This converts batch-array of Transitions
     # # to Transition of batch-arrays.
-    # batch = TrainDQN.Transition(*zip(*transitions))
+    # batch = Agent_DQN.Transition(*zip(*transitions))
 
+    # sample and transpose a batch
     batch = self.memory.batch(self.params.batch_size)
 
     # Compute a mask of non-final states and concatenate the batch elements
@@ -251,13 +261,15 @@ class Agent_DQN:
     non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
                                           batch.next_state)), device=self.device,
                                           dtype=torch.bool)
-
     non_final_next_states = torch.cat([s for s in batch.next_state
                                                 if s is not None])
-
     state_batch = torch.cat(batch.state)
     action_batch = torch.cat(batch.action)
     reward_batch = torch.cat(batch.reward)
+
+    # print("state", state_batch.shape)
+    # print("action", action_batch.shape)
+    # print("reward", reward_batch.shape)
 
     # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
     # columns of actions taken. These are the actions which would've been taken
@@ -270,43 +282,55 @@ class Agent_DQN:
     # This is merged based on the mask, such that we'll have either the expected
     # state value or 0 in case the state was final.
     next_state_values = torch.zeros(self.params.batch_size, device=self.device)
-    next_state_values[non_final_mask] = self.target_net(
-        non_final_next_states).max(1)[0].detach()
-    
+    with torch.no_grad():
+        next_state_values[non_final_mask] = self.target_net(non_final_next_states).max(1)[0]
     # Compute the expected Q values
-    expected_state_action_values = (next_state_values 
-                                        * self.params.gamma) + reward_batch
+    expected_state_action_values = (next_state_values * self.params.gamma) + reward_batch
 
-    # compute the loss
+    # Compute Huber loss
+    # criterion = nn.SmoothL1Loss()
     loss = self.loss_criterion(state_action_values, expected_state_action_values.unsqueeze(1))
 
     # Optimize the model
     self.optimiser.zero_grad()
     loss.backward()
-
-    if self.params.use_grad_clamp:
-      for param in self.policy_net.parameters():
-          param.grad.data.clamp_(-1, 1)
-
+    # In-place gradient clipping
+    if self.params.grad_clamp_value is not None:
+      torch.nn.utils.clip_grad_value_(self.policy_net.parameters(), self.params.grad_clamp_value)
     self.optimiser.step()
-
-    return
 
   def update_step(self, state, action, next_state, reward, terminal):
     """
     Run this every training action step to update the model
     """
 
-    if self.mode == "train":
+    if self.mode != "train": return
 
-      self.memory.push(
-        state,
-        action,
-        next_state,
-        reward,
-        terminal
-      )
-      self.optimise_model()
+    # print("state", state.shape)
+    # print("action", action.shape)
+    # print("next_state", next_state.shape)
+    # print("reward", reward.unsqueeze(0).shape)
+    # print("terminal", terminal.unsqueeze(0).shape)
+
+    self.memory.push(
+      state,
+      action,
+      next_state,
+      reward,
+      terminal
+    )
+
+    self.optimise_model()
+
+    if self.params.soft_target_update:
+      # Soft update of the target network's weights
+      # θ′ ← τ θ + (1 −τ )θ′
+      tau = self.params.soft_target_tau
+      target_net_state_dict = self.target_net.state_dict()
+      policy_net_state_dict = self.policy_net.state_dict()
+      for key in policy_net_state_dict:
+        target_net_state_dict[key] = policy_net_state_dict[key]*tau + target_net_state_dict[key]*(1-tau)
+      self.target_net.load_state_dict(target_net_state_dict)
 
   def update_episode(self, i_episode, finished=False):
     """
@@ -318,7 +342,9 @@ class Agent_DQN:
       # update the target network
       self.target_net.load_state_dict(self.policy_net.state_dict())
 
-    elif self.mode == "train":
+    if self.mode != "train": return
+
+    if not self.params.soft_target_update:
       if i_episode % self.params.target_update == 0:
         self.target_net.load_state_dict(self.policy_net.state_dict())
 

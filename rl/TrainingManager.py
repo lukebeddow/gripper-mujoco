@@ -181,6 +181,7 @@ class TrainingManager():
     # this class other settings
     "episode_log_rate" : 250,
     "track_avg_num" : 250,
+    "print_avg_return" : False,
     "savedir" : "models",
     "save" : True,
     "plot" : False,
@@ -640,9 +641,10 @@ if __name__ == "__main__":
   # tm.settings["trainer"]["save_freq"] = 5
   # tm.settings["final_test_trials_per_object"] = 1
   # tm.settings["env"]["test_objects"] = 3
-  # tm.settings["env"]["max_episode_steps"] = 1
-  # tm.settings["episode_log_rate"] = 1
-  # tm.settings["track_avg_num"] = 5
+  tm.settings["env"]["max_episode_steps"] = 1
+  tm.settings["episode_log_rate"] = 5
+  # tm.settings["track_avg_num"] = 3
+  tm.settings["Agent_DQN"]["target_update"] = 10
 
   # create the environment
   env = tm.make_env()

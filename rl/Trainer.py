@@ -14,6 +14,7 @@ from agents.DQN import Agent_DQN
 from env.MjEnv import MjEnv
 import networks
 
+
 class TrackTraining:
 
   def __init__(self, test_metrics=None, avg_num=50, plt_frequency_seconds=30):
@@ -245,6 +246,15 @@ class TrackTraining:
       if len(self.train_avg_rewards) == 0: return
       else: print(f"Episode {self.episodes_done}, avg_reward = {self.train_avg_rewards[-1]}")
 
+  def get_avg_return(self):
+    """
+    Return the average reward only if the value has updated
+    """
+
+    if self.episodes_done % self.avg_num == 0:
+      if len(self.train_avg_rewards) == 0: return None
+      else: return self.train_avg_rewards[-1]
+
 class Trainer:
 
   @dataclass
@@ -257,7 +267,7 @@ class Trainer:
   def __init__(self, agent, env, rngseed=None, device="cpu", log_level=1, plot=False,
                render=False, group_name="default_%d-%m-%y", run_name="default_run_%H-%M",
                save=True, savedir="models", episode_log_rate=10, strict_seed=False,
-               track_avg_num=50):
+               track_avg_num=50, print_avg_return=False):
     """
     Class that trains RL agents in an environment
     """
@@ -277,6 +287,7 @@ class Trainer:
     self.plot = plot
     self.render = render
     self.log_rate_for_episodes = episode_log_rate
+    self.print_avg_return = print_avg_return
     
     # set up saving
     self.enable_saving = save
@@ -501,7 +512,7 @@ class Trainer:
       done_torch = self.to_torch(done, dtype=torch.bool)
 
       # perform one step of the optimisation on the policy network
-      if test != True:
+      if not test:
         self.agent.update_step(obs, action, new_obs, reward, done_torch)
 
       obs = new_obs
@@ -567,13 +578,16 @@ class Trainer:
       if self.log_level == 1 and (i_episode - 1) % self.log_rate_for_episodes == 0:
         print("Begin training episode", i_episode, flush=True)
       elif self.log_level > 1:
-        print(f"Begin training episode {i_episode} at {datetime.now().strftime('%H:%M')}", flush=True)
+        avg_return = self.track.get_avg_return()
+        if avg_return is not None: str_to_add = f". Average return = {avg_return}"
+        else: str_to_add = ""
+        print(f"Begin training episode {i_episode} at {datetime.now().strftime('%H:%M')}" + str_to_add, flush=True)
 
       self.run_episode(i_episode)
 
       # plot graphs to the screen
       if self.plot: self.track.plot(plt_frequency_seconds=1)
-      self.track.print_training()
+      if self.print_avg_return: self.track.print_training()
 
       # check if we need to do any episode level updates (eg target network)
       self.agent.update_episode(i_episode)
@@ -629,7 +643,7 @@ class MujocoTrainer(Trainer):
   def __init__(self, agent, mjenv, rngseed=None, device="cpu", log_level=1, plot=False,
                render=False, group_name="default_%d-%m-%y", run_name="default_run_%H-%M",
                save=True, savedir="models", episode_log_rate=10, strict_seed=False,
-               track_avg_num=50):
+               track_avg_num=50, print_avg_return=False):
     """
     Trainer class for the gripper mujoco RL environment
     """
@@ -637,7 +651,7 @@ class MujocoTrainer(Trainer):
     super().__init__(agent, mjenv, rngseed=rngseed, device=device, log_level=log_level, 
                      plot=plot, render=render, group_name=group_name, run_name=run_name,
                      save=save, savedir=savedir, episode_log_rate=episode_log_rate, 
-                     strict_seed=strict_seed, track_avg_num=track_avg_num)
+                     strict_seed=strict_seed, track_avg_num=track_avg_num, print_avg_return=print_avg_return)
 
     # override the parameters of the base class
     self.params = MujocoTrainer.Parameters()
@@ -646,6 +660,21 @@ class MujocoTrainer(Trainer):
     self.last_test_data = None
     self.test_performances_filename = "test_performance"
     self.test_result_filename = "test_results"
+
+    # add variables to tracker
+    numpy_float = np.float32
+    self.track.avg_p_lifted = np.array([], dtype=numpy_float)
+    self.track.avg_p_contact = np.array([], dtype=numpy_float)
+    self.track.avg_p_palm_force = np.array([], dtype=numpy_float)
+    self.track.avg_p_exceed_limits = np.array([], dtype=numpy_float)
+    self.track.avg_p_exceed_axial = np.array([], dtype=numpy_float)
+    self.track.avg_p_exceed_lateral = np.array([], dtype=numpy_float)
+    self.track.avg_p_exceed_palm = np.array([], dtype=numpy_float)
+    self.track.avg_lifted = np.array([], dtype=numpy_float)
+    self.track.avg_stable = np.array([], dtype=numpy_float)
+    self.track.avg_oob = np.array([], dtype=numpy_float)
+    self.track.avg_target_height = np.array([], dtype=numpy_float)
+    self.track.avg_stable_height = np.array([], dtype=numpy_float)
 
   def save_hyperparameters(self, filename="hyperparameters", strheader=None, 
                            print_terminal=None):
@@ -1065,23 +1094,6 @@ class MujocoTrainer(Trainer):
       )
 
       category_table += cat_row
-
-    try:
-      self.track.avg_p_lifted = np.append(self.track.avg_p_lifted, total_counter.lifted.percent)
-    except AttributeError as e:
-      numpy_float = np.float32
-      self.track.avg_p_lifted = np.array([], dtype=numpy_float)
-      self.track.avg_p_contact = np.array([], dtype=numpy_float)
-      self.track.avg_p_palm_force = np.array([], dtype=numpy_float)
-      self.track.avg_p_exceed_limits = np.array([], dtype=numpy_float)
-      self.track.avg_p_exceed_axial = np.array([], dtype=numpy_float)
-      self.track.avg_p_exceed_lateral = np.array([], dtype=numpy_float)
-      self.track.avg_p_exceed_palm = np.array([], dtype=numpy_float)
-      self.track.avg_lifted = np.array([], dtype=numpy_float)
-      self.track.avg_stable = np.array([], dtype=numpy_float)
-      self.track.avg_oob = np.array([], dtype=numpy_float)
-      self.track.avg_target_height = np.array([], dtype=numpy_float)
-      self.track.avg_stable_height = np.array([], dtype=numpy_float)
 
     # save test results if we are mid-training
     if i_episode != None:
