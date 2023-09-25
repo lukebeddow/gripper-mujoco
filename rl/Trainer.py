@@ -639,6 +639,7 @@ class MujocoTrainer(Trainer):
       for key, value in newdict.items():
         if hasattr(self, key):
           setattr(self, key, value)
+        else: raise RuntimeError(f"incorrect key: {key}")
 
   def __init__(self, agent, mjenv, rngseed=None, device="cpu", log_level=1, plot=False,
                render=False, group_name="default_%d-%m-%y", run_name="default_run_%H-%M",

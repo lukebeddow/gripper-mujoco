@@ -93,6 +93,7 @@ class Agent_DQN:
       for key, value in newdict.items():
         if hasattr(self, key):
           setattr(self, key, value)
+        else: raise RuntimeError(f"incorrect key: {key}")
 
   Transition = namedtuple('Transition',
                           ('state', 'action', 'next_state', 'reward', 'terminal'))

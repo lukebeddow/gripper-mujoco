@@ -749,7 +749,7 @@ class TrainDQN():
     self.test_performance_txt_file_name = "test_performance"
 
     # prepare environment, but don't load a model xml file yet
-    self.env = MjEnv(noload=True, num_segments=num_segments, depth_camera=depth_camera,
+    self.env = MjEnv(num_segments=num_segments, depth_camera=depth_camera,
                      finger_thickness=finger_thickness, finger_width=finger_width,
                      finger_modulus=finger_modulus, log_level=log_level)
 
@@ -1680,7 +1680,7 @@ class TrainDQN():
       step_data = self.env.step(action.item())
 
       step_data_torch = []
-      for i in range(len(step_data)):
+      for i in range(len(step_data) - 1):
         step_data_torch.append(self.to_torch(step_data[i]))
 
       # step with this action and receive sample data for this transition
@@ -1694,7 +1694,11 @@ class TrainDQN():
         new_depth = self.to_torch(new_depth)
         transition_sample = (obs, img, action, new_obs, new_img, reward)
       else:
-        (new_obs, reward, done) = step_data_torch
+        (new_obs, reward, terminated, truncated) = step_data_torch
+        done = False
+        # bools are cast to float, can only be 0.0 or 1.0
+        if terminated.item() > 0.5 or truncated.item() > 0.5:
+          done = True
         transition_sample = (obs, action, new_obs, reward)
 
       # render the new environment

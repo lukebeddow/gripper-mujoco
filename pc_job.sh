@@ -64,7 +64,7 @@ faketty() {
 
 # default inputs
 machine=luke-PC
-timestamp="$(date +%d-%m-%y-%H:%M)"
+timestamp="$(date +%d-%m-%y_%H-%M)"
 FAKETTY=faketty
 LOGGING='Y'
 PRINT_RESULTS='N'

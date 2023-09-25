@@ -98,6 +98,7 @@ class MjEnv():
       for key, value in newdict.items():
         if hasattr(self, key):
           setattr(self, key, value)
+        else: raise RuntimeError(f"incorrect key: {key}")
 
   def __init__(self, object_set=None, seed=None, num_segments=None, finger_width=None, 
                depth_camera=None, finger_thickness=None, finger_modulus=None,
@@ -1234,7 +1235,7 @@ class MjEnv():
       if terminated or not self.mj.set.reward_on_end_only:
         # do we only award a reward when the episode ends
         reward = self._goal_reward(goal, state)
-      to_return = (obs, reward, terminated, state, goal)
+      to_return = (obs, reward, terminated, state, goal, info)
     else:
       reward = self._reward()
       to_return = (obs, reward, terminated, truncated, info)

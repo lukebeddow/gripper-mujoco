@@ -13,7 +13,7 @@ from env.MjEnv import MjEnv
 from agents.DQN import Agent_DQN
 import networks
 
-datestr = "%d-%m-%y-%H:%M" # all date inputs must follow this format
+datestr = "%d-%m-%y_%H-%M" # all date inputs must follow this format
 
 class TrainingManager():
 
@@ -36,12 +36,14 @@ class TrainingManager():
       "eps_end" : 0.05,
       "eps_decay" : 4000,
       "target_update" : 50,
-      "optimser" : "adam",
+      "optimiser" : "adam",
       "adam_beta1" : 0.9,
       "adam_beta2" : 0.999,
       "min_memory_replay" : 5000,
       "memory_replay" : 75_000,
-      "use_grad_clamp" : True,
+      "soft_target_update" : False,
+      "soft_target_tau" : 0.05,
+      "grad_clamp_value" : 1.0,
       "loss_criterion" : "smoothL1Loss"
     },
 
@@ -74,8 +76,6 @@ class TrainingManager():
       "randomise_colours" : False,
       "time_for_action" : 0.2,
       "saturation_yield_factor" : 1.0,
-      "exceed_lat_min_factor" : 0.75,
-      "exceed_lat_max_factor" : 1.5,
       "sensor_sample_mode" : 2,
       "state_sample_mode" : 4,
       "sensor_n_prev_steps" : 3,
@@ -218,11 +218,12 @@ class TrainingManager():
     agent.set_device(self.device)
 
     # create the trainer
-    self.trainer = MujocoTrainer(agent, env, self.rngseed, self.device,
-                                 self.log_level, self.settings["plot"], self.settings["render"],
-                                 self.group_name, self.run_name, self.settings["save"],
-                                 self.settings["savedir"], self.settings["episode_log_rate"],
-                                 self.strict_seed, self.settings["track_avg_num"])
+    self.trainer = MujocoTrainer(agent, env, rngseed=self.rngseed, device=self.device,
+                                 log_level=self.log_level, plot=self.settings["plot"], 
+                                 render=self.settings["render"], group_name=self.group_name, 
+                                 run_name=self.run_name, save=self.settings["save"],
+                                 savedir=self.settings["savedir"], episode_log_rate=self.settings["episode_log_rate"],
+                                 strict_seed=self.strict_seed, track_avg_num=self.settings["track_avg_num"])
 
     # apply trainer settings
     self.trainer.params.update(self.settings["trainer"])
@@ -631,11 +632,13 @@ if __name__ == "__main__":
   rngseed = None
   device = "cpu"
   log_level = 1
+  save = False
 
   # create the training manager
   tm = TrainingManager(rngseed=rngseed, device=device, log_level=log_level)
 
   # # choose settings
+  tm.settings["save"] = save
   # tm.settings["trainer"]["num_episodes"] = 15
   # tm.settings["trainer"]["test_freq"] = 5
   # tm.settings["trainer"]["save_freq"] = 5

@@ -743,12 +743,13 @@ def logging_job(model, run_name, group_name):
   model.plot(force=True, end=True, hang=True)
 
 def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 100, 50], target_update=50, 
-                      memory_replay=75_000, state_steps=5, sensor_steps=1, z_state=True, sensor_mode=2,
+                      memory_replay=75_000, state_steps=3, sensor_steps=3, z_state=True, sensor_mode=2,
                       state_mode=4, sensor_noise=0.025, state_noise=0.0, sensor_mu=0.05,
                       state_mu=0.025, reward_style="sensor_mixed", reward_options=[], 
                       scale_rewards=1.0, scale_penalties=1.0, penalty_termination=False,
                       num_segments=8, finger_thickness=0.9e-3, finger_width=28e-3,
-                      max_episode_steps=250, eval_me=None, base_XY_actions=False, action_values=None):
+                      max_episode_steps=250, eval_me=None, base_XY_actions=False, action_values=None,
+                      object_set="set8_fullset_1500"):
   """
   Applies baseline settings to the model when run without any arguments
   """
@@ -760,6 +761,7 @@ def baseline_settings(model, lr=5e-5, eps_decay=4000, sensors=3, network=[150, 1
   model.params.target_update = target_update
 
   # set key environment parameters
+  model.params.object_set = object_set
   model.env.params.max_episode_steps = max_episode_steps   # after this number of steps, is_done=True
   model.env.load_next.num_segments = num_segments          # 8 gives good speed/accuracy balance
   model.env.load_next.finger_thickness = finger_thickness  # options are 0.8e-3, 0.9e-3, 1.0e-3
@@ -1127,6 +1129,21 @@ def print_results(model, filename="results.txt", savefile="table.txt"):
   with open(savepath, 'w') as f:
     f.write(print_str)
 
+def print_time_taken():
+  """
+  Print the time taken since the training started
+  """
+
+  finishing_time = datetime.now()
+  time_taken = finishing_time - starting_time
+  d = divmod(time_taken.total_seconds(), 86400)
+  h = divmod(d[1], 3600)
+  m = divmod(h[1], 60)
+  s = m[1]
+  print("\nStarted at:", starting_time.strftime(datestr))
+  print("Finished at:", datetime.now().strftime(datestr))
+  print(f"Time taken was {d[0]:.0f} days {h[0]:.0f} hrs {m[0]:.0f} mins {s:.0f} secs\n")
+
 if __name__ == "__main__":
 
   """
@@ -1158,7 +1175,7 @@ if __name__ == "__main__":
   # key default settings
   use_wandb = False
   no_plot = True
-  datestr = "%d-%m-%y-%H:%M" # all date inputs must follow this format
+  datestr = "%d-%m-%y_%H-%M" # all date inputs must follow this format
 
   # # print all the inputs we have received
   # print("array_training_DQN.py inputs are:", sys.argv[1:])
@@ -1314,13 +1331,11 @@ if __name__ == "__main__":
   # CONFIGURE KEY SETTINGS (take care that baseline_settings(...) does not overwrite)
   model.params.use_curriculum = False
   model.params.num_episodes = 60_000
-  model.params.object_set = "set6_fullset_800_50i"
+  # model.params.object_set = "set6_fullset_800_50i" # baseline setting added
 
   if args.program is None:
     # cannot have whitespace
     raise RuntimeError("must specify the program to run with '--program xxxxxxx'")
-  else:
-    training_type = args.program
 
   # OLD, avoid: defaults to pass into baseline_settings(...)
   this_segments = 8 # was 8, change to 6 for speed
@@ -1328,7 +1343,7 @@ if __name__ == "__main__":
 
   extra_info_string = ""
 
-  if training_type == "paper_baseline_1":
+  if args.program == "paper_baseline_1":
 
     vary_1 = [0.9e-3, 1.0e-3] # thickness
     vary_2 = [0, 1, 2, 3]
@@ -1352,7 +1367,7 @@ if __name__ == "__main__":
     # run longer tests
     model.env.params.test_trials_per_object = 5
 
-  elif training_type == "paper_baseline_1.5":
+  elif args.program == "paper_baseline_1.5":
 
     # vary_1 = [0.9e-3, 1.0e-3] # thickness
     vary_1 = [24e-3] # width
@@ -1378,7 +1393,7 @@ if __name__ == "__main__":
     # run longer tests
     model.env.params.test_trials_per_object = 5
 
-  elif training_type == "paper_baseline_2":
+  elif args.program == "paper_baseline_2":
 
     vary_1 = [
       (0.9e-3, 28e-3),
@@ -1411,7 +1426,7 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  elif training_type == "paper_baseline_2_extra_noise":
+  elif args.program == "paper_baseline_2_extra_noise":
 
     vary_1 = [
       (0.9e-3, 28e-3),
@@ -1445,7 +1460,7 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  elif training_type == "avoid_overfit":
+  elif args.program == "avoid_overfit":
 
     vary_1 = [1, 3, 5, 7]
     vary_2 = None
@@ -1475,7 +1490,7 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  elif training_type == "new_sensor_styles":
+  elif args.program == "new_sensor_styles":
 
     vary_1 = [
       (1, 3),
@@ -1520,7 +1535,7 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  elif training_type == "new_sensor_styles_continued":
+  elif args.program == "new_sensor_styles_continued":
 
     print("Continuing training in group:", model.group_name)
     print("Continuing training of run:", model.run_name)
@@ -1571,7 +1586,7 @@ if __name__ == "__main__":
     # skip train/test below
     args.print = True
 
-  elif training_type == "new_sensor_styles_extended":
+  elif args.program == "new_sensor_styles_extended":
 
     vary_1 = [
       (1, 3),
@@ -1619,7 +1634,7 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  elif training_type == "paper_baseline_3":
+  elif args.program == "paper_baseline_3":
 
     vary_1 = [
       (0.9e-3, 28e-3),
@@ -1665,7 +1680,7 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  elif training_type == "paper_baseline_3.1":
+  elif args.program == "paper_baseline_3.1":
 
     vary_1 = [
       (0.9e-3, 28e-3),
@@ -1711,7 +1726,7 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  elif training_type == "paper_baseline_3.1_heuristic":
+  elif args.program == "paper_baseline_3.1_heuristic":
 
     vary_1 = [
       (0.9e-3, 28e-3),
@@ -1747,7 +1762,7 @@ if __name__ == "__main__":
       "scale_penalties" : 2.5,  # we do want to discourage dangerous actions
     }
 
-  elif training_type == "pb4_testing":
+  elif args.program == "pb4_testing":
 
     # vary_1 = [
     #   (0.9e-3, 28e-3),
@@ -1805,7 +1820,7 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  elif training_type == "paper_baseline_4":
+  elif args.program == "paper_baseline_4":
 
     vary_1 = [
       (0.9e-3, 28e-3),
@@ -1860,7 +1875,7 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  elif training_type == "paper_baseline_4_heuristic":
+  elif args.program == "paper_baseline_4_heuristic":
 
     vary_1 = [
       (0.9e-3, 28e-3),
@@ -1917,7 +1932,7 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  elif training_type == "heuristic_grid_search":
+  elif args.program == "heuristic_grid_search":
 
     vary_1 = [False, True]
     vary_2 = [
@@ -1987,7 +2002,7 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  elif training_type == "test_exceed_limits_termination":
+  elif args.program == "test_exceed_limits_termination":
 
     param_1 = None
     param_2 = None
@@ -2010,7 +2025,7 @@ if __name__ == "__main__":
     # run longer tests
     model.env.params.test_trials_per_object = 5
 
-  elif training_type == "test_prevent_table_impacts":
+  elif args.program == "test_prevent_table_impacts":
 
     param_1 = None
     param_2 = None
@@ -2041,7 +2056,7 @@ if __name__ == "__main__":
     # prevent gripper from going lower than -12.5mm (see myfunctions.cpp for variable hardcoding)
     model.env.mj.prevent_table_impacts(True)
 
-  elif training_type == "new_sensor_rewards":
+  elif args.program == "new_sensor_rewards":
 
     vary_1 = [False, True]
     vary_2 = [(100.0, 100), (3.0, 10.0)]
@@ -2103,7 +2118,7 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  elif training_type == "new_sensor_hypers":
+  elif args.program == "new_sensor_hypers":
 
     vary_1 = [1e-5, 5e-5, 10e-5]
     vary_2 = [1.0, 2.5]
@@ -2160,7 +2175,7 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  elif training_type == "new_sensor_hypers_2":
+  elif args.program == "new_sensor_hypers_2":
 
     vary_1 = [25_000, 50_000, 75_000, 100_000]
     vary_2 = [50, 100, 200, 500]
@@ -2218,7 +2233,7 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  elif training_type == "new_sensor_hypers_2_extended":
+  elif args.program == "new_sensor_hypers_2_extended":
 
     vary_1 = [25_000, 50_000, 75_000, 100_000]
     vary_2 = [1, 25]
@@ -2276,7 +2291,7 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  elif training_type == "heavy_test":
+  elif args.program == "heavy_test":
 
     vary_1 = [1.0, 2.5]
     vary_2 = [3, 5]
@@ -2334,7 +2349,7 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  elif training_type == "step_size_curriculum":
+  elif args.program == "step_size_curriculum":
 
     # define step size levels
     levels_A = [
@@ -2411,7 +2426,7 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  elif training_type == "step_size_curriculum_2":
+  elif args.program == "step_size_curriculum_2":
 
     # define step size levels
     levels_A = [
@@ -2465,7 +2480,7 @@ if __name__ == "__main__":
     # run medium length trainings
     model.params.num_episodes = 60_000
 
-  elif training_type == "cnn_trial_1":
+  elif args.program == "cnn_trial_1":
 
     vary_1 = [
       [150, 100, 50],
@@ -2499,7 +2514,7 @@ if __name__ == "__main__":
     # use the new object set
     model.params.object_set = "set7_xycamera_50i"
 
-  elif training_type == "cnn_trial_2":
+  elif args.program == "cnn_trial_2":
 
     # setup up a step size curriculum
     levels_A = [
@@ -2545,7 +2560,7 @@ if __name__ == "__main__":
     model.params.test_freq = 2000
     model.params.save_freq = 2000
 
-  elif training_type == "cnn_trial_3":
+  elif args.program == "cnn_trial_3":
 
     # setup up a step size curriculum
     levels_A = [
@@ -2592,7 +2607,7 @@ if __name__ == "__main__":
     model.params.test_freq = 4000
     model.params.save_freq = 4000
 
-  elif training_type == "image_collection":
+  elif args.program == "image_collection":
 
     vary_1 = [True, False]
     vary_2 = ["image_collection_100_100", "image_collection_50_50"]
@@ -2644,7 +2659,7 @@ if __name__ == "__main__":
     # 75k -> 75000/200 = 375 episodes
     model.params.image_save_freq = 500 # save memory replay frequently
 
-  elif training_type == "profile_cnn":
+  elif args.program == "profile_cnn":
 
     model = baseline_settings(model)
     model.env.disable_rendering = True
@@ -2666,7 +2681,7 @@ if __name__ == "__main__":
 
     exit()
 
-  elif training_type == "set8_baseline":
+  elif args.program == "set8_baseline":
 
     vary_1 = [False, True]
     vary_2 = [(1, 5), (3, 3)]
@@ -2704,7 +2719,7 @@ if __name__ == "__main__":
       "state_steps" : param_2[1],
     }
 
-  elif training_type.startswith("offline_train_v1-"):
+  elif args.program.startswith("offline_train_v1-"):
 
     vary_1 = [
       (50, 5), 
@@ -2721,13 +2736,13 @@ if __name__ == "__main__":
                                                 param_3=vary_3, repeats=repeats)
 
     # which offline data are we loading
-    if training_type.endswith("v1-1"):
+    if args.program.endswith("v1-1"):
       dataset = "/home/luke/luke-gripper-mujoco/rl/models/dqn/11-08-23/operator-PC_16:33_A1"
       net = "CNN2_100_100"
-    elif training_type.endswith("v1-2"):
+    elif args.program.endswith("v1-2"):
       dataset = "/home/luke/luke-gripper-mujoco/rl/models/dqn/18-08-23/operator-PC_16:32_A1"
       net = "CNN2_100_100"
-    elif training_type.endswith("v1-3"):
+    elif args.program.endswith("v1-3"):
       dataset = "/home/luke/luke-gripper-mujoco/rl/models/dqn/18-08-23/operator-PC_16:32_A3"
       net = "CNN2_50_50"
 
@@ -2766,7 +2781,7 @@ if __name__ == "__main__":
 
       exit()
 
-  elif training_type.startswith("cnn_from_pretrain_v1"):
+  elif args.program.startswith("cnn_from_pretrain_v1"):
 
     vary_1 = [5e-5, 1e-5]
     vary_2 = None
@@ -2781,7 +2796,7 @@ if __name__ == "__main__":
     if not args.print and not args.print_results:
 
       # which offline data are we loading
-      if training_type.endswith("v1-1"):
+      if args.program.endswith("v1-1"):
         # # image only pretrained network
         # path = "/home/luke/luke-gripper-mujoco/rl/models/dqn/15-08-23/operator-PC_16:52_A3"
         # id = 3
@@ -2789,7 +2804,7 @@ if __name__ == "__main__":
         path = "/home/luke/luke-gripper-mujoco/rl/models/dqn/14-08-23/operator-PC_17:50_A1"
         net = "CNN2_100_100"
         id = 4
-      elif training_type.endswith("v1-2"):
+      elif args.program.endswith("v1-2"):
         path = "/home/luke/luke-gripper-mujoco/rl/models/dqn/22-08-23/operator-PC_09:55_A5"
         net = "CNN2_50_50"
         folderpath = "/home/luke/luke-gripper-mujoco/rl/models/dqn/22-08-23/"
@@ -2827,7 +2842,7 @@ if __name__ == "__main__":
 
       exit()
 
-  elif training_type == "finger_angle_test":
+  elif args.program == "finger_angle_test":
 
     vary_1 = [30, 45, 60, 75]
     vary_2 = None
@@ -2864,7 +2879,7 @@ if __name__ == "__main__":
       "state_steps" : 3,
     }
 
-  elif training_type == "set8_baseline_extended":
+  elif args.program == "set8_baseline_extended":
 
     thresholds_A = [10_000, 25_000, 50_000]
     thresholds_B = [10_000, 25_000, 75_000]
@@ -2908,7 +2923,7 @@ if __name__ == "__main__":
       "state_steps" : 3,
     }
 
-  elif training_type.startswith("full_offline_training_v1"):
+  elif args.program.startswith("full_offline_training_v1"):
 
     # vary_1 = [
     #   (50, 5), 
@@ -2925,13 +2940,13 @@ if __name__ == "__main__":
     #                                             param_3=vary_3, repeats=repeats)
 
     # which offline data are we loading
-    if training_type.endswith("v1-1"):
+    if args.program.endswith("v1-1"):
       dataset = "/home/luke/luke-gripper-mujoco/rl/models/dqn/11-08-23/operator-PC_16:33_A1"
       net = "CNN2_100_100"
-    elif training_type.endswith("v1-2"):
+    elif args.program.endswith("v1-2"):
       dataset = "/home/luke/luke-gripper-mujoco/rl/models/dqn/18-08-23/operator-PC_16:32_A1"
       net = "CNN2_100_100"
-    elif training_type.endswith("v1-3"):
+    elif args.program.endswith("v1-3"):
       dataset = "/home/luke/luke-gripper-mujoco/rl/models/dqn/18-08-23/operator-PC_16:32_A3"
       net = "CNN2_50_50"
 
@@ -2996,7 +3011,7 @@ if __name__ == "__main__":
 
       exit()
 
-  elif training_type == "cnn_trial_4":
+  elif args.program == "cnn_trial_4":
 
     vary_1 = [
       "CNN_25_25",
@@ -3023,7 +3038,7 @@ if __name__ == "__main__":
     # very long trainings
     model.params.num_episodes = 200_000
 
-  elif training_type == "larger_actions":
+  elif args.program == "larger_actions":
 
     vary_1 = None
     vary_2 = None
@@ -3045,7 +3060,60 @@ if __name__ == "__main__":
     # very long trainings
     model.params.num_episodes = 100_000
 
-  elif training_type == "example_template":
+  elif args.program == "test_training_manager":
+
+    from TrainingManager import TrainingManager
+    from agents.DQN import Agent_DQN
+
+    # key settings
+    rngseed = None
+    device = "cpu"
+    log_level = 1
+
+    run_name = f"luke-PC_{save_suffix}"
+    group_name = timestamp[:8] # include only day-month-year
+
+    # create the training manager
+    tm = TrainingManager(rngseed=rngseed, device=device, log_level=log_level,
+                         group_name=group_name, run_name=run_name)
+
+    # # choose settings
+    tm.settings["print_avg_return"] = True
+    # tm.settings["trainer"]["num_episodes"] = 15
+    # tm.settings["trainer"]["test_freq"] = 5
+    # tm.settings["trainer"]["save_freq"] = 5
+    # tm.settings["final_test_trials_per_object"] = 1
+    # tm.settings["env"]["test_objects"] = 3
+    # tm.settings["env"]["max_episode_steps"] = 1
+    # tm.settings["episode_log_rate"] = 1
+    # tm.settings["track_avg_num"] = 5
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent
+    layers = [env.n_obs, 150, 100, 50, env.n_actions]
+    network = networks.VariableNetwork(layers, device=device)
+    agent = Agent_DQN(device=device)
+    agent.init(network)
+
+    # input into the training manager and train
+    tm.run_training(agent, env)
+    print_time_taken()
+    exit()
+
+  elif args.program == "baseline_settings":
+
+    # placeholder program where only the current baseline settings are used
+    param_1_name = "baseline settings"
+    param_2_name = None
+    param_3_name = None
+    param_1 = True
+    param_2 = None
+    param_3 = None
+    baseline_args = {} # use only baseline settings
+
+  elif args.program == "example_template":
 
     vary_1 = None
     vary_2 = None
@@ -3062,7 +3130,7 @@ if __name__ == "__main__":
       "param_3_arg" : param_3
     }
 
-  else: raise RuntimeError(f"array_training_DQN.py: training_type of '{training_type}' not recognised")
+  else: raise RuntimeError(f"array_training_DQN.py: args.program of '{args.program}' not recognised")
 
   # note and printing information
   param_1_string = f"\t{param_1_name} is {param_1}\n" if param_1 is not None else ""
@@ -3085,15 +3153,7 @@ if __name__ == "__main__":
     model = test(model, trials_per_obj=10, heuristic=args.heuristic, demo=args.demo)
 
     # finishing time, how long did everything take
-    finishing_time = datetime.now()
-    time_taken = finishing_time - starting_time
-    d = divmod(time_taken.total_seconds(), 86400)
-    h = divmod(d[1], 3600)
-    m = divmod(h[1], 60)
-    s = m[1]
-    print("\nStarted at:", starting_time.strftime(datestr))
-    print("Finished at:", datetime.now().strftime(datestr))
-    print(f"Time taken was {d[0]:.0f} days {h[0]:.0f} hrs {m[0]:.0f} mins {s:.0f} secs\n")
+    print_time_taken()
 
   # prepare to print final results, check if files exist which recorded best performance
   best_sr, best_ep = model.read_best_performance_from_text(silence=True)
