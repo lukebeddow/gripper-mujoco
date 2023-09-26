@@ -614,18 +614,9 @@ class Trainer:
     if self.plot:
       self.track.plot(force=True, end=True, hang=True) # leave plots on screen if we are plotting
 
-    # end of training
-    self.finish_training()
-
   def test(self):
     """
     Empty test function, should be overriden for each environment
-    """
-    pass
-
-  def finish_training(self):
-    """
-    Override this function to run code at the end of a training
     """
     pass
 
@@ -1142,18 +1133,6 @@ class MujocoTrainer(Trainer):
     self.last_test_success_rate = total_counter.object_stable.last_value / N
 
     return output_str
-
-  def finish_training(self):
-    """
-    Save the best performance from the training
-    """
-
-    # get some key details to save in a text file now training is finished
-    best_sr, best_ep = self.calc_best_performance()
-    finish_txt = f"Training finished after {self.track.episodes_done} episodes"
-    finish_txt += f"\n\nBest performance was {best_sr} at episode {best_ep}"
-    if self.enable_saving:
-      self.modelsaver.save("training_finished", txtonly=True, txtstr=finish_txt)
 
   def calc_best_performance(self, from_episode=None, return_id=None):
     """

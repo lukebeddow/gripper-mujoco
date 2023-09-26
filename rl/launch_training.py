@@ -390,11 +390,12 @@ if __name__ == "__main__":
   if args.device is None:
     args.device = "cpu"
 
-  if args.print: args.log_level = 0
+  if args.print: 
+    args.log_level = 0
 
   # echo these inputs
   if args.log_level > 0:
-    print("\launch_training.py is preparing to train:")
+    print("launch_training.py is preparing to train:")
     print(" -> Job number:", args.job)
     print(" -> Timestamp:", timestamp)
     print(" -> Program name:", args.program)
@@ -408,10 +409,11 @@ if __name__ == "__main__":
   # ----- special cases ----- #
 
   if args.print_results:
-    if args.log_level > 0: print("\nPreparing to print a results table")
+    if args.log_level > 0: print("\nPreparing to print a results table in launch_training.py")
     if args.timestamp is None:
       raise RuntimeError("--print-results requires a timestamp (of the chosen training) be set")
     print_results_table(args.timestamp)
+    exit()
 
   # ----- regular training ----- #
 
@@ -423,6 +425,10 @@ if __name__ == "__main__":
   # create the training manager
   tm = TrainingManager(rngseed=args.rngseed, device=args.device, log_level=args.log_level)
   tm.set_group_run_name(job_num=args.job, timestamp=timestamp)
+
+  # input any command line settings
+  tm.settings["plot"] = plot
+  tm.settings["render"] = render
 
   if args.program == "test_1":
 
