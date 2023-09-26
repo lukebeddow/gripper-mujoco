@@ -10,200 +10,6 @@ from env.MjEnv import MjEnv
 from agents.DQN import Agent_DQN
 import networks
 
-def parse_job_string(jobstr):
-  """
-  Get a list of job numbers from a job string, eg "a:e" returns [a,b,c,d,e] and
-  "a e f" returns [a,e,f]
-  """
-
-  # parse the job string, assume either "x:y" or "x y z"
-  if ":" in jobstr:
-    splits = jobstr.split(":")
-    job_start = int(splits[0])
-    job_end = int(splits[-1])
-    job_numbers = list(range(job_start, job_end + 1))
-  else:
-    splits = jobstr.split(" ")
-    job_numbers = []
-    for s in splits:
-      job_numbers.append(int(s))
-
-  return job_numbers
-
-def update_training_summaries(timestamp, jobstr):
-  """
-  Regenerate training_summaries from a currently running training, or any trainings where
-  there is no up to date training_summary.txt files
-  """
-
-  if jobstr is None and job_numbers is None:
-    raise RuntimeError("print_results_table() must have either jobstr or job_numbers != None")
-
-  if jobstr is not None:
-    job_numbers = parse_job_string(jobstr)
-
-  tm = TrainingManager(log_level=0)
-
-  for j in job_numbers:
-
-    # determine the path required for this job
-    tm.init_training_summary()
-    tm.set_group_run_name(job_num=j, timestamp=timestamp)
-    tm.trainer = MujocoTrainer(None, None, log_level=0, run_name=tm.run_name,
-                               group_name=tm.group_name)
-    tm.save_training_summary()
-
-def print_results_table(timestamp, jobstr=None, job_numbers=None):
-  """
-  Print a table of results for a training
-  """
-
-  if jobstr is None and job_numbers is None:
-    raise RuntimeError("print_results_table() must have either jobstr or job_numbers != None")
-
-  if jobstr is not None:
-    job_numbers = parse_job_string(jobstr)
-
-  mj = MujocoTrainer(None, None, log_level=0)
-  savedir = mj.savedir
-  tm = TrainingManager(log_level=0)
-
-  # prepare to find information from training_summary files
-  first_loop = True
-  headings = []
-  table = []
-  new_elem = []
-
-  for j in job_numbers:
-
-    # determine the path required for this job
-    tm.set_group_run_name(job_num=j, timestamp=timestamp)
-    filepath = savedir + "/" + tm.group_name + "/" + tm.run_name + "/"
-    
-    # load information from the training summary
-    tm.init_training_summary() # wipe data from previous loop
-    exists = tm.load_training_summary(filepath=filepath)
-
-    if not exists:
-      # try to create the file
-      tm.trainer = MujocoTrainer(None, None, log_level=0, run_name=tm.run_name,
-                                group_name=tm.group_name)
-      tm.save_training_summary(filepath=filepath)
-      exists = tm.load_training_summary(filepath=filepath)
-      if not exists:
-        raise RuntimeError("print_results_table() failed to make training summary at", filepath)
-
-    if first_loop:
-      if tm.job_number is not None: 
-        found_job_number = True
-        headings.append("Job num")
-      else: found_job_number = False
-      if tm.timestamp is not None: 
-        found_timestamp = True
-        headings.append("Timestamp    ") # 4xspace for heading
-      else: found_timestamp = False
-      if tm.param_1 is not None: 
-        found_param_1 = True
-        headings.append(tm.param_1_name)
-      else: found_param_1 = False
-      if tm.param_2 is not None: 
-        found_param_2 = True
-        headings.append(tm.param_2_name)
-      else: found_param_2 = False
-      if tm.param_3 is not None: 
-        found_param_3 = True
-        headings.append(tm.param_3_name)
-      else: found_param_3 = False
-      if tm.trained_to is not None: 
-        found_trained_to = True
-        headings.append("Trained to")
-      else: found_trained_to = False
-      if tm.train_best_ep is not None: 
-        found_train_best_ep = True
-        headings.append("Train best SR")
-      else: found_train_best_ep = False
-      if tm.train_best_sr is not None: 
-        found_train_best_sr = True
-        headings.append("Train best episode")
-      else: found_train_best_sr = False
-      if tm.full_test_sr is not None: 
-        found_full_test_sr = True
-        headings.append("Final test SR")
-      else: found_full_test_sr = False
-      first_loop = False
-
-    if found_job_number:
-      if tm.job_number is not None:
-        new_elem.append(tm.job_number)
-      else: new_elem.append("nodata")
-    if found_timestamp:
-      if tm.timestamp is not None:
-        new_elem.append(tm.timestamp)
-      else: new_elem.append("nodata")
-    if found_param_1:
-      if tm.param_1 is not None:
-        new_elem.append(tm.param_1)
-      else: new_elem.append("nodata")
-    if found_param_2:
-      if tm.param_2 is not None:
-        new_elem.append(tm.param_2)
-      else: new_elem.append("nodata")
-    if found_param_3:
-      if tm.param_3 is not None:
-        new_elem.append(tm.param_3)
-      else: new_elem.append("nodata")
-    if found_trained_to:
-      if tm.trained_to is not None:
-        new_elem.append(tm.trained_to)
-      else: new_elem.append("nodata")
-    if found_train_best_ep:
-      if tm.train_best_ep is not None:
-        new_elem.append(tm.train_best_ep)
-      else: new_elem.append("nodata")
-    if found_train_best_sr:
-      if tm.train_best_sr is not None:
-        new_elem.append(tm.train_best_sr)
-      else: new_elem.append("nodata")
-    if found_full_test_sr:
-      if tm.full_test_sr is not None:
-        new_elem.append(tm.full_test_sr)
-      else: new_elem.append("nodata")
-
-    table.append(new_elem[:])
-    new_elem = []
-
-  # now prepare to print the table
-  print_str = """"""
-  heading_str = ""
-  for x in range(len(headings) - 1): heading_str += "{" + str(x) + "} | "
-  heading_str += "{" + str(len(headings) - 1) + "}"
-  row_str = heading_str[:]
-  heading_formatters = []
-  row_formatters = []
-  for x in range(len(headings)):
-    row_formatters.append("{" + f"{x}:<{len(headings[x]) + 2}" + "}")
-    heading_formatters.append("{" + f"{x}:<{len(headings[x]) + 2}" + "}")
-  heading_str = heading_str.format(*heading_formatters)
-  row_str = row_str.format(*row_formatters)
-
-  # assemble the table text
-  print_str += heading_str.format(*headings) + "\n"
-  # print(heading_str.format(*headings))
-  for i in range(len(table)):
-    # check if entry is incomplete
-    while len(table[i]) < len(headings): table[i] += ["N/F"]
-    for j, elem in enumerate(table[i]):
-      if isinstance(elem, float):
-        table[i][j] = "{:.4f}".format(elem)
-    # print(row_str.format(*table[i]))
-    print_str += row_str.format(*table[i]) + "\n"
-
-  # print and save the table
-  print("\n" + print_str)
-  tablepath = savedir + "/" + tm.group_name + "/" + "results_table.txt"
-  with open(tablepath, 'w') as f:
-    f.write(print_str)
-
 class TrainingManager():
 
   # baseline settings for all components
@@ -504,6 +310,57 @@ class TrainingManager():
     self.full_test_sr = None
     self.trained_to = None
 
+  def get_training_summary(self, filepath=None):
+    """
+    Get a string summary of training details (not to be confused with hyperparameters,
+    see Trainer.py to print or get any hyperparameters. Alternatively print the settings
+    dictionary from this class)
+    """
+
+    if filepath is None:
+      filepath = self.trainer.savedir + "/" + self.trainer.group_name + "/" + self.trainer.run_name
+
+    # try to load any existing information first
+    exists = self.load_training_summary(filepath=filepath)
+
+    if not self.settings["save"]: 
+      if self.log_level > 0: print("Saving is disabled, not saving a training summary")
+      return
+
+    job_string = f"Job number is {self.job_number}\n" if self.job_number is not None else ""
+    timestamp_string = f"\tTimestamp is {self.timestamp}\n" if self.timestamp is not None else ""
+    param_1_string = f"\tParam 1: {self.param_1_name} is {self.param_1}\n" if self.param_1 is not None else ""
+    param_2_string = f"\tParam 2: {self.param_2_name} is {self.param_2}\n" if self.param_2 is not None else ""
+    param_3_string = f"\tParam 3: {self.param_3_name} is {self.param_3}\n" if self.param_3 is not None else ""
+
+    traintime_test_np = self.trainer.read_test_performance()
+    best_index = np.argmax(traintime_test_np[1])
+    best_traintime_success = traintime_test_np[1][best_index]
+    best_traintime_episode = int(traintime_test_np[0][best_index])
+    best_traintime_str = f"\tBest training time test performance = {best_traintime_success} at episode = {best_traintime_episode}\n"
+    trained_to_str = f"\tTrained to episode = {int(traintime_test_np[0][-1])}\n"
+
+    # create table of test performances
+    test_table = "Test time performance (success rate metric = stable height):\n\n"
+    top_row = "{0:<10} | {1:<15}\n".format("Episode", "Success rate")
+    test_table += top_row
+    row_str = "{0:<10} | {1:<15.3f}\n"
+    for i in range(len(traintime_test_np[0])):
+      test_table += row_str.format(int(traintime_test_np[0,i]), traintime_test_np[1,i])
+
+    best_fulltest_sr, best_ep = self.trainer.read_best_performance_from_text(fulltest=True, silence=True)
+    if best_fulltest_sr is not None:
+      fulltest_str = f"\tMost recent fulltest performance = {best_fulltest_sr:.3f}\n"
+    else: fulltest_str = ""
+
+    # assemble our output
+    output = job_string + timestamp_string + param_1_string + param_2_string + param_3_string
+    output += trained_to_str + best_traintime_str + fulltest_str
+    output += self.summary_section_seperator
+    output += "\n" + test_table
+
+    return output
+
   def load_training_summary(self, filepath=None):
     """
     Check for an existing training summary to load information from. Returns True if a
@@ -573,48 +430,11 @@ class TrainingManager():
     if filepath is None:
       filepath = self.trainer.savedir + "/" + self.trainer.group_name + "/" + self.trainer.run_name
 
-    # try to load any existing information first
-    exists = self.load_training_summary(filepath=filepath)
-
-    if not self.settings["save"]: 
-      if self.log_level > 0: print("Saving is disabled, not saving a training summary")
-      return
-
-    job_string = f"Job number is {self.job_number}\n" if self.job_number is not None else ""
-    timestamp_string = f"\tTimestamp is {self.timestamp}\n" if self.timestamp is not None else ""
-    param_1_string = f"\tParam 1: {self.param_1_name} is {self.param_1}\n" if self.param_1 is not None else ""
-    param_2_string = f"\tParam 2: {self.param_2_name} is {self.param_2}\n" if self.param_2 is not None else ""
-    param_3_string = f"\tParam 3: {self.param_3_name} is {self.param_3}\n" if self.param_3 is not None else ""
-
-    traintime_test_np = self.trainer.read_test_performance()
-    best_index = np.argmax(traintime_test_np[1])
-    best_traintime_success = traintime_test_np[1][best_index]
-    best_traintime_episode = int(traintime_test_np[0][best_index])
-    best_traintime_str = f"\tBest training time test performance = {best_traintime_success} at episode = {best_traintime_episode}\n"
-    trained_to_str = f"\tTrained to episode = {int(traintime_test_np[0][-1])}\n"
-
-    # create table of test performances
-    test_table = "Test time performance (success rate metric = stable height):\n\n"
-    top_row = "{0:<10} | {1:<15}\n".format("Episode", "Success rate")
-    test_table += top_row
-    row_str = "{0:<10} | {1:<15.3f}\n"
-    for i in range(len(traintime_test_np[0])):
-      test_table += row_str.format(int(traintime_test_np[0,i]), traintime_test_np[1,i])
-
-    best_fulltest_sr, best_ep = self.trainer.read_best_performance_from_text(fulltest=True)
-    if best_fulltest_sr is not None:
-      fulltest_str = f"\tMost recent fulltest performance = {best_fulltest_sr:.3f}\n"
-    else: fulltest_str = ""
-
-    # assemble our output
-    output = job_string + timestamp_string + param_1_string + param_2_string + param_3_string
-    output += trained_to_str + best_traintime_str + fulltest_str
-    output += self.summary_section_seperator
-    output += "\n" + test_table
+    summary_string = self.get_training_summary(filepath=filepath)
 
     # save to a textfile
     with open(filepath + "/" + self.summary_filename, 'w') as f:
-      f.write(output)
+      f.write(summary_string)
 
   def wipe_cpp_settings(self, env):
     """
@@ -980,8 +800,8 @@ if __name__ == "__main__":
   log_level = 1
   save = True
 
-  # timestamp = "26-09-23_13-42"
-  # jobstr = "1:12"
+  timestamp = "26-09-23_13-42"
+  jobstr = None # "1:12"
 
   # update_training_summaries(timestamp=timestamp, jobstr=jobstr)
   # print_results_table(timestamp=timestamp, jobstr=jobstr)
