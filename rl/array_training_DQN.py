@@ -3102,6 +3102,59 @@ if __name__ == "__main__":
     print_time_taken()
     exit()
 
+  elif args.program == "debug_tm":
+
+    from TrainingManager import TrainingManager
+    from agents.DQN import Agent_DQN
+
+    # key settings
+    rngseed = None
+    device = "cpu"
+    log_level = 1
+
+    # create the training manager
+    tm = TrainingManager(rngseed=rngseed, device=device, log_level=log_level)
+    tm.set_group_run_name(job_num=inputarg, timestamp=timestamp)
+
+    vary_1 = [100, 200]
+    vary_2 = [250, 500]
+    vary_3 = None
+    repeats = 3
+    tm.param_1_name = "target_update"
+    tm.param_2_name = "eps_decay"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(inputarg, param_1=vary_1, param_2=vary_2,
+                                                param_3=vary_3, repeats=repeats)
+    
+    tm.settings["Agent_DQN"]["target_update"] = tm.param_1
+    tm.settings["Agent_DQN"]["eps_decay"] = tm.param_2
+
+    # # choose settings
+    tm.settings["save"] = True
+    tm.settings["trainer"]["num_episodes"] = 15
+    tm.settings["trainer"]["test_freq"] = 5
+    tm.settings["trainer"]["save_freq"] = 5
+    tm.settings["final_test_trials_per_object"] = 1
+    tm.settings["env"]["test_objects"] = 3
+    tm.settings["env"]["max_episode_steps"] = 1
+    tm.settings["episode_log_rate"] = 5
+    tm.settings["track_avg_num"] = 3
+    tm.settings["Agent_DQN"]["target_update"] = 10
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent
+    layers = [env.n_obs, 10, env.n_actions]
+    network = networks.VariableNetwork(layers, device=device)
+    agent = Agent_DQN(device=device)
+    agent.init(network)
+
+    # input into the training manager and train
+    tm.run_training(agent, env)
+    print_time_taken()
+    exit()
+
   elif args.program == "baseline_settings":
 
     # placeholder program where only the current baseline settings are used

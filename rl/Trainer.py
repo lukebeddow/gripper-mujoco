@@ -282,7 +282,6 @@ class Trainer:
     # input class options
     self.rngseed = rngseed
     self.device = torch.device(device)
-    self.agent.set_device(device)
     self.log_level = log_level
     self.plot = plot
     self.render = render
@@ -301,10 +300,12 @@ class Trainer:
       import matplotlib.pyplot as plt
       plt.ion()
 
-    # seed the environment 
+    # seed the environment (skip if given None for agent and env)
     # training only reproducible if torch.manual_seed() set BEFORE agent network initialisation
     self.training_reproducible = strict_seed
-    self.seed(strict=strict_seed)
+    if agent is not None and env is not None: self.seed(strict=strict_seed)
+    elif self.log_level > 0:
+      print("MujocoTrainer.__init__() warning: agent and/or env is None and environment is NOT seeded")
 
     if self.log_level > 0:
       print("Trainer settings:")
@@ -569,7 +570,8 @@ class Trainer:
     if self.log_level > 0:
       print(f"\nBegin training, target is {self.params.num_episodes} episodes\n", flush=True)
 
-    # put the agent into training mode
+    # prepare the agent for training
+    self.agent.set_device(self.device)
     self.agent.training_mode()
     
     # begin training episodes
@@ -1241,7 +1243,7 @@ class MujocoTrainer(Trainer):
     hardcoding
     """
 
-    readroot = self.savedir + self.group_name + "/"
+    readroot = self.savedir + "/" + self.group_name + "/"
 
     if heuristic: 
       readroot += "heuristic/"
@@ -1265,7 +1267,7 @@ class MujocoTrainer(Trainer):
           if not silence: print(f"Multiple '{fulltest_str}.txt' files found in read_best_performance_from_text(...)")
 
           # hardcoded date string
-          datestr = "%d-%m-%y-%H:%M"
+          datestr = "%d-%m-%y_%H-%M"
           ex_date = datetime.now().strftime(datestr)
 
           # remove the '.txt' extension
@@ -1282,7 +1284,7 @@ class MujocoTrainer(Trainer):
             if not silence: print("read_best_performance_from_text() datetime error:", e)
             if not silence: print("Trying again with another datestring") # OLD CODE compatible
             # try again with alternative datestring
-            datestr = "%d-%m-%Y-%H:%M"
+            datestr = "%d-%m-%y-%H:%M"
             ex_date = datetime.now().strftime(datestr)
             date_strings = [x[-len(ex_date):] for x in no_txt[:]]
             dates = [datetime.strptime(x, datestr) for x in date_strings[:]]
@@ -1324,6 +1326,7 @@ class MujocoTrainer(Trainer):
       except ValueError as e:
         print("Error in read_best_performance_from_text() on fulltest:", e)
         exit()
+      if self.log_level > 0: print(f"{readname} gives performance of {best_sr}")
       return best_sr, None
 
     # extract details based on hardcoded knowledge of txt file structure (see self.best_performance_template)

@@ -2385,6 +2385,9 @@ class TrainDQN():
     hardcoding
     """
 
+    # hardcoded date string
+    datestr = "%d-%m-%y_%H-%M"
+
     readroot = self.savedir + self.group_name + "/"
 
     if heuristic: 
@@ -2408,8 +2411,6 @@ class TrainDQN():
 
           if not silence: print(f"Multiple '{fulltest_str}.txt' files found in read_best_performance_from_text(...)")
 
-          # hardcoded date string
-          datestr = "%d-%m-%y-%H:%M"
           ex_date = datetime.now().strftime(datestr)
 
           # remove the '.txt' extension
@@ -2426,7 +2427,7 @@ class TrainDQN():
             if not silence: print("read_best_performance_from_text() datetime error:", e)
             if not silence: print("Trying again with another datestring") # OLD CODE compatible
             # try again with alternative datestring
-            datestr = "%d-%m-%Y-%H:%M"
+            datestr = "%d-%m-%y-%H:%M"
             ex_date = datetime.now().strftime(datestr)
             date_strings = [x[-len(ex_date):] for x in no_txt[:]]
             dates = [datetime.strptime(x, datestr) for x in date_strings[:]]
