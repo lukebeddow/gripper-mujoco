@@ -346,12 +346,30 @@ def print_training_info(include_all=False):
 
 if __name__ == "__main__":
 
+  """
+  This script launches a mujoco grasping training, using the TrainingManager class.
+  
+  Basic usage: 
+    1. source a virtual environment
+    2. create a training program and add it to the bottom of this file in the if...elif
+    3. run this file with the two required command line arguments:
+        python launch_training.py --program myprogram --job 1
+
+  To print the results afterwards use the training timestamp to idenfity it: 
+    python launch_training.py --timestamp dd-mm-yy_hr-mn
+  
+  This script is designed to be called repeatedly with different job numbers. Say you
+  want to compare a training with a learning rate of 1e-3 and 5e-3. You make your
+  program which varies learning rate depending on the job number (either 1 or 2).
+  Then you can call this script twice, with job numbers 1 and 2. You can add repeats,
+  so maybe jobs 1-10 are the first learning rate and jobs 11-20 are the second. You
+  can vary other parameters etc, this is how you build up large training comparisons.
+  """
+
   # starting time
   starting_time = datetime.now()
 
   # key default settings
-  plot = False
-  render = False
   datestr = "%d-%m-%y_%H-%M" # all date inputs must follow this format
 
   # # print all the inputs we have received
@@ -363,24 +381,20 @@ if __name__ == "__main__":
   parser.add_argument("-t", "--timestamp",    default=None)           # timestamp
   parser.add_argument("-p", "--program",      default=None)           # program name to select from if..else if
   parser.add_argument("-d", "--device",       default=None)           # override device
+  parser.add_argument("-r", "--render",       action="store_true")    # render window during training
+  parser.add_argument("-g", "--plot",         action="store_true")    # plot to wandb job
   parser.add_argument("--print-results",      action="store_true")    # prepare and print all 
   parser.add_argument("--rngseed",            default=None)           # turns on reproducible training with given seed (slower)
   parser.add_argument("--log-level",          type=int, default=1)    # set script log level
   parser.add_argument("--no-delay",           action="store_true")    # prevent a sleep(...) to seperate processes
   parser.add_argument("--print",              action="store_true")    # don't train, print job options
+  parser.add_argument("--savedir",            default=None)           # override save/load directory
 
   parser.add_argument("-c", "--continue",     action="store_true", dest="resume") # continue training
-
-  parser.add_argument("-g", "--plot",         action="store_true") # plot to wandb job
-  parser.add_argument("-H", "--heuristic",    action="store_true") # run a test using heuristic actions
-  parser.add_argument("-r", "--render",       action="store_true") # render window during training
-  
-  parser.add_argument("--savedir",            default=None)        # override save/load directory
-  
-  
-  parser.add_argument("--override-lib",       action="store_true") # override bind.so library with loaded data
-  parser.add_argument("--test",               action="store_true") # run a thorough test on existing model
-  parser.add_argument("--demo",               action="store_true") # run a demo test on model, can specify id number
+  parser.add_argument("-H", "--heuristic",    action="store_true")    # run a test using heuristic actions
+  parser.add_argument("--override-lib",       action="store_true")    # override bind.so library with loaded data
+  parser.add_argument("--test",               action="store_true")    # run a thorough test on existing model
+  parser.add_argument("--demo",               action="store_true")    # run a demo test on model, can specify id number
 
   args = parser.parse_args()
 
@@ -412,6 +426,7 @@ if __name__ == "__main__":
     if args.log_level > 0: print("\nPreparing to print a results table in launch_training.py")
     if args.timestamp is None:
       raise RuntimeError("--print-results requires a timestamp (of the chosen training) be set")
+    update_training_summaries(args.timestamp)
     print_results_table(args.timestamp)
     exit()
 
@@ -427,8 +442,9 @@ if __name__ == "__main__":
   tm.set_group_run_name(job_num=args.job, timestamp=timestamp)
 
   # input any command line settings
-  tm.settings["plot"] = plot
-  tm.settings["render"] = render
+  tm.settings["plot"] = args.plot
+  tm.settings["render"] = args.render
+  if args.savedir is not None: tm.settings["savedir"] = args.savedir
 
   if args.program == "test_1":
 
@@ -469,6 +485,10 @@ if __name__ == "__main__":
     agent = Agent_DQN(device=args.device)
     agent.init(network)
 
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number
@@ -502,8 +522,8 @@ if __name__ == "__main__":
     agent = Agent_DQN(device=args.device)
     agent.init(network)
 
-  # ----- run training ----- #
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
 
-  # complete the training
-  tm.run_training(agent, env)
-  print_time_taken()
+# ----- end ----- #

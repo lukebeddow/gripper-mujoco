@@ -803,11 +803,6 @@ if __name__ == "__main__":
   timestamp = "26-09-23_13-42"
   jobstr = None # "1:12"
 
-  # update_training_summaries(timestamp=timestamp, jobstr=jobstr)
-  # print_results_table(timestamp=timestamp, jobstr=jobstr)
-
-  # exit()
-
   # create the training manager
   tm = TrainingManager(rngseed=rngseed, device=device, log_level=log_level)
 
