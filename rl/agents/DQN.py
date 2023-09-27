@@ -14,6 +14,7 @@ class ReplayMemory(object):
       self.memory = deque([], maxlen=capacity)
       self.device = device
       self.transition = transition
+      self.capacity = capacity
       self.seed(rngseed)
 
     def push(self, *args):
@@ -109,11 +110,18 @@ class Agent_DQN:
     self.mode = mode
 
   def init(self, network):
+    """
+    Main initialisation of the agent, applies settings and creates network. This
+    function can be called with network='loaded' to initialise settings but not
+    reinitialise the networks
+    """
 
     self.memory = ReplayMemory(self.params.memory_replay, self.device, Agent_DQN.Transition)
-    self.policy_net = network
-    self.target_net = deepcopy(self.policy_net)
-    self.n_actions = network.n_output # network must provide this member variable
+
+    if network != "loaded":
+      self.policy_net = network
+      self.target_net = deepcopy(self.policy_net)
+      self.n_actions = network.n_output # network must provide this member variable
 
     self.policy_net.to(self.device)
     self.target_net.to(self.device)
@@ -337,6 +345,8 @@ class Agent_DQN:
     """
     Run this at the end of every training episode
     """
+
+    print("replay memory length is", len(self.memory), "max length is", self.memory.capacity)
 
     # if we are finished training
     if finished:

@@ -538,6 +538,9 @@ class TrainingManager():
     else:
       raise RuntimeError(f"TrainingManager.apply_trainer_agent_settings() has agent with unrecognised name = {agent.name}")
     
+    # reinitialise the agent with the new settings, but network is not reloaded
+    agent.init(network="loaded")
+
     return agent
 
   def make_env(self, load=True):
