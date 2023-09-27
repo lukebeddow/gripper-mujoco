@@ -111,19 +111,24 @@ def get_jobs_from_timestamp(timestamp, run_name_prefix=None):
   savedir = mj.savedir
   tm = TrainingManager(log_level=0)
   tm.set_group_run_name(job_num=1, timestamp=timestamp, prefix=run_name_prefix)
+  match_str = tm.run_name[:-3]
 
   # get all the run folder corresponding to this timestamp
   group_path = savedir + "/" + tm.group_name
-  run_folders = [x for x in os.listdir(group_path) if x.startswith(tm.run_name[:-3])]
+  run_folders = [x for x in os.listdir(group_path) if x.startswith(match_str)]
   
   job_nums = []
 
   for folder in run_folders:
-    num = folder.split(tm.run_name[:-3])[-1][2:] # from _A5 -> 5"
+    num = folder.split(match_str)[-1][2:] # from _A5 -> 5"
     job_nums.append(int(num))
 
   # sort into numeric ascending order
   job_nums.sort()
+
+  # check for failures
+  if len(job_nums) == 0:
+    print(f"launch_training.py warning: get_jobs_from_timestamp found zero trainings matching '{match_str}'")
 
   return job_nums
 
