@@ -405,7 +405,7 @@ if __name__ == "__main__":
   parser.add_argument("-c", "--continue",     action="store_true", dest="resume") # continue training
   parser.add_argument("-H", "--heuristic",    action="store_true")    # run a test using heuristic actions
   parser.add_argument("-id", "--load-id",     default=None)           # id to load in case we are testing/plotting
-  parser.add_argument("--name-prefix",        default=None)          # run name prefix eg run_12-32
+  parser.add_argument("--name-prefix",        default=None)           # run name prefix eg run_12-32 for training or loading
   parser.add_argument("--job-string",         default=None)           # job string for print results eg "1:10" or "1 2 3 6"
   parser.add_argument("--print-results",      action="store_true")    # prepare and print all 
   parser.add_argument("--rngseed",            default=None)           # turns on reproducible training with given seed (slower)
