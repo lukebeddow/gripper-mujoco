@@ -234,12 +234,7 @@ class TrainingManager():
     agent.set_device(self.device)
 
     # create the trainer
-    self.trainer = MujocoTrainer(agent, env, rngseed=self.rngseed, device=self.device,
-                                 log_level=self.log_level, plot=self.settings["plot"], 
-                                 render=self.settings["render"], group_name=self.group_name, 
-                                 run_name=self.run_name, save=self.settings["save"],
-                                 savedir=self.settings["savedir"], episode_log_rate=self.settings["episode_log_rate"],
-                                 strict_seed=self.strict_seed, track_avg_num=self.settings["track_avg_num"])
+    self.trainer = self.make_trainer(agent, env)
 
     # apply trainer settings
     self.trainer.params.update(self.settings["trainer"])
@@ -258,18 +253,13 @@ class TrainingManager():
     # save final summary of training
     self.save_training_summary()
 
-  def run_test(self, heuristic=False, trials_per_obj=10, render=False, pause=False, demo=False, id=None,
-               load=True):
+  def run_test(self, heuristic=False, trials_per_obj=10, render=False, pause=False, demo=False):
     """
     Perform a thorough test on the model, including loading the best performing network
     """
 
-    print("\nPreparing to perform a model test, heuristic =", heuristic)
-
-    # load the best performing network
-    if load and not heuristic: 
-      if id is None: self.trainer.load_best_id()
-      else: self.trainer.load(id=id)
+    if self.log_level > 0:
+      print("\nPreparing to perform a model test, heuristic =", heuristic)
 
     # adjust settingss
     if demo:
@@ -277,7 +267,9 @@ class TrainingManager():
       self.trainer.env.params.test_objects = 30
     else:
       self.trainer.env.params.test_trials_per_object = trials_per_obj
-    if render: self.trainer.env.disable_rendering = False
+    if render:
+      self.trainer.render = True 
+      self.trainer.env.render_window = True
 
     # perform the test
     test_data = self.trainer.test(save=False, heuristic=heuristic, pause_each_episode=pause)
@@ -291,6 +283,49 @@ class TrainingManager():
     else: savename = "full_test_"
     savename += datetime.now().strftime(self.datestr)
     self.trainer.modelsaver.save(savename, txtonly=True, txtstr=savetxt)
+
+  def continue_training(self, new_endpoint=None, extra_episodes=None):
+    """
+    Load and then continue a training, either to a new endpoint, or simply adding a
+    given number of episodes. A trainer must be loaded when this function is called.
+    """
+
+    if new_endpoint is None and extra_episodes is None:
+      raise RuntimeError("TrainingManager.continue_training() requires either 'new_endpoint' or 'extra_episodes' to be set")
+
+    self.trainer.train(num_episodes_abs=new_endpoint, num_episodes_extra=extra_episodes)
+    self.run_test(trials_per_obj=self.settings["final_test_trials_per_object"])
+    self.save_training_summary()
+
+  def load(self, job_num=None, timestamp=None, run_name=None, group_name=None, 
+           best_id=False, id=None, path_to_run_folder=None):
+    """
+    Load the training currently specified. Either pass:
+      1) nothing - run_name and group_name are already set in the class
+      2) job_num and timestamp
+      3) run_name and group_name
+      4) run_name and path_to_run_folder
+    Alongside all pass either the id to load, or best_id=True to find the id with
+    the best test performance and load that one.
+    """
+
+    if job_num is not None and timestamp is not None:
+      self.set_group_run_name(job_num=job_num, timestamp=timestamp)
+    else:
+      if run_name is not None and group_name is not None:
+        self.run_name = run_name
+        self.group_name = group_name
+  
+    # make the trainer if needed
+    if not hasattr(self, "trainer"): self.trainer = self.make_trainer(None, self.make_env(load=False))
+
+    # now load the specified model
+    if best_id:
+      self.trainer.load_best_id(self.run_name, group_name=self.group_name,
+                                path_to_run_folder=path_to_run_folder)
+    else:
+      self.trainer.load(self.run_name, group_name=self.group_name, id=id,
+                        path_to_run_folder=path_to_run_folder)
 
   def init_training_summary(self):
     """
@@ -499,16 +534,28 @@ class TrainingManager():
     
     return agent
 
-  def make_env(self):
+  def make_env(self, load=True):
     """
     Create an MjEnv environment
     """
 
-    env = MjEnv(log_level=self.log_level)
+    env = MjEnv(log_level=self.log_level, render=self.settings["render"])
     env = self.configure_env(env)
-    env.load()
+    if load: env.load()
 
     return env
+  
+  def make_trainer(self, agent=None, env=None):
+    """
+    Create a MujocoTrainer
+    """
+
+    return MujocoTrainer(agent, env, rngseed=self.rngseed, device=self.device,
+                         log_level=self.log_level, plot=self.settings["plot"], 
+                         render=self.settings["render"], group_name=self.group_name, 
+                         run_name=self.run_name, save=self.settings["save"],
+                         savedir=self.settings["savedir"], episode_log_rate=self.settings["episode_log_rate"],
+                         strict_seed=self.strict_seed, track_avg_num=self.settings["track_avg_num"])
 
   def apply_env_settings(self, env, set):
     """
@@ -628,7 +675,7 @@ class TrainingManager():
     Determine the reward thresholds
     """
 
-    printout = True
+    printout = True if self.log_level >= 2 else False
 
     @dataclass
     class RewardThresholds:

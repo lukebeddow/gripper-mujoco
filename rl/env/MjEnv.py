@@ -102,7 +102,7 @@ class MjEnv():
 
   def __init__(self, object_set=None, seed=None, num_segments=None, finger_width=None, 
                depth_camera=None, finger_thickness=None, finger_modulus=None,
-               log_level=0):
+               log_level=0, render=False):
     """
     A mujoco environment, optionally set the random seed or prevent loading a
     model, in which case the user should call load() before using the class
@@ -118,7 +118,7 @@ class MjEnv():
 
     # general class settings
     self.log_level = log_level
-    self.disable_rendering = True
+    self.render_window = render
     self.prevent_reload = False
     self.use_yaml_hashing = False
 
@@ -1164,7 +1164,7 @@ class MjEnv():
     self.params = state_dict["parameters"]
     self.load_next = deepcopy(state_dict["parameters"])
     self.mj = state_dict["mjcpp"]
-    self._load_xml() # segfault without this
+    self.load()
 
   def load(self, object_set_name=None, object_set_path=None, index=None, 
            num_segments=None, finger_width=None, finger_thickness=None,
@@ -1289,8 +1289,7 @@ class MjEnv():
     Render the simulation to a window
     """
 
-    if not self.disable_rendering:
-
+    if self.render_window:
       self.mj.render()
 
     if self.log_level >= 3:
@@ -1314,7 +1313,7 @@ if __name__ == "__main__":
   # import pickle
 
   mj = MjEnv(noload=True, depth_camera=True, log_level=2, seed=122)
-  mj.disable_rendering = True
+  mj.render_window = False
   mj.mj.set.mujoco_timestep = 3.187e-3
   mj.mj.set.auto_set_timestep = False
 

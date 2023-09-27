@@ -2578,7 +2578,7 @@ if __name__ == "__main__":
   # model.env.max_episode_steps = 20
   # model.params.wandb_freq_s = 5
   # model.env.mj.set.action_motor_steps = 350
-  # model.env.disable_rendering = False
+  # model.env.render_window = True
   # model.params.test_freq = 10
   # model.env.params.test_trials_per_object = 1
   # model.env.test_obj_limit = 10
@@ -2611,7 +2611,7 @@ if __name__ == "__main__":
   # model.init(network=net)
   # model.log_level = 2
   # model.env.mj.set.debug = False
-  # model.env.disable_rendering = False
+  # model.env.render_window = True
   # # model.env.params.test_trials_per_object = 1
   # model.env.params.test_objects = 20
   # model.env.params.max_episode_steps = 250
@@ -2649,7 +2649,7 @@ if __name__ == "__main__":
   # train
   net = [5000,5000,5000]
   model.set_device("cpu")
-  model.env.disable_rendering = True
+  model.env.render_window = False
   model.env.mj.set.debug = False
   model.num_segments = 8
   model.finger_thickness = 0.9e-3
@@ -2680,7 +2680,7 @@ if __name__ == "__main__":
   # in order to read profile results, run: $ python3 -m pstats /path/to/results.xyz
   # do: $ sort cumtime OR $ sort tottime AND THEN $ stats
 
-  model.env.disable_rendering = True
+  model.env.render_window = False
   model.params.object_set = "set7_fullset_1500_50i_updated"
 
   net = "CNN_50_50"
@@ -2713,7 +2713,7 @@ if __name__ == "__main__":
   # test
   # model.log_level = 2
   # model.env.mj.set.debug = False
-  # model.env.disable_rendering = True
+  # model.env.render_window = False
   # model.env.params.test_trials_per_object = 5
   # model.env.params.test_objects = 20
   # model.env.params.test_obj_per_file = 5

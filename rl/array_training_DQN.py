@@ -594,7 +594,7 @@ def apply_to_all_models(model):
   model.env.mj.set.debug = False
 
   # disable all rendering
-  model.env.disable_rendering = True
+  model.env.render_window = False
   model.env.mj.set.use_render_delay = False
   model.env.mj.set.render_on_step = False
 
@@ -671,9 +671,6 @@ def apply_to_all_models(model):
   model.track.plot_time_taken = True
 
   return model
-
-
-
 
 def continue_training(model, run_name, group_name, object_set=None, new_endpoint=None,
                       extra_episodes=None):
@@ -862,7 +859,7 @@ def heuristic_test(model, inputarg=None, render=False):
   model = baseline_settings(model, **baseline_args)
 
   # perform the test
-  if True or render: model.env.disable_rendering = False
+  if True or render: model.env.render_window = True
   model.test_heuristic_baseline()
 
   print(f"Finished heurisitc test with sensors = {param_1} and thickness = {param_2} and num segments = {param_3}")
@@ -996,7 +993,7 @@ def test(model, heuristic=False, trials_per_obj=10, render=False, pause=False, d
     model.env.params.test_objects = 30
   else:
     model.env.params.test_trials_per_object = trials_per_obj
-  if render: model.env.disable_rendering = False
+  if render: model.env.render_window = True
 
   # perform the test
   test_data = model.test(heuristic=heuristic, pause_each_episode=pause)
@@ -1272,7 +1269,7 @@ if __name__ == "__main__":
     model.savedir = args.savedir
 
   # are we rendering
-  if args.render is True: model.env.disable_rendering = False
+  if args.render is True: model.env.render_window = True
 
   if log_level > 0:
     print(" -> Run group is:", model.group_name)
@@ -2662,7 +2659,7 @@ if __name__ == "__main__":
   elif args.program == "profile_cnn":
 
     model = baseline_settings(model)
-    model.env.disable_rendering = True
+    model.env.render_window = False
     model.params.object_set = "set7_fullset_1500_50i_updated"
 
     # vary_1 = ["CNN_25_25", "CNN_50_50", "CNN_75_75", "CNN_100_100"]

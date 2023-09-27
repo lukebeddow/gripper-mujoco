@@ -383,18 +383,21 @@ if __name__ == "__main__":
   parser.add_argument("-d", "--device",       default=None)           # override device
   parser.add_argument("-r", "--render",       action="store_true")    # render window during training
   parser.add_argument("-g", "--plot",         action="store_true")    # plot to wandb job
+  parser.add_argument("-c", "--continue",     action="store_true", dest="resume") # continue training
+  parser.add_argument("-H", "--heuristic",    action="store_true")    # run a test using heuristic actions
+  parser.add_argument("-id", "--load-id",     default=None)           # id to load in case we are testing/plotting
   parser.add_argument("--print-results",      action="store_true")    # prepare and print all 
   parser.add_argument("--rngseed",            default=None)           # turns on reproducible training with given seed (slower)
   parser.add_argument("--log-level",          type=int, default=1)    # set script log level
   parser.add_argument("--no-delay",           action="store_true")    # prevent a sleep(...) to seperate processes
   parser.add_argument("--print",              action="store_true")    # don't train, print job options
-  parser.add_argument("--savedir",            default=None)           # override save/load directory
-
-  parser.add_argument("-c", "--continue",     action="store_true", dest="resume") # continue training
-  parser.add_argument("-H", "--heuristic",    action="store_true")    # run a test using heuristic actions
-  parser.add_argument("--override-lib",       action="store_true")    # override bind.so library with loaded data
+  parser.add_argument("--savedir",            default=None)           # override save/load directory (use with caution)
+  parser.add_argument("--pause",              default=False)          # pause between episodes in a test
   parser.add_argument("--test",               action="store_true")    # run a thorough test on existing model
   parser.add_argument("--demo",               action="store_true")    # run a demo test on model, can specify id number
+  parser.add_argument("--new-endpoint",       default=None, type=int) # new episode target for continuing training
+  parser.add_argument("--extra-episodes",     default=None, type=int) # extra episodes to run for continuing training
+  # parser.add_argument("--override-lib",       action="store_true")    # override bind.so library with loaded data
 
   args = parser.parse_args()
 
@@ -423,20 +426,64 @@ if __name__ == "__main__":
   # ----- special cases ----- #
 
   if args.print_results:
-    if args.log_level > 0: print("\nPreparing to print a results table in launch_training.py")
+
     if args.timestamp is None:
-      raise RuntimeError("--print-results requires a timestamp (of the chosen training) be set")
+      raise RuntimeError(f"launch_training.py: a timestamp [-t, --timestamp] in the following format '{datestr}' is required to load existing trainigs")
+
+    if args.log_level > 0: print("\nPreparing to print a results table in launch_training.py")
     update_training_summaries(args.timestamp)
     print_results_table(args.timestamp)
+    exit()
+
+  if args.job is None:
+    raise RuntimeError("launch_training.py: your options require a job number [-j, --job], either to identify an existing training for loading, or to correspond to your selected program")
+
+  if args.plot:
+
+    if args.timestamp is None:
+      raise RuntimeError(f"launch_training.py: a timestamp [-t, --timestamp] in the following format '{datestr}' is required to load existing trainigs")
+
+    if args.log_level > 0: print("launch_training.py will plot a training")
+    tm = TrainingManager(rngseed=args.rngseed, device=args.device, log_level=args.log_level)
+    tm.settings["plot"] = True
+    tm.load(job_num=args.job, timestamp=args.timestamp, id=args.load_id)
+    tm.trainer.track.plot(plttitle=tm.group_name + "/" + tm.run_name)
+    input("Press enter to quit plotting windows and terminate program")
+    exit()
+
+  if args.test or args.demo:
+
+    if args.timestamp is None:
+      raise RuntimeError(f"launch_training.py: a timestamp [-t, --timestamp] in the following format '{datestr}' is required to load existing trainigs")
+
+    if args.demo: args.render = True # always render for demonstration tests
+    best_id = True if args.load_id is None else False
+
+    # create the training manager and then load the given training
+    if args.log_level > 0: print("launch_training.py is running a test, render =", args.render)
+    tm = TrainingManager(rngseed=args.rngseed, device=args.device, log_level=args.log_level)
+    tm.load(job_num=args.job, timestamp=args.timestamp, best_id=best_id, id=args.load_id)
+    tm.run_test(heuristic=args.heuristic, demo=args.demo, render=args.render, pause=args.pause)
+    exit()
+
+  if args.resume:
+
+    if args.timestamp is None:
+      raise RuntimeError(f"launch_training.py: a timestamp [-t, --timestamp] in the following format '{datestr}' is required to load existing trainigs")
+    if args.new_endpoint is None and args.extra_episodes is None:
+      raise RuntimeError("launch_training.py: [-c, --continue] must be used with either [--new-endpoint] or [--extra-episodes]")
+    
+    if args.log_level > 0: print(f"launch_training.py is continuing a traing, new_endpoint={args.new_endpoint}, extra_episodes={args.extra_episodes}")
+    tm = TrainingManager(rngseed=args.rngseed, device=args.device, log_level=args.log_level)
+    tm.load(job_num=args.job, timestamp=args.timestamp, id=args.load_id)
+    tm.continue_training(new_endpoint=args.new_endpoint, extra_episodes=args.extra_episodes)
     exit()
 
   # ----- regular training ----- #
 
   if args.program is None:
-    raise RuntimeError("launch_training.py: regular training requires that [-p, --program] be set with training name corresponding to an option in this file")
-  if args.job is None:
-    raise RuntimeError("launch_training.py: regular training requires a job number [-j, --job] which should correspond to options in the program")
-  
+    raise RuntimeError("launch_training.py: normal trainings require that [-p, --program] be set with training name corresponding to an option in this file")
+
   # create the training manager
   tm = TrainingManager(rngseed=args.rngseed, device=args.device, log_level=args.log_level)
   tm.set_group_run_name(job_num=args.job, timestamp=timestamp)

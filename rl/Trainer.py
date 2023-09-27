@@ -383,6 +383,9 @@ class Trainer:
       trainer_save = {
         "parameters" : self.params,
         "rngseed" : self.rngseed,
+        "run_name" : self.run_name,
+        "group_name" : self.group_name,
+        "agent_name" : self.agent.name,
         "env_data" : self.env.get_save_state(),
         "extra_data" : extra_data
       }
@@ -469,9 +472,16 @@ class Trainer:
     
     # extract loaded data
     self.params = load_train["parameters"]
-    self.track = load_track
-    self.agent.load_save_state(load_agent)
+    self.run_name = load_train["run_name"]
+    self.group_name = load_train["group_name"]
     self.env.load_save_state(load_train["env_data"])
+    self.track = load_track
+
+    # do we have the agent already, if not, create it
+    if self.agent is None:
+      to_exec = f"""self.agent = {load_train["agent_name"]}()"""
+      exec(to_exec)
+    self.agent.load_save_state(load_agent)
 
     # reseed - be aware this will not be contingous
     self.rngseed = load_train["rngseed"]
@@ -1330,7 +1340,7 @@ class MujocoTrainer(Trainer):
 
     return best_sr, best_ep
 
-  def load_best_id(self):
+  def load_best_id(self, run_name, group_name=None, path_to_run_folder=None):
     """
     Try to find the best performing agent and load that
     """
@@ -1350,8 +1360,8 @@ class MujocoTrainer(Trainer):
       if self.log_level > 0: print(f"id set to {id} with best_ep={best_ep}, save_freq={self.params.save_freq} and best_sr={best_sr}")
       best_id_found = True
 
-    # try to load, if best id not found it loads most recent
-    self.load(self.run_name, id=id)
+    # try to load, if best id not found it loads most recent (ie id=None)
+    self.load(run_name, id=id, group_name=group_name, path_to_run_folder=path_to_run_folder)
 
     if not best_id_found:
       best_sr, best_ep = self.calc_best_performance()
@@ -1364,7 +1374,7 @@ class MujocoTrainer(Trainer):
         best_id = int((best_ep / self.params.save_freq) + 1)
         if self.log_level > 0: print(f"BEST_ID_SUCCESS -> best_id set to {best_id} with best_ep={best_ep}, save_freq={self.params.save_freq} and best_sr={best_sr}")
         # try to load again
-        self.load(id=best_id)
+        self.load(run_name, id=best_id, group_name=group_name, path_to_run_folder=path_to_run_folder)
 
 if __name__ == "__main__":
 
