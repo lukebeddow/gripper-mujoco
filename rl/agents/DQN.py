@@ -346,8 +346,6 @@ class Agent_DQN:
     Run this at the end of every training episode
     """
 
-    print("replay memory length is", len(self.memory), "max length is", self.memory.capacity)
-
     # if we are finished training
     if finished:
       # update the target network
