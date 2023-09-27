@@ -515,7 +515,25 @@ if __name__ == "__main__":
   # set the name of this training in the training manager
   tm.set_group_run_name(job_num=args.job, timestamp=timestamp, prefix=args.name_prefix)
 
-  if args.program == "test_1":
+  if args.program == "baseline_basic":
+
+    # create the environment
+    env = tm.make_env()
+
+    # baseline network size
+    net = [150, 100, 50]
+
+    # make the agent, may depend on variable settings above
+    layers = [env.n_obs, *net, env.n_actions]
+    network = networks.VariableNetwork(layers, device=args.device)
+    agent = Agent_DQN(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "test_1":
 
     # define what to vary this training, dependent on job number
     vary_1 = [100, 200]
