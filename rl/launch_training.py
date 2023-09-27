@@ -107,13 +107,11 @@ def get_jobs_from_timestamp(timestamp, run_name_prefix=None):
   Find all the jobs with a particular timestamp
   """
 
-  mj = MujocoTrainer(None, None, log_level=0)
-  savedir = mj.savedir
-  tm = TrainingManager(log_level=0)
+  tm = make_training_manager_from_args(args, silent=True)
   tm.set_group_run_name(job_num=1, timestamp=timestamp, prefix=run_name_prefix)
 
   # get all the run folder corresponding to this timestamp
-  group_path = savedir + "/" + tm.group_name
+  group_path = tm.trainer.savedir + "/" + tm.group_name
   run_folders = [x for x in os.listdir(group_path) if x.startswith(tm.run_name[:-3])]
   
   job_nums = []
@@ -141,15 +139,13 @@ def update_training_summaries(timestamp, jobstr=None, job_numbers=None, run_name
   if jobstr is not None:
     job_numbers = parse_job_string(jobstr)
 
-  tm = TrainingManager(log_level=0)
+  tm = make_training_manager_from_args(args, silent=True)
 
   for j in job_numbers:
 
     # determine the path required for this job
     tm.init_training_summary()
     tm.set_group_run_name(job_num=j, timestamp=timestamp, prefix=run_name_prefix)
-    tm.trainer = MujocoTrainer(None, None, log_level=0, run_name=tm.run_name,
-                               group_name=tm.group_name)
     tm.save_training_summary()
 
 def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefix=None):
@@ -165,9 +161,7 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
   if jobstr is not None:
     job_numbers = parse_job_string(jobstr)
 
-  mj = MujocoTrainer(None, None, log_level=0)
-  savedir = mj.savedir
-  tm = TrainingManager(log_level=0)
+  tm = make_training_manager_from_args(args, silent=True)
 
   # prepare to find information from training_summary files
   first_loop = True
@@ -179,7 +173,7 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
 
     # determine the path required for this job
     tm.set_group_run_name(job_num=j, timestamp=timestamp, prefix=run_name_prefix)
-    filepath = savedir + "/" + tm.group_name + "/" + tm.run_name + "/"
+    filepath = tm.trainer.savedir + "/" + tm.group_name + "/" + tm.run_name + "/"
     
     # load information from the training summary
     tm.init_training_summary() # wipe data from previous loop
@@ -301,7 +295,7 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
 
   # print and save the table
   print("\n" + print_str)
-  tablepath = savedir + "/" + tm.group_name + "/" + "results_table.txt"
+  tablepath = tm.trainer.savedir + "/" + tm.group_name + "/" + "results_table.txt"
   with open(tablepath, 'w') as f:
     f.write(print_str)
 
@@ -343,6 +337,26 @@ def print_training_info(include_all=False):
       to_print += line
     print(to_print)
   exit()
+
+def make_training_manager_from_args(args, silent=False):
+  """
+  Create a training manager given the command line arguments
+  """
+
+  log_level = args.log_level
+  if silent: log_level = 0
+
+  tm = TrainingManager(rngseed=args.rngseed, device=args.device, log_level=log_level)
+
+  # input any command line settings
+  tm.settings["plot"] = args.plot
+  tm.settings["render"] = args.render
+  if args.savedir is not None: tm.settings["savedir"] = args.savedir
+
+  # now create an underlying trainer without an agent or environment
+  tm.trainer = tm.make_trainer(None, None)
+
+  return tm
 
 if __name__ == "__main__":
 
@@ -393,7 +407,7 @@ if __name__ == "__main__":
   parser.add_argument("--log-level",          type=int, default=1)    # set script log level
   parser.add_argument("--no-delay",           action="store_true")    # prevent a sleep(...) to seperate processes
   parser.add_argument("--print",              action="store_true")    # don't train, print job options
-  parser.add_argument("--savedir",            default=None)           # override save/load directory (use with caution)
+  parser.add_argument("--savedir",            default=None)           # override save/load directory
   parser.add_argument("--pause",              default=False)          # pause between episodes in a test
   parser.add_argument("--test",               action="store_true")    # run a thorough test on existing model
   parser.add_argument("--demo",               action="store_true")    # run a demo test on model, can specify id number
@@ -440,14 +454,16 @@ if __name__ == "__main__":
   if args.job is None:
     raise RuntimeError("launch_training.py: your options require a job number [-j, --job], either to identify an existing training for loading, or to correspond to your selected program")
 
+  # create a training manager
+  tm = make_training_manager_from_args(args)
+
   if args.plot:
 
     if args.timestamp is None:
       raise RuntimeError(f"launch_training.py: a timestamp [-t, --timestamp] in the following format '{datestr}' is required to load existing trainigs")
 
     if args.log_level > 0: print("launch_training.py will plot a training")
-    tm = TrainingManager(rngseed=args.rngseed, device=args.device, log_level=args.log_level)
-    tm.settings["plot"] = True
+
     tm.load(job_num=args.job, timestamp=args.timestamp, id=args.load_id)
     tm.trainer.track.plot(plttitle=tm.group_name + "/" + tm.run_name)
     input("Press enter to quit plotting windows and terminate program")
@@ -461,9 +477,8 @@ if __name__ == "__main__":
     if args.demo: args.render = True # always render for demonstration tests
     best_id = True if args.load_id is None else False
 
-    # create the training manager and then load the given training
     if args.log_level > 0: print("launch_training.py is running a test, render =", args.render)
-    tm = TrainingManager(rngseed=args.rngseed, device=args.device, log_level=args.log_level)
+
     tm.load(job_num=args.job, timestamp=args.timestamp, best_id=best_id, id=args.load_id)
     tm.run_test(heuristic=args.heuristic, demo=args.demo, render=args.render, pause=args.pause)
     exit()
@@ -476,12 +491,13 @@ if __name__ == "__main__":
       raise RuntimeError("launch_training.py: [-c, --continue] must be used with either [--new-endpoint] or [--extra-episodes]")
     
     if args.log_level > 0: print(f"launch_training.py is continuing a traing, new_endpoint={args.new_endpoint}, extra_episodes={args.extra_episodes}")
-    tm = TrainingManager(rngseed=args.rngseed, device=args.device, log_level=args.log_level)
+
     tm.load(job_num=args.job, timestamp=args.timestamp, id=args.load_id)
 
-    # adjust command line settings
+    # adjust command line settings as load overrides them
     tm.settings["plot"] = args.plot
     tm.settings["render"] = args.render
+    if args.savedir is not None: tm.settings["savedir"] = args.savedir
 
     tm.continue_training(new_endpoint=args.new_endpoint, extra_episodes=args.extra_episodes)
     exit()
@@ -491,14 +507,8 @@ if __name__ == "__main__":
   if args.program is None:
     raise RuntimeError("launch_training.py: normal trainings require that [-p, --program] be set with training name corresponding to an option in this file")
 
-  # create the training manager
-  tm = TrainingManager(rngseed=args.rngseed, device=args.device, log_level=args.log_level)
+  # set the name of this training in the training manager
   tm.set_group_run_name(job_num=args.job, timestamp=timestamp, prefix=args.name_prefix)
-
-  # input any command line settings
-  tm.settings["plot"] = args.plot
-  tm.settings["render"] = args.render
-  if args.savedir is not None: tm.settings["savedir"] = args.savedir
 
   if args.program == "test_1":
 

@@ -224,6 +224,11 @@ class TrainingManager():
     self.group_name = timestamp[:8]
     self.run_name = f"{prefix}_{timestamp[-5:]}{job_suffix}"
 
+    # apply changes to any trainer we have
+    if hasattr(self, "trainer"):
+      self.trainer.run_name = self.run_name
+      self.trainer.group_name = self.group_name
+
     # save details
     if job_num is not None: self.job_number = job_num
     self.timestamp = timestamp
@@ -239,9 +244,6 @@ class TrainingManager():
 
     # create the trainer
     self.trainer = self.make_trainer(agent, env)
-
-    # apply trainer settings
-    self.trainer.params.update(self.settings["trainer"])
 
     # save initial training summary (requires creating the training folder before train())
     if not self.trainer.modelsaver.in_folder:
@@ -320,8 +322,8 @@ class TrainingManager():
         self.run_name = run_name
         self.group_name = group_name
   
-    # make the trainer if needed
-    if not hasattr(self, "trainer"): self.trainer = self.make_trainer(None, self.make_env(load=False))
+    # make the trainer (overwrite any existing trainer)
+    self.trainer = self.make_trainer(None, self.make_env(load=False))
 
     # now load the specified model
     if best_id:
@@ -554,12 +556,17 @@ class TrainingManager():
     Create a MujocoTrainer
     """
 
-    return MujocoTrainer(agent, env, rngseed=self.rngseed, device=self.device,
-                         log_level=self.log_level, plot=self.settings["plot"], 
-                         render=self.settings["render"], group_name=self.group_name, 
-                         run_name=self.run_name, save=self.settings["save"],
-                         savedir=self.settings["savedir"], episode_log_rate=self.settings["episode_log_rate"],
-                         strict_seed=self.strict_seed, track_avg_num=self.settings["track_avg_num"])
+    trainer = MujocoTrainer(agent, env, rngseed=self.rngseed, device=self.device,
+                            log_level=self.log_level, plot=self.settings["plot"], 
+                            render=self.settings["render"], group_name=self.group_name, 
+                            run_name=self.run_name, save=self.settings["save"],
+                            savedir=self.settings["savedir"], episode_log_rate=self.settings["episode_log_rate"],
+                            strict_seed=self.strict_seed, track_avg_num=self.settings["track_avg_num"])
+    
+    # apply trainer settings
+    trainer.params.update(self.settings["trainer"])
+
+    return trainer
 
   def apply_env_settings(self, env, set):
     """
