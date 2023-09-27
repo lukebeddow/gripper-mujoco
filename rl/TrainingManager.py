@@ -197,6 +197,7 @@ class TrainingManager():
     self.device = device
 
     # key training information
+    self.run_name_prefix = "run"
     self.summary_filename = "training_summary.txt"
     self.summary_section_seperator = "\n--- * ----\n"
     self.datestr = "%d-%m-%y_%H-%M" # all date inputs must follow this format
@@ -209,10 +210,13 @@ class TrainingManager():
       torch.manual_seed(rngseed)
     else: self.strict_seed = False
 
-  def set_group_run_name(self, job_num=None, timestamp=None, prefix="run"):
+  def set_group_run_name(self, job_num=None, timestamp=None, prefix=None):
     """
     Set a default group and run name given a job number and a timestamp
     """
+
+    if prefix is None: prefix = self.run_name_prefix
+    else: self.run_name_prefix = prefix
 
     timestamp = timestamp if timestamp is not None else datetime.now().strftime(self.datestr)
     job_suffix = f"_A{job_num}" if job_num is not None else ""

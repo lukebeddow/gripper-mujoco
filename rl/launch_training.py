@@ -102,7 +102,7 @@ def parse_job_string(jobstr):
 
   return job_numbers
 
-def get_jobs_from_timestamp(timestamp):
+def get_jobs_from_timestamp(timestamp, run_name_prefix=None):
   """
   Find all the jobs with a particular timestamp
   """
@@ -110,7 +110,7 @@ def get_jobs_from_timestamp(timestamp):
   mj = MujocoTrainer(None, None, log_level=0)
   savedir = mj.savedir
   tm = TrainingManager(log_level=0)
-  tm.set_group_run_name(job_num=1, timestamp=timestamp, prefix=args.name_prefix)
+  tm.set_group_run_name(job_num=1, timestamp=timestamp, prefix=run_name_prefix)
 
   # get all the run folder corresponding to this timestamp
   group_path = savedir + "/" + tm.group_name
@@ -127,14 +127,14 @@ def get_jobs_from_timestamp(timestamp):
 
   return job_nums
 
-def update_training_summaries(timestamp, jobstr=None, job_numbers=None):
+def update_training_summaries(timestamp, jobstr=None, job_numbers=None, run_name_prefix=None):
   """
   Regenerate training_summaries from a currently running training, or any trainings where
   there is no up to date training_summary.txt files
   """
 
   if jobstr is None and job_numbers is None:
-    job_numbers = get_jobs_from_timestamp(timestamp)
+    job_numbers = get_jobs_from_timestamp(timestamp, run_name_prefix=run_name_prefix)
     if len(job_numbers) == 0:
       raise RuntimeError(f"print_results_table() cannot find any job numbers for timestamp {timestamp}")
 
@@ -147,18 +147,18 @@ def update_training_summaries(timestamp, jobstr=None, job_numbers=None):
 
     # determine the path required for this job
     tm.init_training_summary()
-    tm.set_group_run_name(job_num=j, timestamp=timestamp, prefix=args.name_prefix)
+    tm.set_group_run_name(job_num=j, timestamp=timestamp, prefix=run_name_prefix)
     tm.trainer = MujocoTrainer(None, None, log_level=0, run_name=tm.run_name,
                                group_name=tm.group_name)
     tm.save_training_summary()
 
-def print_results_table(timestamp, jobstr=None, job_numbers=None):
+def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefix=None):
   """
   Print a table of results for a training
   """
 
   if jobstr is None and job_numbers is None:
-    job_numbers = get_jobs_from_timestamp(timestamp)
+    job_numbers = get_jobs_from_timestamp(timestamp, run_name_prefix=run_name_prefix)
     if len(job_numbers) == 0:
       raise RuntimeError(f"print_results_table() cannot find any job numbers for timestamp {timestamp}")
 
@@ -178,7 +178,7 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None):
   for j in job_numbers:
 
     # determine the path required for this job
-    tm.set_group_run_name(job_num=j, timestamp=timestamp, prefix=args.name_prefix)
+    tm.set_group_run_name(job_num=j, timestamp=timestamp, prefix=run_name_prefix)
     filepath = savedir + "/" + tm.group_name + "/" + tm.run_name + "/"
     
     # load information from the training summary
@@ -386,7 +386,7 @@ if __name__ == "__main__":
   parser.add_argument("-c", "--continue",     action="store_true", dest="resume") # continue training
   parser.add_argument("-H", "--heuristic",    action="store_true")    # run a test using heuristic actions
   parser.add_argument("-id", "--load-id",     default=None)           # id to load in case we are testing/plotting
-  parser.add_argument("--name-prefix",        default="run")          # run name prefix eg run_12-32
+  parser.add_argument("--name-prefix",        default=None)          # run name prefix eg run_12-32
   parser.add_argument("--job-string",         default=None)           # job string for print results eg "1:10" or "1 2 3 6"
   parser.add_argument("--print-results",      action="store_true")    # prepare and print all 
   parser.add_argument("--rngseed",            default=None)           # turns on reproducible training with given seed (slower)
@@ -433,8 +433,8 @@ if __name__ == "__main__":
       raise RuntimeError(f"launch_training.py: a timestamp [-t, --timestamp] in the following format '{datestr}' is required to load existing trainigs")
 
     if args.log_level > 0: print("\nPreparing to print a results table in launch_training.py")
-    update_training_summaries(args.timestamp, jobstr=args.job_string)
-    print_results_table(args.timestamp, jobstr=args.job_string)
+    update_training_summaries(args.timestamp, jobstr=args.job_string, run_name_prefix=args.name_prefix)
+    print_results_table(args.timestamp, jobstr=args.job_string, run_name_prefix=args.name_prefix)
     exit()
 
   if args.job is None:
