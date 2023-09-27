@@ -353,10 +353,10 @@ if __name__ == "__main__":
     1. source a virtual environment
     2. create a training program and add it to the bottom of this file in the if...elif
     3. run this file with the two required command line arguments:
-        python launch_training.py --program myprogram --job 1
+        > python launch_training.py --program myprogram --job 1
 
   To print the results afterwards use the training timestamp to idenfity it: 
-    python launch_training.py --timestamp dd-mm-yy_hr-mn
+    > python launch_training.py --timestamp dd-mm-yy_hr-mn
   
   This script is designed to be called repeatedly with different job numbers. Say you
   want to compare a training with a learning rate of 1e-3 and 5e-3. You make your
@@ -476,6 +476,11 @@ if __name__ == "__main__":
     if args.log_level > 0: print(f"launch_training.py is continuing a traing, new_endpoint={args.new_endpoint}, extra_episodes={args.extra_episodes}")
     tm = TrainingManager(rngseed=args.rngseed, device=args.device, log_level=args.log_level)
     tm.load(job_num=args.job, timestamp=args.timestamp, id=args.load_id)
+
+    # adjust command line settings
+    tm.settings["plot"] = args.plot
+    tm.settings["render"] = args.render
+
     tm.continue_training(new_endpoint=args.new_endpoint, extra_episodes=args.extra_episodes)
     exit()
 
