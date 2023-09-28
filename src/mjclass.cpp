@@ -109,9 +109,12 @@ void MjClass::configure_settings()
   action_options.clear();
   action_options.resize(MjType::Action::count, -1);
 
+  // set all the actions discrete or continous
+  s_.set_all_action_continous(s_.continous_actions);
+
   // use macros to determine which actions are in use
   int i = 0;
-  #define AA(NAME, USED, CONTINOUS, VALUE, SIGN)                                    \
+  #define AA(NAME, USED, VALUE, SIGN)                                    \
     if (s_.NAME.in_use) {                                                           \
       if (s_.NAME.continous) {                                                      \
         action_options[i] = MjType::Action::TOKEN_CONCAT(NAME, CONTINOUS_TOKEN);    \
@@ -1226,7 +1229,25 @@ void MjClass::action_step()
   return;
 }
 
-std::vector<float> MjClass::set_action(int action)
+std::vector<float> MjClass::set_discrete_action(int action)
+{
+  /* call for discrete actions, only the action code */
+
+  return set_action(action, 0); // continous_fraction unused for discrete actions
+}
+
+std::vector<float> MjClass::set_continous_action(int action, float magnitude_fraction)
+{
+  /* call for discrete actions, only the action code */
+
+  // check that the magnitude_fraction is in bounds [-1, +1]
+  if (magnitude_fraction < -1.0) magnitude_fraction = -1.0;
+  else if (magnitude_fraction > 1.0) magnitude_fraction = 1.0;
+
+  return set_action(action, magnitude_fraction);
+}
+
+std::vector<float> MjClass::set_action(int action, float continous_fraction)
 {
   /* sets an action in the simulation, but does not step at all. Returns the
   new state vector */
@@ -1253,7 +1274,7 @@ std::vector<float> MjClass::set_action(int action)
 
     // define action behaviour for positive/negative/continous
     // any new actions should be further defined in ActionSettings::update_action_function()
-    #define AA(NAME, USED, CONTINOUS, VALUE, SIGN)              \
+    #define AA(NAME, USED, VALUE, SIGN)              \
       case MjType::Action::TOKEN_CONCAT(NAME, POSITIVE_TOKEN):  \
         if (s_.debug) std::cout << s_.NAME.name + "_positive";  \
         wl = s_.NAME.call_action_function(s_.NAME.value);       \
@@ -1264,7 +1285,7 @@ std::vector<float> MjClass::set_action(int action)
         break;                                                  \
       case MjType::Action::TOKEN_CONCAT(NAME, CONTINOUS_TOKEN): \
         if (s_.debug) std::cout << s_.NAME.name + "_continous"; \
-        wl = s_.NAME.call_action_function(s_.NAME.value);       \
+        wl = s_.NAME.call_action_function(s_.NAME.value * continous_fraction); \
         break;                                                  \
 
       // run the macro to create the code
@@ -3018,7 +3039,7 @@ std::string MjClass::print_actions()
 
       // define action behaviour for positive/negative/continous
       // any new actions should be further defined in ActionSettings::update_action_function()
-      #define AA(NAME, USED, CONTINOUS, VALUE, SIGN)              \
+      #define AA(NAME, USED, VALUE, SIGN)              \
         case MjType::Action::TOKEN_CONCAT(NAME, POSITIVE_TOKEN):  \
           str += s_.NAME.name + "_positive\n";  \
           break;                                                  \
@@ -4264,7 +4285,7 @@ std::string MjType::Settings::get_settings()
             /* add to output */\
             output_str += str;
 
-  #define AA(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4) \
+  #define AA(NAME, DONTUSE1, DONTUSE2, DONTUSE3) \
             str.clear();\
             /* type first */\
             type_str.clear(); type_str += "Action";\
@@ -4546,7 +4567,7 @@ void MjType::Settings::set_all_action_use(bool set_as)
 {
   /* set all the actions to 'set_as' */
 
-  #define AA(NAME, DONT1, DONT2, DONT3, DONT4) NAME.in_use = set_as;
+  #define AA(NAME, DONT1, DONT2, DONT3) NAME.in_use = set_as;
 
     LUKE_MJSETTINGS_ACTION
 
@@ -4557,7 +4578,7 @@ void MjType::Settings::set_all_action_continous(bool set_as)
 {
   /* set all the actions to 'set_as' */
 
-  #define AA(NAME, DONT1, DONT2, DONT3, DONT4) NAME.continous = set_as;
+  #define AA(NAME, DONT1, DONT2, DONT3) NAME.continous = set_as;
 
     LUKE_MJSETTINGS_ACTION
 
@@ -4568,7 +4589,7 @@ void MjType::Settings::set_all_action_value(float set_as)
 {
   /* set all the actions to 'set_as' */
 
-  #define AA(NAME, DONT1, DONT2, DONT3, DONT4) NAME.value = set_as;
+  #define AA(NAME, DONT1, DONT2, DONT3) NAME.value = set_as;
 
     LUKE_MJSETTINGS_ACTION
 
@@ -4583,7 +4604,7 @@ void MjType::Settings::set_all_action_sign(int set_as)
     throw std::runtime_error("MjType::Settings::set_all_action_sign recieved a value not either +1 or -1");
   }
 
-  #define AA(NAME, DONT1, DONT2, DONT3, DONT4) NAME.sign = set_as;
+  #define AA(NAME, DONT1, DONT2, DONT3) NAME.sign = set_as;
 
     LUKE_MJSETTINGS_ACTION
 

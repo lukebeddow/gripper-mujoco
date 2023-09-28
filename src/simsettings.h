@@ -75,6 +75,7 @@
   XX(  quit_on_reward_below,    float,    -1.01)    /* done=true if reward drops below this value */\
   /* 
   set_action() settings */\
+  XX(  continous_actions,       bool,     false)    /* are actions continous or discrete */\
   XX(  sim_steps_per_action,    int,      200)      /* number of sim steps performed to complete one action */\
   XX(  fingertip_min_mm,        double,   -12.5)    /* minimum allowable fingertip depth below start position before within_limits=false */\
   /*
@@ -105,18 +106,18 @@
   /* 
 
   3. Actions
-      name                      used      continous  value   sign */\
-  AA(  gripper_X,               false,     false,     1.0e-3,  -1)        /* move gripper X motor by m */\
-  AA(  gripper_prismatic_X,     true,     false,     1.0e-3,  -1)        /* move gripper X and Y motors to move prismatically by m */\
-  AA(  gripper_Y,               false,     false,     1.0e-3,  -1)        /* move gripper Y motor by m */\
-  AA(  gripper_revolute_Y,      true,     false,     0.01,    -1)        /* move gripper Y motor with angular motions/targets in radians */\
-  AA(  gripper_Z,               true,     false,     2.0e-3,   1)        /* move gripper Z motor by m */\
-  AA(  base_X,                  true,     false,     2.0e-3,   1)        /* move gripper base X by m */\
-  AA(  base_Y,                  true,     false,     2.0e-3,   1)        /* move gripper base Y by m */\
-  AA(  base_Z,                  true,     false,     2.0e-3,   1)        /* move gripper base Z by m */\
-  AA(  base_roll,               false,    false,     0.01,     1)        /* rotate gripper base about X in radians */\
-  AA(  base_pitch,              false,    false,     0.01,     1)        /* rotate gripper base about Y in radians */\
-  AA(  base_yaw,                false,    false,     0.01,     1)        /* rotate gripper base about Z in radians */\
+      name                      used      value   sign */\
+  AA(  gripper_X,               false,    1.0e-3,  -1)        /* move gripper X motor by m */\
+  AA(  gripper_prismatic_X,     true,     1.0e-3,  -1)        /* move gripper X and Y motors to move prismatically by m */\
+  AA(  gripper_Y,               false,    1.0e-3,  -1)        /* move gripper Y motor by m */\
+  AA(  gripper_revolute_Y,      true,     0.01,    -1)        /* move gripper Y motor with angular motions/targets in radians */\
+  AA(  gripper_Z,               true,     2.0e-3,   1)        /* move gripper Z motor by m */\
+  AA(  base_X,                  true,     2.0e-3,   1)        /* move gripper base X by m */\
+  AA(  base_Y,                  true,     2.0e-3,   1)        /* move gripper base Y by m */\
+  AA(  base_Z,                  true,     2.0e-3,   1)        /* move gripper base Z by m */\
+  AA(  base_roll,               false,    0.01,     1)        /* rotate gripper base about X in radians */\
+  AA(  base_pitch,              false,    0.01,     1)        /* rotate gripper base about Y in radians */\
+  AA(  base_yaw,                false,    0.01,     1)        /* rotate gripper base about Z in radians */\
   
   
   

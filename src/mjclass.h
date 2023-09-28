@@ -47,7 +47,7 @@ namespace MjType
       #define NEGATIVE_TOKEN _negative
       #define CONTINOUS_TOKEN _continous
 
-      #define AA(NAME, USED, CONTINOUS, VALUE, SIGN) \
+      #define AA(NAME, USED, VALUE, SIGN) \
         TOKEN_CONCAT(NAME, POSITIVE_TOKEN),\
         TOKEN_CONCAT(NAME, NEGATIVE_TOKEN),\
         TOKEN_CONCAT(NAME, CONTINOUS_TOKEN),
@@ -419,8 +419,8 @@ namespace MjType
       int arg_num = 0; // when calling action_function(arg0, arg1, arg2), which arg should we set?
 
       // constructor - users should hardcode the action function required for any new actions
-      ActionSetting(std::string name, bool in_use, bool continous, double value, int sign)
-        : name(name), in_use(in_use), continous(continous), value(value), sign(sign)
+      ActionSetting(std::string name, bool in_use, double value, int sign)
+        : name(name), in_use(in_use), value(value), sign(sign)
       {
         update_action_function();
         if (sign != -1 and sign != 1) {
@@ -681,8 +681,8 @@ namespace MjType
     // define the assignment code we want to initialise settings variables/classes
     #define XX(name, type, value) type name { value };
     #define SS(name, in_use, norm, readrate) Sensor name { in_use, norm, readrate };
-    #define AA(name, in_use, continous, value, sign) \
-              ActionSetting name { #name, in_use, continous, value, sign };
+    #define AA(name, in_use, value, sign) \
+              ActionSetting name { #name, in_use, value, sign };
     #define BR(name, reward, done, trigger) BinaryReward name { reward, done, trigger };
     #define LR(name, reward, done, trigger, min, max, overshoot) \
               LinearReward name { reward, done, trigger, min, max, overshoot };
@@ -1510,7 +1510,9 @@ public:
 
   // learning functions
   void action_step();
-  std::vector<float> set_action(int action);
+  std::vector<float> set_discrete_action(int action);
+  std::vector<float> set_continous_action(int action, float magnitude_fraction);
+  std::vector<float> set_action(int action, float continous_fraction);
   void reset_object();
   void spawn_object(int index);
   void spawn_object(int index, double xpos, double ypos, double zrot);

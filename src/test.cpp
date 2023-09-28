@@ -17,7 +17,7 @@ bool learning_step(MjClass& mj)
 
   // set a random action
   int randact = rand() % mj.n_actions;
-  mj.set_action(randact);
+  mj.set_discrete_action(randact);
 
   // complete this action in the simulatin
   mj.action_step();

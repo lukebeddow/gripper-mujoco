@@ -82,6 +82,8 @@ PYBIND11_MODULE(bind, m) {
     // learning functions
     .def("action_step", &MjClass::action_step)
     .def("set_action", &MjClass::set_action)
+    .def("set_continous_action", &MjClass::set_continous_action)
+    .def("set_discrete_action", &MjClass::set_discrete_action)
     .def("reset_object", &MjClass::reset_object)
     .def("spawn_object", static_cast<void (MjClass::*)(int)>(&MjClass::spawn_object)) /* see bottom */
     .def("spawn_object", static_cast<void (MjClass::*)(int, double, double, double)>(&MjClass::spawn_object))
@@ -235,7 +237,7 @@ PYBIND11_MODULE(bind, m) {
     // use a macro to create code snippets for all of the settings
     #define XX(name, type, value) .def_readwrite(#name, &MjType::Settings::name)
     #define SS(name, in_use, norm, readrate) .def_readwrite(#name, &MjType::Settings::name)
-    #define AA(name, in_use, continous, value, sign) .def_readwrite(#name, &MjType::Settings::name)
+    #define AA(name, in_use, value, sign) .def_readwrite(#name, &MjType::Settings::name)
     #define BR(name, reward, done, trigger) .def_readwrite(#name, &MjType::Settings::name)
     #define LR(name, reward, done, trigger, min, max, overshoot) \
               .def_readwrite(#name, &MjType::Settings::name)
@@ -266,7 +268,7 @@ PYBIND11_MODULE(bind, m) {
           // expand settings into list of variable names for tuple
           #define XX(name, type, value) s.name,
           #define SS(name, in_use, norm, readrate) s.name,
-          #define AA(name, in_use, continous, value, sign) s.name,
+          #define AA(name, in_use, value, sign) s.name,
           #define BR(name, reward, done, trigger) s.name,
           #define LR(name, reward, done, trigger, min, max, overshoot) s.name,
             // run the macro to create the code
@@ -305,7 +307,7 @@ PYBIND11_MODULE(bind, m) {
         #define XX(name, type, value) out.name = t[i].cast<type>(); ++i;
         #define SS(name, in_use, norm, readrate) \
                   out.name = t[i].cast<MjType::Sensor>(); ++i;
-        #define AA(name, used, continous, value, sign) \
+        #define AA(name, used, value, sign) \
                   out.name = t[i].cast<MjType::ActionSetting>(); ++i;
         #define BR(name, reward, done, trigger) \
                   out.name = t[i].cast<MjType::BinaryReward>(); ++i;
@@ -629,10 +631,9 @@ PYBIND11_MODULE(bind, m) {
   // set up action setting type so python can interact and change them
   {py::class_<MjType::ActionSetting>(m, "ActionSetting")
 
-    .def(py::init<std::string, bool, bool, double, int>())
+    .def(py::init<std::string, bool, double, int>())
     .def_readwrite("name", &MjType::ActionSetting::name)
     .def_readwrite("in_use", &MjType::ActionSetting::in_use)
-    .def_readwrite("continous", &MjType::ActionSetting::continous)
     .def_readwrite("value", &MjType::ActionSetting::value)
     .def_readwrite("sign", &MjType::ActionSetting::sign)
 
@@ -643,7 +644,6 @@ PYBIND11_MODULE(bind, m) {
         return py::make_tuple(
           r.name,
           r.in_use,
-          r.continous,
           r.value,
           r.sign
         );
@@ -654,13 +654,12 @@ PYBIND11_MODULE(bind, m) {
         //   std::cout << "unpickling MjType::ActionSetting ...";
         // }
 
-        // size == 3 is old and can be later deleted
-        if (t.size() != 5)
+        if (t.size() != 4)
           throw std::runtime_error("MjType::ActionSetting py::pickle got invalid state");
 
         // create new c++ instance with old data
         MjType::ActionSetting out(t[0].cast<std::string>(), t[1].cast<bool>(), 
-          t[2].cast<bool>(), t[3].cast<double>(), t[4].cast<int>());
+          t[2].cast<double>(), t[3].cast<int>());
 
         // if (debug_bind) {
         //   std::cout << " finished\n";
