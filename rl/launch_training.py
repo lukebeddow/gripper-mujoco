@@ -8,6 +8,7 @@ from datetime import datetime
 import argparse
 from time import sleep
 from random import random
+import torch
 
 from Trainer import MujocoTrainer
 from TrainingManager import TrainingManager
@@ -427,6 +428,7 @@ if __name__ == "__main__":
   # default device
   if args.device is None:
     args.device = "cpu"
+  if args.device == "cpu": torch.set_num_threads(1)
 
   if args.print: 
     args.log_level = 0
