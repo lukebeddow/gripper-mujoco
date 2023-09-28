@@ -1284,7 +1284,10 @@ std::vector<float> MjClass::set_action(int action, float continous_fraction)
         wl = s_.NAME.call_action_function(-1 * s_.NAME.value);  \
         break;                                                  \
       case MjType::Action::TOKEN_CONCAT(NAME, CONTINOUS_TOKEN): \
-        if (s_.debug) std::cout << s_.NAME.name + "_continous"; \
+        if (s_.debug) {                                         \
+          std::cout << s_.NAME.name + "_continous";             \
+          std::cout << ", fraction = " << continous_fraction;   \
+        }                                                       \
         wl = s_.NAME.call_action_function(s_.NAME.value * continous_fraction); \
         break;                                                  \
 

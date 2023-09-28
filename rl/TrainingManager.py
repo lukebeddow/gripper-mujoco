@@ -505,7 +505,7 @@ class TrainingManager():
     env.mj.set.auto_exceed_lateral_lim = False # no longer in_use
 
     # general settings
-    env.mj.set.debug = False
+    # env.mj.set.debug = False # MjEnv handles this
     env.mj.set.curve_validation = False
     env.mj.set.render_on_step = False
 

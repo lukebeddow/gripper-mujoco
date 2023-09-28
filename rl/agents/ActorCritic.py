@@ -332,7 +332,7 @@ class Agent_SAC:
     #   if rand < eps_threshold: random_action = True
 
     if decay_num < self.params.random_start_episodes:
-      return torch.tensor([self.rng.random() for x in range(self.n_actions)], dtype=torch.float32)
+      return torch.tensor([2*self.rng.random() - 1 for x in range(self.n_actions)], dtype=torch.float32)
 
     return self.mlp_ac.act(state, test) # test=True means determinstic=True
       
