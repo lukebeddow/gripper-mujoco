@@ -86,11 +86,11 @@ class TrainingManager():
       "stable_finger_force_lim" : 100,
       "stable_palm_force_lim" : 100,
       "fingertip_min_mm" : -12.5, # below (from start position) sets within_limits=false;
+      "continous_actions" : False,
       "action" : {
-        "continous" : False,
         "gripper_prismatic_X" : { 
           "in_use" : True, 
-          "value" : 1e-3,
+          "value" : 1e-3, # value = size of discrete, max size of continous
           "sign" : -1
         },
         "gripper_revolute_Y" : { 
@@ -600,6 +600,7 @@ class TrainingManager():
     env.mj.set.stable_finger_force_lim = set["cpp"]["stable_finger_force_lim"]
     env.mj.set.stable_palm_force_lim = set["cpp"]["stable_palm_force_lim"]
     env.mj.set.fingertip_min_mm = set["cpp"]["fingertip_min_mm"]
+    env.mj.set.continous_actions = set["cpp"]["continous_actions"]
 
     # apply cpp settings - actions
     env.mj.set.gripper_prismatic_X.in_use = set["cpp"]["action"]["gripper_prismatic_X"]["in_use"]
@@ -608,8 +609,6 @@ class TrainingManager():
     env.mj.set.base_X.in_use = set["cpp"]["action"]["base_X"]["in_use"]
     env.mj.set.base_Y.in_use = set["cpp"]["action"]["base_Y"]["in_use"]
     env.mj.set.base_Z.in_use = set["cpp"]["action"]["base_Z"]["in_use"]
-
-    env.mj.set.set_all_action_continous(set["cpp"]["action"]["continous"])
 
     env.mj.set.gripper_prismatic_X.value = set["cpp"]["action"]["gripper_prismatic_X"]["value"]
     env.mj.set.gripper_revolute_Y.value = set["cpp"]["action"]["gripper_revolute_Y"]["value"]

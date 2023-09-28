@@ -477,8 +477,15 @@ class MjEnv():
     Take an action in the simulation
     """
 
-    # set the action and step the simulation
-    self.mj.set_action(action)
+    # for continous actions set them all, mag should be [-1, +1] and is clipped internally
+    if self.mj.set.continous_actions:
+      for i, mag in enumerate(action):
+        self.mj.set_continous_action(i, mag)
+
+    # for discrete actions, input the action to perform
+    else: self.mj.set_discrete_action(action)
+
+    # step the simulation for the given time (mj.set.time_for_action)
     self.mj.action_step()
 
     return
@@ -1078,6 +1085,12 @@ class MjEnv():
     # - dangerous palm force
 
     return action
+
+  def using_actions_continous(self):
+    """
+    Return if action space is continous or discrete
+    """
+    return self.mj.set.continous_actions
 
   def seed(self, seed=None):
     """
