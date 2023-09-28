@@ -42,6 +42,22 @@ class TrainingManager():
       "loss_criterion" : "smoothL1Loss"
     },
 
+    "Agent_SAC" : {
+      "learning_rate" : 5e-5,
+      "gamma" : 0.999,
+      "alpha" : 0.2,
+      "batch_size" : 128,
+      "update_after_steps" : 1000,
+      "update_every_steps" : 50,
+      "random_start_episodes" : 1000,
+      "optimiser" : "adam",
+      "adam_beta1" : 0.9,
+      "adam_beta2" : 0.999,
+      "min_memory_replay" : 5000,
+      "memory_replay" : 75_000,
+      "soft_target_tau" : 0.05,
+    },
+
     # environment hyperparameters
     "env" : {
       "max_episode_steps" : 250,
@@ -532,12 +548,15 @@ class TrainingManager():
     Apply all the settings given in a dictionary of settings
     """
 
-    # apply agent settings
-    if agent.name == "Agent_DQN":
-      agent.params.update(self.settings["Agent_DQN"])
-    else:
-      raise RuntimeError(f"TrainingManager.apply_trainer_agent_settings() has agent with unrecognised name = {agent.name}")
+    # # apply agent settings
+    # if agent.name == "Agent_DQN":
+    #   agent.params.update(self.settings["Agent_DQN"])
+    # else:
+    #   raise RuntimeError(f"TrainingManager.apply_trainer_agent_settings() has agent with unrecognised name = {agent.name}")
     
+    # update using the agent name, which should match an entry in the settings dict
+    agent.params.update(self.settings[agent.name])
+
     # reinitialise the agent with the new settings, but network is not reloaded
     agent.init(network="loaded")
 

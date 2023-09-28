@@ -13,6 +13,7 @@ import torch
 from Trainer import MujocoTrainer
 from TrainingManager import TrainingManager
 from agents.DQN import Agent_DQN
+from agents.ActorCritic import MLPActorCritic, Agent_SAC
 import networks
 
 def vary_all_inputs(raw_inputarg=None, param_1=None, param_2=None, param_3=None, repeats=None):
@@ -560,10 +561,11 @@ if __name__ == "__main__":
     tm.settings["trainer"]["save_freq"] = 5
     tm.settings["final_test_trials_per_object"] = 1
     tm.settings["env"]["test_objects"] = 3
-    tm.settings["env"]["max_episode_steps"] = 1
+    tm.settings["env"]["max_episode_steps"] = 5
     tm.settings["episode_log_rate"] = 5
     tm.settings["track_avg_num"] = 3
     tm.settings["Agent_DQN"]["target_update"] = 10
+    tm.settings["Agent_DQN"]["min_memory_replay"] = 1
 
     # create the environment
     env = tm.make_env()
@@ -572,6 +574,46 @@ if __name__ == "__main__":
     layers = [env.n_obs, 64, 64, env.n_actions]
     network = networks.VariableNetwork(layers, device=args.device)
     agent = Agent_DQN(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "sac_test_1":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-6, 1e-5, 1e-4, 1e3]
+    vary_2 = None
+    vary_3 = None
+    repeats = 5
+    tm.param_1_name = None
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+    
+    # apply the varied settings
+    tm.settings["Agent_SAC"]["learning_rate"] = tm.param_1
+
+    # apply other essential settings
+    tm.settings["cpp"]["continous_actions"] = True
+    
+    # # for debugging do NOT use for training
+    # tm.settings["Agent_SAC"]["random_start_episodes"] = 1
+    # tm.settings["Agent_SAC"]["update_after_steps"] = 1
+    # tm.settings["Agent_SAC"]["update_every_steps"] = 1
+    # tm.settings["Agent_SAC"]["min_memory_replay"] = 1
+    # tm.settings["Agent_SAC"]["batch_size"] = 5
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent, may depend on variable settings above
+    layers = [256, 256]
+    network = MLPActorCritic(env.n_obs, env.n_actions, layers)
+    agent = Agent_SAC(device=args.device)
     agent.init(network)
 
     # complete the training

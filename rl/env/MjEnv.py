@@ -479,8 +479,8 @@ class MjEnv():
 
     # for continous actions set them all, mag should be [-1, +1] and is clipped internally
     if self.mj.set.continous_actions:
-      for i, mag in enumerate(action):
-        self.mj.set_continous_action(i, mag)
+      for i in range(len(action)):
+        self.mj.set_continous_action(i, action[i])
 
     # for discrete actions, input the action to perform
     else: self.mj.set_discrete_action(action)

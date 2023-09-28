@@ -508,8 +508,8 @@ class Trainer:
 
       # select and perform an action
       if self.env.using_continous_actions():
-        action_mags = self.agent.choose_actions(obs, decay_num=i_episode, test=test)
-        (new_obs, reward, terminated, truncated, info) = self.env.step(action_mags.numpy())
+        action = self.agent.select_action(obs, decay_num=i_episode, test=test)
+        (new_obs, reward, terminated, truncated, info) = self.env.step(action.numpy())
       else:
         action = self.agent.select_action(obs, decay_num=i_episode, test=test)
         (new_obs, reward, terminated, truncated, info) = self.env.step(action.item())
@@ -523,7 +523,7 @@ class Trainer:
       # convert data to torch tensors on specified device
       new_obs = self.to_torch(new_obs)
       reward = self.to_torch(reward)
-      action = action.to(self.device).unsqueeze(0).unsqueeze(0) # from Tensor(x) -> Tensor([[x]])
+      action = action.to(self.device).unsqueeze(0) # from Tensor([x]) -> Tensor([[x]])
       done_torch = self.to_torch(done, dtype=torch.bool)
 
       # perform one step of the optimisation on the policy network

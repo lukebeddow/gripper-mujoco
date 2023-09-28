@@ -10,52 +10,52 @@ import random
 
 class ReplayMemory(object):
 
-    def __init__(self, capacity, device, transition, rngseed=None):
-      self.memory = deque([], maxlen=capacity)
-      self.device = device
-      self.transition = transition
-      self.capacity = capacity
-      self.seed(rngseed)
+  def __init__(self, capacity, device, transition, rngseed=None):
+    self.memory = deque([], maxlen=capacity)
+    self.device = device
+    self.transition = transition
+    self.capacity = capacity
+    self.seed(rngseed)
 
-    def push(self, *args):
-      """Save a transition"""
-      self.memory.append(self.transition(*args))
+  def push(self, *args):
+    """Save a transition"""
+    self.memory.append(self.transition(*args))
 
-    def to_torch(self, data, dtype=None):
-      """
-      Convert some data to a torch tensor
-      """
-      if dtype == None: dtype = torch.float32
-      return torch.tensor(data, device=self.device, dtype=dtype).unsqueeze(0)
+  def to_torch(self, data, dtype=None):
+    """
+    Convert some data to a torch tensor
+    """
+    if dtype == None: dtype = torch.float32
+    return torch.tensor(data, device=self.device, dtype=dtype).unsqueeze(0)
 
-    def sample(self, batch_size):
-      return self.rng.sample(self.memory, batch_size)
-    
-    def seed(self, rngseed=None):
-      self.rngseed = rngseed
-      # create an instance of the Python random class with the given seed
-      # the random module functions just call an instance of this class
-      # we can't use numpy random as we want to support torch tensors and deque()
-      self.rng = random.Random(rngseed)
+  def sample(self, batch_size):
+    return self.rng.sample(self.memory, batch_size)
+  
+  def seed(self, rngseed=None):
+    self.rngseed = rngseed
+    # create an instance of the Python random class with the given seed
+    # the random module functions just call an instance of this class
+    # we can't use numpy random as we want to support torch tensors and deque()
+    self.rng = random.Random(rngseed)
 
-    def batch(self, batch_size):
-      # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
-      # detailed explanation). This converts batch-array of Transitions
-      # to Transition of batch-arrays.
-      transitions = self.sample(batch_size)
-      return self.transition(*zip(*transitions))
+  def batch(self, batch_size):
+    # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
+    # detailed explanation). This converts batch-array of Transitions
+    # to Transition of batch-arrays.
+    transitions = self.sample(batch_size)
+    return self.transition(*zip(*transitions))
 
-    def __len__(self):
-      return len(self.memory)
+  def __len__(self):
+    return len(self.memory)
 
-    def to_device(self, tuple_of_tensors):
-      """Moves a transition to a device"""
-      lst = []
-      for item in tuple_of_tensors:
-        lst.append(item.to(self.device))
-      return self.transition(*tuple(lst))
+  def to_device(self, tuple_of_tensors):
+    """Moves a transition to a device"""
+    lst = []
+    for item in tuple_of_tensors:
+      lst.append(item.to(self.device))
+    return self.transition(*tuple(lst))
 
-    def all_to(self, device):
+  def all_to(self, device):
       """Move entire replay memory to a device"""
       self.device = device
       for i, item in enumerate(self.memory):
@@ -182,7 +182,9 @@ class Agent_DQN:
 
   def select_action(self, state, decay_num, test=False):
     """
-    Choose an action using the policy network, or randomly depending on decay
+    Choose an action using the policy network, or randomly depending on decay.
+
+    This function should return a tensor([x])
     """
 
     # determine if we will act randomly
@@ -196,14 +198,14 @@ class Agent_DQN:
 
     # take an action
     if random_action: 
-      return torch.tensor(self.rng.integers(0, self.n_actions), dtype=torch.long)
+      return torch.tensor([self.rng.integers(0, self.n_actions)], dtype=torch.long)
     else:
       with torch.no_grad():
         # t.max(1) returns largest column value of each row
         # [1] is second column of max result, the index of max element
         # view(1, 1) selects this element which has max expected reward
         # [0][0] changes Tensor([[x]]) -> Tensor(x)
-        return self.policy_net(state).max(1)[1].view(1, 1)[0][0]
+        return self.policy_net(state).max(1)[1].view(1, 1)[0]
       
   def get_save_state(self):
     """
