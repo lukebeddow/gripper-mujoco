@@ -507,7 +507,7 @@ class Trainer:
       if self.log_level >= 3: print("Episode", i_episode, "action", t)
 
       # select and perform an action
-      if self.env.using_continous_actions:
+      if self.env.using_continous_actions():
         action_mags = self.agent.choose_actions(obs, decay_num=i_episode, test=test)
         (new_obs, reward, terminated, truncated, info) = self.env.step(action_mags.numpy())
       else:

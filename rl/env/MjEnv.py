@@ -1086,11 +1086,11 @@ class MjEnv():
 
     return action
 
-  def using_actions_continous(self):
+  def using_continous_actions(self):
     """
     Return if action space is continous or discrete
     """
-    return self.mj.set.continous_actions
+    return bool(self.mj.set.continous_actions)
 
   def seed(self, seed=None):
     """
