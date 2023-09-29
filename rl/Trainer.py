@@ -512,10 +512,10 @@ class Trainer:
       # select and perform an action
       if self.env.using_continous_actions():
         action = self.agent.select_action(obs, decay_num=i_episode, test=test)
-        (new_obs, reward, terminated, truncated, info) = self.env.step(action.numpy())
+        (new_obs, reward, terminated, truncated, info) = self.env.step(action.cpu().numpy())
       else:
         action = self.agent.select_action(obs, decay_num=i_episode, test=test)
-        (new_obs, reward, terminated, truncated, info) = self.env.step(action.item())
+        (new_obs, reward, terminated, truncated, info) = self.env.step(action.cpu().item())
    
       # render the new environment
       if self.render: self.env.render()

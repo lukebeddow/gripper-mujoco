@@ -54,9 +54,9 @@ do
     -s | --stagger ) (( i++ )); STAGGER=${!i}; echo stagger is $STAGGER ;;
     # without arguments
     -f | --no-faketty ) FAKETTY=; echo faketty disabled ;;
-    -d | --debug ) LOGGING='N'; DEBUG=" --no-delay"; echo Debug mode on, terminal logging ;;
-    --print ) LOGGING='N'; PRINT="--print"; echo Printing mode on, no training ;;
-    --print-results ) LOGGING='N'; PRINT="--print-results --no-delay" ;;
+    -d | --debug ) LOGGING='N'; PRINT_RESULTS_AFTER='N' ; DEBUG=" --no-delay"; echo Debug mode on, terminal logging ;;
+    --print ) LOGGING='N'; PRINT_RESULTS_AFTER='N' ; PRINT="--print"; echo Printing mode on, no training ;;
+    --print-results ) LOGGING='N'; PRINT_RESULTS_AFTER='N' ; PRINT="--print-results --no-delay" ;;
     # everything else passed directly to python
     * ) PY_ARGS+=( ${!i} ) ;;
   esac
