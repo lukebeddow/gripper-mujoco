@@ -72,9 +72,6 @@ def mlp(sizes, activation, output_activation=nn.Identity):
     layers += [nn.Linear(sizes[j], sizes[j+1]), act()]
   return nn.Sequential(*layers)
 
-def count_vars(module):
-  return sum([np.prod(p.shape) for p in module.parameters()])
-
 class SquashedGaussianMLPActor(nn.Module):
 
   def __init__(self, n_obs, n_actions, hidden_sizes, activation, action_limit,
@@ -128,9 +125,9 @@ class MLPQFunction(nn.Module):
     q = self.q(torch.cat([obs, act], dim=-1))
     return torch.squeeze(q, -1) # Critical to ensure q has right shape.
 
-class MLPActorCritic(nn.Module):
+class MLPActorCriticAC(nn.Module):
     
-  name = "MLPActorCritic_"
+  name = "MLPActorCriticAC_"
 
   def __init__(self, n_obs, n_actions, hidden_sizes=(256,256),
               activation=nn.ReLU, action_limit=1.0, mode="train"):
@@ -145,7 +142,7 @@ class MLPActorCritic(nn.Module):
     self.mode = mode
 
     if self.mode not in ["test", "train"]:
-      raise RuntimeError(f"MLPActorCritic given mode={mode}, should be 'test' or 'train'")
+      raise RuntimeError(f"MLPActorCriticAC given mode={mode}, should be 'test' or 'train'")
 
     # add hidden layer size into the name
     for i in range(len(hidden_sizes)):
@@ -485,7 +482,7 @@ class Agent_SAC:
         p_targ.data.mul_(1 - self.params.soft_target_tau)
         p_targ.data.add_(self.params.soft_target_tau * p.data)
 
-  def update_step(self, state, action, next_state, reward, terminal):
+  def update_step(self, state, action, next_state, reward, terminal, truncated):
     """
     Run this every training action step to update the model
     """

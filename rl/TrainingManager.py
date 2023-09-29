@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from Trainer import MujocoTrainer
 from env.MjEnv import MjEnv
 from agents.DQN import Agent_DQN
+from agents.ActorCritic import Agent_SAC
+from agents.PolicyGradient import Agent_PPO
 import networks
 
 class TrainingManager():
@@ -56,6 +58,22 @@ class TrainingManager():
       "min_memory_replay" : 5000,
       "memory_replay" : 75_000,
       "soft_target_tau" : 0.05,
+    },
+
+    "Agent_PPO" : {
+      "learning_rate_pi" : 3e-4,
+      "learning_rate_vf" : 1e-3,
+      "gamma" : 0.99,
+      "steps_per_epoch" : 4000,
+      "clip_ratio" : 0.2,
+      "train_pi_iters" : 80,
+      "train_vf_iters" : 80,
+      "lam" : 0.97,
+      "target_kl" : 0.01,
+      "max_kl_ratio" : 1.5,
+      "optimiser": "adam",
+      "adam_beta1" : 0.9,
+      "adam_beta2" : 0.999,
     },
 
     # environment hyperparameters

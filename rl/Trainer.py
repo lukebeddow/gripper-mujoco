@@ -304,8 +304,11 @@ class Trainer:
     # training only reproducible if torch.manual_seed() set BEFORE agent network initialisation
     self.training_reproducible = strict_seed
     if agent is not None and env is not None: self.seed(strict=strict_seed)
-    elif self.log_level > 0:
-      print("MujocoTrainer.__init__() warning: agent and/or env is None and environment is NOT seeded")
+    else:
+      if strict_seed or rngseed is not None:
+        raise RuntimeError("MujocoTrainer.__init__() error: agent and/or env is None, environment is not seeded by rngseed or strict_seed was set")
+      elif self.log_level >= 2:
+        print("MujocoTrainer.__init__() warning: agent and/or env is None and environment is NOT seeded")
 
     if self.log_level > 0:
       print("Trainer settings:")
@@ -524,11 +527,14 @@ class Trainer:
       new_obs = self.to_torch(new_obs)
       reward = self.to_torch(reward)
       action = action.to(self.device).unsqueeze(0) # from Tensor([x]) -> Tensor([[x]])
-      done_torch = self.to_torch(done, dtype=torch.bool)
+      truncated = self.to_torch(truncated, dtype=torch.bool)
+
+      # store if it was a terminal state (ie either terminated or truncated)
+      done = self.to_torch(done, dtype=torch.bool)
 
       # perform one step of the optimisation on the policy network
       if not test:
-        self.agent.update_step(obs, action, new_obs, reward, done_torch)
+        self.agent.update_step(obs, action, new_obs, reward, done, truncated)
 
       obs = new_obs
       cumulative_reward += reward.cpu()

@@ -492,19 +492,26 @@ class MjEnv():
 
   def _is_done(self):
     """
-    Determine if the epsiode should finish
+    Determine if the epsiode should finish.
+
+    Terminated - episode reached termination condition
+    Trucnated - episode exceeded max number of steps
     """
+
+    terminated = False
+    truncated = False
 
     # if we have exceeded our time limit
     if self.track.current_step >= self.params.max_episode_steps:
       if self.log_level >= 3 or self.mj.set.debug: 
         print("is_done() = true (in python) as max step number exceeded")
-      return True
+      truncated = True
+      return terminated, truncated
 
     # check the cpp side
-    done = self.mj.is_done()
+    terminated = self.mj.is_done()
 
-    return done
+    return terminated, truncated
     
   def _init_rgbd(self, width=None, height=None):
     """
@@ -1223,7 +1230,7 @@ class MjEnv():
     # reset any lingering goal defaults
     self.mj.reset_goal()
 
-  def step(self, action):
+  def step(self, action, torch=False):
     """
     Perform an action and step the simulation until it is resolved
     """
@@ -1233,19 +1240,27 @@ class MjEnv():
       raise RuntimeError("step has been called with done=true, use reset()")
 
     self.track.current_step += 1
+
+    # have we been given a torch tensor
+    if torch:
+      if self.mj.set.continous_actions:
+        action = action.numpy()
+      else:
+        action = action.item()
     
     self._take_action(action)
     obs = self._next_observation()
-    terminated = self._is_done()
-    truncated = False
+    terminated, truncated = self._is_done()
     info = {}
+
+    done = bool(terminated + truncated)
 
     # what method are we using
     if self.mj.set.use_HER:
       state = self._event_state()
       goal = self._assess_goal(state)
       reward = 0.0
-      if terminated or not self.mj.set.reward_on_end_only:
+      if done or not self.mj.set.reward_on_end_only:
         # do we only award a reward when the episode ends
         reward = self._goal_reward(goal, state)
       to_return = (obs, reward, terminated, state, goal, info)
@@ -1255,11 +1270,11 @@ class MjEnv():
 
     self.track.last_action = action
     self.track.last_reward = reward
-    self.track.is_done = terminated
+    self.track.is_done = done
     self.track.cumulative_reward += reward
 
     # track testing if this result has finished
-    if terminated and self.test_in_progress:
+    if done and self.test_in_progress:
       self._monitor_test()
 
     return to_return

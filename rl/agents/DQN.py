@@ -310,7 +310,7 @@ class Agent_DQN:
       torch.nn.utils.clip_grad_value_(self.policy_net.parameters(), self.params.grad_clamp_value)
     self.optimiser.step()
 
-  def update_step(self, state, action, next_state, reward, terminal):
+  def update_step(self, state, action, next_state, reward, terminal, truncated):
     """
     Run this every training action step to update the model
     """
