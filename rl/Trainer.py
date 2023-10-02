@@ -11,6 +11,8 @@ from datetime import datetime
 
 from ModelSaver import ModelSaver
 from agents.DQN import Agent_DQN
+from agents.ActorCritic import Agent_SAC
+from agents.PolicyGradient import Agent_PPO
 from env.MjEnv import MjEnv
 import networks
 
