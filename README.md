@@ -154,4 +154,16 @@ make cluster
 
 Then to submit a job for example ```qsub mymujoco/array_job.sh```. It is important to have built with ```make cluster``` otherwise it will fail.
 
+## Troubleshooting
+
+Python not compiling, no python.h
+
+On ubuntu 20, when you create a virtual environment it does not seem to populate the ```include``` folder, hence the compilation fails to find python.h. What you should do is:
+
+```
+sudo apt install python3.8-dev
+ln -s /usr/include/python3.8/ /home/path/to/venv/name/include/python3.8
+```
+
+First we install the headers, then create a symbolic link to them. Now python should compile correctly.
 
