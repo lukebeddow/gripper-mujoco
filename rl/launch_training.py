@@ -702,6 +702,46 @@ if __name__ == "__main__":
     tm.run_training(agent, env)
     print_time_taken()
 
+  elif args.program == "ppo_hypers_1":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1.0, 2.5]
+    vary_2 = [(64, 64), (128, 128)]
+    vary_3 = None
+    repeats = 8
+    tm.param_1_name = "action_scaling"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply environment dependent settings
+    tm.settings["cpp"]["continous_actions"] = True
+    tm.settings["scale_rewards"] = tm.param_1
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 2e-3
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.015
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 4e-3
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3
+
+    # create the environment
+    env = tm.make_env()
+    
+    # apply the agent settings
+    layers = tm.param_2
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = 1e-5
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = 1e-5
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number
