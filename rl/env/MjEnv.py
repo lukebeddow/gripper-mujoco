@@ -617,6 +617,20 @@ class MjEnv():
       print("Error is:", e)
       obs = self.mj.get_observation()
 
+    # if we are using a depth camera, combine this into the observation
+    if self.params.depth_camera:
+      include_depth = False
+      rgb, depth = self._get_rgbd_image()
+      if include_depth:
+        rgb = np.concatenate((rgb, depth), axis=0)
+      # resize and pad with zeros the observation vector
+      new_size = self.rgbd_height * self.rgbd_width
+      if len(obs) > new_size:
+        raise RuntimeError(f"MjEnv()._next_observation() failed as observation length {len(obs)} exceeds image number of pixels {new_size}")
+      obs.resize(new_size)
+      obs = obs.reshape((1, self.rgbd_width, self.rgbd_height))
+      obs = np.concatenate((rgb, obs), axis=0)
+
     return obs
 
   def _event_state(self):
@@ -1340,28 +1354,36 @@ if __name__ == "__main__":
 
   # import pickle
 
-  mj = MjEnv(noload=True, depth_camera=True, log_level=2, seed=122)
+  mj = MjEnv(depth_camera=True, log_level=2, seed=122)
   mj.render_window = False
   mj.mj.set.mujoco_timestep = 3.187e-3
   mj.mj.set.auto_set_timestep = False
 
-  # mj.load("set7_fullset_1500_50i_updated", num_segments=8, finger_width=28, finger_thickness=0.9e-3)
-  # mj._spawn_object()
-  # mj._set_rgbd_size(848, 480)
-  # mj._set_rgbd_size(1000, 1000)
+  mj.load("set8_fullset_1500", num_segments=8, finger_width=28e-3, finger_thickness=0.9e-3)
+  mj._spawn_object()
+  mj._set_rgbd_size(100, 100)
+
+  mj.reset()
+  num = 101
+  for i in range(num):
+    mj.step(random_train.integers(0, mj.n_actions))
+
+  x = mj._next_observation()
+
+  print(x[3][0][:5])
 
   # widths = [24e-3, 28e-3]
   # segments = [8]
   # xy_base = [False, True]
   # inertia = [1, 50]
 
-  mj.load_next.num_segments = 8
-  angles = [90]
-  for a in angles:
-    mj.load_next.finger_hook_angle_degrees = a
-    mj.load_next.finger_hook_length = 100e-3
-    mj.load_next.XY_base_actions = True
-    mj._auto_generate_xml_file("set_test_large", use_hashes=True, silent=True)
+  # mj.load_next.num_segments = 8
+  # angles = [90]
+  # for a in angles:
+  #   mj.load_next.finger_hook_angle_degrees = a
+  #   mj.load_next.finger_hook_length = 100e-3
+  #   mj.load_next.XY_base_actions = True
+  #   mj._auto_generate_xml_file("set_test_large", use_hashes=True, silent=True)
 
   # for w in widths:
   #   for N in segments:
