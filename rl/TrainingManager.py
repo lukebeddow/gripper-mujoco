@@ -720,7 +720,7 @@ class TrainingManager():
     
     return env
 
-  def set_sensor_reward_thresholds(self, env, exceed_style=None, min_style=None):
+  def set_sensor_reward_thresholds(self, env, exceed_style=None, min_style=None, dangerous_style=None):
     """
     Determine the reward thresholds
     """
@@ -779,6 +779,21 @@ class TrainingManager():
       self.RT.xPalm = self.RT.gPalm + 0.8 * (self.RT.dPalm - self.RT.gPalm)
     elif exceed_style is not None: 
       raise RuntimeError(f"set_sensor_reward_thresholds() got invalid 'exceed_style' of {exceed_style}")
+    
+    # check if dangerous handling is specified
+    if isinstance(dangerous_style, float):
+      self.RT.dBend = dangerous_style
+      self.RT.dPalm = dangerous_style
+    elif isinstance(dangerous_style, list) and len(dangerous_style) == 2:
+      self.RT.dBend = dangerous_style[0]
+      self.RT.dPalm = dangerous_style[1]
+    elif dangerous_style == "safe":
+      if self.RT.dBend < self.RT.xBend:
+        self.RT.dBend = self.RT.xBend + 1
+      if self.RT.dPalm < self.RT.dPalm:
+        self.RT.dPalm = self.RT.xPalm + 1
+    elif dangerous_style is not None: 
+      raise RuntimeError(f"set_sensor_reward_thresholds() got invalid 'dangerous_style' of {dangerous_style}")
 
     # confirm that the thresholds make sense
     if self.RT.mBend > self.RT.gBend:
@@ -860,7 +875,10 @@ class TrainingManager():
           env.mj.set.stable_palm_force_lim > 99.0):
         exceed_style = [3.0, 10.0]
       else: exceed_style = None
-      self.set_sensor_reward_thresholds(env, exceed_style=exceed_style, min_style=None)
+      if penalty_termination: danger_style = None
+      else: danger_style = "safe"
+      self.set_sensor_reward_thresholds(env, exceed_style=exceed_style, min_style=None,
+                                        dangerous_style=danger_style)
       # reward each step                     reward   done   trigger
       env.mj.set.step_num.set          (-0.01,  False,   1)
       # penalties and bonuses
