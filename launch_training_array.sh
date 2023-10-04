@@ -40,6 +40,7 @@ faketty() {
 timestamp="$(date +%d-%m-%y_%H-%M)"
 FAKETTY=faketty
 LOGGING='Y'
+PRINT_RESULTS='N'
 PRINT_RESULTS_AFTER='Y'
 
 PY_ARGS=() # arguments passed directly into python without parsing
@@ -56,7 +57,7 @@ do
     -f | --no-faketty ) FAKETTY=; echo faketty disabled ;;
     -d | --debug ) LOGGING='N'; PRINT_RESULTS_AFTER='N' ; DEBUG=" --no-delay"; echo Debug mode on, terminal logging ;;
     --print ) LOGGING='N'; PRINT_RESULTS_AFTER='N' ; PRINT="--print"; echo Printing mode on, no training ;;
-    --print-results ) LOGGING='N'; PRINT_RESULTS_AFTER='N' ; PRINT="--print-results --no-delay" ;;
+    --print-results ) PRINT_RESULTS='Y' ;;
     # everything else passed directly to python
     * ) PY_ARGS+=( ${!i} ) ;;
   esac
@@ -68,6 +69,22 @@ echo Python only arguments are: ${PY_ARGS[@]}
 
 # navigate to correct directory
 cd $path_to_mymujoco/$python_folder || exit
+
+# are we printing a results table
+if [ $PRINT_RESULTS = 'Y' ]
+then
+    echo -e "\nPrinting results table\n"
+
+    python3 launch_training.py \
+        -t $timestamp \
+        ${PY_ARGS[@]} \
+        --print-results \
+        --no-delay \
+        --log-level 0
+
+    echo -e "\nResults table complete"
+    exit
+fi
 
 # extract the job indicies
 ARRAY_INDEXES=("$jobs")
