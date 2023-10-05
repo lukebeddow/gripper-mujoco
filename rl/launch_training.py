@@ -172,10 +172,19 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
   tm = make_training_manager_from_args(args, silent=True)
 
   # prepare to find information from training_summary files
-  first_loop = True
   headings = []
   table = []
   new_elem = []
+
+  found_job_number = False
+  found_timestamp = False
+  found_param_1 = False
+  found_param_2 = False
+  found_param_3 = False
+  found_trained_to = False
+  found_train_best_ep = False
+  found_train_best_sr = False
+  found_full_test_sr = False
 
   for j in job_numbers:
 
@@ -195,45 +204,45 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
       exists = tm.load_training_summary(filepath=filepath)
       if not exists:
         raise RuntimeError("print_results_table() failed to make training summary at", filepath)
+      
+    if tm.job_number is not None: found_job_number = True
+    if tm.timestamp is not None: found_timestamp = True
+    if tm.param_1 is not None: found_param_1 = True
+    if tm.param_2 is not None: found_param_2 = True
+    if tm.param_3 is not None: found_param_3 = True
+    if tm.trained_to is not None: found_trained_to = True
+    if tm.train_best_ep is not None: found_train_best_ep = True
+    if tm.train_best_sr is not None: found_train_best_sr = True
+    if tm.full_test_sr is not None: found_full_test_sr = True
 
-    if first_loop:
-      if tm.job_number is not None: 
-        found_job_number = True
-        headings.append("Job num")
-      else: found_job_number = False
-      if tm.timestamp is not None: 
-        found_timestamp = True
-        headings.append("Timestamp    ") # 4xspace for heading
-      else: found_timestamp = False
-      if tm.param_1 is not None: 
-        found_param_1 = True
-        headings.append(tm.param_1_name)
-      else: found_param_1 = False
-      if tm.param_2 is not None: 
-        found_param_2 = True
-        headings.append(tm.param_2_name)
-      else: found_param_2 = False
-      if tm.param_3 is not None: 
-        found_param_3 = True
-        headings.append(tm.param_3_name)
-      else: found_param_3 = False
-      if tm.trained_to is not None: 
-        found_trained_to = True
-        headings.append("Trained to")
-      else: found_trained_to = False
-      if tm.train_best_ep is not None: 
-        found_train_best_ep = True
-        headings.append("Train best SR")
-      else: found_train_best_ep = False
-      if tm.train_best_sr is not None: 
-        found_train_best_sr = True
-        headings.append("Train best episode")
-      else: found_train_best_sr = False
-      if tm.full_test_sr is not None: 
-        found_full_test_sr = True
-        headings.append("Final test SR")
-      else: found_full_test_sr = False
-      first_loop = False
+  if found_job_number: headings.append("Job num")
+  if found_timestamp: headings.append("Timestamp    ") # 4xspace for heading
+  if found_param_1: headings.append(tm.param_1_name)
+  if found_param_2: headings.append(tm.param_2_name)
+  if found_param_3: headings.append(tm.param_3_name)
+  if found_trained_to: headings.append("Trained to")
+  if found_train_best_ep: headings.append("Train best SR")
+  if found_train_best_sr: headings.append("Train best episode")
+  if found_full_test_sr: headings.append("Final test SR")
+
+  for j in job_numbers:
+
+    # determine the path required for this job
+    tm.set_group_run_name(job_num=j, timestamp=timestamp, prefix=run_name_prefix)
+    filepath = tm.trainer.savedir + "/" + tm.group_name + "/" + tm.run_name + "/"
+    
+    # load information from the training summary
+    tm.init_training_summary() # wipe data from previous loop
+    exists = tm.load_training_summary(filepath=filepath)
+
+    if not exists:
+      # try to create the file
+      tm.trainer = MujocoTrainer(None, None, log_level=0, run_name=tm.run_name,
+                                group_name=tm.group_name)
+      tm.save_training_summary(filepath=filepath)
+      exists = tm.load_training_summary(filepath=filepath)
+      if not exists:
+        raise RuntimeError("print_results_table() failed to make training summary at", filepath)
 
     if found_job_number:
       if tm.job_number is not None:
