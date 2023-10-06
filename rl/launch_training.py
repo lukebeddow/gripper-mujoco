@@ -841,6 +841,52 @@ if __name__ == "__main__":
     tm.run_training(agent, env)
     print_time_taken()
 
+  elif args.program == "set9_baseline_1":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [3.0, 100.0]
+    vary_2 = [10, 15, 20]
+    vary_3 = [2e-6, 1e-5, 5e-5]
+    repeats = 5
+    tm.param_1_name = "bending frc limit"
+    tm.param_2_name = "object pos noise"
+    tm.param_3_name = "learning rate"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply environment dependent settings
+    tm.settings["cpp"]["continous_actions"] = True
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 2e-3
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.015
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 4e-3
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3
+
+    # apply training specific settings
+    tm.settings["cpp"]["stable_finger_force_lim"] = tm.param_1
+    tm.settings["cpp"]["stable_palm_force_lim"] = 10.0
+    tm.settings["env"]["object_position_noise_mm"] = tm.param_2
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["object_set_name"] = "set9_fullset"
+
+    # create the environment
+    env = tm.make_env()
+    
+    # apply the agent settings
+    layers = [128, 128, 128]
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_3
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_3
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number

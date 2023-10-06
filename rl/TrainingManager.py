@@ -615,6 +615,7 @@ class TrainingManager():
     
     # apply MjEnv settings
     env.params.update(set["env"])
+    env.load_next.update(set["env"]) # params to load in
 
     # apply cpp settings - general
     env.mj.set.randomise_colours = set["cpp"]["randomise_colours"]
