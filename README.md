@@ -10,7 +10,12 @@ Clone with submodules to include the ```description``` submodule:
 
 Then update the submodule to track the main branch, so that it stays up to date and also you can push commits directly to the ```luke-gripper-description``` repo by editing within this repository.
 
-```git submodule update --remote```
+```
+git submodule update --remote
+cd description/
+git checkout main
+cd ..
+```
 
 ## Installations
 
