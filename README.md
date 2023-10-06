@@ -2,6 +2,16 @@
 
 Code for simulating my gripper with mujoco. The ```src``` folder contains c++ code which interfaces with mujoco, this is compiled into binaries in ```bin``` as well as a python module in ```rl/env/mjpy/bind.so``` for use with machine learning frameworks.
 
+## Download
+
+Clone with submodules to include the ```description``` submodule:
+
+```git clone --recurse-submodules /git/address/...```
+
+Then update the submodule to track the main branch, so that it stays up to date and also you can push commits directly to the ```luke-gripper-description``` repo by editing within this repository.
+
+```git submodule update --remote```
+
 ## Installations
 
 This code has the following dependencies:
