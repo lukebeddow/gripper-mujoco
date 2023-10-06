@@ -1391,17 +1391,20 @@ class MujocoTrainer(Trainer):
 if __name__ == "__main__":
 
   # master seed, torch seed must be set before network creation (random initialisation)
-  rngseed = None
-  strict_seed = False
+  rngseed = 2
+  strict_seed = True
   if strict_seed:
     if rngseed is None: rngseed = random.randint(0, 2_147_483_647)
     torch.manual_seed(rngseed)
   
+  render = True
+  
   # create the environment
-  env = MjEnv(object_set="set8_fullset_1500", log_level=1)
-  env.params.test_objects = 1
-  env.params.test_trials_per_object = 1
+  env = MjEnv(object_set="set9_fullset", log_level=2, render=render)
+  # env.params.test_objects = 1
+  # env.params.test_trials_per_object = 1
   env.params.max_episode_steps = 20
+  env.params.object_position_noise_mm = 20
 
   # training device
   device = "cpu"
@@ -1414,11 +1417,12 @@ if __name__ == "__main__":
 
   # train the agent on the environment
   trainer = MujocoTrainer(agent, env, rngseed=rngseed, device=device, plot=False, save=True,
-                    strict_seed=strict_seed, episode_log_rate=1)
+                          strict_seed=strict_seed, episode_log_rate=1, render=render,
+                          track_avg_num=5, print_avg_return=True)
   
   # set training parameters then train
-  trainer.params.num_episodes = 5
-  trainer.params.save_freq = 5
-  trainer.params.test_freq = 5
-  trainer.load("run_16-37", path_to_run_folder="/home/luke/mujoco-devel/models/22-09-23", id=2)
-  # trainer.train()
+  trainer.params.num_episodes = 10000
+  # trainer.params.save_freq = 5
+  # trainer.params.test_freq = 5
+  # trainer.load("run_16-37", path_to_run_folder="/home/luke/mujoco-devel/models/22-09-23", id=2)
+  trainer.train()

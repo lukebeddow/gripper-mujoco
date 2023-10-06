@@ -1132,21 +1132,6 @@ namespace MjType
     }
   };
 
-  // // calibration constants for gauge data
-  // struct RealGaugeCalibrations {
-
-  //   /* applied as follows: g_out = (g_raw + offset) * scale */
-  //   struct RealSensors { float g1 {}, g2 {}, g3 {}, palm {}, wrist_Z {}; };
-
-  //   RealSensors offset;
-  //   RealSensors scale;
-  //   RealSensors norm;
-
-  //   // when true, automatically detect the offset
-  //   bool recalibrate_offset_flag = false;
-
-  // };
-
   // data containers for all of the possible sensors
   struct SensorData {
 
@@ -1566,6 +1551,7 @@ public:
   bool last_action_panda();
   std::string print_actions();
   int get_number_of_objects() { return env_.object_names.size(); }
+  std::string get_object_name(int idx) { return env_.object_names[idx]; }
   std::string get_current_object_name() { return env_.obj[0].name; }
   float get_fingertip_z_height();
   MjType::TestReport get_test_report();

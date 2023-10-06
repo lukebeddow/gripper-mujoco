@@ -672,6 +672,8 @@ class MjEnv():
     global random_test
     global random_train
 
+    new = True
+
     # are we using train or test time random generator
     if self.test_in_progress:
       generator = random_test
@@ -685,20 +687,63 @@ class MjEnv():
       # otherwise choose a random object
       obj_idx = generator.integers(0, self.num_objects)
 
-    # randomly generate the object (x, y) position
-    xy_noise = self.params.object_position_noise_mm
-    x_pos_mm = generator.integers(-xy_noise, xy_noise + 1)
-    y_pos_mm = generator.integers(-xy_noise, xy_noise + 1)
+    if new:
 
-    # randomly choose a z rotation
-    angle_options = [0, 60, 120]
-    th_noise = self.params.object_rotation_noise_deg
-    angle_noise_deg = generator.integers(-th_noise, th_noise + 1)
-    rand_index = generator.integers(0, len(angle_options))
-    z_rot_rad = (angle_options[rand_index] + angle_noise_deg) * (np.pi / 180.0)
+      # apply spawning parameters
+      self.mj.default_spawn_params.xrange = self.params.object_position_noise_mm * 1e-3
+      self.mj.default_spawn_params.yrange = self.params.object_position_noise_mm * 1e-3
+      self.mj.default_spawn_params.rotrange = np.pi / 2.0
 
-    # spawn in the object
-    self.mj.spawn_object(obj_idx, x_pos_mm * 1e-3, y_pos_mm * 1e-3, z_rot_rad)
+      spawned = False
+      max_count = 3
+      count = 0
+
+      while not spawned and count < max_count:
+
+        spawned = self.mj.spawn_into_scene(obj_idx)
+        count += 1
+        if not spawned and self.log_level >= 3:
+          print(f"Object '{self.mj.get_object_name(obj_idx)}' failed to spawn, try {count}")
+
+      if not spawned:
+        if self.log_level >= 2:
+          print(f"Warning: object '{self.mj.get_object_name(obj_idx)}' failed to spawn, resorting to old method")
+
+        # use old method: randomly generate the object (x, y) position
+        xy_noise = self.params.object_position_noise_mm
+        x_pos_mm = generator.integers(-xy_noise, xy_noise + 1)
+        y_pos_mm = generator.integers(-xy_noise, xy_noise + 1)
+
+        # randomly choose a z rotation
+        angle_options = [0, 60, 120]
+        th_noise = self.params.object_rotation_noise_deg
+        angle_noise_deg = generator.integers(-th_noise, th_noise + 1)
+        rand_index = generator.integers(0, len(angle_options))
+        z_rot_rad = (angle_options[rand_index] + angle_noise_deg) * (np.pi / 180.0)
+
+        # spawn in the object
+        self.mj.spawn_object(obj_idx, x_pos_mm * 1e-3, y_pos_mm * 1e-3, z_rot_rad)
+
+        # for observing failure cases
+        # self.render()
+        # input("enter to continue")
+        
+    else:
+
+      # randomly generate the object (x, y) position
+      xy_noise = self.params.object_position_noise_mm
+      x_pos_mm = generator.integers(-xy_noise, xy_noise + 1)
+      y_pos_mm = generator.integers(-xy_noise, xy_noise + 1)
+
+      # randomly choose a z rotation
+      angle_options = [0, 60, 120]
+      th_noise = self.params.object_rotation_noise_deg
+      angle_noise_deg = generator.integers(-th_noise, th_noise + 1)
+      rand_index = generator.integers(0, len(angle_options))
+      z_rot_rad = (angle_options[rand_index] + angle_noise_deg) * (np.pi / 180.0)
+
+      # spawn in the object
+      self.mj.spawn_object(obj_idx, x_pos_mm * 1e-3, y_pos_mm * 1e-3, z_rot_rad)
 
     return
 
@@ -1115,7 +1160,7 @@ class MjEnv():
 
   def seed(self, seed=None):
     """
-    Set the seed for the environment
+    Set the seed for the environment, applied upon call to reset
     """
 
     global random_train # reseed only the training generator

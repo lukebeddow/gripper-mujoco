@@ -130,6 +130,7 @@ PYBIND11_MODULE(bind, m) {
     .def("tock", &MjClass::tock)
     .def("forward", &MjClass::forward)
     .def("get_number_of_objects", &MjClass::get_number_of_objects)
+    .def("get_object_name", &MjClass::get_object_name)
     .def("get_current_object_name", &MjClass::get_current_object_name)
     .def("get_test_report", &MjClass::get_test_report)
     .def("get_n_actions", &MjClass::get_n_actions)
