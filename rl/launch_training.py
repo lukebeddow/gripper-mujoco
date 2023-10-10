@@ -887,6 +887,33 @@ if __name__ == "__main__":
     tm.run_training(agent, env)
     print_time_taken()
 
+  elif args.program == "set8_vs_set9":
+
+    if args.job == 1:
+
+      job = 68
+      timestamp = "06-10-23_16-57"
+
+    elif args.job == 2:
+
+      job = 77
+      timestamp = "06-10-23_16-57"
+
+    elif args.job == 3:
+
+      job = 87
+      timestamp = "06-10-23_16-57"
+
+    else:
+      raise RuntimeError("args.job not set to valid number")
+
+    tm.load(job_num=job, timestamp=timestamp, best_id=True)
+
+    # now run test with set8
+    tm.trainer.env.load("set8_fullset_1500")
+    tm.run_test(trials_per_obj=10)
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number

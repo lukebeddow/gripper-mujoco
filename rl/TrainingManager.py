@@ -326,7 +326,7 @@ class TrainingManager():
 
   def continue_training(self, new_endpoint=None, extra_episodes=None):
     """
-    Load and then continue a training, either to a new endpoint, or simply adding a
+    Continue a training (already loaded), either to a new endpoint, or simply adding a
     given number of episodes. A trainer must be loaded when this function is called.
     """
 
