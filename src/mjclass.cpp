@@ -259,7 +259,7 @@ void MjClass::configure_settings()
     sim_gauge_raw_to_N_factor = bend_gauge_normalise / s_.bending_gauge.normalise;
     if (echo_auto_changes) {
       std::cout << "MjClass auto-setting: Bending gauge normalisation set to: " 
-        << s_.bending_gauge.normalise << " (NOT SI), based on saturation load of " << bend_gauge_normalise <<'\n';
+        << s_.bending_gauge.normalise << " (NOT SI), based on saturation load of " << bend_gauge_normalise << " newtons\n";
       std::cout << "MjClass auto-setting: Wrist Z sensor offset set to: " 
         << s_.wrist_sensor_Z.raw_value_offset << '\n';
     }
