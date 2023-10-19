@@ -2021,6 +2021,8 @@ void update_all(mjModel* model, mjData* data)
     throw std::runtime_error("non-stepper not implemented");
   }
 
+  update_objects(model, data);
+
   // // for testing
   // update_state(model, data);
   // j_.print_qpos();
@@ -2091,11 +2093,15 @@ void update_objects(const mjModel* model, mjData* data)
 {
   /* update the position of the objects in the simulation */
 
+  // this isn't strictly needed
   for (int i = 0; i < oh_.names.size(); i++) {
     if (oh_.in_use[i]) {
       oh_.qpos[i].update(model, data, oh_.qposadr[i]);
     }
   }
+
+  // apply antiroll - only works if oh_.extract_forces_faster() has run this step
+  oh_.apply_antiroll(data);
 
   // // for testing
   // QPos test = get_object_qpos();
@@ -3384,14 +3390,6 @@ luke::Vec3 get_object_xyz_bounding_box(int idx)
 
   return oh_.get_object_xyz(idx);
 }
-
-// Forces get_object_forces(const mjModel* model, mjData* data)
-// {
-//   /* get the contact forces on the live object */
-
-//   // use the faster version of the extract_forces() function
-//   return oh_.extract_forces(model, data);
-// }
 
 Forces_faster get_object_forces_faster(const mjModel* model, mjData* data)
 {

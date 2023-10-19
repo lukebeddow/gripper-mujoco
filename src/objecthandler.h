@@ -44,7 +44,7 @@ struct ObjectHandler {
 
   std::vector<int> live_objects;
   std::vector<std::string> live_geoms;
-
+  
   // are we showing objects not being used (default: no)
   bool object_visibility = false;
   
@@ -192,6 +192,7 @@ public:
   // Forces extract_forces(const mjModel* model, mjData* data);
   Forces_faster extract_forces_faster(const mjModel* model, mjData* data);
   bool check_contact_forces(const mjModel* model, mjData* data);
+  bool apply_antiroll(mjData* data);
 
   // set object properties
   void set_object_visibility(mjModel* model, bool visible);

@@ -1400,10 +1400,10 @@ if __name__ == "__main__":
   render = True
   
   # create the environment
-  env = MjEnv(object_set="set9_fullset", log_level=2, render=render)
+  env = MjEnv(object_set="set9_sphereonly", log_level=2, render=render)
   # env.params.test_objects = 1
   # env.params.test_trials_per_object = 1
-  env.params.max_episode_steps = 20
+  env.params.max_episode_steps = 50
   env.params.object_position_noise_mm = 20
 
   # training device
