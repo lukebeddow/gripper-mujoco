@@ -1060,12 +1060,12 @@ if __name__ == "__main__":
 
     # define what to vary this training, dependent on job number
     vary_1 = [0.5, 1.0, 1.5]
-    vary_2 = [45, 60, 90]
-    vary_3 = [1e-5, 5e-5]
+    vary_2 = [1e-5, 5e-5]
+    vary_3 = [45, 60, 90]
     repeats = 5
     tm.param_1_name = "action_size_scale"
-    tm.param_2_name = "fingertip angle"
-    tm.param_3_name = None
+    tm.param_2_name = "learning rate"
+    tm.param_3_name = "fingertip angle"
     tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
                                                          param_3=vary_3, repeats=repeats)
     if args.print: print_training_info()
@@ -1085,15 +1085,15 @@ if __name__ == "__main__":
     tm.settings["env"]["object_position_noise_mm"] = 10
     tm.settings["trainer"]["num_episodes"] = 120_000
     tm.settings["env"]["object_set_name"] = "set9_nosharp" # "set9_fullset"
-    tm.settings["env"]["finger_hook_angle_degrees"] = tm.param_2
+    tm.settings["env"]["finger_hook_angle_degrees"] = tm.param_3
 
     # create the environment
     env = tm.make_env()
     
     # apply the agent settings
     layers = [128, 128, 128]
-    tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_3
-    tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_3
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_2
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_2
     network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
                                 continous_actions=True)
 
