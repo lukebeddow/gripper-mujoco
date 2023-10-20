@@ -338,7 +338,7 @@ class TrainingManager():
     self.save_training_summary()
 
   def load(self, job_num=None, timestamp=None, run_name=None, group_name=None, 
-           best_id=False, id=None, path_to_run_folder=None):
+           best_id=False, id=None, path_to_run_folder=None, use_abs_path=False):
     """
     Load the training currently specified. Either pass:
       1) nothing - run_name and group_name are already set in the class
@@ -351,13 +351,24 @@ class TrainingManager():
 
     if job_num is not None and timestamp is not None:
       self.set_group_run_name(job_num=job_num, timestamp=timestamp)
-    else:
-      if run_name is not None and group_name is not None:
-        self.run_name = run_name
-        self.group_name = group_name
+    elif run_name is not None and group_name is not None:
+      if path_to_run_folder is not None:
+        if self.log_level > 0:
+          print("TrainingManager.load() warning: path_to_run_folder being ignored as run_name and group_name are set")
+      path_to_run_folder = None
+      self.run_name = run_name
+      self.group_name = group_name
+    elif run_name and path_to_run_folder is not None:
+      self.run_name = run_name
+      if path_to_run_folder[-1] == "/": path_to_run_folder = path_to_run_folder[:-1]
+      self.group_name = path_to_run_folder.split("/")[-1]
   
     # make the trainer (overwrite any existing trainer)
     self.trainer = self.make_trainer(None, self.make_env(load=False))
+
+    # special case, we want to remake the modelsaver in load()
+    if run_name and path_to_run_folder is not None:
+      delattr(self.trainer, "modelsaver")
 
     # now load the specified model
     if best_id:

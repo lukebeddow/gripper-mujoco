@@ -395,7 +395,7 @@ class ModelSaver:
       if forcecreate:
         self.new_folder(name=foldername)
       else:
-        raise RuntimeError("folder name does not exist")
+        raise RuntimeError(f"Modelsaver.enter_folder() error: folder name does not exist = {self.path + foldername}")
 
     if self.in_folder: self.exit_folder()
     if foldername[-1] != '/': foldername += '/'

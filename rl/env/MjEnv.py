@@ -472,18 +472,27 @@ class MjEnv():
 
     return cpp_settings
 
-  def _take_action(self, action):
+  def _set_action(self, action):
     """
-    Take an action in the simulation
+    Set the action in the simulation
     """
 
     # for continous actions set them all, mag should be [-1, +1] and is clipped internally
     if self.mj.set.continous_actions:
       for i in range(len(action)):
-        self.mj.set_continous_action(i, action[i])
+        new_state = self.mj.set_continous_action(i, action[i])
 
     # for discrete actions, input the action to perform
-    else: self.mj.set_discrete_action(action)
+    else: new_state = self.mj.set_discrete_action(action)
+
+    return new_state
+
+  def _take_action(self, action):
+    """
+    Take an action in the simulation
+    """
+
+    self._set_action(action)
 
     # step the simulation for the given time (mj.set.time_for_action)
     self.mj.action_step()
