@@ -879,7 +879,7 @@ class TrainingManager():
     Set terminations based on dangerous sensor readings
     """
 
-    # terminations                              reward   done   trigger  min               max       overshoot
+    # terminations                        reward   done   trigger  min               max       overshoot
     env.mj.set.dangerous_bend_sensor.set  (value,  done,  trigger, self.RT.dBend,  self.RT.dBend,  -1)
     env.mj.set.dangerous_palm_sensor.set  (value,  done,  trigger, self.RT.dPalm,  self.RT.dPalm,  -1)
     env.mj.set.dangerous_wrist_sensor.set (value,  done,  trigger, self.RT.dWrist, self.RT.dWrist, -1)

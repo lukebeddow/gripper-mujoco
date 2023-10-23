@@ -1106,6 +1106,33 @@ if __name__ == "__main__":
     tm.run_training(agent, env)
     print_time_taken()
 
+  elif args.program == "tune_table_hit":
+
+    timestamp = "20-10-23_17-45"
+
+    if args.job == 1: job = 65
+    elif args.job == 2: job = 74
+    elif args.job == 3: job = 77
+    elif args.job == 4: job = 85
+    elif args.job == 5: job = 165
+    elif args.job == 6: job = 174
+    elif args.job == 7: job = 177
+    elif args.job == 8: job = 185
+    else:
+      raise RuntimeError("args.job not set to valid number")
+
+    tm.load(job_num=job, timestamp=timestamp) #, best_id=True)
+
+    # add in punishment for dangerous forces
+    # terminations                                   reward done  trigger  min   max  overshoot
+    tm.trainer.env.mj.set.dangerous_wrist_sensor.set (-1,   True, 1,      10.0, 10.0,   -1)
+    if args.job >= 5:
+      tm.trainer.env.mj.set.dangerous_bend_sensor.set  (-1, True,  1, 5.0,   5.0,   -1)
+      tm.trainer.env.mj.set.dangerous_palm_sensor.set  (-1, True,  1, 10.0,  10.0,  -1)
+
+    # now run test with set8
+    tm.continue_training(extra_episodes=40_000)
+    print_time_taken()
 
   elif args.program == "example_template":
 

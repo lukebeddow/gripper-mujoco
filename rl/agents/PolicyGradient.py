@@ -465,6 +465,9 @@ class Agent_PPO:
     self.vf_optimiser.load_state_dict(saved_dict["optimiser_state_dict"]["vf_optimiser"])
     self.pi_optimiser.load_state_dict(saved_dict["optimiser_state_dict"]["pi_optimiser"])
 
+    # prepare class variables
+    self.steps_done = self.buffer.index
+
   def get_params_dict(self):
     """
     Return a dictionary of hyperparameters
@@ -567,7 +570,7 @@ class Agent_PPO:
 
     self.steps_done += 1
 
-    epoch_ended = (self.steps_done == self.params.steps_per_epoch)
+    epoch_ended = (self.steps_done >= self.params.steps_per_epoch)
     terminal = bool(terminal.item())
 
     # if trajectory did not reach terminal state, bootstrap value target
