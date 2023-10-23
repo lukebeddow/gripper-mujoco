@@ -280,7 +280,7 @@ class TrainingManager():
     self.trainer = self.make_trainer(agent, env)
 
     # save initial training summary (requires creating the training folder before train())
-    if not self.trainer.modelsaver.in_folder:
+    if self.settings["save"] and not self.trainer.modelsaver.in_folder:
       self.trainer.modelsaver.new_folder(name=self.trainer.run_name, notimestamp=True)
     self.save_training_summary()
 
@@ -316,13 +316,14 @@ class TrainingManager():
     test_report = self.trainer.create_test_report(test_data, print_out=False)
 
     # save data to a text file
-    savetxt = f"array_training_DQN.test(...) final success rate = {self.trainer.last_test_success_rate}\n"
-    savetxt += "\n" + test_report
-    if heuristic: savename = "heuristic_test_"
-    elif demo: savename = "demo_test_"
-    else: savename = "full_test_"
-    savename += datetime.now().strftime(self.datestr)
-    self.trainer.modelsaver.save(savename, txtonly=True, txtstr=savetxt)
+    if self.settings["save"]:
+      savetxt = f"array_training_DQN.test(...) final success rate = {self.trainer.last_test_success_rate}\n"
+      savetxt += "\n" + test_report
+      if heuristic: savename = "heuristic_test_"
+      elif demo: savename = "demo_test_"
+      else: savename = "full_test_"
+      savename += datetime.now().strftime(self.datestr)
+      self.trainer.modelsaver.save(savename, txtonly=True, txtstr=savetxt)
 
   def continue_training(self, new_endpoint=None, extra_episodes=None):
     """
@@ -513,6 +514,11 @@ class TrainingManager():
     Save a text file summarising the whole training
     """
 
+    if self.settings["save"] is False: 
+      if self.log_level > 0:
+        print("TrainingMananger.save_training_summary() warning: trainer.enable_saving = False, nothing saved")
+      return
+
     if filepath is None:
       filepath = self.trainer.savedir + "/" + self.trainer.group_name + "/" + self.trainer.run_name
 
@@ -614,6 +620,11 @@ class TrainingManager():
                             savedir=self.settings["savedir"], episode_log_rate=self.settings["episode_log_rate"],
                             strict_seed=self.strict_seed, track_avg_num=self.settings["track_avg_num"])
     
+    # useful warnings
+    if self.log_level > 0:
+      if not self.settings["save"]:
+        print("TrainingMananger.make_trainer() warning: saving is disabled, not model data will be saved")
+
     # apply trainer settings
     trainer.params.update(self.settings["trainer"])
 

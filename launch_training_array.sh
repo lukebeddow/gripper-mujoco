@@ -80,6 +80,7 @@ then
         ${PY_ARGS[@]} \
         --print-results \
         --no-delay \
+        --no-saving \
         --log-level 0
 
     echo -e "\nResults table complete"
@@ -163,6 +164,7 @@ then
         ${PY_ARGS[@]} \
         --print-results \
         --no-delay \
+        --no-saving \
         --log-level 0
 
     echo -e "\nResults table complete"

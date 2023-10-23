@@ -291,10 +291,9 @@ class Trainer:
     self.print_avg_return = print_avg_return
     
     # set up saving
-    self.enable_saving = save
     self.train_param_savename = "Trainer_params"
     self.track_savename = "Tracking_info"
-    self.setup_saving(run_name, group_name, savedir)
+    self.setup_saving(run_name, group_name, savedir, enable_saving=save)
 
     # are we plotting
     if self.plot:
@@ -412,7 +411,8 @@ class Trainer:
     param_dict = asdict(self.params)
     param_dict.update({
       "rngseed" : self.rngseed,
-      "training_reproducible" : self.training_reproducible
+      "training_reproducible" : self.training_reproducible,
+      "saving_enabled" : self.enable_saving,
     })
     return param_dict
 
@@ -426,7 +426,7 @@ class Trainer:
       if self.log_level > 0: print_terminal = True
       else: print_terminal = False
 
-    hyper_str = "\nTraining Hyperparameters\n\n"
+    hyper_str = """"""
     if strheader is not None: hyper_str += strheader + "\n"
 
     hyper_str += "Trainer hyperparameters:\n\n"
@@ -766,7 +766,7 @@ class MujocoTrainer(Trainer):
           
         break
 
-  def test(self, save=True, pause_each_episode=None, heuristic=None):
+  def test(self, save=None, pause_each_episode=None, heuristic=None):
     """
     Test the target net performance, return a test report. Set heuristic to True
     in order to use a human written function for selecting actions.
@@ -822,7 +822,7 @@ class MujocoTrainer(Trainer):
     # process test data
     test_report = self.create_test_report(test_data, i_episode=self.track.episodes_done)
 
-    if save:
+    if save and self.enable_saving:
       # save the network along with the test report
       self.save(txtfilename=self.test_result_filename, txtfilestr=test_report, extra_data=(test_data))
 

@@ -355,7 +355,7 @@ def print_training_info(include_all=False):
     print(to_print)
   exit()
 
-def make_training_manager_from_args(args, silent=False):
+def make_training_manager_from_args(args, silent=False, save=True):
   """
   Create a training manager given the command line arguments
   """
@@ -368,6 +368,7 @@ def make_training_manager_from_args(args, silent=False):
   # input any command line settings
   tm.settings["plot"] = args.plot
   tm.settings["render"] = args.render
+  tm.settings["save"] = not args.no_saving
   if args.savedir is not None: tm.settings["savedir"] = args.savedir
 
   # now create an underlying trainer without an agent or environment
@@ -424,6 +425,7 @@ if __name__ == "__main__":
   parser.add_argument("--log-level",          type=int, default=1)    # set script log level
   parser.add_argument("--no-delay",           action="store_true")    # prevent a sleep(...) to seperate processes
   parser.add_argument("--print",              action="store_true")    # don't train, print job options
+  parser.add_argument("--no-saving",          action="store_true")    # do we save any data from this training
   parser.add_argument("--savedir",            default=None)           # override save/load directory
   parser.add_argument("--pause",              default=False)          # pause between episodes in a test
   parser.add_argument("--test",               action="store_true")    # run a thorough test on existing model
@@ -569,7 +571,6 @@ if __name__ == "__main__":
     tm.settings["Agent_DQN"]["eps_decay"] = tm.param_2
 
     # choose any additional settings to change
-    tm.settings["save"] = True
     tm.settings["trainer"]["num_episodes"] = 15
     tm.settings["trainer"]["test_freq"] = 5
     tm.settings["trainer"]["save_freq"] = 5
@@ -1142,5 +1143,8 @@ if __name__ == "__main__":
     # complete the training
     tm.run_training(agent, env)
     print_time_taken()
+
+  else:
+    raise RuntimeError(f"launch_training.py error: program name of {args.program} not recognised")
 
 # ----- end ----- #
