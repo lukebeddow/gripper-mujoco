@@ -57,7 +57,8 @@ namespace MjType
 
       #undef AA
 
-      count // last entry, how many possible actions
+      termination_signal, // action to indicate grasping should end
+      count               // last entry, how many possible actions
     };
   };
 
@@ -1135,7 +1136,7 @@ namespace MjType
   // data containers for all of the possible sensors
   struct SensorData {
 
-    static constexpr int buffer_size = 50;
+    static constexpr int buffer_size = 250;
 
     // storage containers for state data
     luke::SlidingWindow<luke::gfloat> x_motor_position { buffer_size };
@@ -1359,7 +1360,6 @@ public:
 
   // parameters set at compile time
   static constexpr double ftol = 1e-5;             // floating point tolerance
-  static constexpr int gauge_buffer_size = 50;     // buffer to store gauge data 
 
   /* ----- parameters that are unchanged with reset() ----- */
 
@@ -1424,8 +1424,9 @@ public:
   /* ----- variables that are reset ----- */
 
   // standard class variables
-  int n_actions;                      // number of possible actions
-  std::vector<int> action_options;    // possible action codes
+  int n_actions;                          // number of possible actions
+  std::vector<int> action_options;        // possible action codes
+  bool termiantion_signal_sent = false;   // has termination action been triggered
 
   // track the timestamps of sensor updates, this is for plotting in mysimlulate.cpp
   luke::SlidingWindow<float> step_timestamps { MjType::SensorData::buffer_size };

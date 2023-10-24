@@ -485,7 +485,7 @@ void lukesensorfigsupdate()
         throw std::runtime_error("lukesensorfigsupdate called with MjPtr=NULL");
 
     // amount of data we extract for each sensor
-    int gnum = MjPtr->gauge_buffer_size;
+    int gnum = 50;
 
     // check we can plot this amount of data
     if (gnum > mjMAXLINEPNT) {

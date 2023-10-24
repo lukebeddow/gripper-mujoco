@@ -76,6 +76,8 @@
   /* 
   set_action() settings */\
   XX(  continous_actions,       bool,     false)    /* are actions continous or discrete */\
+  XX(  use_termination_action,  bool,     true)    /* include an action for termination signalling to end grasp */\
+  XX(  termination_threshold,   float,    0.9)      /* threshold for termination action to trigger (only relevant for continous actions) */\
   XX(  sim_steps_per_action,    int,      200)      /* number of sim steps performed to complete one action */\
   XX(  fingertip_min_mm,        double,   -12.5)    /* minimum allowable fingertip depth below start position before within_limits=false */\
   /*
