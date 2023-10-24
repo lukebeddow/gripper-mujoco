@@ -774,7 +774,7 @@ class MujocoTrainer(Trainer):
           
         break
 
-  def test(self, save=None, pause_each_episode=None, heuristic=None):
+  def test(self, save=True, pause_each_episode=None, heuristic=None):
     """
     Test the target net performance, return a test report. Set heuristic to True
     in order to use a human written function for selecting actions.
