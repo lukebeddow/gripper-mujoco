@@ -766,7 +766,7 @@ class MujocoTrainer(Trainer):
           
         break
 
-  def test(self, save=None, pause_each_episode=None, heuristic=None):
+  def test(self, save=True, pause_each_episode=False, heuristic=False):
     """
     Test the target net performance, return a test report. Set heuristic to True
     in order to use a human written function for selecting actions.
@@ -834,6 +834,9 @@ class MujocoTrainer(Trainer):
       for i in range(len(self.track.test_episodes)):
         log_str += row_str.format(self.track.test_episodes[i], self.track.avg_stable_height[i])
       self.modelsaver.save(self.test_performances_filename, txtonly=True, txtstr=log_str)
+    else:
+      if self.log_level > 0:
+        print(f"Trainer.test() warning: nothing saved following test, save={save}, enable_saving={self.enable_saving}")
 
     return test_data
 
