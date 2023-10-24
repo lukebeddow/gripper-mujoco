@@ -121,6 +121,8 @@ class TrainingManager():
       "stable_palm_force_lim" : 100,
       "fingertip_min_mm" : -12.5, # below (from start position) sets within_limits=false;
       "continous_actions" : False,
+      "use_termination_action" : False,
+      "termination_threshold" : 0.9,
       "action" : {
         "gripper_prismatic_X" : { 
           "in_use" : True, 
@@ -206,6 +208,8 @@ class TrainingManager():
     "scale_rewards" : 1.0,
     "scale_penalties" : 1.0,
     "penalty_termination" : False,
+    "min_style" : None,
+    "danger_style" : "safe",
     
     # this class other settings
     "episode_log_rate" : 250,
@@ -549,6 +553,7 @@ class TrainingManager():
     env.mj.set.set_all_action_continous(False)
     env.mj.set.set_all_action_value(0.0)
     env.mj.set.set_all_action_sign(1)
+    env.mj.set.use_termination_action = False
 
     # remove any rewards and ensure none trigger
     env.mj.set.wipe_rewards()
@@ -661,6 +666,8 @@ class TrainingManager():
     env.mj.set.stable_palm_force_lim = set["cpp"]["stable_palm_force_lim"]
     env.mj.set.fingertip_min_mm = set["cpp"]["fingertip_min_mm"]
     env.mj.set.continous_actions = set["cpp"]["continous_actions"]
+    env.mj.set.use_termination_action = set["cpp"]["use_termination_action"]
+    env.mj.set.termination_threshold = set["cpp"]["termination_threshold"]
 
     # apply cpp settings - actions
     env.mj.set.gripper_prismatic_X.in_use = set["cpp"]["action"]["gripper_prismatic_X"]["in_use"]
@@ -736,10 +743,12 @@ class TrainingManager():
     env = self.wipe_cpp_settings(env)
     env = self.apply_env_settings(env, self.settings)
     env = self.create_reward_function(env, self.settings["reward_style"],
-                                      self.settings["reward_options"],
-                                      self.settings["scale_rewards"],
-                                      self.settings["scale_penalties"],
-                                      self.settings["penalty_termination"])
+                                      options=self.settings["reward_options"],
+                                      scale_rewards=self.settings["scale_rewards"],
+                                      scale_penalties=self.settings["scale_penalties"],
+                                      penalty_termination=self.settings["penalty_termination"],
+                                      min_style=self.settings["min_style"],
+                                      danger_style=self.settings["danger_style"])
     
     return env
 
@@ -748,7 +757,7 @@ class TrainingManager():
     Determine the reward thresholds
     """
 
-    printout = True if self.log_level >= 2 else False
+    printout = True #if self.log_level >= 2 else False
 
     @dataclass
     class RewardThresholds:
@@ -807,9 +816,11 @@ class TrainingManager():
     if isinstance(dangerous_style, float):
       self.RT.dBend = dangerous_style
       self.RT.dPalm = dangerous_style
-    elif isinstance(dangerous_style, list) and len(dangerous_style) == 2:
+      self.RT.dWrist = dangerous_style
+    elif isinstance(dangerous_style, list) and len(dangerous_style) == 3:
       self.RT.dBend = dangerous_style[0]
       self.RT.dPalm = dangerous_style[1]
+      self.RT.dWrist = dangerous_style[2]
     elif dangerous_style == "safe":
       if self.RT.dBend < self.RT.xBend:
         self.RT.dBend = self.RT.xBend + 1
@@ -852,7 +863,7 @@ class TrainingManager():
     Set bonus rewards with a given value
     """
 
-    # rewards                             reward   done   trigger    min             max      overshoot
+    # rewards                        reward   done   trigger    min             max      overshoot
     env.mj.set.lifted.set           (value,  False,   1)
     env.mj.set.target_height.set    (value,  False,   1)
     env.mj.set.object_stable.set    (value,  False,   1)
@@ -885,9 +896,9 @@ class TrainingManager():
     env.mj.set.dangerous_wrist_sensor.set (value,  done,  trigger, self.RT.dWrist, self.RT.dWrist, -1)
 
     return env
-  
+
   def create_reward_function(self, env, style, options=[], scale_rewards=1, scale_penalties=1,
-                             penalty_termination=False):
+                             penalty_termination=False, min_style=None, danger_style=None):
     """
     Set the reward structure for the learning, with different style options
     """
@@ -898,20 +909,40 @@ class TrainingManager():
           env.mj.set.stable_palm_force_lim > 99.0):
         exceed_style = [3.0, 10.0]
       else: exceed_style = None
-      if penalty_termination: danger_style = None
-      else: danger_style = "safe"
-      self.set_sensor_reward_thresholds(env, exceed_style=exceed_style, min_style=None,
+      self.set_sensor_reward_thresholds(env, exceed_style=exceed_style, min_style=min_style,
                                         dangerous_style=danger_style)
-      # reward each step                     reward   done   trigger
+      # reward each step               reward   done   trigger
       env.mj.set.step_num.set          (-0.01,  False,   1)
       # penalties and bonuses
       env = self.set_sensor_bonuses(env, 0.002 * scale_rewards)
       env = self.set_sensor_penalties(env, -0.002 * scale_penalties)
       # scale based on steps allowed per episode
       env.mj.set.scale_rewards(100 / env.params.max_episode_steps)
-      # end criteria                         reward   done   trigger
+      # end criteria                   reward   done   trigger
       env.mj.set.stable_height.set     (1.0,    True,    1)
       env.mj.set.oob.set               (-1.0,   True,    1)
+      if penalty_termination:
+        env = self.set_sensor_terminations(env)
+
+    elif style == "termination_action_v1":
+      # prepare reward thresholds
+      if (env.mj.set.stable_finger_force_lim > 99.0 and
+          env.mj.set.stable_palm_force_lim > 99.0):
+        exceed_style = [3.0, 10.0]
+      else: exceed_style = None
+      self.set_sensor_reward_thresholds(env, exceed_style=exceed_style, min_style=min_style,
+                                        dangerous_style=danger_style)
+      # reward each step               reward   done   trigger
+      env.mj.set.step_num.set          (-0.01,  False,   1)
+      # penalties and bonuses
+      env = self.set_sensor_bonuses(env, 0.002 * scale_rewards)
+      env = self.set_sensor_penalties(env, -0.002 * scale_penalties)
+      # scale based on steps allowed per episode
+      env.mj.set.scale_rewards(100 / env.params.max_episode_steps)
+      # end criteria                        reward   done   trigger
+      env.mj.set.stable_termination.set     (1.0,    True,   1)
+      env.mj.set.failed_termination.set     (-1.0,   True,   1)
+      env.mj.set.oob.set                    (-1.0,   True,   1)
       if penalty_termination:
         env = self.set_sensor_terminations(env)
     
