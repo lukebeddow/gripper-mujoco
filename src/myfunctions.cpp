@@ -2361,6 +2361,30 @@ bool move_base_target_rad(double roll, double pitch, double yaw)
   throw std::runtime_error("move_base_target_rad(...) is not yet implemented - do not use!");
 }
 
+bool lift_base_to_height(double z) 
+{
+  /* lift base to a given z height, which should be positive */
+
+  target_.last_robot = Target::Robot::panda;
+
+  // set the new height (swap positive to negative)
+  target_.base.z = -z;
+
+  bool within_limits = true;
+
+  // z base limits
+  if (target_.base.z > target_.base_max.z) {
+    target_.base.z = target_.base_max.z;
+    within_limits = false;
+  }
+  if (target_.base.z < target_.base_min.z) {
+    target_.base.z = target_.base_min.z;
+    within_limits = false;
+  }
+
+  return within_limits;
+}
+
 void print_target()
 {
   std::cout << "The target gripper state is:";

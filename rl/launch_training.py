@@ -176,6 +176,7 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
   headings = []
   table = []
   new_elem = []
+  program_names = [None]
 
   found_job_number = False
   found_timestamp = False
@@ -200,6 +201,8 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
     # load information from the training summary
     tm.init_training_summary() # wipe data from previous loop
     exists = tm.load_training_summary(filepath=filepath)
+    if tm.program not in program_names:
+      program_names.append(tm.program)
 
     if not exists:
       # try to create the file
@@ -219,6 +222,17 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
     if tm.train_best_ep is not None: found_train_best_ep = True
     if tm.train_best_sr is not None: found_train_best_sr = True
     if tm.full_test_sr is not None: found_full_test_sr = True
+
+  # get the program name
+  if len(program_names) == 2:
+    program_str = f"Program: {program_names[1]}\n\n"
+  elif len(program_names) == 1:
+    program_str = ""
+  else:
+    program_str = "Multiple program names found: "
+    for i in range(1, len(program_names) - 1):
+      program_str += f"{program_names[i]}; "
+    program_str += f"{program_names[-1]}\n\n"
 
   if found_job_number: headings.append("Job num")
   if found_timestamp: headings.append("Timestamp    ") # 4xspace for heading
@@ -310,7 +324,7 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
     new_elem = []
 
   # now prepare to print the table
-  print_str = """"""
+  print_str = """""" + program_str
   heading_str = ""
   for x in range(len(headings) - 1): heading_str += "{" + str(x) + "} | "
   heading_str += "{" + str(len(headings) - 1) + "}"
@@ -395,6 +409,7 @@ def make_training_manager_from_args(args, silent=False, save=True):
   tm.settings["render"] = args.render
   tm.settings["save"] = not args.no_saving
   if args.savedir is not None: tm.settings["savedir"] = args.savedir
+  tm.program = args.program
 
   # now create an underlying trainer without an agent or environment
   tm.trainer = tm.make_trainer(None, None)
@@ -1160,6 +1175,108 @@ if __name__ == "__main__":
 
     # now run test with set8
     tm.continue_training(extra_episodes=40_000)
+    print_time_taken()
+
+  elif args.program == "test_termination_action":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-5, 5e-5]
+    vary_2 = None
+    vary_3 = None
+    repeats = 5
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply environment dependent settings
+    tm.settings["cpp"]["continous_actions"] = True
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 2e-3
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.015
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 4e-3
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3
+    tm.settings["cpp"]["time_for_action"] = 0.2
+
+    # apply training specific settings
+    tm.settings["reward_style"] = "termination_action_v1"
+    tm.settings["cpp"]["use_termination_action"] = True
+    tm.settings["cpp"]["saturation_yield_factor"] = 1.5
+    tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
+    tm.settings["cpp"]["stable_palm_force_lim"] = 10.0
+    tm.settings["env"]["object_position_noise_mm"] = 10
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp" # "set9_fullset"
+    tm.settings["env"]["finger_hook_angle_degrees"] = 90
+
+    # create the environment
+    env = tm.make_env()
+    
+    # apply the agent settings
+    layers = [128, 128, 128]
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "test_dangerous_terminations":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-5, 5e-5]
+    vary_2 = None
+    vary_3 = None
+    repeats = 5
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply environment dependent settings
+    tm.settings["cpp"]["continous_actions"] = True
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 2e-3
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.015
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 4e-3
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3
+    tm.settings["cpp"]["time_for_action"] = 0.2
+
+    # apply training specific settings
+    tm.settings["penalty_termination"] = True
+    tm.settings["danger_style"] = [5.0, 15.0, 10.0] # bend, palm, wrist
+    tm.settings["cpp"]["saturation_yield_factor"] = 1.5
+    tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
+    tm.settings["cpp"]["stable_palm_force_lim"] = 10.0
+    tm.settings["env"]["object_position_noise_mm"] = 10
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp" # "set9_fullset"
+    tm.settings["env"]["finger_hook_angle_degrees"] = 90
+
+    # create the environment
+    env = tm.make_env()
+    
+    # apply the agent settings
+    layers = [128, 128, 128]
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
     print_time_taken()
 
   elif args.program == "example_template":

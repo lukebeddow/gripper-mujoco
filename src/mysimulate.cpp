@@ -717,7 +717,7 @@ void lukesensorfigsinit(void)
 void lukesensorfigsupdate(void)
 {
     // amount of data we extract for each sensor
-    int gnum = myMjClass.gauge_buffer_size;
+    int gnum = 50;
 
     // check we can plot this amount of data
     if (gnum > mjMAXLINEPNT) {
@@ -2393,7 +2393,7 @@ void uiEvent(mjuiState* state)
             }
 
             // if we are set to full environment steps
-            if (settings.env_steps and it->itemid < 8) {
+            if (settings.env_steps and it->itemid < 15) {
                 std::vector<luke::gfloat> obs = 
                     myMjClass.get_observation();
                 double reward = myMjClass.reward();

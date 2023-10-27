@@ -34,7 +34,7 @@
   /*
   automatic settings value detection, and parameters for guiding this */\
   XX(  auto_set_timestep,       bool,     true)     /* find the highest stable timestep, overrides mujoco_timestep */\
-  XX(  auto_calibrate_gauges,   bool,     false)     /* normalise gauges between +-5N, overrides bending_gauge.normalise */\
+  XX(  auto_calibrate_gauges,   bool,     true)     /* normalise gauges between +-5N, overrides bending_gauge.normalise */\
   XX(  auto_sim_steps,          bool,     true)     /* automatically find the sim steps per action, overrides sim_steps_per_action */\
   XX(  auto_exceed_lateral_lim, bool,     false)     /* calculate safe finger bending automaticalled based on yield load */\
   XX(  time_for_action,         double,    0.2)      /* time in seconds to give for each action to complete, only used if auto_sim_steps=true */\
@@ -76,6 +76,8 @@
   /* 
   set_action() settings */\
   XX(  continous_actions,       bool,     false)    /* are actions continous or discrete */\
+  XX(  use_termination_action,  bool,     true)    /* include an action for termination signalling to end grasp */\
+  XX(  termination_threshold,   float,    0.9)      /* threshold for termination action to trigger (only relevant for continous actions) */\
   XX(  sim_steps_per_action,    int,      200)      /* number of sim steps performed to complete one action */\
   XX(  fingertip_min_mm,        double,   -12.5)    /* minimum allowable fingertip depth below start position before within_limits=false */\
   /*
@@ -135,7 +137,9 @@
   BR(  object_contact,          0.005,    false,    1)      /* fingers or palm touches object */\
   BR(  object_stable,           1.0,      false,    1)      /* fingers and palm apply min force */\
   BR(  stable_height,           0.0,      1,        1)      /* object stable and at height target */\
-  
+  BR(  stable_termination,      1.0,      1,        1)      /* object stable and termination signal sent */\
+  BR(  failed_termination,      -1.0,     1,        1)      /* termination signal sent but object not stable */\
+  BR(  successful_grasp,        0.0,      1,        1)      /* metric to indicate a grasp is stable, shouldn't have associated reward */
   
   
 #define LUKE_MJSETTINGS_LINEAR_REWARD \

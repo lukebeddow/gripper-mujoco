@@ -132,6 +132,12 @@ void MjClass::configure_settings()
 
   #undef AA
 
+  // are we using a termination signal action
+  if (s_.use_termination_action) {
+    action_options[i] = MjType::Action::termination_signal;
+    i += 1;
+  }
+
   n_actions = i;
 
   // what sample function will we use for sampling regular sensor data
@@ -327,7 +333,7 @@ std::string MjClass::file_from_from_command_line(int argc, char **argv)
   if (segments.empty()) { segments = "8"; };
   if (width.empty()) { width = "28"; };
   if (gripper.empty()) { gripper = "gripper_N" + segments + "_" + width; };
-  if (object_set.empty()) { object_set = "set8_fullset_1500"; };
+  if (object_set.empty()) { object_set = "set9_fullset"; };
   if (task.empty()) { task = "0"; };
   if (path.empty()) { path = LUKE_MJCF_PATH; };
 
@@ -442,6 +448,9 @@ void MjClass::reset()
 
   // reset variables for use with real gripper
   samples_since_last_obs = 0;
+
+  // wipe any signalling
+  termination_signal_sent = false;
 
   // empty any curve validation data
   curve_validation_data_.reset();
@@ -1087,8 +1096,16 @@ void MjClass::update_env()
       env_.cnt.stable_height.value = true;
       env_.obj[i].stable_height = true;
     }
-  }
 
+    // if a termination signal has been sent and criteria is met
+    if (env_.cnt.stable_height.value and termination_signal_sent) {
+      env_.cnt.stable_termination.value = true;
+      env_.obj[i].stable_termination = true;
+    }
+    else if (termination_signal_sent) {
+      env_.cnt.failed_termination.value = true;
+    }
+  }
 
   // check if the object has been dropped (env_.cnt.lifted must already be set)
   env_.cnt.dropped.value = 
@@ -1129,6 +1146,20 @@ void MjClass::update_env()
   env_.cnt.dangerous_palm_sensor.value = last_palm_N;
   env_.cnt.exceed_wrist_sensor.value = last_wrist_N;
   env_.cnt.dangerous_wrist_sensor.value = last_wrist_N;
+
+  /* ----- determine the reported success rate (as a proxy, should not have associated reward) ----- */
+
+  // determine successful grasp, for metric only, no associated reward
+  if (s_.use_termination_action) {
+    if (env_.cnt.stable_termination.value) {
+      env_.cnt.successful_grasp.value = true;
+    }
+  }
+  else {
+    if (env_.cnt.stable_height.value) {
+      env_.cnt.successful_grasp.value = true;
+    }
+  }
 
   /* ----- resolve linear events and update counts of all events (no editing needed) ----- */
 
@@ -1296,6 +1327,24 @@ std::vector<float> MjClass::set_action(int action, float continous_fraction)
 
     #undef AA
 
+    case MjType::Action::termination_signal: {
+      float value = 0.0;
+      if (s_.continous_actions) value = continous_fraction;
+      else value = 1.0;
+      bool triggered = (value > s_.termination_threshold);
+      if (s_.debug) {
+        std::cout << "termination_signal, value = " << value <<", threshold = "
+          << s_.termination_threshold << ", hence triggered is " <<
+          ((triggered) ? "true" : "false");
+      }
+      if (triggered) {
+        termination_signal_sent = true;
+      }
+      luke::lift_base_to_height(base_max_[2]); // this is max z height
+      wl = true;
+      break;
+    }
+
     default:
       std::cout << "Action value received is " << action_code << '\n';
       std::cout << "Number of actions is " << n_actions << '\n';
@@ -1361,6 +1410,12 @@ bool MjClass::is_done()
   //     << "oob" << " limit of " << s_.oob.done << " exceeded)\n";
   //   return true;
   // }
+
+  // if a termination signal has been sent
+  if (termination_signal_sent) {
+    if (s_.debug) std::cout << "is_done = true, termination signal sent\n";
+    return true;
+  }
 
   // if the cumulative reward drops below a given threshold
   if (env_.cumulative_reward < s_.quit_on_reward_below) {
