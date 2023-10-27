@@ -1147,6 +1147,9 @@ void MjClass::update_env()
   env_.cnt.exceed_wrist_sensor.value = last_wrist_N;
   env_.cnt.dangerous_wrist_sensor.value = last_wrist_N;
 
+  // scale the action penalty based on the number of actions (not counting termination action)
+  env_.cnt.action_penalty.value /= float(n_actions - s_.use_termination_action);
+
   /* ----- determine the reported success rate (as a proxy, should not have associated reward) ----- */
 
   // determine successful grasp, for metric only, no associated reward
@@ -1320,6 +1323,7 @@ std::vector<float> MjClass::set_action(int action, float continous_fraction)
           std::cout << ", fraction = " << continous_fraction;   \
         }                                                       \
         wl = s_.NAME.call_action_function(s_.NAME.value * continous_fraction); \
+        env_.cnt.action_penalty.value += (continous_fraction * continous_fraction);\
         break;                                                  \
 
       // run the macro to create the code
@@ -1364,7 +1368,8 @@ std::vector<float> MjClass::set_action(int action, float continous_fraction)
   //     << ", minimum allowed is " << s_.fingertip_min_mm << "\n";
 
   // update whether this action was within limits or not
-  env_.cnt.exceed_limits.value = not wl;
+  // use += so True is latching when using continous actions
+  env_.cnt.exceed_limits.value += not wl;
 
   // get the target state and return it as a vector
   return luke::get_target_state_vector();

@@ -34,7 +34,7 @@
   /*
   automatic settings value detection, and parameters for guiding this */\
   XX(  auto_set_timestep,       bool,     true)     /* find the highest stable timestep, overrides mujoco_timestep */\
-  XX(  auto_calibrate_gauges,   bool,     true)     /* normalise gauges between +-5N, overrides bending_gauge.normalise */\
+  XX(  auto_calibrate_gauges,   bool,     false)     /* normalise gauges between +-5N, overrides bending_gauge.normalise */\
   XX(  auto_sim_steps,          bool,     true)     /* automatically find the sim steps per action, overrides sim_steps_per_action */\
   XX(  auto_exceed_lateral_lim, bool,     false)     /* calculate safe finger bending automaticalled based on yield load */\
   XX(  time_for_action,         double,    0.2)      /* time in seconds to give for each action to complete, only used if auto_sim_steps=true */\
@@ -161,6 +161,7 @@
   LR(  dangerous_bend_sensor,   0.0,      true,     1,    10.0, 11.0, -1)     /* dangerous bending force, direct sensor limit */\
   LR(  dangerous_wrist_sensor,  0.0,      true,     1,    12.0, 13.0, -1)     /* dangerous wrist force, direct sensor limit */\
   LR(  dangerous_palm_sensor,   0.0,      true,     1,    20.0, 21.0, -1)     /* dangerous palm force, direct sensor limit */\
+  LR(  action_penalty,          -0.1,     false,    1,    0.1,  1.5,  -1)     /* penalty applied for large actions in continous domains */\ 
   /* testing extras for goals */\
   LR(  finger1_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 1 force */\
   LR(  finger2_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 2 force */\
