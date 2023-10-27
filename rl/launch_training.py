@@ -156,7 +156,8 @@ def update_training_summaries(timestamp, jobstr=None, job_numbers=None, run_name
     tm.set_group_run_name(job_num=j, timestamp=timestamp, prefix=run_name_prefix)
     tm.save_training_summary()
 
-def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefix=None):
+def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefix=None,
+                        min_ep=None, max_ep=None):
   """
   Print a table of results for a training
   """
@@ -185,6 +186,10 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
   found_train_best_ep = False
   found_train_best_sr = False
   found_full_test_sr = False
+
+  if min_ep or max_ep is not None:
+    do_min_max_ep = True
+  else: do_min_max_ep = False
 
   for j in job_numbers:
 
@@ -221,8 +226,17 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
   if found_param_2: headings.append(tm.param_2_name)
   if found_param_3: headings.append(tm.param_3_name)
   if found_trained_to: headings.append("Trained to")
-  if found_train_best_ep: headings.append("Train best SR")
-  if found_train_best_sr: headings.append("Train best episode")
+  if do_min_max_ep:
+    if min_ep and max_ep is not None:
+      headings.append(f"Best SR range {min_ep} - {max_ep}")
+    elif min_ep is not None:
+      headings.append(f"Best SR from ep {min_ep}")
+    elif max_ep is not None:
+      headings.append(f"Best SR up to ep {max_ep}")
+    else: raise RuntimeError("code error in print_results_table()")
+    headings.append("At episode")
+  if found_train_best_ep: headings.append("Train best episode")
+  if found_train_best_sr: headings.append("Train best SR")
   if found_full_test_sr: headings.append("Final test SR")
 
   for j in job_numbers:
@@ -268,6 +282,17 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
       if tm.trained_to is not None:
         new_elem.append(tm.trained_to)
       else: new_elem.append("nodata")
+    if do_min_max_ep:
+      data = tm.trainer.read_test_performance()
+      sr, ep = tm.trainer.calc_best_performance(from_episode=min_ep, to_episode=max_ep,
+                                                success_rate_vector=data[1,:],
+                                                episodes_vector=data[0,:])
+      if sr == 0 and ep == 0:
+        new_elem.append("nodata")
+        new_elem.append("nodata")
+      else:
+        new_elem.append(sr)
+        new_elem.append(int(ep))
     if found_train_best_ep:
       if tm.train_best_ep is not None:
         new_elem.append(tm.train_best_ep)
@@ -421,6 +446,8 @@ if __name__ == "__main__":
   parser.add_argument("--name-prefix",        default=None)           # run name prefix eg run_12-32 for training or loading
   parser.add_argument("--job-string",         default=None)           # job string for print results eg "1:10" or "1 2 3 6"
   parser.add_argument("--print-results",      action="store_true")    # prepare and print all 
+  parser.add_argument("--print-from-ep",      default=None, type=int) # print best SR from a specific episode
+  parser.add_argument("--print-up-to-ep",     default=None, type=int) # print best SR up until a specific episode
   parser.add_argument("--rngseed",            default=None)           # turns on reproducible training with given seed (slower)
   parser.add_argument("--log-level",          type=int, default=1)    # set script log level
   parser.add_argument("--no-delay",           action="store_true")    # prevent a sleep(...) to seperate processes
@@ -472,7 +499,8 @@ if __name__ == "__main__":
 
     if args.log_level > 0: print("\nPreparing to print a results table in launch_training.py")
     update_training_summaries(args.timestamp, jobstr=args.job_string, run_name_prefix=args.name_prefix)
-    print_results_table(args.timestamp, jobstr=args.job_string, run_name_prefix=args.name_prefix)
+    print_results_table(args.timestamp, jobstr=args.job_string, run_name_prefix=args.name_prefix,
+                        min_ep=args.print_from_ep, max_ep=args.print_up_to_ep)
     exit()
 
   if args.job is None:
@@ -1124,8 +1152,8 @@ if __name__ == "__main__":
     tm.load(job_num=job, timestamp=timestamp) #, best_id=True)
 
     # add in punishment for dangerous forces
-    # terminations                                   reward done  trigger  min   max  overshoot
-    tm.trainer.env.mj.set.dangerous_wrist_sensor.set (-1,   True, 1,      10.0, 10.0,   -1)
+    # terminations                                     reward done  trigger  min   max  overshoot
+    tm.trainer.env.mj.set.dangerous_wrist_sensor.set   (-1,   True, 1,      10.0, 10.0,   -1)
     if args.job >= 5:
       tm.trainer.env.mj.set.dangerous_bend_sensor.set  (-1, True,  1, 5.0,   5.0,   -1)
       tm.trainer.env.mj.set.dangerous_palm_sensor.set  (-1, True,  1, 10.0,  10.0,  -1)

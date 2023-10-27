@@ -1159,14 +1159,20 @@ class MujocoTrainer(Trainer):
 
     return output_str
 
-  def calc_best_performance(self, from_episode=None, return_id=None):
+  def calc_best_performance(self, from_episode=None, to_episode=None, return_id=None,
+                            success_rate_vector=None, episodes_vector=None):
     """
     Find the best success rate by the model, and what episode number it occured
     """
 
     if from_episode is None: from_episode = 0
+    if to_episode is None: to_episode = 100_000_000
 
-    success_rate_vector = self.track.avg_stable_height
+    if success_rate_vector is None:
+      success_rate_vector = self.track.avg_stable_height
+
+    if episodes_vector is None:
+      episodes_vector = self.track.test_episodes
 
     best_sr = 0
     best_ep = 0
@@ -1176,10 +1182,13 @@ class MujocoTrainer(Trainer):
     for i, sr in enumerate(success_rate_vector):
 
       # get info
-      this_ep = self.track.test_episodes[i]
+      this_ep = episodes_vector[i]
 
       # check if this episode is past our minimum
       if this_ep < from_episode: continue
+
+      # check if this episode is past our maximum
+      if this_ep > to_episode: break
 
       # see if this is best
       if sr > best_sr:
