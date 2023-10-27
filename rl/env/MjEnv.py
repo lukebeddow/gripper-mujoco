@@ -474,7 +474,8 @@ class MjEnv():
 
   def _set_action(self, action):
     """
-    Set the action in the simulation
+    Set the action, either for simulation or real world. If using simulation
+    however, it is better to use the MjEnv._take_action() function
     """
 
     # for continous actions set them all, mag should be [-1, +1] and is clipped internally

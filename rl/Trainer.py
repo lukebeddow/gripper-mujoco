@@ -889,9 +889,9 @@ class MujocoTrainer(Trainer):
     )
 
     # insert string formatting information for each column style
-    header_str = col_str.format    ("{}",     "{:<3}", "{:<6}",    "{:<4}",    "{:<3}")
-    normal_row_str = col_str.format("{:<51}", "{:<3}", "{:<6.2f}", "{:<4}",    "{:<3.0f}")
-    avg_row_str = col_str.format   ("{:<51}", "{:<3}", "{:<6.2f}", "{:<4.2f}", "{:<3.0f}")
+    header_str = col_str.format    ("{}",     "{:<4}", "{:<6}",    "{:<4}",    "{:<3}")
+    normal_row_str = col_str.format("{:<51}", "{:<4}", "{:<6.2f}", "{:<4}",    "{:<3.0f}")
+    avg_row_str = col_str.format   ("{:<51}", "{:<4}", "{:<6.2f}", "{:<4.2f}", "{:<3.0f}")
 
     # insert the names into the top of each column - notice the grouping of styles
     table_header = header_str.format(

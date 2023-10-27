@@ -175,6 +175,7 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
   headings = []
   table = []
   new_elem = []
+  program_names = [None]
 
   found_job_number = False
   found_timestamp = False
@@ -195,6 +196,8 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
     # load information from the training summary
     tm.init_training_summary() # wipe data from previous loop
     exists = tm.load_training_summary(filepath=filepath)
+    if tm.program not in program_names:
+      program_names.append(tm.program)
 
     if not exists:
       # try to create the file
@@ -214,6 +217,17 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
     if tm.train_best_ep is not None: found_train_best_ep = True
     if tm.train_best_sr is not None: found_train_best_sr = True
     if tm.full_test_sr is not None: found_full_test_sr = True
+
+  # get the program name
+  if len(program_names) == 2:
+    program_str = f"Program: {program_names[1]}\n\n"
+  elif len(program_names) == 1:
+    program_str = ""
+  else:
+    program_str = "Multiple program names found: "
+    for i in range(1, len(program_names) - 1):
+      program_str += f"{program_names[i]}; "
+    program_str += f"{program_names[-1]}\n\n"
 
   if found_job_number: headings.append("Job num")
   if found_timestamp: headings.append("Timestamp    ") # 4xspace for heading
@@ -285,7 +299,7 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
     new_elem = []
 
   # now prepare to print the table
-  print_str = """"""
+  print_str = """""" + program_str
   heading_str = ""
   for x in range(len(headings) - 1): heading_str += "{" + str(x) + "} | "
   heading_str += "{" + str(len(headings) - 1) + "}"
@@ -370,6 +384,7 @@ def make_training_manager_from_args(args, silent=False, save=True):
   tm.settings["render"] = args.render
   tm.settings["save"] = not args.no_saving
   if args.savedir is not None: tm.settings["savedir"] = args.savedir
+  tm.program = args.program
 
   # now create an underlying trainer without an agent or environment
   tm.trainer = tm.make_trainer(None, None)

@@ -390,6 +390,7 @@ class TrainingManager():
 
     self.job_number = None
     self.timestamp = None
+    self.program = None
     self.param_1 = None
     self.param_2 = None
     self.param_3 = None
@@ -420,6 +421,7 @@ class TrainingManager():
 
     job_string = f"Job number is {self.job_number}\n" if self.job_number is not None else ""
     timestamp_string = f"\tTimestamp is {self.timestamp}\n" if self.timestamp is not None else ""
+    program_string = f"\tProgram is {self.program}\n" if self.program is not None else ""
     param_1_string = f"\tParam 1: {self.param_1_name} is {self.param_1}\n" if self.param_1 is not None else ""
     param_2_string = f"\tParam 2: {self.param_2_name} is {self.param_2}\n" if self.param_2 is not None else ""
     param_3_string = f"\tParam 3: {self.param_3_name} is {self.param_3}\n" if self.param_3 is not None else ""
@@ -445,7 +447,7 @@ class TrainingManager():
     else: fulltest_str = ""
 
     # assemble our output
-    output = job_string + timestamp_string + param_1_string + param_2_string + param_3_string
+    output = job_string + timestamp_string + program_string + param_1_string + param_2_string + param_3_string
     output += trained_to_str + best_traintime_str + fulltest_str
     output += self.summary_section_seperator
     output += "\n" + test_table
@@ -496,6 +498,10 @@ class TrainingManager():
         elif line.startswith("\tTimestamp is"):
           splits = line.split(" is ")
           self.timestamp = splits[-1].strip("\n")
+
+        elif line.startswith("\tProgram is"):
+          splits = line.split(" is ")
+          self.program = splits[-1].strip("\n")
 
         elif line.startswith("\tParam"):
           splits = line.split(" is ")
