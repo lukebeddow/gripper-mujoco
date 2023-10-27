@@ -774,7 +774,7 @@ class MujocoTrainer(Trainer):
           
         break
 
-  def test(self, save=True, pause_each_episode=None, heuristic=None):
+  def test(self, save=True, pause_each_episode=False, heuristic=False):
     """
     Test the target net performance, return a test report. Set heuristic to True
     in order to use a human written function for selecting actions.
@@ -842,6 +842,9 @@ class MujocoTrainer(Trainer):
       for i in range(len(self.track.test_episodes)):
         log_str += row_str.format(self.track.test_episodes[i], self.track.avg_stable_height[i])
       self.modelsaver.save(self.test_performances_filename, txtonly=True, txtstr=log_str)
+    else:
+      if self.log_level > 0:
+        print(f"Trainer.test() warning: nothing saved following test, save={save}, enable_saving={self.enable_saving}")
 
     return test_data
 
@@ -1172,14 +1175,20 @@ class MujocoTrainer(Trainer):
 
     return output_str
 
-  def calc_best_performance(self, from_episode=None, return_id=None):
+  def calc_best_performance(self, from_episode=None, to_episode=None, return_id=None,
+                            success_rate_vector=None, episodes_vector=None):
     """
     Find the best success rate by the model, and what episode number it occured
     """
 
     if from_episode is None: from_episode = 0
+    if to_episode is None: to_episode = 100_000_000
 
-    success_rate_vector = self.track.avg_stable_height
+    if success_rate_vector is None:
+      success_rate_vector = self.track.avg_stable_height
+
+    if episodes_vector is None:
+      episodes_vector = self.track.test_episodes
 
     best_sr = 0
     best_ep = 0
@@ -1189,10 +1198,13 @@ class MujocoTrainer(Trainer):
     for i, sr in enumerate(success_rate_vector):
 
       # get info
-      this_ep = self.track.test_episodes[i]
+      this_ep = episodes_vector[i]
 
       # check if this episode is past our minimum
       if this_ep < from_episode: continue
+
+      # check if this episode is past our maximum
+      if this_ep > to_episode: break
 
       # see if this is best
       if sr > best_sr:

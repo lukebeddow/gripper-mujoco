@@ -41,7 +41,7 @@ timestamp="$(date +%d-%m-%y_%H-%M)"
 FAKETTY=faketty
 LOGGING='Y'
 PRINT_RESULTS='N'
-PRINT_RESULTS_AFTER='Y'
+PRINT_RESULTS_AFTER='N'
 
 PY_ARGS=() # arguments passed directly into python without parsing
 
@@ -55,10 +55,11 @@ do
     -s | --stagger ) (( i++ )); STAGGER=${!i}; echo stagger is $STAGGER ;;
     # without arguments
     -f | --no-faketty ) FAKETTY=; echo faketty disabled ;;
-    -d | --debug ) LOGGING='N'; PRINT_RESULTS_AFTER='N' ; DEBUG=" --no-delay"; echo Debug mode on, terminal logging ;;
-    --print ) LOGGING='N'; PRINT_RESULTS_AFTER='N' ; PRINT="--print"; echo Printing mode on, no training ;;
+    -d | --debug ) LOGGING='N'; DEBUG=" --no-delay"; echo Debug mode on, terminal logging ;;
+    --print ) LOGGING='N'; PRINT="--print"; echo Printing mode on, no training ;;
     --print-results ) PRINT_RESULTS='Y' ;;
     # everything else passed directly to python
+    --program ) PRINT_RESULTS_AFTER='Y' ; PY_ARGS+=( ${!i} ) ;;
     * ) PY_ARGS+=( ${!i} ) ;;
   esac
 done
