@@ -822,11 +822,11 @@ void MjClass::monitor_sensors()
     // read
     luke::gfloat z = data->userdata[2];
 
-    // save SI
-    sim_sensors_SI_.wrist_Z_sensor.add(z);
-
     // zero the reading (this step is unique to wrist Z sensor)
     z -= s_.wrist_sensor_Z.raw_value_offset;
+
+    // save SI (with reading zero applied!)
+    sim_sensors_SI_.wrist_Z_sensor.add(z);
 
     // normalise
     z = s_.wrist_sensor_Z.apply_normalisation(z);
@@ -3975,17 +3975,17 @@ float MjClass::yield_load(float thickness, float width)
 
 MjType::EventTrack MjClass::add_events(MjType::EventTrack& e1, MjType::EventTrack& e2)
 {
-  /* add the absolute count and last value of two events, all else is ignored */
+  /* add the absolute count and activity of two events, all else is ignored */
 
   MjType::EventTrack out;
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             out.NAME.abs = e1.NAME.abs + e2.NAME.abs;                          \
-            out.NAME.last_value = e1.NAME.last_value + e2.NAME.last_value;
+            out.NAME.active_sum = e1.NAME.active_sum + e2.NAME.active_sum;
 
   #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)                 \
             out.NAME.abs = e1.NAME.abs + e2.NAME.abs;                          \
-            out.NAME.last_value = e1.NAME.last_value + e2.NAME.last_value;  
+            out.NAME.active_sum = e1.NAME.active_sum + e2.NAME.active_sum;  
 
     // run the macro to create the code
     LUKE_MJSETTINGS_BINARY_REWARD
@@ -4701,13 +4701,14 @@ void update_events(MjType::EventTrack& events, MjType::Settings& settings)
 {
   /* update the count of each event and reset recent event information */
 
-  bool active = false; // is a linear reward active
+  bool active = false; // is an event active
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                    \
             events.NAME.row = events.NAME.row *                              \
                                   events.NAME.value + events.NAME.value;     \
             events.NAME.abs += events.NAME.value;                            \
             events.NAME.last_value = events.NAME.value;                      \
+            events.NAME.active_sum = bool(events.NAME.row);                  \
             events.NAME.value = false; // reset for next step
 
   #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)               \
@@ -4719,6 +4720,7 @@ void update_events(MjType::EventTrack& events, MjType::Settings& settings)
             events.NAME.row = events.NAME.row * active + active;             \
             events.NAME.abs += active;                                       \
             events.NAME.last_value = events.NAME.value;                      \
+            events.NAME.active_sum = active;                                 \
             events.NAME.value = 0.0; // reset for next step
 
     // run the macro to create the code

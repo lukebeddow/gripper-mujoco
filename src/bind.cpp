@@ -345,6 +345,7 @@ PYBIND11_MODULE(bind, m) {
 
     .def_readonly("value", &MjType::EventTrack::BinaryEvent::value)
     .def_readonly("last_value", &MjType::EventTrack::BinaryEvent::last_value)
+    .def_readonly("active_sum", &MjType::EventTrack::BinaryEvent::active_sum)
     .def_readonly("row", &MjType::EventTrack::BinaryEvent::row)
     .def_readonly("abs", &MjType::EventTrack::BinaryEvent::abs)
     .def_readonly("percent", &MjType::EventTrack::BinaryEvent::percent)
@@ -456,6 +457,7 @@ PYBIND11_MODULE(bind, m) {
 
     .def_readonly("value", &MjType::EventTrack::LinearEvent::value)
     .def_readonly("last_value", &MjType::EventTrack::LinearEvent::last_value)
+    .def_readonly("active_sum", &MjType::EventTrack::LinearEvent::active_sum)
     .def_readonly("row", &MjType::EventTrack::LinearEvent::row)
     .def_readonly("abs", &MjType::EventTrack::LinearEvent::abs)
     .def_readonly("percent", &MjType::EventTrack::LinearEvent::percent)
@@ -484,6 +486,8 @@ PYBIND11_MODULE(bind, m) {
         out.row = t[2].cast<int>();
         out.abs = t[3].cast<int>();
         out.percent = t[4].cast<float>();
+
+        // out.active_sum = bool(out.row);
 
         if (debug_bind)
           std::cout << "unpickling MjType::EventTrack::LinearEvent finished\n";

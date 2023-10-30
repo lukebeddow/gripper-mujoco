@@ -520,22 +520,24 @@ namespace MjType
 
     struct BinaryEvent {
       bool value { false };
-      int last_value { false }; // can represent sum of booleans (eg 2 = true twice)
+      int last_value { false };
+      int active_sum { 0 };     // was this activated last step, can be summed
       int row { 0 };
       int abs { 0 };
       float percent { 0.0 };
 
-      void reset() { value = 0; last_value = 0; row = 0; abs = 0; percent = 0; }
+      void reset() { value = 0; last_value = 0; row = 0; abs = 0; percent = 0; active_sum = 0; }
     };
 
     struct LinearEvent {
       float value { 0.0 };
       float last_value { 0.0 };
+      int active_sum { 0 };    // was this activated last step, can be summed
       int row { 0 };
       int abs { 0 };
       float percent { 0.0 };
 
-      void reset() { value = 0; last_value = 0; row = 0; abs = 0; percent = 0; }
+      void reset() { value = 0; last_value = 0; row = 0; abs = 0; percent = 0; active_sum = 0;}
     };
 
     // create an event for each reward, binary->binary, linear->linear

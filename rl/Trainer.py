@@ -692,6 +692,9 @@ class MujocoTrainer(Trainer):
     self.track.avg_target_height = np.array([], dtype=numpy_float)
     self.track.avg_stable_height = np.array([], dtype=numpy_float)
     self.track.avg_successful_grasp = np.array([], dtype=numpy_float)
+    self.track.avg_dangerous_bend = np.array([], dtype=numpy_float)
+    self.track.avg_dangerous_palm = np.array([], dtype=numpy_float)
+    self.track.avg_dangerous_wrist = np.array([], dtype=numpy_float)
     self.track.object_categories = []
     self.track.category_num = []
     self.track.category_stable = []
@@ -699,6 +702,9 @@ class MujocoTrainer(Trainer):
     self.track.category_target_height = []
     self.track.category_stable_height = []
     self.track.category_successful_grasp = []
+    self.track.category_dangerous_bend = []
+    self.track.category_dangerous_palm = []
+    self.track.category_dangerous_wrist = []
 
   def save_hyperparameters(self, filename="hyperparameters", strheader=None, 
                            print_terminal=None):
@@ -885,23 +891,25 @@ class MujocoTrainer(Trainer):
     col_str = (
         "{0} | " * 1 # name
       + "{1} | " * 1 # number of instances
-      + "{2} | " * 4 # float fields - reward, steps, palm f, fing.f
-      + "{3} | " * 6 # end conditions - Lft, Stb, oob, t.h, s.h, s.g
-      + "{4} | " * 7 # percentages - pLft, pCon, pPlmFrc, pXLim, pXBend, pXPalm, pXWrist #pXAxial, pXlaT, pXPalm
+      + "{2} | " * 1 # success rate
+      + "{3} | " * 4 # float fields - reward, steps, palm f, fing.f
+      + "{4} | " * 8 # end conditions - Lft, Stb, oob, t.h, s.h, dB, dP, dW
+      + "{5} | " * 7 # percentages - pLft, pCon, pPlmFrc, pXLim, pXBend, pXPalm, pXWrist #pXAxial, pXlaT, pXPalm
       + "\n"
     )
 
     # insert string formatting information for each column style
-    header_str = col_str.format    ("{}",     "{:<4}", "{:<6}",    "{:<4}",    "{:<3}")
-    normal_row_str = col_str.format("{:<51}", "{:<4}", "{:<6.2f}", "{:<4}",    "{:<3.0f}")
-    avg_row_str = col_str.format   ("{:<51}", "{:<4}", "{:<6.2f}", "{:<4.2f}", "{:<3.0f}")
+    header_str = col_str.format    ("{}",     "{:<4}", "{:<7}",    "{:<6}",    "{:<4}",    "{:<3}")
+    normal_row_str = col_str.format("{:<51}", "{:<4}", "{:<7}",    "{:<6.2f}", "{:<4}",    "{:<3.0f}")
+    avg_row_str = col_str.format   ("{:<51}", "{:<4}", "{:<7.3f}", "{:<6.2f}", "{:<4.2f}", "{:<3.0f}")
 
     # insert the names into the top of each column - notice the grouping of styles
     table_header = header_str.format(
       "{:<51}",
       "Num",
+      "Success",
       "Reward", "Steps", "Palm f", "Fing.f",
-      "lft", "stb", "oob", "t.h", "s.h", "s.g",
+      "lft", "stb", "oob", "t.h", "s.h", "dB", "dP", "dW",
       "%Lt", "%Cn", "%PF", "%XL", "%XB", "%XP", "%XW"
     )
     
@@ -963,18 +971,22 @@ class MujocoTrainer(Trainer):
         names[-1], 
         # number x1
         num_trials,
+        # success rate x1
+        obj_counter.successful_grasp.active_sum,
         # float style x4
         avg_rewards[-1], 
         obj_counter.step_num.abs / float(num_trials),
-        obj_counter.palm_force.last_value / float(num_trials),
-        obj_counter.finger_force.last_value / float(num_trials),
-        # end state style x6
-        obj_counter.lifted.last_value, 
-        obj_counter.object_stable.last_value, 
-        obj_counter.oob.last_value, 
-        obj_counter.target_height.last_value, 
-        obj_counter.stable_height.last_value,
-        obj_counter.successful_grasp.last_value,
+        obj_counter.palm_force.active_sum / float(num_trials),
+        obj_counter.finger_force.active_sum / float(num_trials),
+        # end state style x8
+        obj_counter.lifted.active_sum, 
+        obj_counter.object_stable.active_sum, 
+        obj_counter.oob.active_sum, 
+        obj_counter.target_height.active_sum, 
+        obj_counter.stable_height.active_sum,
+        obj_counter.dangerous_bend_sensor.active_sum,
+        obj_counter.dangerous_palm_sensor.active_sum,
+        obj_counter.dangerous_wrist_sensor.active_sum,
         # perentage style x7
         obj_counter.lifted.percent,
         obj_counter.object_contact.percent,
@@ -1009,18 +1021,23 @@ class MujocoTrainer(Trainer):
       "All objects",
       # number x1
       int(N),
+      # success rate x1 (averaged)
+      total_counter.successful_grasp.active_sum / N,
       # float style x4
       mean_reward, 
       total_counter.step_num.abs / N,
-      total_counter.palm_force.last_value / N,
-      total_counter.finger_force.last_value / N,
-      # end state style (averaged) x6
-      total_counter.lifted.last_value / N, 
-      total_counter.object_stable.last_value / N, 
-      total_counter.oob.last_value / N, 
-      total_counter.target_height.last_value / N, 
-      total_counter.stable_height.last_value / N,
-      total_counter.successful_grasp.last_value / N,
+      total_counter.palm_force.active_sum / N,
+      total_counter.finger_force.active_sum / N,
+      # end state style (averaged) x8
+      total_counter.lifted.active_sum / N, 
+      total_counter.object_stable.active_sum / N, 
+      total_counter.oob.active_sum / N, 
+      total_counter.target_height.active_sum / N, 
+      total_counter.stable_height.active_sum / N,
+      total_counter.successful_grasp.active_sum / N,
+      total_counter.dangerous_bend_sensor.active_sum / N,
+      total_counter.dangerous_palm_sensor.active_sum / N,
+      total_counter.dangerous_wrist_sensor.active_sum / N,
       # percentage style x7
       total_counter.lifted.percent,
       total_counter.object_contact.percent,
@@ -1047,11 +1064,27 @@ class MujocoTrainer(Trainer):
       self.track.category_stable_height = []
       self.track.category_successful_grasp = []
 
+    try:
+      test = self.track.avg_dangerous_bend
+    except Exception as e:
+      print("Dangerous fields did not exist in this model, old code")
+      print(e)
+      self.track.category_dangerous_bend = []
+      self.track.category_dangerous_palm = []
+      self.track.category_dangerous_wrist = []
+      numpy_float = np.float32
+      self.track.avg_successful_grasp = np.array([], dtype=numpy_float)
+      self.track.avg_dangerous_bend = np.array([], dtype=numpy_float)
+      self.track.avg_dangerous_palm = np.array([], dtype=numpy_float)
+      self.track.avg_dangerous_wrist = np.array([], dtype=numpy_float)
+
+
     self.track.object_categories = list(category_dict.keys())
 
     category_table += table_header.format("Overall averages by category")
 
     num_per_obj = []
+    successful_grasp_per_obj = []
     reward_per_obj = []
     step_num_per_obj = []
     palm_force_per_obj = []
@@ -1061,7 +1094,6 @@ class MujocoTrainer(Trainer):
     oob_per_obj = []
     target_height_per_obj = []
     stable_height_per_obj = []
-    successful_grasp_per_obj = []
     lifted_percentage_per_obj = []
     contact_percentage_per_obj = []
     palm_force_percentage_per_obj = []
@@ -1069,6 +1101,9 @@ class MujocoTrainer(Trainer):
     exceed_bend_percentage_per_obj = []
     exceed_palm_percentage_per_obj = []
     exceed_wrist_percentage_per_obj = []
+    dangerous_bend_per_obj = []
+    dangerous_palm_per_obj = []
+    dangerous_wrist_per_obj = []
 
     for i, cat in enumerate(self.track.object_categories):
 
@@ -1076,18 +1111,21 @@ class MujocoTrainer(Trainer):
       category_dict[cat]["reward"] /= category_dict[cat]["num"]
 
       num_per_obj.append(category_dict[cat]["num"])
+      successful_grasp_per_obj.append(category_dict[cat]["counter"].successful_grasp.active_sum / category_dict[cat]["num"])
       reward_per_obj.append(category_dict[cat]["reward"])
 
       step_num_per_obj.append(category_dict[cat]["counter"].step_num.abs / category_dict[cat]["num"])
-      palm_force_per_obj.append(category_dict[cat]["counter"].palm_force.last_value / category_dict[cat]["num"])
-      finger_force_per_obj.append(category_dict[cat]["counter"].finger_force.last_value / category_dict[cat]["num"])
+      palm_force_per_obj.append(category_dict[cat]["counter"].palm_force.active_sum / category_dict[cat]["num"])
+      finger_force_per_obj.append(category_dict[cat]["counter"].finger_force.active_sum / category_dict[cat]["num"])
 
-      lifted_per_obj.append(category_dict[cat]["counter"].lifted.last_value / category_dict[cat]["num"])
-      stable_per_obj.append(category_dict[cat]["counter"].object_stable.last_value / category_dict[cat]["num"])
-      oob_per_obj.append(category_dict[cat]["counter"].oob.last_value / category_dict[cat]["num"])
-      target_height_per_obj.append(category_dict[cat]["counter"].target_height.last_value / category_dict[cat]["num"])
-      stable_height_per_obj.append(category_dict[cat]["counter"].stable_height.last_value / category_dict[cat]["num"])
-      successful_grasp_per_obj.append(category_dict[cat]["counter"].successful_grasp.last_value / category_dict[cat]["num"])
+      lifted_per_obj.append(category_dict[cat]["counter"].lifted.active_sum / category_dict[cat]["num"])
+      stable_per_obj.append(category_dict[cat]["counter"].object_stable.active_sum / category_dict[cat]["num"])
+      oob_per_obj.append(category_dict[cat]["counter"].oob.active_sum / category_dict[cat]["num"])
+      target_height_per_obj.append(category_dict[cat]["counter"].target_height.active_sum / category_dict[cat]["num"])
+      stable_height_per_obj.append(category_dict[cat]["counter"].stable_height.active_sum / category_dict[cat]["num"])
+      dangerous_bend_per_obj.append(category_dict[cat]["counter"].dangerous_bend_sensor.active_sum / category_dict[cat]["num"])
+      dangerous_palm_per_obj.append(category_dict[cat]["counter"].dangerous_palm_sensor.active_sum / category_dict[cat]["num"])
+      dangerous_wrist_per_obj.append(category_dict[cat]["counter"].dangerous_wrist_sensor.active_sum / category_dict[cat]["num"])
 
       lifted_percentage_per_obj.append(category_dict[cat]["counter"].lifted.percent)
       contact_percentage_per_obj.append(category_dict[cat]["counter"].object_contact.percent)
@@ -1104,18 +1142,22 @@ class MujocoTrainer(Trainer):
         self.track.object_categories[c], 
         # number x1
         int(category_dict[self.track.object_categories[c]]["num"]),
+        # success rate
+        successful_grasp_per_obj[c],
         # float style x4
         reward_per_obj[c], 
         step_num_per_obj[c],
         palm_force_per_obj[c],
         finger_force_per_obj[c],
-        # end state style x6
+        # end state style x8
         lifted_per_obj[c], 
         stable_per_obj[c], 
         oob_per_obj[c], 
         target_height_per_obj[c], 
         stable_height_per_obj[c],
-        successful_grasp_per_obj[c],
+        dangerous_bend_per_obj[c],
+        dangerous_palm_per_obj[c],
+        dangerous_wrist_per_obj[c],
         # perentage style x7
         lifted_percentage_per_obj[c],
         contact_percentage_per_obj[c],
@@ -1135,6 +1177,7 @@ class MujocoTrainer(Trainer):
       self.track.test_episodes = np.append(self.track.test_episodes, i_episode)
       self.track.test_durations = np.append(self.track.test_durations, total_counter.step_num.abs / N)
       self.track.test_rewards = np.append(self.track.test_rewards, mean_reward)
+      self.track.avg_successful_grasp = np.append(self.track.avg_successful_grasp, total_counter.successful_grasp.active_sum / N)
       self.track.avg_p_lifted = np.append(self.track.avg_p_lifted, total_counter.lifted.percent)
       self.track.avg_p_contact = np.append(self.track.avg_p_contact, total_counter.object_contact.percent)
       self.track.avg_p_palm_force = np.append(self.track.avg_p_palm_force, total_counter.palm_force.percent)
@@ -1142,12 +1185,14 @@ class MujocoTrainer(Trainer):
       self.track.avg_p_exceed_bend = np.append(self.track.avg_p_exceed_bend, total_counter.exceed_bend_sensor.percent)
       self.track.avg_p_exceed_palm = np.append(self.track.avg_p_exceed_palm, total_counter.exceed_palm_sensor.percent)
       self.track.avg_p_exceed_wrist = np.append(self.track.avg_p_exceed_wrist, total_counter.exceed_wrist_sensor.percent)
-      self.track.avg_lifted = np.append(self.track.avg_lifted, total_counter.lifted.last_value / N)
-      self.track.avg_stable = np.append(self.track.avg_stable, total_counter.object_stable.last_value / N)
-      self.track.avg_oob = np.append(self.track.avg_oob, total_counter.oob.last_value / N)
-      self.track.avg_target_height = np.append(self.track.avg_target_height, total_counter.target_height.last_value / N)
-      self.track.avg_stable_height = np.append(self.track.avg_stable_height, total_counter.stable_height.last_value / N)
-      self.track.avg_successful_grasp = np.append(self.track.avg_successful_grasp, total_counter.successful_grasp.last_value / N)
+      self.track.avg_lifted = np.append(self.track.avg_lifted, total_counter.lifted.active_sum / N)
+      self.track.avg_stable = np.append(self.track.avg_stable, total_counter.object_stable.active_sum / N)
+      self.track.avg_oob = np.append(self.track.avg_oob, total_counter.oob.active_sum / N)
+      self.track.avg_target_height = np.append(self.track.avg_target_height, total_counter.target_height.active_sum / N)
+      self.track.avg_stable_height = np.append(self.track.avg_stable_height, total_counter.stable_height.active_sum / N)
+      self.track.avg_dangerous_bend = np.append(self.track.avg_dangerous_bend, total_counter.dangerous_bend_sensor.active_sum / N)
+      self.track.avg_dangerous_palm = np.append(self.track.avg_dangerous_palm, total_counter.dangerous_palm_sensor.active_sum / N)
+      self.track.avg_dangerous_wrist = np.append(self.track.avg_dangerous_wrist, total_counter.dangerous_wrist_sensor.active_sum / N)
 
       # save only select category data
       self.track.category_num.append(num_per_obj)
@@ -1156,6 +1201,9 @@ class MujocoTrainer(Trainer):
       self.track.category_target_height.append(target_height_per_obj)
       self.track.category_stable_height.append(stable_height_per_obj)
       self.track.category_successful_grasp.append(successful_grasp_per_obj)
+      self.track.category_dangerous_bend.append(dangerous_bend_per_obj)
+      self.track.category_dangerous_palm.append(dangerous_palm_per_obj)
+      self.track.category_dangerous_wrist.append(dangerous_wrist_per_obj)
 
     # finally, assembly the output string
     output_str += start_str + "\n"
@@ -1171,7 +1219,7 @@ class MujocoTrainer(Trainer):
       if print_overall: print(overall_avg_table)
 
     # save a flag for final success rate
-    self.last_test_success_rate = total_counter.object_stable.last_value / N
+    self.last_test_success_rate = total_counter.object_stable.active_sum / N
 
     return output_str
 
