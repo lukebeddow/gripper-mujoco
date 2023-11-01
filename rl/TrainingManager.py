@@ -415,10 +415,6 @@ class TrainingManager():
     # try to load any existing information first
     exists = self.load_training_summary(filepath=filepath)
 
-    if not self.settings["save"]: 
-      if self.log_level > 0: print("Saving is disabled, not saving a training summary")
-      return
-
     job_string = f"Job number is {self.job_number}\n" if self.job_number is not None else ""
     timestamp_string = f"\tTimestamp is {self.timestamp}\n" if self.timestamp is not None else ""
     program_string = f"\tProgram is {self.program}\n" if self.program is not None else ""
@@ -519,12 +515,12 @@ class TrainingManager():
 
     return True
 
-  def save_training_summary(self, filepath=None):
+  def save_training_summary(self, filepath=None, force=True):
     """
     Save a text file summarising the whole training
     """
 
-    if self.settings["save"] is False: 
+    if self.settings["save"] is False and force is False: 
       if self.log_level > 0:
         print("TrainingMananger.save_training_summary() warning: trainer.enable_saving = False, nothing saved")
       return

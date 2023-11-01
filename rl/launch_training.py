@@ -133,7 +133,8 @@ def get_jobs_from_timestamp(timestamp, run_name_prefix=None):
 
   return job_nums
 
-def update_training_summaries(timestamp, jobstr=None, job_numbers=None, run_name_prefix=None):
+def update_training_summaries(timestamp, jobstr=None, job_numbers=None, run_name_prefix=None,
+                              silent=True):
   """
   Regenerate training_summaries from a currently running training, or any trainings where
   there is no up to date training_summary.txt files
@@ -147,17 +148,17 @@ def update_training_summaries(timestamp, jobstr=None, job_numbers=None, run_name
   if jobstr is not None:
     job_numbers = parse_job_string(jobstr)
 
-  tm = make_training_manager_from_args(args, silent=True)
+  tm = make_training_manager_from_args(args, silent=silent)
 
   for j in job_numbers:
 
     # determine the path required for this job
     tm.init_training_summary()
     tm.set_group_run_name(job_num=j, timestamp=timestamp, prefix=run_name_prefix)
-    tm.save_training_summary()
+    tm.save_training_summary(force=True)
 
 def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefix=None,
-                        min_ep=None, max_ep=None):
+                        min_ep=None, max_ep=None, silent=True):
   """
   Print a table of results for a training
   """
@@ -170,7 +171,7 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
   if jobstr is not None:
     job_numbers = parse_job_string(jobstr)
 
-  tm = make_training_manager_from_args(args, silent=True)
+  tm = make_training_manager_from_args(args, silent=silent)
 
   # prepare to find information from training_summary files
   headings = []
@@ -480,6 +481,8 @@ if __name__ == "__main__":
 
   timestamp = args.timestamp if args.timestamp else datetime.now().strftime(datestr)
 
+  print("log level is", args.log_level)
+
   # default device
   if args.device is None:
     args.device = "cpu"
@@ -512,10 +515,14 @@ if __name__ == "__main__":
     if args.timestamp is None:
       raise RuntimeError(f"launch_training.py: a timestamp [-t, --timestamp] in the following format '{datestr}' is required to load existing trainigs")
 
-    if args.log_level > 0: print("\nPreparing to print a results table in launch_training.py")
-    update_training_summaries(args.timestamp, jobstr=args.job_string, run_name_prefix=args.name_prefix)
+    if args.log_level > 0: 
+      print("\nPreparing to print a results table in launch_training.py")
+    silent = True if args.log_level <= 1 else False
+    if not silent: print("Not silent, log_level set to:", args.log_level)
+    update_training_summaries(args.timestamp, jobstr=args.job_string, run_name_prefix=args.name_prefix,
+                              silent=silent)
     print_results_table(args.timestamp, jobstr=args.job_string, run_name_prefix=args.name_prefix,
-                        min_ep=args.print_from_ep, max_ep=args.print_up_to_ep)
+                        min_ep=args.print_from_ep, max_ep=args.print_up_to_ep, silent=silent)
     exit()
 
   if args.job is None:
