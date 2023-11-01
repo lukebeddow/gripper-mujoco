@@ -209,6 +209,7 @@ class TrainingManager():
     "scale_penalties" : 1.0,
     "penalty_termination" : False,
     "min_style" : None,
+    "exceed_style" : None,
     "danger_style" : "safe",
     
     # this class other settings
@@ -745,7 +746,8 @@ class TrainingManager():
                                       scale_penalties=self.settings["scale_penalties"],
                                       penalty_termination=self.settings["penalty_termination"],
                                       min_style=self.settings["min_style"],
-                                      danger_style=self.settings["danger_style"])
+                                      danger_style=self.settings["danger_style"],
+                                      exceed_style=self.settings["exceed_style"])
     
     return env
 
@@ -806,6 +808,8 @@ class TrainingManager():
     elif exceed_style == "factor_0.8":
       self.RT.xBend = self.RT.gBend + 0.8 * (self.RT.dBend - self.RT.gBend)
       self.RT.xPalm = self.RT.gPalm + 0.8 * (self.RT.dPalm - self.RT.gPalm)
+    elif isinstance(exceed_style, str) and exceed_style.startswith("wrist_"):
+      self.RT.xWrist = float(exceed_style.split("_")[-1])
     elif exceed_style is not None: 
       raise RuntimeError(f"set_sensor_reward_thresholds() got invalid 'exceed_style' of {exceed_style}")
     
@@ -895,17 +899,19 @@ class TrainingManager():
     return env
 
   def create_reward_function(self, env, style, options=[], scale_rewards=1, scale_penalties=1,
-                             penalty_termination=False, min_style=None, danger_style=None):
+                             penalty_termination=False, min_style=None, danger_style=None,
+                             exceed_style=None):
     """
     Set the reward structure for the learning, with different style options
     """
 
     if style == "sensor_mixed_v1":
       # prepare reward thresholds
-      if (env.mj.set.stable_finger_force_lim > 99.0 and
+      
+      if (exceed_style is None and
+          env.mj.set.stable_finger_force_lim > 99.0 and
           env.mj.set.stable_palm_force_lim > 99.0):
         exceed_style = [3.0, 10.0]
-      else: exceed_style = None
       self.set_sensor_reward_thresholds(env, exceed_style=exceed_style, min_style=min_style,
                                         dangerous_style=danger_style)
       # reward each step               reward   done   trigger
@@ -923,10 +929,10 @@ class TrainingManager():
 
     elif style == "termination_action_v1":
       # prepare reward thresholds
-      if (env.mj.set.stable_finger_force_lim > 99.0 and
+      if (exceed_style is None and
+          env.mj.set.stable_finger_force_lim > 99.0 and
           env.mj.set.stable_palm_force_lim > 99.0):
         exceed_style = [3.0, 10.0]
-      else: exceed_style = None
       self.set_sensor_reward_thresholds(env, exceed_style=exceed_style, min_style=min_style,
                                         dangerous_style=danger_style)
       # reward each step               reward   done   trigger

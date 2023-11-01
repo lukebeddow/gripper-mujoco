@@ -1416,6 +1416,7 @@ if __name__ == "__main__":
 
     # apply training specific settings
     tm.settings["penalty_termination"] = True
+    tm.settings["exceed_style"] = "wrist_" + str(tm.param_2 * 0.5)
     tm.settings["danger_style"] = [5.0, 15.0, tm.param_2] # bend, palm, wrist
     tm.settings["cpp"]["saturation_yield_factor"] = 1.5
     tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
