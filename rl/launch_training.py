@@ -300,8 +300,8 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
     if do_min_max_ep:
       data = tm.trainer.read_test_performance()
       sr, ep = tm.trainer.calc_best_performance(from_episode=min_ep, to_episode=max_ep,
-                                                success_rate_vector=data[1,:],
-                                                episodes_vector=data[0,:])
+                                                success_rate_vector=data[2,:],
+                                                episodes_vector=data[1,:])
       if sr == 0 and ep == 0:
         new_elem.append("nodata")
         new_elem.append("nodata")
@@ -665,9 +665,9 @@ if __name__ == "__main__":
     tm.settings["Agent_PPO"]["clip_ratio"] = tm.param_2
 
     # choose any additional settings to change
-    tm.settings["trainer"]["num_episodes"] = 15
-    tm.settings["trainer"]["test_freq"] = 5
-    tm.settings["trainer"]["save_freq"] = 5
+    tm.settings["trainer"]["num_episodes"] = 30
+    tm.settings["trainer"]["test_freq"] = 6
+    tm.settings["trainer"]["save_freq"] = 6
     tm.settings["final_test_trials_per_object"] = 1
     tm.settings["env"]["test_objects"] = 3
     tm.settings["env"]["max_episode_steps"] = 5

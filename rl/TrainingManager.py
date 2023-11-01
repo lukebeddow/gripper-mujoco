@@ -423,19 +423,14 @@ class TrainingManager():
     param_3_string = f"\tParam 3: {self.param_3_name} is {self.param_3}\n" if self.param_3 is not None else ""
 
     traintime_test_np = self.trainer.read_test_performance()
-    best_index = np.argmax(traintime_test_np[1])
-    best_traintime_success = traintime_test_np[1][best_index]
-    best_traintime_episode = int(traintime_test_np[0][best_index])
+    best_index = np.argmax(traintime_test_np[2])
+    best_traintime_success = traintime_test_np[2][best_index]
+    best_traintime_episode = int(traintime_test_np[1][best_index])
     best_traintime_str = f"\tBest training time test performance = {best_traintime_success} at episode = {best_traintime_episode}\n"
-    trained_to_str = f"\tTrained to episode = {int(traintime_test_np[0][-1])}\n"
+    trained_to_str = f"\tTrained to episode = {int(traintime_test_np[1][-1])}\n"
 
-    # create table of test performances
-    test_table = "Test time performance (success rate metric = stable height):\n\n"
-    top_row = "{0:<10} | {1:<15}\n".format("Episode", "Success rate")
-    test_table += top_row
-    row_str = "{0:<10} | {1:<15.3f}\n"
-    for i in range(len(traintime_test_np[0])):
-      test_table += row_str.format(int(traintime_test_np[0,i]), traintime_test_np[1,i])
+    # include the table of test performances
+    test_table = self.trainer.read_test_performance(as_string=True)
 
     best_fulltest_sr, best_ep = self.trainer.read_best_performance_from_text(fulltest=True, silence=True)
     if best_fulltest_sr is not None:
@@ -759,7 +754,7 @@ class TrainingManager():
     Determine the reward thresholds
     """
 
-    printout = True #if self.log_level >= 2 else False
+    printout = True if self.log_level >= 2 else False
 
     @dataclass
     class RewardThresholds:

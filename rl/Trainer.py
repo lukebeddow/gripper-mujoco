@@ -839,20 +839,43 @@ class MujocoTrainer(Trainer):
     if save and self.enable_saving:
       # save the network along with the test report
       self.save(txtfilename=self.test_result_filename, txtfilestr=test_report, extra_data=(test_data))
-
       # save table of test performances
-      log_str = "Test time performance (success rate metric = stable height):\n\n"
-      top_row = "{0:<10} | {1:<15}\n".format("Episode", "Success rate")
-      log_str += top_row
-      row_str = "{0:<10} | {1:<15.3f}\n"
-      for i in range(len(self.track.test_episodes)):
-        log_str += row_str.format(self.track.test_episodes[i], self.track.avg_stable_height[i])
-      self.modelsaver.save(self.test_performances_filename, txtonly=True, txtstr=log_str)
+      self.modelsaver.save(self.test_performances_filename, txtonly=True, txtstr=self.get_test_performance())
     else:
       if self.log_level > 0:
         print(f"Trainer.test() warning: nothing saved following test, save={save}, enable_saving={self.enable_saving}")
 
     return test_data
+
+  def get_test_performance(self):
+    """
+    Get a table of test time performance
+    """
+
+    # save table of test performances
+    log_str = "Test time performance:\n\n"
+    top_row = "{0:<10} | {1:<10} | {2:<15} | {3:<10} | {4:<10}\n".format(
+      "Save ID", "Episode", "Success rate", "Reward", "Avg steps"
+    )
+    log_str += top_row
+    row_str = "{0:<10} | {1:<10} | {2:<15.3f} | {3:<10.3f} | {4:<10.3f}\n"
+    for i in range(len(self.track.test_episodes)):
+      if self.params.test_freq == self.params.save_freq:
+        save_id = 1 + (self.track.test_episodes[i] // self.params.test_freq)
+      else:
+        save_id = 1 + (self.track.test_episodes[i] // self.params.test_freq
+                        + self.track.test_episodes[i] // self.params.save_freq
+                        - self.track.test_episodes[i] // (np.lcm(self.params.test_freq, self.params.save_freq)))
+                        
+      log_str += row_str.format(
+        save_id,
+        self.track.test_episodes[i], 
+        self.track.avg_successful_grasp[i],
+        self.track.test_rewards[i],
+        self.track.test_durations[i]
+      )
+
+    return log_str
 
   def create_test_report(self, test_data, i_episode=None, print_out=True):
     """
@@ -1034,7 +1057,6 @@ class MujocoTrainer(Trainer):
       total_counter.oob.active_sum / N, 
       total_counter.target_height.active_sum / N, 
       total_counter.stable_height.active_sum / N,
-      total_counter.successful_grasp.active_sum / N,
       total_counter.dangerous_bend_sensor.active_sum / N,
       total_counter.dangerous_palm_sensor.active_sum / N,
       total_counter.dangerous_wrist_sensor.active_sum / N,
@@ -1264,7 +1286,7 @@ class MujocoTrainer(Trainer):
 
     return best_sr, best_ep
 
-  def read_test_performance(self):
+  def read_test_performance(self, as_string=False):
     """
     Read the test performance into a numpy array
     """
@@ -1281,38 +1303,71 @@ class MujocoTrainer(Trainer):
     except Exception as e:
       if self.log_level > 0:
         print(f"TrainDQN.read_test_performance() error: {e}")
-      return np.array([[0],[0]])
+      if as_string:
+        return f"TrainDQN.read_test_performance() error: {e}"
+      else:
+        return np.zeros((5,1))
+    
+    if as_string: return txt
 
     lines = txt.splitlines()
 
+    save_ids = []
     episodes = []
     success_rates = []
+    rewards = []
+    avg_steps = []
 
-    found_data = False
+    found_data_new = False
+    found_data_old = False
 
     for l in lines:
 
-      if found_data:
+      if found_data_new:
 
         splits = l.split("|")
-        ep = int(splits[0])
-        sr = float(splits[1])
-        episodes.append(ep)
-        success_rates.append(sr)
+        save_ids.append(int(splits[0]))
+        episodes.append(int(splits[1]))
+        success_rates.append(float(splits[2]))
+        rewards.append(float(splits[3]))
+        avg_steps.append(float(splits[4]))
 
-      if l.startswith("Episode"):
-        found_data = True
+      elif found_data_old:
+
+        splits = l.split("|")
+        save_ids.append(0)
+        episodes.append(int(splits[0]))
+        success_rates.append(float(splits[1]))
+        rewards.append(0)
+        avg_steps.append(0)
+
+
+      if l.startswith("Save ID"):
+        found_data_new = True
+      elif l.startswith("Episode"):
+        found_data_old = True
 
     if len(episodes) != len(success_rates):
       raise RuntimeError("TrainDQN.read_test_performance() found episode length != success rate length")
 
-    if len(episodes) == 0: episodes.append(0)
-    if len(success_rates) == 0: success_rates.append(0)
+    if not found_data_new and not found_data_old:
+      save_ids = [0]
+      episodes = [0]
+      success_rates = [0]
+      rewards = [0]
+      avg_steps = [0]
 
-    ep_np = np.array([episodes])
-    sr_np = np.array([success_rates])
+    # convert into a numpy matrix
+    matrix = np.concatenate(
+      (np.array([save_ids]), 
+       np.array([episodes]),
+       np.array([success_rates]),
+       np.array([rewards]),
+       np.array([avg_steps])), 
+      axis=0
+    )
 
-    return np.concatenate((ep_np, sr_np), axis=0)
+    return matrix
 
   def read_best_performance_from_text(self, silence=False, fulltest=False, heuristic=False):
     """
@@ -1383,9 +1438,9 @@ class MujocoTrainer(Trainer):
 
       else: 
         # return the best_sr, best_ep from the test performance file
-        best_np = self.read_test_performance()
-        best_index = np.argmax(best_np[1])
-        return best_np[1][best_index], int(best_np[0][best_index])
+        matrix = self.read_test_performance()
+        best_index = np.argmax(matrix[2])
+        return matrix[2][best_index], int(matrix[1][best_index])
 
       if self.log_level > 0: print(f"Reading text file: {readpath + readname}")
       with open(readpath + readname, 'r') as openfile:
