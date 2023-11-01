@@ -346,7 +346,7 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
     while len(table[i]) < len(headings): table[i] += ["N/F"]
     for j, elem in enumerate(table[i]):
       if isinstance(elem, float):
-        table[i][j] = "{:.4f}".format(elem)
+        table[i][j] = "{:.3f}".format(elem)
     # print(row_str.format(*table[i]))
     print_str += row_str.format(*table[i]) + "\n"
 
@@ -480,8 +480,6 @@ if __name__ == "__main__":
   args = parser.parse_args()
 
   timestamp = args.timestamp if args.timestamp else datetime.now().strftime(datestr)
-
-  print("log level is", args.log_level)
 
   # default device
   if args.device is None:
@@ -665,9 +663,9 @@ if __name__ == "__main__":
     tm.settings["Agent_PPO"]["clip_ratio"] = tm.param_2
 
     # choose any additional settings to change
-    tm.settings["trainer"]["num_episodes"] = 30
+    tm.settings["trainer"]["num_episodes"] = 18
     tm.settings["trainer"]["test_freq"] = 6
-    tm.settings["trainer"]["save_freq"] = 6
+    tm.settings["trainer"]["save_freq"] = 4
     tm.settings["final_test_trials_per_object"] = 1
     tm.settings["env"]["test_objects"] = 3
     tm.settings["env"]["max_episode_steps"] = 5

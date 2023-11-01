@@ -999,8 +999,8 @@ class MujocoTrainer(Trainer):
         # float style x4
         avg_rewards[-1], 
         obj_counter.step_num.abs / float(num_trials),
-        obj_counter.palm_force.active_sum / float(num_trials),
-        obj_counter.finger_force.active_sum / float(num_trials),
+        obj_counter.palm_force.last_value / float(num_trials),
+        obj_counter.finger_force.last_value / float(num_trials),
         # end state style x8
         obj_counter.lifted.active_sum, 
         obj_counter.object_stable.active_sum, 
@@ -1049,8 +1049,8 @@ class MujocoTrainer(Trainer):
       # float style x4
       mean_reward, 
       total_counter.step_num.abs / N,
-      total_counter.palm_force.active_sum / N,
-      total_counter.finger_force.active_sum / N,
+      total_counter.palm_force.last_value / N,
+      total_counter.finger_force.last_value / N,
       # end state style (averaged) x8
       total_counter.lifted.active_sum / N, 
       total_counter.object_stable.active_sum / N, 
@@ -1137,8 +1137,8 @@ class MujocoTrainer(Trainer):
       reward_per_obj.append(category_dict[cat]["reward"])
 
       step_num_per_obj.append(category_dict[cat]["counter"].step_num.abs / category_dict[cat]["num"])
-      palm_force_per_obj.append(category_dict[cat]["counter"].palm_force.active_sum / category_dict[cat]["num"])
-      finger_force_per_obj.append(category_dict[cat]["counter"].finger_force.active_sum / category_dict[cat]["num"])
+      palm_force_per_obj.append(category_dict[cat]["counter"].palm_force.last_value / category_dict[cat]["num"])
+      finger_force_per_obj.append(category_dict[cat]["counter"].finger_force.last_value / category_dict[cat]["num"])
 
       lifted_per_obj.append(category_dict[cat]["counter"].lifted.active_sum / category_dict[cat]["num"])
       stable_per_obj.append(category_dict[cat]["counter"].object_stable.active_sum / category_dict[cat]["num"])

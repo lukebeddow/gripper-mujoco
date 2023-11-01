@@ -531,8 +531,8 @@ namespace MjType
 
     struct LinearEvent {
       float value { 0.0 };
-      float last_value { 0.0 };
-      int active_sum { 0 };    // was this activated last step, can be summed
+      float last_value { 0.0 }; // can be summed
+      int active_sum { 0 };     // was this activated last step, can be summed
       int row { 0 };
       int abs { 0 };
       float percent { 0.0 };

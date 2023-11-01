@@ -3985,7 +3985,8 @@ MjType::EventTrack MjClass::add_events(MjType::EventTrack& e1, MjType::EventTrac
 
   #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)                 \
             out.NAME.abs = e1.NAME.abs + e2.NAME.abs;                          \
-            out.NAME.active_sum = e1.NAME.active_sum + e2.NAME.active_sum;  
+            out.NAME.active_sum = e1.NAME.active_sum + e2.NAME.active_sum;     \
+            out.NAME.last_value = e1.NAME.last_value + e2.NAME.last_value;    
 
     // run the macro to create the code
     LUKE_MJSETTINGS_BINARY_REWARD
