@@ -11,8 +11,8 @@ from datetime import datetime
 
 from ModelSaver import ModelSaver
 from agents.DQN import Agent_DQN
-from agents.ActorCritic import Agent_SAC
-from agents.PolicyGradient import Agent_PPO
+from agents.ActorCritic import MLPActorCriticAC, Agent_SAC
+from agents.PolicyGradient import MLPActorCriticPG, Agent_PPO
 from env.MjEnv import MjEnv
 import networks
 
@@ -1529,27 +1529,31 @@ if __name__ == "__main__":
     torch.manual_seed(rngseed)
   
   render = True
+  continous_actions = True
+  log_level = 2
   
   # create the environment
-  env = MjEnv(object_set="set9_sphereonly", log_level=2, render=render)
+  env = MjEnv(object_set="set9_fullset", log_level=log_level, render=render,
+              continous_actions=continous_actions)
   # env.params.test_objects = 1
   # env.params.test_trials_per_object = 1
-  env.params.max_episode_steps = 50
+  env.params.max_episode_steps = 250
   env.params.object_position_noise_mm = 20
 
   # training device
   device = "cpu"
 
   # make the agent
-  layers = [env.n_obs, 64, 64, env.n_actions]
-  network = networks.VariableNetwork(layers, device=device)
-  agent = Agent_DQN(device=device)
+  layers = [32, 32]
+  network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                             continous_actions=continous_actions)
+  agent = Agent_PPO(device=device)
   agent.init(network)
 
   # train the agent on the environment
   trainer = MujocoTrainer(agent, env, rngseed=rngseed, device=device, plot=False, save=True,
                           strict_seed=strict_seed, episode_log_rate=1, render=render,
-                          track_avg_num=5, print_avg_return=True)
+                          track_avg_num=5, print_avg_return=True, log_level=log_level)
   
   # set training parameters then train
   trainer.params.num_episodes = 10000
