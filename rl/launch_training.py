@@ -472,7 +472,7 @@ if __name__ == "__main__":
   parser.add_argument("--savedir",            default=None)           # override save/load directory
   parser.add_argument("--pause",              default=False)          # pause between episodes in a test
   parser.add_argument("--test",               action="store_true")    # run a thorough test on existing model
-  parser.add_argument("--demo",               action="store_true")    # run a demo test on model, can specify id number
+  parser.add_argument("--demo", default=0, const=30, nargs="?", type=int)  # run a demo test on model, default 30 trials, can set
   parser.add_argument("--new-endpoint",       default=None, type=int) # new episode target for continuing training
   parser.add_argument("--extra-episodes",     default=None, type=int) # extra episodes to run for continuing training
   # parser.add_argument("--override-lib",       action="store_true")    # override bind.so library with loaded data
@@ -1446,6 +1446,71 @@ if __name__ == "__main__":
     # complete the training
     tm.run_training(agent, env)
     print_time_taken()
+
+  elif args.program == "try_action_noise":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [0.5, 1.0]
+    vary_2 = [0.05, 0.15, 0.3]
+    vary_3 = [False, True]
+    repeats = 5
+    tm.param_1_name = "action scaling"
+    tm.param_2_name = "action noise"
+    tm.param_3_name = "action penalty"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply environment dependent settings
+    tm.settings["cpp"]["continous_actions"] = True
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 2e-3 * tm.param_1
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.015 * tm.param_1
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 4e-3 * tm.param_1
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3 * tm.param_1
+    tm.settings["cpp"]["time_for_action"] = 0.2 * tm.param_1
+
+    # apply training specific settings
+    wrist_limit = 4
+    tm.settings["penalty_termination"] = True
+    tm.settings["exceed_style"] = "wrist_" + str(wrist_limit * 0.5)
+    tm.settings["danger_style"] = [5.0, 15.0, wrist_limit] # bend, palm, wrist
+    tm.settings["cpp"]["saturation_yield_factor"] = 1.5
+    tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
+    tm.settings["cpp"]["stable_palm_force_lim"] = 10.0
+    tm.settings["env"]["object_position_noise_mm"] = 10
+    tm.settings["trainer"]["num_episodes"] = 60_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp" # "set9_fullset"
+    tm.settings["env"]["finger_hook_angle_degrees"] = 90
+
+    # create the environment
+    env = tm.make_env()
+
+    # wrist normalisation
+    env.mj.set.wrist_sensor_Z.normalise = wrist_limit * 1.5
+
+    # are we using an action penalty
+    if tm.param_3:
+      value = 2 * env.mj.set.exceed_limits.reward
+      # rewards                      reward  done   trigger  min  max  overshoot
+      env.mj.set.action_penalty.set (value,  False,   1,     0.1, 3.0,  -1)
+
+    # apply the agent settings
+    layers = [128, 128, 128]
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = 5e-5
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = 5e-5
+    tm.settings["Agent_PPO"]["use_random_action_noise"] = True
+    tm.settings["Agent_PPO"]["random_action_noise_size"] = tm.param_2
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
 
   elif args.program == "example_template":
 

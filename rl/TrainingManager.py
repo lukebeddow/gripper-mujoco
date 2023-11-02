@@ -71,7 +71,9 @@ class TrainingManager():
       "lam" : 0.97,
       "target_kl" : 0.01,
       "max_kl_ratio" : 1.5,
-      "optimiser": "adam",
+      "use_random_action_noise" : False,
+      "random_action_noise_size" : 0.2,
+      "optimiser" : "adam",
       "adam_beta1" : 0.9,
       "adam_beta2" : 0.999,
     },
@@ -309,7 +311,7 @@ class TrainingManager():
     # adjust settingss
     if demo:
       self.trainer.env.params.test_trials_per_object = 1
-      self.trainer.env.params.test_objects = 30
+      self.trainer.env.params.test_objects = demo
     else:
       self.trainer.env.params.test_trials_per_object = trials_per_obj
     if render:
