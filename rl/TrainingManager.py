@@ -300,7 +300,8 @@ class TrainingManager():
     # save final summary of training
     self.save_training_summary()
 
-  def run_test(self, heuristic=False, trials_per_obj=10, render=False, pause=False, demo=False):
+  def run_test(self, heuristic=False, trials_per_obj=10, render=False, pause=False, demo=False,
+               different_object_set=None):
     """
     Perform a thorough test on the model, including loading the best performing network
     """
@@ -317,6 +318,10 @@ class TrainingManager():
     if render:
       self.trainer.render = True 
       self.trainer.env.render_window = True
+    if different_object_set is not None and isinstance(different_object_set, str):
+      if self.log_level > 0:
+        print(f"Loading a different object set for the test, name = {different_object_set}")
+      self.trainer.env.load(object_set_name=different_object_set)
 
     # perform the test
     test_data = self.trainer.test(save=False, heuristic=heuristic, pause_each_episode=pause)
@@ -329,6 +334,8 @@ class TrainingManager():
       if heuristic: savename = "heuristic_test_"
       elif demo: savename = "demo_test_"
       else: savename = "full_test_"
+      if different_object_set is not None and isinstance(different_object_set, str):
+        savename = different_object_set + "_" + savename
       savename += datetime.now().strftime(self.datestr)
       self.trainer.modelsaver.save(savename, txtonly=True, txtstr=savetxt)
 
