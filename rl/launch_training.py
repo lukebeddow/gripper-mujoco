@@ -1562,7 +1562,7 @@ if __name__ == "__main__":
     env.mj.set.wrist_sensor_Z.normalise = wrist_limit + 2
 
     # are we using an action penalty
-    if tm.param_3:
+    if True:
       value = 2 * env.mj.set.exceed_limits.reward
       # rewards                      reward  done   trigger  min  max  overshoot
       env.mj.set.action_penalty.set (value,  False,   1,     0.1, 3.0,  -1)

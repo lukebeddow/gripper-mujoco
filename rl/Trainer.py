@@ -689,7 +689,7 @@ class MujocoTrainer(Trainer):
     self.track.avg_lifted = np.array([], dtype=numpy_float)
     self.track.avg_stable = np.array([], dtype=numpy_float)
     self.track.avg_oob = np.array([], dtype=numpy_float)
-    self.track.avg_target_height = np.array([], dtype=numpy_float)
+    self.track.avg_lifted_to_height = np.array([], dtype=numpy_float)
     self.track.avg_stable_height = np.array([], dtype=numpy_float)
     self.track.avg_successful_grasp = np.array([], dtype=numpy_float)
     self.track.avg_dangerous_bend = np.array([], dtype=numpy_float)
@@ -699,7 +699,7 @@ class MujocoTrainer(Trainer):
     self.track.category_num = []
     self.track.category_stable = []
     self.track.category_lifted = []
-    self.track.category_target_height = []
+    self.track.category_lifted_to_height = []
     self.track.category_stable_height = []
     self.track.category_successful_grasp = []
     self.track.category_dangerous_bend = []
@@ -932,7 +932,7 @@ class MujocoTrainer(Trainer):
       "Num",
       "Success",
       "Reward", "Steps", "Palm f", "Fing.f",
-      "lft", "stb", "oob", "t.h", "s.h", "dB", "dP", "dW",
+      "lft", "stb", "oob", "l2h", "s.h", "dB", "dP", "dW",
       "%Lt", "%Cn", "%PF", "%XL", "%XB", "%XP", "%XW"
     )
     
@@ -1005,7 +1005,7 @@ class MujocoTrainer(Trainer):
         obj_counter.lifted.active_sum, 
         obj_counter.object_stable.active_sum, 
         obj_counter.oob.active_sum, 
-        obj_counter.target_height.active_sum, 
+        obj_counter.lifted_to_height.active_sum, 
         obj_counter.stable_height.active_sum,
         obj_counter.dangerous_bend_sensor.active_sum,
         obj_counter.dangerous_palm_sensor.active_sum,
@@ -1055,7 +1055,7 @@ class MujocoTrainer(Trainer):
       total_counter.lifted.active_sum / N, 
       total_counter.object_stable.active_sum / N, 
       total_counter.oob.active_sum / N, 
-      total_counter.target_height.active_sum / N, 
+      total_counter.lifted_to_height.active_sum / N, 
       total_counter.stable_height.active_sum / N,
       total_counter.dangerous_bend_sensor.active_sum / N,
       total_counter.dangerous_palm_sensor.active_sum / N,
@@ -1082,7 +1082,7 @@ class MujocoTrainer(Trainer):
       self.track.category_num = []
       self.track.category_stable = []
       self.track.category_lifted = []
-      self.track.category_target_height = []
+      self.track.category_lifted_to_height = []
       self.track.category_stable_height = []
       self.track.category_successful_grasp = []
 
@@ -1114,7 +1114,7 @@ class MujocoTrainer(Trainer):
     lifted_per_obj = []
     stable_per_obj = []
     oob_per_obj = []
-    target_height_per_obj = []
+    lifted_to_height_per_obj = []
     stable_height_per_obj = []
     lifted_percentage_per_obj = []
     contact_percentage_per_obj = []
@@ -1143,7 +1143,7 @@ class MujocoTrainer(Trainer):
       lifted_per_obj.append(category_dict[cat]["counter"].lifted.active_sum / category_dict[cat]["num"])
       stable_per_obj.append(category_dict[cat]["counter"].object_stable.active_sum / category_dict[cat]["num"])
       oob_per_obj.append(category_dict[cat]["counter"].oob.active_sum / category_dict[cat]["num"])
-      target_height_per_obj.append(category_dict[cat]["counter"].target_height.active_sum / category_dict[cat]["num"])
+      lifted_to_height_per_obj.append(category_dict[cat]["counter"].lifted_to_height.active_sum / category_dict[cat]["num"])
       stable_height_per_obj.append(category_dict[cat]["counter"].stable_height.active_sum / category_dict[cat]["num"])
       dangerous_bend_per_obj.append(category_dict[cat]["counter"].dangerous_bend_sensor.active_sum / category_dict[cat]["num"])
       dangerous_palm_per_obj.append(category_dict[cat]["counter"].dangerous_palm_sensor.active_sum / category_dict[cat]["num"])
@@ -1175,7 +1175,7 @@ class MujocoTrainer(Trainer):
         lifted_per_obj[c], 
         stable_per_obj[c], 
         oob_per_obj[c], 
-        target_height_per_obj[c], 
+        lifted_to_height_per_obj[c], 
         stable_height_per_obj[c],
         dangerous_bend_per_obj[c],
         dangerous_palm_per_obj[c],
@@ -1210,7 +1210,7 @@ class MujocoTrainer(Trainer):
       self.track.avg_lifted = np.append(self.track.avg_lifted, total_counter.lifted.active_sum / N)
       self.track.avg_stable = np.append(self.track.avg_stable, total_counter.object_stable.active_sum / N)
       self.track.avg_oob = np.append(self.track.avg_oob, total_counter.oob.active_sum / N)
-      self.track.avg_target_height = np.append(self.track.avg_target_height, total_counter.target_height.active_sum / N)
+      self.track.avg_lifted_to_height = np.append(self.track.avg_lifted_to_height, total_counter.lifted_to_height.active_sum / N)
       self.track.avg_stable_height = np.append(self.track.avg_stable_height, total_counter.stable_height.active_sum / N)
       self.track.avg_dangerous_bend = np.append(self.track.avg_dangerous_bend, total_counter.dangerous_bend_sensor.active_sum / N)
       self.track.avg_dangerous_palm = np.append(self.track.avg_dangerous_palm, total_counter.dangerous_palm_sensor.active_sum / N)
@@ -1220,7 +1220,7 @@ class MujocoTrainer(Trainer):
       self.track.category_num.append(num_per_obj)
       self.track.category_lifted.append(lifted_per_obj)
       self.track.category_stable.append(stable_per_obj)
-      self.track.category_target_height.append(target_height_per_obj)
+      self.track.category_lifted_to_height.append(lifted_to_height_per_obj)
       self.track.category_stable_height.append(stable_height_per_obj)
       self.track.category_successful_grasp.append(successful_grasp_per_obj)
       self.track.category_dangerous_bend.append(dangerous_bend_per_obj)

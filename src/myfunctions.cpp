@@ -304,6 +304,7 @@ struct JointSettings {
   VectorStruct<int> qveladr;
   VectorStruct<mjtNum> qpos;
   VectorStruct<mjtNum> qvel;
+  VectorStruct<mjtNum> reset_qpos;
   VectorStruct<mjtNum*> to_qpos;
   VectorStruct<mjtNum*> to_qvel;
 
@@ -1398,8 +1399,6 @@ void calibrate_reset(mjModel* model, mjData* data)
   constexpr bool debug_fcn = debug_;
 
   static bool first_call = true;
-  static std::vector<mjtNum> control_signals;
-  static std::vector<mjtNum> qpos_positions;
 
   static int num_panda = j_.num.panda;
   static int num_base = j_.num.base;
@@ -1428,15 +1427,15 @@ void calibrate_reset(mjModel* model, mjData* data)
 
     // see where the joints have settled to equilibrium
     for (int i = 0; i < j_.num.panda; i++) {
-      qpos_positions.push_back(*j_.to_qpos.panda[i]);
+      j_.reset_qpos.panda.push_back(*j_.to_qpos.panda[i]);
     }
 
     for (int i = 0; i < j_.num.base; i++) {
-      qpos_positions.push_back(*j_.to_qpos.base[i]);
+      j_.reset_qpos.base.push_back(*j_.to_qpos.base[i]);
     }
 
     for (int i = 0; i < j_.num.gripper; i++) {
-      qpos_positions.push_back(*j_.to_qpos.gripper[i]);
+      j_.reset_qpos.gripper.push_back(*j_.to_qpos.gripper[i]);
     }
 
     first_call = false;
@@ -1448,22 +1447,17 @@ void calibrate_reset(mjModel* model, mjData* data)
     }
   }
 
-  int k = 0;
-
   // apply the equilibrium positions to the joints
   for (int i = 0; i < j_.num.panda; i++) { 
-    (*j_.to_qpos.panda[i]) = qpos_positions[k]; 
-    k += 1;
+    (*j_.to_qpos.panda[i]) = j_.reset_qpos.panda[i]; 
   }
 
   for (int i = 0; i < j_.num.base; i++) {
-    (*j_.to_qpos.base[i]) = qpos_positions[k]; 
-    k += 1;
+    (*j_.to_qpos.base[i]) = j_.reset_qpos.base[i]; 
   }
 
   for (int i = 0; i < j_.num.gripper; i++) {
-    (*j_.to_qpos.gripper[i]) = qpos_positions[k]; 
-    k += 1;
+    (*j_.to_qpos.gripper[i]) = j_.reset_qpos.gripper[i]; 
   }
 }
 
@@ -2396,6 +2390,24 @@ void update_target()
   target_.end.update();
 }
 
+void set_base_to_position(mjData* data, float z_pos)
+{
+  /* set the gripper base to a given position immediately. Note that
+  +ve means downwards, so to move to the max would be for example
+  z_pos = -30e-3 */
+
+  // set the base target (ie keep track of this movement and maintain it)
+  set_base_target_m(0, 0, z_pos);
+
+  // override qpos for the base to snap model to maximum (include equilibrium offset)
+  if (j_.in_use.base_xyz) {
+    (*j_.to_qpos.base[2]) = z_pos + j_.reset_qpos.base[2]; 
+  }
+  else if (j_.in_use.base_z) {
+    (*j_.to_qpos.base[0]) = z_pos + j_.reset_qpos.base[0]; 
+  } 
+}
+
 void set_base_to_max_height(mjData* data)
 {
   /* moves the base position to maximum height, should only ber used for specific
@@ -2404,16 +2416,7 @@ void set_base_to_max_height(mjData* data)
   // confusingly, for the base down is +ve and up is -ve
   float max_height = target_.base_min.z;
 
-  // set the base target to maximum
-  set_base_target_m(0, 0, max_height);
-
-  // override qpos for the base to snap model to maximum
-  if (j_.in_use.base_xyz) {
-    (*j_.to_qpos.base[2]) = max_height; 
-  }
-  else if (j_.in_use.base_z) {
-    (*j_.to_qpos.base[0]) = max_height; 
-  } 
+  set_base_to_position(data, max_height);
 }
 
 /* ----- sensing ------ */

@@ -115,12 +115,15 @@ class TrainingManager():
       "sensor_noise_std" : 0.025,
       "state_noise_mu" : 0.025,
       "state_noise_std" : 0.0,
+      "base_position_noise" : 0.0,
       "oob_distance" : 75e-3,
-      "done_height" : 15e-3,
+      "lift_height" : 15e-3,
+      "gripper_target_height" : 28e-3,
       "stable_finger_force" : 1.0,
       "stable_palm_force" : 1.0,
       "stable_finger_force_lim" : 100,
       "stable_palm_force_lim" : 100,
+      "cap_reward" : False,
       "fingertip_min_mm" : -12.5, # below (from start position) sets within_limits=false;
       "continous_actions" : False,
       "use_termination_action" : False,
@@ -564,9 +567,10 @@ class TrainingManager():
 
     # remove any rewards and ensure none trigger
     env.mj.set.wipe_rewards()
-    env.mj.set.quit_on_reward_below = -1e6
-    env.mj.set.quit_on_reward_above = 1e6
-    env.mj.set.use_quit_on_reward = False
+    env.mj.set.cap_reward = False
+    env.mj.set.quit_if_cap_exceeded = False
+    env.mj.set.reward_cap_lower_bound = -1e6
+    env.mj.set.reward_cap_upper_bound = 1e6
     env.mj.set.use_HER = False
 
     # disable use of all sensors
@@ -587,6 +591,7 @@ class TrainingManager():
     env.mj.set.state_noise_mag = 0
     env.mj.set.state_noise_mu = 0
     env.mj.set.state_noise_std = 0
+    env.mj.set.base_position_noise = 0
 
     return env
 
@@ -664,9 +669,11 @@ class TrainingManager():
     env.mj.set.sensor_noise_std = set["cpp"]["sensor_noise_std"]
     env.mj.set.state_noise_mu = set["cpp"]["state_noise_mu"]
     env.mj.set.state_noise_std = set["cpp"]["state_noise_std"]
+    env.mj.set.base_position_noise = set["cpp"]["base_position_noise"]
 
     env.mj.set.oob_distance = set["cpp"]["oob_distance"]
-    env.mj.set.done_height = set["cpp"]["done_height"]
+    env.mj.set.lift_height = set["cpp"]["lift_height"]
+    env.mj.set.gripper_target_height = set["cpp"]["gripper_target_height"]
     env.mj.set.stable_finger_force = set["cpp"]["stable_finger_force"]
     env.mj.set.stable_palm_force = set["cpp"]["stable_palm_force"]
     env.mj.set.stable_finger_force_lim = set["cpp"]["stable_finger_force_lim"]
@@ -875,7 +882,7 @@ class TrainingManager():
 
     # rewards                        reward   done   trigger    min             max      overshoot
     env.mj.set.lifted.set           (value,  False,   1)
-    env.mj.set.target_height.set    (value,  False,   1)
+    env.mj.set.lifted_to_height.set (value,  False,   1)
     env.mj.set.object_stable.set    (value,  False,   1)
     env.mj.set.good_bend_sensor.set (value,  False,   1,     self.RT.mBend, self.RT.gBend,  -1)
     env.mj.set.good_palm_sensor.set (value,  False,   1,     self.RT.mPalm, self.RT.gPalm,  -1)
@@ -965,11 +972,6 @@ class TrainingManager():
     if "terminate_on_exceed_limits" in options:
       # reward each step                     reward   done   trigger
       env.mj.set.exceed_limits.set     (-1.0,   True,    3)
-
-    # termination on specific reward
-    env.mj.set.quit_on_reward_below = -1.0 if "neg_cap" in options else -1e6
-    env.mj.set.quit_on_reward_above = +1.0 if "pos_cap" in options else 1e6
-    env.mj.set.use_quit_on_reward = True
 
     return env
 

@@ -1646,6 +1646,7 @@ void makeObjectUI(int oldstate)
         {mjITEM_SLIDERINT, "scene obj",   3, &settings.scene_objects,    "1 20"},
         {mjITEM_SLIDERNUM,  "scene X",         2, &settings.scene_x, "0 1"},
         {mjITEM_SLIDERNUM,  "scene Y",         2, &settings.scene_y, "0 1"},
+        {mjITEM_BUTTON,   "random base",    2, NULL,                 " #317"},
         {mjITEM_END}
     };
 
@@ -2584,6 +2585,11 @@ void uiEvent(mjuiState* state)
                     M_PI);
                 std::cout << "success flag is " << success << "\n";
                 break;
+            }
+            case 37: {         // random base movement
+                std::cout << "Performaning a random base movement with noise " << myMjClass.s_.base_position_noise << "\n";
+                double z = myMjClass.random_base_movement(myMjClass.s_.base_position_noise);
+                std::cout << "Amount of noise applied was " << z << "\n";
             }
             }
         }

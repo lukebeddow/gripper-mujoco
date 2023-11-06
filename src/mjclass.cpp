@@ -457,6 +457,9 @@ void MjClass::reset()
 
   // ensure the simulation settings are all ready to go
   configure_settings();
+
+  // move the base to a random new position
+  random_base_movement(s_.base_position_noise);
 }
 
 void MjClass::hard_reset()
@@ -1041,6 +1044,7 @@ void MjClass::update_env()
 
     env_.obj[i].lifted = false;
     env_.obj[i].oob = false;
+    env_.obj[i].lifted_to_height = false;
     env_.obj[i].target_height = false;
     env_.obj[i].contact = false;
     env_.obj[i].stable = false;
@@ -1060,10 +1064,16 @@ void MjClass::update_env()
       env_.obj[i].oob = true;
     }
 
-    // lifted above the target height and not oob (env_.cnt.lifted and env_.cnt.oob must be set)
-    if (env_.obj_values.highest_lift > s_.done_height and
-        gripper_z_height > s_.done_height and
-        env_.obj[i].lifted and not env_.obj[i].oob) { // newest version, lift object AND gripper
+    // object lifted past minimum required and not oob (env_.cnt.lifted and env_.cnt.oob must be set)
+    if (env_.obj_values.highest_lift > s_.lift_height - ftol and
+        env_.obj[i].lifted and not env_.obj[i].oob) {
+      env_.cnt.lifted_to_height.value = true;
+      env_.obj[i].lifted_to_height = true;
+    }
+
+    // object is lifted and the gripper has reached the target height
+    if (env_.obj[i].lifted_to_height and
+        gripper_z_height > s_.gripper_target_height - ftol) {
       env_.cnt.target_height.value = true;
       env_.obj[i].target_height = true;
     }
@@ -1232,6 +1242,19 @@ bool MjClass::move_step_target(int x, int y, int z)
   /* move the gripper step position by xyz steps */
 
   return luke::move_gripper_target_step(x, y, z);
+}
+
+double MjClass::random_base_movement(double size)
+{
+  /* Perform a random movement of the base taken from a uniform distribution of
+  [-size, size] in metres */
+
+  std::uniform_real_distribution<double> distribution(-size, size);
+  double z_move = distribution(*MjType::generator);
+
+  luke::set_base_to_position(data, z_move);
+
+  return z_move;
 }
 
 /* ----- learning functions ----- */
@@ -1423,10 +1446,17 @@ bool MjClass::is_done()
   }
 
   // if the cumulative reward drops below a given threshold
-  if (env_.cumulative_reward < s_.quit_on_reward_below) {
-    if (s_.debug) std::printf("Reward dropped below limit of %.3f, is_done() = true\n",
-      s_.quit_on_reward_below);
-    return true;
+  if (s_.cap_reward and s_.quit_if_cap_exceeded) {
+    if (env_.cumulative_reward - ftol < s_.reward_cap_lower_bound) {
+      if (s_.debug) std::printf("Reward dropped below limit of %.3f, is_done() = true\n",
+        s_.reward_cap_lower_bound);
+      return true;
+    }
+    if (env_.cumulative_reward + ftol > s_.reward_cap_upper_bound) {
+      if (s_.debug) std::printf("Reward exceeded upper limit of %.3f, is_done() = true\n",
+        s_.reward_cap_upper_bound);
+      return true;
+    }
   }
 
   return false;
@@ -2516,20 +2546,20 @@ float MjClass::reward()
   env_.cumulative_reward += transition_reward;
 
   // if we are capping the maximum cumulative negative reward
-  if (env_.cumulative_reward < s_.quit_on_reward_below) {
-    if (s_.use_quit_on_reward) {
+  if (env_.cumulative_reward < s_.reward_cap_lower_bound) {
+    if (s_.cap_reward) {
       // reduce the reward to not put us below the cap
-      transition_reward += s_.quit_on_reward_below - env_.cumulative_reward - ftol;
-      env_.cumulative_reward = s_.quit_on_reward_below - ftol;
+      transition_reward += s_.reward_cap_lower_bound - env_.cumulative_reward;
+      env_.cumulative_reward = s_.reward_cap_lower_bound;
     }
   }
 
   // if we are capping the maximum cumulative positive reward
-  if (env_.cumulative_reward > s_.quit_on_reward_above) {
-    if (s_.use_quit_on_reward) {
+  if (env_.cumulative_reward > s_.reward_cap_upper_bound) {
+    if (s_.cap_reward) {
       // reduce the reward to not put us above the cap
-      transition_reward += s_.quit_on_reward_above - env_.cumulative_reward - ftol;
-      env_.cumulative_reward = s_.quit_on_reward_above - ftol;
+      transition_reward += s_.reward_cap_upper_bound - env_.cumulative_reward;
+      env_.cumulative_reward = s_.reward_cap_upper_bound;
     }
   }
 
