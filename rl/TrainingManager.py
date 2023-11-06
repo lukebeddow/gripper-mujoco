@@ -292,7 +292,7 @@ class TrainingManager():
     # save initial training summary (requires creating the training folder before train())
     if self.settings["save"] and not self.trainer.modelsaver.in_folder:
       self.trainer.modelsaver.new_folder(name=self.trainer.run_name, notimestamp=True)
-    self.save_training_summary()
+    self.save_training_summary(printout=True)
 
     # now train
     self.trainer.train()
@@ -523,7 +523,7 @@ class TrainingManager():
 
     return True
 
-  def save_training_summary(self, filepath=None, force=True):
+  def save_training_summary(self, filepath=None, force=True, printout=False):
     """
     Save a text file summarising the whole training
     """
@@ -537,6 +537,9 @@ class TrainingManager():
       filepath = self.trainer.savedir + "/" + self.trainer.group_name + "/" + self.trainer.run_name
 
     summary_string = self.get_training_summary(filepath=filepath)
+
+    if printout and self.log_level > 0:
+      print(summary_string)
 
     # save to a textfile
     with open(filepath + "/" + self.summary_filename, 'w') as f:

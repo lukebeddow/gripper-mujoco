@@ -1584,6 +1584,85 @@ if __name__ == "__main__":
     tm.run_training(agent, env)
     print_time_taken()
 
+  elif args.program == "try_z_noise":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [0, 2e-3, 5e-3]
+    vary_2 = [
+      (False, None),
+      (True, None),
+      (True, (0.05, 0.0)),
+      (True, (0.10, 0.0))
+    ]
+    vary_3 = None
+    repeats = 5
+    tm.param_1_name = "base pos noise"
+    tm.param_2_name = "(use Z sensor, noise override)"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply environment dependent settings
+    action_scale = 1.0
+    tm.settings["cpp"]["continous_actions"] = True
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 2e-3 * action_scale
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.015 * action_scale
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 4e-3 * action_scale
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3 * action_scale
+    tm.settings["cpp"]["time_for_action"] = 0.2 * action_scale
+
+    # apply training specific settings
+    wrist_limit = 4
+    tm.settings["penalty_termination"] = True
+    tm.settings["exceed_style"] = "wrist_" + str(wrist_limit * 0.5)
+    tm.settings["danger_style"] = [5.0, 15.0, wrist_limit] # bend, palm, wrist
+    tm.settings["cpp"]["saturation_yield_factor"] = 1.5
+    tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
+    tm.settings["cpp"]["stable_palm_force_lim"] = 10.0
+    tm.settings["env"]["object_position_noise_mm"] = 10
+    tm.settings["trainer"]["num_episodes"] = 60_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp" # "set9_fullset"
+    tm.settings["env"]["finger_hook_angle_degrees"] = 90
+
+    # add in z base noise
+    tm.settings["cpp"]["base_position_noise"] = tm.param_1
+
+    # are we using z base state sensor
+    if tm.param_2[0]:
+      tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = True
+      tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["noise_override"] = tm.param_2[1]
+    else:
+      tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = False
+
+    # create the environment
+    env = tm.make_env()
+
+    # wrist normalisation
+    env.mj.set.wrist_sensor_Z.normalise = wrist_limit + 2
+
+    # use an action penalty
+    value = 2 * env.mj.set.exceed_limits.reward
+    # rewards                      reward  done   trigger  min  max  overshoot
+    env.mj.set.action_penalty.set (value,  False,   1,     0.1, 3.0,  -1)
+
+    # apply the agent settings
+    layers = [128, 128, 128]
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = 5e-5
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = 5e-5
+    tm.settings["Agent_PPO"]["use_random_action_noise"] = True
+    tm.settings["Agent_PPO"]["random_action_noise_size"] = 0.05
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number
