@@ -67,11 +67,24 @@ class TrackTraining:
 
     if dtype is None: dtype = self.numpy_float
 
+    if isinstance(metrics_to_add, str):
+      metrics_to_add = [metrics_to_add]
+
     for m in metrics_to_add:
       self.test_metric_names.append(m)
       self.test_metric_values.append(np.array([], dtype=dtype))
 
     self.n_test_metrics = len(self.test_metric_names)
+
+  def get_test_metric(self, metric_name):
+    """
+    Return the array corresponding to a given metric_name
+    """
+
+    for i in range(len(self.test_metric_names)):
+      if self.test_metric_names[i] == metric_name:
+        return self.test_metrics[i]
+    return None
 
   def log_training_episode(self, reward, duration, time_taken):
     """
@@ -323,7 +336,7 @@ class Trainer:
         print(" -> Save path:", self.modelsaver.path)
 
   def setup_saving(self, run_name="default_run_%H-%M", group_name="default_%d-%m-%y",
-                   savedir="models", enable_saving=None):
+                   savedir="models", enable_saving=None, track_info_overwrite=False):
     """
     Provide saving information and enable saving of models during training. The
     save() function will not work without first running this function
@@ -342,6 +355,7 @@ class Trainer:
     self.group_name = group_name
     self.run_name = run_name
     self.savedir = savedir
+    self.trackinfo_numbering = not track_info_overwrite
 
     if self.enable_saving:
       self.modelsaver = ModelSaver(self.savedir + "/" + self.group_name)
@@ -398,7 +412,8 @@ class Trainer:
       self.saved_trainer_params = True
 
     # save tracking information
-    self.modelsaver.save(self.track_savename, pyobj=self.track)
+    self.modelsaver.save(self.track_savename, pyobj=self.track, 
+                         suffix_numbering=self.trackinfo_numbering)
 
     # save the actual agent
     self.modelsaver.save(self.agent.name, pyobj=self.agent.get_save_state(),
@@ -471,7 +486,8 @@ class Trainer:
     load_agent = self.modelsaver.load(id=id, folderpath=path_to_run_folder,
                                       filenamestarts="Agent")
     load_track = self.modelsaver.load(id=id, folderpath=path_to_run_folder, 
-                                      filenamestarts=self.track_savename)
+                                      filenamestarts=self.track_savename,
+                                      suffix_numbering=self.trackinfo_numbering)
     load_train = self.modelsaver.load(folderpath=path_to_run_folder,
                                       filenamestarts=self.train_param_savename)
     
