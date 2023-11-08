@@ -11,6 +11,7 @@ from agents.DQN import Agent_DQN
 from agents.ActorCritic import Agent_SAC
 from agents.PolicyGradient import Agent_PPO
 import networks
+import functools
 
 class TrainingManager():
 
@@ -22,6 +23,7 @@ class TrainingManager():
       "num_episodes" : 60_000,
       "test_freq" : 4000,
       "save_freq" : 4000,
+      "use_curriculum" : False,
     },
 
     # agent hyperparameters
@@ -216,6 +218,14 @@ class TrainingManager():
     "min_style" : None,
     "exceed_style" : None,
     "danger_style" : "safe",
+
+    # curriculum settings
+    "curriculum" : {
+      "metric_name" : "",
+      "metric_thresholds" : [],
+      "param_values" : [],
+      "change_fcn" : None,
+    },
     
     # this class other settings
     "episode_log_rate" : 250,
@@ -647,6 +657,12 @@ class TrainingManager():
 
     # apply trainer settings
     trainer.params.update(self.settings["trainer"])
+    trainer.curriculum_dict["metric_name"] = self.settings["curriculum"]["metric_name"]
+    trainer.curriculum_dict["metric_thresholds"] = self.settings["curriculum"]["metric_thresholds"]
+    trainer.curriculum_dict["param_values"] = self.settings["curriculum"]["param_values"]
+    if trainer.params.use_curriculum and trainer.curriculum_change is not None:
+      trainer.curriculum_change = functools.partial(self.settings["curriculum"]["change_fcn"], trainer)
+      trainer.curriculum_change(trainer.curriculum_dict["stage"]) # apply initial stage settings
 
     return trainer
 

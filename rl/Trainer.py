@@ -46,10 +46,12 @@ class TrackTraining:
     self.train_avg_episodes = np.array([], dtype=np.int32)
     self.train_avg_rewards = np.array([], dtype=self.numpy_float)
     self.train_avg_durations = np.array([], dtype=np.int32)
+    self.train_curriculum_stages = np.array([], dtype=np.int32)
     # testing data
     self.test_episodes = np.array([], dtype=np.int32)
     self.test_rewards = np.array([], dtype=self.numpy_float)
     self.test_durations = np.array([], dtype=np.int32)
+    self.test_curriculum_stages = np.array([], dtype=np.int32)
     self.n_test_metrics = 0
     self.test_metric_names = []
     self.test_metric_values = []
@@ -86,7 +88,7 @@ class TrackTraining:
         return self.test_metrics[i]
     return None
 
-  def log_training_episode(self, reward, duration, time_taken):
+  def log_training_episode(self, reward, duration, time_taken, curriculum_stage=0):
     """
     Log one training episode
     """
@@ -94,6 +96,7 @@ class TrackTraining:
     self.train_episodes = np.append(self.train_episodes, self.episodes_done)
     self.train_durations = np.append(self.train_durations, duration)
     self.train_rewards = np.append(self.train_rewards, reward)
+    self.train_curriculum_stages = np.append(self.train_curriculum_stages, curriculum_stage)
     self.per_action_time_taken = np.append(self.per_action_time_taken, time_taken)
     self.episodes_done += 1
 
@@ -278,6 +281,7 @@ class Trainer:
     num_episodes: int = 10_000
     test_freq: int = 1000
     save_freq: int = 50
+    use_curriculum: bool = False
 
   def __init__(self, agent, env, rngseed=None, device="cpu", log_level=1, plot=False,
                render=False, group_name="default_%d-%m-%y", run_name="default_run_%H-%M",
@@ -293,6 +297,14 @@ class Trainer:
     self.agent = agent
     self.env = env
     self.saved_trainer_params = False
+    self.curriculum_dict = {
+      "stage" : 0,
+      "metric_name" : "",
+      "metric_thresholds" : [],
+      "param_values" : [],
+      "finished" : False,
+      "info" : "",
+    }
 
     # input class options
     self.rngseed = rngseed
@@ -336,7 +348,7 @@ class Trainer:
         print(" -> Save path:", self.modelsaver.path)
 
   def setup_saving(self, run_name="default_run_%H-%M", group_name="default_%d-%m-%y",
-                   savedir="models", enable_saving=None, track_info_overwrite=False):
+                   savedir="models", enable_saving=None, track_info_overwrite=True):
     """
     Provide saving information and enable saving of models during training. The
     save() function will not work without first running this function
@@ -405,6 +417,7 @@ class Trainer:
         "group_name" : self.group_name,
         "agent_name" : self.agent.name,
         "env_data" : self.env.get_save_state(),
+        "curriculum_dict" : self.curriculum_dict,
         "extra_data" : extra_data
       }
 
@@ -485,11 +498,18 @@ class Trainer:
 
     load_agent = self.modelsaver.load(id=id, folderpath=path_to_run_folder,
                                       filenamestarts="Agent")
-    load_track = self.modelsaver.load(id=id, folderpath=path_to_run_folder, 
-                                      filenamestarts=self.track_savename,
-                                      suffix_numbering=self.trackinfo_numbering)
     load_train = self.modelsaver.load(folderpath=path_to_run_folder,
                                       filenamestarts=self.train_param_savename)
+    try:
+      load_track = self.modelsaver.load(id=id, folderpath=path_to_run_folder, 
+                                      filenamestarts=self.track_savename,
+                                      suffix_numbering=self.trackinfo_numbering)
+    except FileNotFoundError as e:
+      if self.log_level > 0:
+        print("failed\nLoading track failed, trying again with alternative numbering. Error:", e)
+      load_track = self.modelsaver.load(id=id, folderpath=path_to_run_folder, 
+                                    filenamestarts=self.track_savename,
+                                    suffix_numbering=not self.trackinfo_numbering)
     
     # extract loaded data
     self.params = load_train["parameters"]
@@ -497,6 +517,22 @@ class Trainer:
     self.group_name = load_train["group_name"]
     self.env.load_save_state(load_train["env_data"])
     self.track = load_track
+
+    try:
+      self.curriculum_dict = load_train["curriculum_dict"]
+      if len(self.track.train_curriculum_stages) > 0:
+        self.curriculum_dict["stage"] = self.track.train_curriculum_stages[-1]
+      else: self.curriculum_dict["stage"] = 0
+    except KeyError as e:
+      print("curriculum_dict not found in loaded trainer_params, old code. Error:", e)
+      self.curriculum_dict = {
+        "stage" : 0,
+        "metric_name" : "",
+        "metric_thresholds" : [],
+        "param_values" : [],
+        "finished" : False,
+        "info" : "",
+      }
 
     # do we have the agent already, if not, create it
     if self.agent is None:
@@ -571,7 +607,9 @@ class Trainer:
         if test: break
 
         # save training data
-        self.track.log_training_episode(cumulative_reward, t + 1, time_per_step)
+        self.track.log_training_episode(cumulative_reward, t + 1, time_per_step,
+                                        curriculum_stage=0 if not self.params.use_curriculum
+                                        else self.curriculum_dict["stage"])
         cumulative_reward = 0
 
         break
@@ -614,6 +652,9 @@ class Trainer:
     
     # begin training episodes
     for i_episode in range(i_start + 1, self.params.num_episodes + 1):
+
+      # check if we should adjust the training curriculum
+      if self.params.use_curriculum: self.curriculum_fcn(i_episode)
 
       if self.log_level == 1 and (i_episode - 1) % self.log_rate_for_episodes == 0:
         print("Begin training episode", i_episode, flush=True)
@@ -658,6 +699,64 @@ class Trainer:
     """
     pass
 
+  def curriculum_fcn(self, i):
+    """
+    Empty curriculum function, override if using a curriculum. Takes as input the
+    current episode number, i. See below an example template which uses another
+    function 'self.curriculum_change(stage)' to apply the stage-dependent changes:
+
+    if self.curriculum_dict["finished"]: return
+
+    # determine what stage we are at
+    stage = self.curriculum_dict["stage"]
+
+    # determine the curriculum metric
+    if self.curriculum_dict["metric_name"] == "episode_number":
+
+      for t in self.curriculum_dict["metric_thresholds"][stage:]:
+        if i >= t:
+          stage += 1
+        else: break
+
+    # example of using success rate as a metric
+    elif self.curriculum_dict["metric_name"] == "success_rate":
+
+      # get the most recent success rate
+      success_rate = 0.0 # update this...
+
+      # determine if we have passed the required threshold
+      for t in self.curriculum_dict["metric_thresholds"][stage:]:
+        if success_rate >= t:
+          stage += 1
+
+    # if the metric is not recognised
+    else: raise RuntimeError(f"TrainingManager.curriculum_fcn() metric of {self.curriculum_dict['metric_name']} not recognised")
+
+    # check if we are still at the same stage we were last episode
+    if stage == self.curriculum_dict["stage"]:
+      # check if we have finished the curriculum
+      if stage == len(self.curriculum_dict["metric_thresholds"]): 
+        self.curriculum_dict["finished"] = True
+      return
+
+    # update to the new stage
+    if self.log_level > 0:
+      print(f"Episode = {i}, curriculum is changing from stage {self.curriculum_dict['stage']} to stage {stage}")
+    self.curriculum_dict["stage"] = stage
+
+    # now apply the curriculum change (this function must be user overwritten for a training)
+    self.curriculum_change(stage)
+
+    # save a text file to reflect the changes
+    labelstr = f"Hyperparameters after curriculum change which occured at episode {i}\n"
+    name = f"hyperparameters_curriculum_stage_{stage}"
+    self.save_hyperparameters(filename=name, strheader=labelstr, print_terminal=False)
+    
+    return
+    """
+
+    pass
+
 class MujocoTrainer(Trainer):
 
   @dataclass
@@ -665,6 +764,7 @@ class MujocoTrainer(Trainer):
     num_episodes: int = 10_000
     test_freq: int = 1000
     save_freq: int = 1000
+    use_curriculum: bool = False
 
     def update(self, newdict):
       for key, value in newdict.items():
@@ -870,11 +970,11 @@ class MujocoTrainer(Trainer):
 
     # save table of test performances
     log_str = "Test time performance:\n\n"
-    top_row = "{0:<10} | {1:<10} | {2:<15} | {3:<10} | {4:<10}\n".format(
-      "Save ID", "Episode", "Success rate", "Reward", "Avg steps"
+    top_row = "{0:<10} | {1:<10} | {2:<15} | {3:<10} | {4:<10} | {5:<10}\n".format(
+      "Save ID", "Episode", "Success rate", "Reward", "Avg steps", "Stage"
     )
     log_str += top_row
-    row_str = "{0:<10} | {1:<10} | {2:<15.3f} | {3:<10.3f} | {4:<10.3f}\n"
+    row_str = "{0:<10} | {1:<10} | {2:<15.3f} | {3:<10.3f} | {4:<10.3f} | {5:<10}\n"
     for i in range(len(self.track.test_episodes)):
       if self.params.test_freq == self.params.save_freq:
         save_id = 1 + (self.track.test_episodes[i] // self.params.test_freq)
@@ -883,12 +983,18 @@ class MujocoTrainer(Trainer):
                         + self.track.test_episodes[i] // self.params.save_freq
                         - self.track.test_episodes[i] // (np.lcm(self.params.test_freq, self.params.save_freq)))
                         
+      if not self.params.use_curriculum:
+        stage = 0
+      else:
+        stage = self.track.test_curriculum_stages[i]
+
       log_str += row_str.format(
         save_id,
         self.track.test_episodes[i], 
         self.track.avg_successful_grasp[i],
         self.track.test_rewards[i],
-        self.track.test_durations[i]
+        self.track.test_durations[i],
+        stage,
       )
 
     return log_str
@@ -1116,6 +1222,13 @@ class MujocoTrainer(Trainer):
       self.track.avg_dangerous_palm = np.array([], dtype=numpy_float)
       self.track.avg_dangerous_wrist = np.array([], dtype=numpy_float)
 
+    try:
+      test = self.track.test_curriculum_stages
+    except Exception as e:
+      print("Curriculum stages not found in self.track, old code")
+      print(e)
+      self.track.train_curriculum_stages = np.array([], dtype=np.int32)
+      self.track.test_curriculum_stages = np.array([], dtype=np.int32)
 
     self.track.object_categories = list(category_dict.keys())
 
@@ -1215,6 +1328,7 @@ class MujocoTrainer(Trainer):
       self.track.test_episodes = np.append(self.track.test_episodes, i_episode)
       self.track.test_durations = np.append(self.track.test_durations, total_counter.step_num.abs / N)
       self.track.test_rewards = np.append(self.track.test_rewards, mean_reward)
+      self.track.test_curriculum_stages = np.append(self.track.test_curriculum_stages, self.curriculum_dict["stage"])
       self.track.avg_successful_grasp = np.append(self.track.avg_successful_grasp, total_counter.successful_grasp.active_sum / N)
       self.track.avg_p_lifted = np.append(self.track.avg_p_lifted, total_counter.lifted.percent)
       self.track.avg_p_contact = np.append(self.track.avg_p_contact, total_counter.object_contact.percent)
@@ -1262,13 +1376,16 @@ class MujocoTrainer(Trainer):
     return output_str
 
   def calc_best_performance(self, from_episode=None, to_episode=None, return_id=None,
-                            success_rate_vector=None, episodes_vector=None):
+                            success_rate_vector=None, episodes_vector=None,
+                            stages_vector=None, from_stage=None, to_stage=None):
     """
     Find the best success rate by the model, and what episode number it occured
     """
 
     if from_episode is None: from_episode = 0
     if to_episode is None: to_episode = 100_000_000
+    if from_stage is None: from_stage = 0
+    if to_stage is None: to_stage = 100_000_000
 
     if success_rate_vector is None:
       success_rate_vector = self.track.avg_stable_height
@@ -1276,21 +1393,31 @@ class MujocoTrainer(Trainer):
     if episodes_vector is None:
       episodes_vector = self.track.test_episodes
 
+    if stages_vector is None:
+      stages_vector = self.track.test_curriculum_stages
+
     best_sr = 0
     best_ep = 0
     best_id = 0
 
-    # loop through, this is slower than numpy but lets us check for 'from_episode'
+    # loop through, this is slower than numpy but lets us check for 'from_episode' etc
     for i, sr in enumerate(success_rate_vector):
 
       # get info
-      this_ep = episodes_vector[i]
+      this_ep = int(episodes_vector[i])
+      this_stage = int(stages_vector[i])
 
       # check if this episode is past our minimum
       if this_ep < from_episode: continue
 
       # check if this episode is past our maximum
       if this_ep > to_episode: break
+
+      # check if this stage is past our minimum
+      if this_stage < from_stage: continue
+
+      # check if this stage is past our maximum
+      if this_stage > to_stage: break
 
       # see if this is best
       if sr > best_sr:
@@ -1333,6 +1460,7 @@ class MujocoTrainer(Trainer):
     success_rates = []
     rewards = []
     avg_steps = []
+    stages = []
 
     found_data_new = False
     found_data_old = False
@@ -1347,6 +1475,11 @@ class MujocoTrainer(Trainer):
         success_rates.append(float(splits[2]))
         rewards.append(float(splits[3]))
         avg_steps.append(float(splits[4]))
+        try:
+          stages.append(int(splits[5]))
+        except Exception as e:
+          print("Error in read_test_performance, old code. Error", e)
+          stages.append(0)
 
       elif found_data_old:
 
@@ -1356,7 +1489,7 @@ class MujocoTrainer(Trainer):
         success_rates.append(float(splits[1]))
         rewards.append(0)
         avg_steps.append(0)
-
+        stages.append(0)
 
       if l.startswith("Save ID"):
         found_data_new = True
@@ -1372,6 +1505,7 @@ class MujocoTrainer(Trainer):
       success_rates = [0]
       rewards = [0]
       avg_steps = [0]
+      stages = [0]
 
     # convert into a numpy matrix
     matrix = np.concatenate(
@@ -1379,7 +1513,8 @@ class MujocoTrainer(Trainer):
        np.array([episodes]),
        np.array([success_rates]),
        np.array([rewards]),
-       np.array([avg_steps])), 
+       np.array([avg_steps]),
+       np.array([stages])), 
       axis=0
     )
 
@@ -1534,6 +1669,71 @@ class MujocoTrainer(Trainer):
         if self.log_level > 0: print(f"BEST_ID_SUCCESS -> best_id set to {best_id} with best_ep={best_ep}, save_freq={self.params.save_freq} and best_sr={best_sr}")
         # try to load again
         self.load(run_name, id=best_id, group_name=group_name, path_to_run_folder=path_to_run_folder)
+
+  def curriculum_fcn(self, i):
+    """
+    Curriculum function which updates which stage we are at given the episode number
+    i, and calls another function 'self.curriculum_change(stage)' with the stage
+    number to apply stage dependent parameter changes. This function must be user
+    defined and overriden! Otherwise a NotImplementedError will be raised
+    """
+
+    if self.curriculum_dict["finished"]: return
+
+    # determine what stage we are at
+    stage = self.curriculum_dict["stage"]
+
+    # determine the curriculum metric
+    if self.curriculum_dict["metric_name"] == "episode_number":
+
+      for t in self.curriculum_dict["metric_thresholds"][stage:]:
+        if i >= t:
+          stage += 1
+        else: break
+
+    elif self.curriculum_dict["metric_name"] == "success_rate":
+
+      # get the most recent success rate
+      if len(self.track.avg_successful_grasp) > 0:
+        success_rate = self.track.avg_successful_grasp[-1]
+      else: success_rate = 0.0
+
+      # determine if we have passed the required threshold
+      for t in self.curriculum_dict["metric_thresholds"][stage:]:
+        if success_rate >= t:
+          stage += 1
+
+    # if the metric is not recognised
+    else: raise RuntimeError(f"TrainingManager.curriculum_fcn() metric of {self.curriculum_dict['metric_name']} not recognised")
+
+    # check if we are still at the same stage we were last episode
+    if stage == self.curriculum_dict["stage"]:
+      # check if we have finished the curriculum
+      if stage == len(self.curriculum_dict["metric_thresholds"]): 
+        self.curriculum_dict["finished"] = True
+      return
+
+    # update to the new stage
+    if self.log_level > 0:
+      print(f"Episode = {i}, curriculum is changing from stage {self.curriculum_dict['stage']} to stage {stage}")
+    self.curriculum_dict["stage"] = stage
+
+    # now apply the curriculum change (this function must be user overwritten for a training)
+    self.curriculum_change(stage)
+
+    # save a text file to reflect the changes
+    labelstr = f"Hyperparameters after curriculum change which occured at episode {i}\n"
+    name = f"hyperparameters_curriculum_stage_{stage}"
+    self.save_hyperparameters(filename=name, strheader=labelstr, print_terminal=False)
+    
+    return
+
+  def curriculum_change(self, stage):
+    """
+    Apply parameters to change the curriculum to the given stage. This function
+    should be overwritten if using a curriculum (params.use_curriculum = True)
+    """
+    raise NotImplementedError("Trainer.curriculum_change() must be overwritten if using a curriculum")
 
 if __name__ == "__main__":
 

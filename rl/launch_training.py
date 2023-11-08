@@ -158,7 +158,7 @@ def update_training_summaries(timestamp, jobstr=None, job_numbers=None, run_name
     tm.save_training_summary(force=True)
 
 def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefix=None,
-                        min_ep=None, max_ep=None, silent=True):
+                        min_ep=None, max_ep=None, silent=True, min_stage=None, max_stage=None):
   """
   Print a table of results for a training
   """
@@ -189,9 +189,12 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
   found_train_best_sr = False
   found_full_test_sr = False
 
-  if min_ep or max_ep is not None:
+  if min_ep is not None or max_ep is not None:
     do_min_max_ep = True
   else: do_min_max_ep = False
+  if min_stage is not None or max_stage is not None:
+    do_min_max_stage = True
+  else: do_min_max_stage = False
 
   for j in job_numbers:
 
@@ -242,12 +245,24 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
   if found_param_3: headings.append(tm.param_3_name)
   if found_trained_to: headings.append("Trained to")
   if do_min_max_ep:
-    if min_ep and max_ep is not None:
+    if min_ep is not None and max_ep is not None:
       headings.append(f"Best SR range {min_ep} - {max_ep}")
     elif min_ep is not None:
       headings.append(f"Best SR from ep {min_ep}")
     elif max_ep is not None:
       headings.append(f"Best SR up to ep {max_ep}")
+    else: raise RuntimeError("code error in print_results_table()")
+    headings.append("At episode")
+  if do_min_max_stage:
+    if min_stage is not None and max_stage is not None:
+      if min_stage == max_stage:
+        headings.append(f"Best SR during stage {min_stage}")
+      else:
+        headings.append(f"Best SR stages {min_stage} - {max_stage}")
+    elif min_stage is not None:
+      headings.append(f"Best SR from stage {min_stage}")
+    elif max_stage is not None:
+      headings.append(f"Best SR up to stage {max_stage}")
     else: raise RuntimeError("code error in print_results_table()")
     headings.append("At episode")
   if found_train_best_ep: headings.append("Train best episode")
@@ -301,7 +316,20 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
       data = tm.trainer.read_test_performance()
       sr, ep = tm.trainer.calc_best_performance(from_episode=min_ep, to_episode=max_ep,
                                                 success_rate_vector=data[2,:],
-                                                episodes_vector=data[1,:])
+                                                episodes_vector=data[1,:],
+                                                stages_vector=data[5,:])
+      if sr == 0 and ep == 0:
+        new_elem.append("nodata")
+        new_elem.append("nodata")
+      else:
+        new_elem.append(sr)
+        new_elem.append(int(ep))
+    if do_min_max_stage:
+      data = tm.trainer.read_test_performance()
+      sr, ep = tm.trainer.calc_best_performance(from_stage=min_stage, to_stage=max_stage,
+                                                success_rate_vector=data[2,:],
+                                                episodes_vector=data[1,:],
+                                                stages_vector=data[5,:])
       if sr == 0 and ep == 0:
         new_elem.append("nodata")
         new_elem.append("nodata")
@@ -417,6 +445,35 @@ def make_training_manager_from_args(args, silent=False, save=True):
 
   return tm
 
+def curriculum_change_termination(self, stage):
+  """
+  Toggle the termination threshold over the stages. Below -1.0 or above 1.0 is
+  impossible to trigger.
+  """
+
+  self.env.mj.set.termination_threshold = self.curriculum_dict["param_values"][stage]
+
+def curriculum_change_step_sizes(self, stage):
+  """
+  Change the step sizes
+  """
+
+  # set the action step sizes
+  self.env.mj.set.gripper_prismatic_X.value = self.curriculum_dict["param_values"][stage][0]
+  self.env.mj.set.gripper_revolute_Y.value = self.curriculum_dict["param_values"][stage][1]
+  self.env.mj.set.gripper_Z.value = self.curriculum_dict["param_values"][stage][2]
+  self.env.mj.set.base_Z.value = self.curriculum_dict["param_values"][stage][3]
+
+  # now adjust the time per action to match the step sizes
+  self.env.mj.set.time_for_action = self.curriculum_dict["param_values"][stage][4]
+
+def curriculum_change_successful_grasp(self, stage):
+  """
+  Make the gripper height required for a successful grasp change over the stages
+  """
+  self.env.mj.set.gripper_target_height = self.curriculum_dict["param_values"][stage][0]
+  env.mj.set.object_stable.trigger = self.curriculum_dict["param_values"][stage][1]
+
 if __name__ == "__main__":
 
   """
@@ -464,6 +521,9 @@ if __name__ == "__main__":
   parser.add_argument("--print-results",      action="store_true")    # prepare and print all 
   parser.add_argument("--print-from-ep",      default=None, type=int) # print best SR from a specific episode
   parser.add_argument("--print-up-to-ep",     default=None, type=int) # print best SR up until a specific episode
+  parser.add_argument("--print-stage",        default=None, type=int) # print best SR during a specific stage
+  parser.add_argument("--print-from-stage",   default=None, type=int) # print best SR from a specific curriculum stage
+  parser.add_argument("--print-up-to-stage",  default=None, type=int) # print best SR up until a specific curriculum stage
   parser.add_argument("--rngseed",            default=None)           # turns on reproducible training with given seed (slower)
   parser.add_argument("--log-level",          type=int, default=1)    # set script log level
   parser.add_argument("--no-delay",           action="store_true")    # prevent a sleep(...) to seperate processes
@@ -501,8 +561,8 @@ if __name__ == "__main__":
     print(" -> Program name:", args.program)
     print(" -> Device:", args.device)
 
-  # seperate process for safety
-  if not args.no_delay and args.job is not None:
+  # seperate process for safety when running a training program
+  if not args.no_delay and args.job is not None and args.program is not None:
     sleep(args.job)
     sleep(0.25 * random())
 
@@ -517,10 +577,14 @@ if __name__ == "__main__":
       print("\nPreparing to print a results table in launch_training.py")
     silent = True if args.log_level <= 1 else False
     if not silent: print("Not silent, log_level set to:", args.log_level)
+    if args.print_stage is not None:
+      args.print_from_stage = args.print_stage
+      args.print_up_to_stage = args.print_stage
     update_training_summaries(args.timestamp, jobstr=args.job_string, run_name_prefix=args.name_prefix,
                               silent=silent)
     print_results_table(args.timestamp, jobstr=args.job_string, run_name_prefix=args.name_prefix,
-                        min_ep=args.print_from_ep, max_ep=args.print_up_to_ep, silent=silent)
+                        min_ep=args.print_from_ep, max_ep=args.print_up_to_ep, silent=silent,
+                        min_stage=args.print_from_stage, max_stage=args.print_up_to_stage)
     exit()
 
   if args.job is None:
@@ -1645,6 +1709,131 @@ if __name__ == "__main__":
     value = 2 * env.mj.set.exceed_limits.reward
     # rewards                      reward  done   trigger  min  max  overshoot
     env.mj.set.action_penalty.set (value,  False,   1,     0.1, 3.0,  -1)
+
+    # apply the agent settings
+    layers = [128, 128, 128]
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = 5e-5
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = 5e-5
+    tm.settings["Agent_PPO"]["use_random_action_noise"] = True
+    tm.settings["Agent_PPO"]["random_action_noise_size"] = 0.05
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "improve_on_z_noise":
+
+    """
+    Palm in simulation gives much smaller readings, in real life it reaches up to 10N much faster
+    and leads to corrective actions by the policy interrupting the normal grasp. Should make
+    the palm more sensitive in simultion, perhaps 2x as sensitive then manually adjust for
+    real life grasping.
+
+    Wrist sensor avoidance also seems to be working okay with these trainings. Perhaps more
+    can be done, likely the wrist sensor moves faster in real life. Also, the fingers getting
+    caught on the foam causes a sim2real gap as the policy is not used to that. Could I 
+    greatly increase the friction of the ground to reflect this?
+
+    Lastly, the raising to 30mm whilst keeping stable is not really working. Partly this is
+    probably due to the palm being much more sensitive in real life. However, I should also
+    enforce a slower trigger on the 'object stable' and perhaps rethink how trainings
+    terminate (and in real life as well).
+
+    Revisiting a termination signal would be nice, as easy grasps can then be completed 
+    quicker. However, it does introduce another point of failure. Perhaps I could try a 
+    training which has the termination signal but is not able to trigger it and just uses
+    stable height. Then when it is performing well I change the criteria and keep training
+    to try and get it to learn to use the termination signal when it thinks the grasp is
+    stable.
+      - beware though the termination signal introduces another point of failure - just
+      imagine in real life how many good grasps would be terminated incorrectly and be
+      chalked up as failures
+
+    At what point do I start training with set9 with sharp edged objects? Would that help
+    or hinder the learning? It may well improve the real life performance.
+    """
+
+    # define what to vary this training, dependent on job number
+    vary_1 = None
+    vary_2 = None
+    vary_3 = None
+    repeats = 5
+    tm.param_1_name = "base pos noise"
+    tm.param_2_name = "(use Z sensor, noise override)"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply environment dependent settings
+    action_scale = 1.0
+    tm.settings["cpp"]["continous_actions"] = True
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 2e-3 * action_scale
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.015 * action_scale
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 4e-3 * action_scale
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3 * action_scale
+    tm.settings["cpp"]["time_for_action"] = 0.2 * action_scale
+
+    # apply training specific settings
+    palm_stable_lim = 4
+    palm_danger_lim = 5
+    wrist_limit = 4
+    tm.settings["penalty_termination"] = True
+    tm.settings["exceed_style"] = "wrist_" + str(wrist_limit * 0.5)
+    tm.settings["danger_style"] = [5.0, 15.0, wrist_limit] # bend, palm, wrist
+    tm.settings["cpp"]["saturation_yield_factor"] = 1.5
+    tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
+    tm.settings["cpp"]["stable_palm_force_lim"] = 10.0
+    tm.settings["env"]["object_position_noise_mm"] = 10
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp" # "set9_fullset"
+    tm.settings["env"]["finger_hook_angle_degrees"] = 90
+
+    # add in z base noise
+    tm.settings["cpp"]["base_position_noise"] = 5e-3
+
+    # add significant mean noise to z base state sensor
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["noise_override"] = [0.1, 0.0]
+
+    # FOR TESTING ONLY
+    tm.settings["trainer"]["num_episodes"] = 18
+    tm.settings["trainer"]["test_freq"] = 6
+    tm.settings["trainer"]["save_freq"] = 4
+    tm.settings["final_test_trials_per_object"] = 1
+    tm.settings["env"]["test_objects"] = 3
+    tm.settings["env"]["max_episode_steps"] = 5
+    tm.settings["episode_log_rate"] = 5
+    tm.settings["track_avg_num"] = 3
+    tm.settings["Agent_PPO"]["steps_per_epoch"] = 15
+
+    # create the environment
+    env = tm.make_env()
+
+    # # how many steps in a row do we require stability
+    # env.mj.set.object_stable.trigger = 4
+
+    # palm and wrist normalisation
+    env.mj.set.palm_sensor.normalise = palm_danger_lim + 1
+    env.mj.set.wrist_sensor_Z.normalise = wrist_limit + 2
+
+    # use an action penalty
+    value = 2 * env.mj.set.exceed_limits.reward
+    # rewards                      reward  done   trigger  min  max  overshoot
+    env.mj.set.action_penalty.set (value,  False,   1,     0.1, 3.0,  -1)
+
+    # add in curriculum
+    tm.settings["trainer"]["use_curriculum"] = True
+    tm.settings["curriculum"]["metric_name"] = "episode_number"
+    tm.settings["curriculum"]["metric_thresholds"] = [8]
+    tm.settings["curriculum"]["param_values"] = [(15e-3, 1), (28e-3, 4)]
+    tm.settings["curriculum"]["change_fcn"] = curriculum_change_successful_grasp
 
     # apply the agent settings
     layers = [128, 128, 128]
