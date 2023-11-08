@@ -449,9 +449,6 @@ void MjClass::reset()
   // reset variables for use with real gripper
   samples_since_last_obs = 0;
 
-  // wipe any signalling
-  termination_signal_sent = false;
-
   // empty any curve validation data
   curve_validation_data_.reset();
 
@@ -1367,8 +1364,8 @@ std::vector<float> MjClass::set_action(int action, float continous_fraction)
       }
       if (triggered) {
         termination_signal_sent = true;
+        // luke::lift_base_to_height(base_max_[2]); // this is max z height
       }
-      luke::lift_base_to_height(base_max_[2]); // this is max z height
       wl = true;
       break;
     }
@@ -4790,7 +4787,7 @@ float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings)
               float scaled_reward = settings.NAME.reward * fraction;            \
               if (settings.debug)                                               \
                 std::printf("%s triggered by value %.1f, reward += %.4f\n",     \
-                  #NAME, events.NAME.last_value, settings.NAME.reward);         \
+                  #NAME, events.NAME.last_value, scaled_reward);                \
               reward += scaled_reward;                                          \
             }
             

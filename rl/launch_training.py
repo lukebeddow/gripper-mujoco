@@ -1859,9 +1859,13 @@ if __name__ == "__main__":
 
     # define what to vary this training, dependent on job number
     vary_1 = [1e-5, 5e-5]
-    vary_2 = [(60_000, 90_000), (40_000, 90_000)]
+    vary_2 = [
+      (-1, -1),
+      (60_000, 90_000), 
+      (40_000, 90_000)
+    ]
     vary_3 = None
-    repeats = 3
+    repeats = 2
     tm.param_1_name = "learning rate"
     tm.param_2_name = "ep thresholds"
     tm.param_3_name = None
