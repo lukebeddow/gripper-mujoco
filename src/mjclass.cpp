@@ -1310,6 +1310,7 @@ std::vector<float> MjClass::set_action(int action, float continous_fraction)
   new state vector */
 
   bool wl = true; // within limits
+  termination_signal_sent = false; // reset whether we received a termination action
 
   if (action < 0 or action >= n_actions) {
     std::cout << "MjClass::set_action() received action = " << action << " which is out of bounds.\n"
@@ -1439,11 +1440,15 @@ bool MjClass::is_done()
   //   return true;
   // }
 
-  // if a termination signal has been sent
-  if (termination_signal_sent) {
-    if (s_.debug) std::cout << "is_done = true, termination signal sent\n";
-    return true;
-  }
+  /* termination rewards should set done=true,
+      -> stable_termination
+      -> failed_termination
+  */
+  // // if a termination signal has been sent
+  // if (termination_signal_sent) {
+  //   if (s_.debug) std::cout << "is_done = true, termination signal sent\n";
+  //   return true;
+  // }
 
   // if the cumulative reward drops below a given threshold
   if (s_.cap_reward and s_.quit_if_cap_exceeded) {

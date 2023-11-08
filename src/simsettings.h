@@ -133,17 +133,17 @@
       name                      reward    done      trigger */\
   BR(  step_num,                -0.01,    false,    1)      /* when a step is made */\
   BR(  lifted,                  0.005,    false,    1)      /* object leaves the ground */\
-  BR(  oob,                     -1.0,      1,        1)      /* object out of bounds */\
+  BR(  oob,                     -1.0,     1,        1)      /* object out of bounds */\
   BR(  dropped,                 0.0,      false,    1000)   /* object lifted and then touches gnd */\
-  BR(  lifted_to_height,        0.01,      false,    1)   /* object lifted to lift_height */\
-  BR(  target_height,           0.01,      false,    1)   /* object lifted to lift_height and gripper at target_height */\
+  BR(  lifted_to_height,        0.01,     false,    1)      /* object lifted to lift_height */\
+  BR(  target_height,           0.01,     false,    1)      /* object lifted to lift_height and gripper at target_height */\
   BR(  exceed_limits,           -0.1,     false,    1)      /* gripper motor limits exceeded */\
   BR(  object_contact,          0.005,    false,    1)      /* fingers or palm touches object */\
-  BR(  object_stable,           0.01,      false,    1)      /* fingers and palm apply min force */\
+  BR(  object_stable,           0.01,     false,    1)      /* fingers and palm apply min force */\
   BR(  stable_height,           1.0,      1,        1)      /* object stable and at height target */\
   BR(  stable_termination,      1.0,      1,        1)      /* object stable and termination signal sent */\
   BR(  failed_termination,      -1.0,     1,        1)      /* termination signal sent but object not stable */\
-  BR(  successful_grasp,        0.01,      1,        1)      /* metric to indicate a grasp is stable, shouldn't have associated reward */
+  BR(  successful_grasp,        0.01,     1,        1)      /* metric to indicate a grasp is stable, shouldn't have associated reward */
   
   
 #define LUKE_MJSETTINGS_LINEAR_REWARD \

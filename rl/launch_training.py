@@ -447,11 +447,21 @@ def make_training_manager_from_args(args, silent=False, save=True):
 
 def curriculum_change_termination(self, stage):
   """
-  Toggle the termination threshold over the stages. Below -1.0 or above 1.0 is
+  Toggle the termination threshold over stages. Below -1.0 or above 1.0 is
   impossible to trigger.
   """
+  if stage == 0:
+    self.env.mj.set.termination_threshold = self.curriculum_dict["param_values"][stage]
+  elif stage == 1:
+    self.env.mj.set.termination_threshold = self.curriculum_dict["param_values"][stage]
+    # disable stable height and enable stable_termination, penalise failed temrination
+    self.env.mj.set.stable_height.set          (0.0,    False,  1000)
+    self.env.mj.set.stable_termination.set     (1.0,    True,   1)
+    self.env.mj.set.failed_termination.set     (-0.05,  False,  1)
+  elif stage == 2:
+    # set failed termination as a complete failure
+    self.env.mj.set.failed_termination.set     (-1.0,   True,  1)
 
-  self.env.mj.set.termination_threshold = self.curriculum_dict["param_values"][stage]
 
 def curriculum_change_step_sizes(self, stage):
   """
@@ -1760,13 +1770,17 @@ if __name__ == "__main__":
     """
 
     # define what to vary this training, dependent on job number
-    vary_1 = None
-    vary_2 = None
-    vary_3 = None
+    vary_1 = [4, 8]
+    vary_2 = [4, 8]
+    vary_3 = [
+      (False, 15e-3, 1),
+      (False, 28e-3, 4),
+      (True,  15e-3, 1),
+    ]
     repeats = 5
-    tm.param_1_name = "base pos noise"
-    tm.param_2_name = "(use Z sensor, noise override)"
-    tm.param_3_name = None
+    tm.param_1_name = "palm limit"
+    tm.param_2_name = "wrist limit"
+    tm.param_3_name = "curriculum/t.h/stb trigger"
     tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
                                                          param_3=vary_3, repeats=repeats)
     if args.print: print_training_info()
@@ -1781,15 +1795,15 @@ if __name__ == "__main__":
     tm.settings["cpp"]["time_for_action"] = 0.2 * action_scale
 
     # apply training specific settings
-    palm_stable_lim = 4
-    palm_danger_lim = 5
-    wrist_limit = 4
+    palm_stable_lim = tm.param_1
+    palm_danger_lim = palm_stable_lim * 1.25
+    wrist_limit = tm.param_2
     tm.settings["penalty_termination"] = True
-    tm.settings["exceed_style"] = "wrist_" + str(wrist_limit * 0.5)
-    tm.settings["danger_style"] = [5.0, 15.0, wrist_limit] # bend, palm, wrist
+    tm.settings["exceed_style"] = "wrist_" + str(wrist_limit * 0.75)
+    tm.settings["danger_style"] = [5.0, palm_danger_lim, wrist_limit] # bend, palm, wrist
     tm.settings["cpp"]["saturation_yield_factor"] = 1.5
     tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
-    tm.settings["cpp"]["stable_palm_force_lim"] = 10.0
+    tm.settings["cpp"]["stable_palm_force_lim"] = palm_stable_lim
     tm.settings["env"]["object_position_noise_mm"] = 10
     tm.settings["trainer"]["num_episodes"] = 120_000
     tm.settings["env"]["object_set_name"] = "set9_nosharp" # "set9_fullset"
@@ -1802,25 +1816,14 @@ if __name__ == "__main__":
     tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = True
     tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["noise_override"] = [0.1, 0.0]
 
-    # FOR TESTING ONLY
-    tm.settings["trainer"]["num_episodes"] = 18
-    tm.settings["trainer"]["test_freq"] = 6
-    tm.settings["trainer"]["save_freq"] = 4
-    tm.settings["final_test_trials_per_object"] = 1
-    tm.settings["env"]["test_objects"] = 3
-    tm.settings["env"]["max_episode_steps"] = 5
-    tm.settings["episode_log_rate"] = 5
-    tm.settings["track_avg_num"] = 3
-    tm.settings["Agent_PPO"]["steps_per_epoch"] = 15
-
     # create the environment
     env = tm.make_env()
 
-    # # how many steps in a row do we require stability
-    # env.mj.set.object_stable.trigger = 4
+    env.mj.set.gripper_target_height = tm.param_3[1]
+    env.mj.set.object_stable.trigger = tm.param_3[2]
 
     # palm and wrist normalisation
-    env.mj.set.palm_sensor.normalise = palm_danger_lim + 1
+    env.mj.set.palm_sensor.normalise = palm_danger_lim * (6/5)
     env.mj.set.wrist_sensor_Z.normalise = wrist_limit + 2
 
     # use an action penalty
@@ -1828,10 +1831,10 @@ if __name__ == "__main__":
     # rewards                      reward  done   trigger  min  max  overshoot
     env.mj.set.action_penalty.set (value,  False,   1,     0.1, 3.0,  -1)
 
-    # add in curriculum
-    tm.settings["trainer"]["use_curriculum"] = True
-    tm.settings["curriculum"]["metric_name"] = "episode_number"
-    tm.settings["curriculum"]["metric_thresholds"] = [8]
+    # add in curriculum where grasping gets harder
+    tm.settings["trainer"]["use_curriculum"] = tm.param_3[0]
+    tm.settings["curriculum"]["metric_name"] = "success_rate"
+    tm.settings["curriculum"]["metric_thresholds"] = [0.7]
     tm.settings["curriculum"]["param_values"] = [(15e-3, 1), (28e-3, 4)]
     tm.settings["curriculum"]["change_fcn"] = curriculum_change_successful_grasp
 
@@ -1839,6 +1842,83 @@ if __name__ == "__main__":
     layers = [128, 128, 128]
     tm.settings["Agent_PPO"]["learning_rate_pi"] = 5e-5
     tm.settings["Agent_PPO"]["learning_rate_vf"] = 5e-5
+    tm.settings["Agent_PPO"]["use_random_action_noise"] = True
+    tm.settings["Agent_PPO"]["random_action_noise_size"] = 0.05
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "curriculum_termination_action":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-5, 5e-5]
+    vary_2 = [(60_000, 90_000), (40_000, 90_000)]
+    vary_3 = None
+    repeats = 3
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "ep thresholds"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply environment dependent settings
+    tm.settings["cpp"]["continous_actions"] = True
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 2e-3
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.015
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 4e-3
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3
+    tm.settings["cpp"]["time_for_action"] = 0.2
+
+    # ensure we are training with the termination action
+    tm.settings["cpp"]["use_termination_action"] = True
+
+    # apply training specific settings
+    palm_stable_lim = 8
+    palm_danger_lim = palm_stable_lim * 1.25
+    wrist_limit = 8
+    tm.settings["penalty_termination"] = True
+    tm.settings["exceed_style"] = "wrist_" + str(wrist_limit * 0.75)
+    tm.settings["danger_style"] = [5.0, palm_danger_lim, wrist_limit] # bend, palm, wrist
+    tm.settings["cpp"]["saturation_yield_factor"] = 1.5
+    tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
+    tm.settings["cpp"]["stable_palm_force_lim"] = palm_stable_lim
+    tm.settings["env"]["object_position_noise_mm"] = 10
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp" # "set9_fullset"
+    tm.settings["env"]["finger_hook_angle_degrees"] = 90
+
+    # add in z base noise
+    tm.settings["cpp"]["base_position_noise"] = 5e-3
+
+    # create the environment
+    env = tm.make_env()
+
+    env.mj.set.gripper_target_height = 15e-3
+    env.mj.set.object_stable.trigger = 1
+
+    # palm and wrist normalisation
+    env.mj.set.palm_sensor.normalise = palm_danger_lim * (6/5)
+    env.mj.set.wrist_sensor_Z.normalise = wrist_limit + 2
+
+    # add in curriculum where grasping gets harder
+    tm.settings["trainer"]["use_curriculum"] = True
+    tm.settings["curriculum"]["metric_name"] = "episode_number"
+    tm.settings["curriculum"]["metric_thresholds"] = tm.param_2
+    tm.settings["curriculum"]["param_values"] = [1.1, 0.8]
+    tm.settings["curriculum"]["change_fcn"] = curriculum_change_termination
+    
+    # apply the agent settings
+    layers = [128, 128, 128]
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1
     tm.settings["Agent_PPO"]["use_random_action_noise"] = True
     tm.settings["Agent_PPO"]["random_action_noise_size"] = 0.05
     network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,

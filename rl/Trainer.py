@@ -1678,6 +1678,9 @@ class MujocoTrainer(Trainer):
     defined and overriden! Otherwise a NotImplementedError will be raised
     """
 
+    # allow_backwards = False
+    # allow_multistep = False
+
     if self.curriculum_dict["finished"]: return
 
     # determine what stage we are at
