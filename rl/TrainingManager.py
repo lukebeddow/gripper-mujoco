@@ -355,11 +355,13 @@ class TrainingManager():
   def continue_training(self, new_endpoint=None, extra_episodes=None):
     """
     Continue a training (already loaded), either to a new endpoint, or simply adding a
-    given number of episodes. A trainer must be loaded when this function is called.
+    given number of episodes. A trainer must be loaded before this function is called.
+    If neither new_endpoint or extra_episodes are set, the training will continue to the
+    original endpointy
     """
 
-    if new_endpoint is None and extra_episodes is None:
-      raise RuntimeError("TrainingManager.continue_training() requires either 'new_endpoint' or 'extra_episodes' to be set")
+    if not hasattr(self, "trainer") or self.trainer is None:
+      raise RuntimeError("TrainingManager.continue_training() has been called but no trainer is loaded. The load() function must be run before calling this function")
 
     self.trainer.train(num_episodes_abs=new_endpoint, num_episodes_extra=extra_episodes)
     self.run_test(trials_per_obj=self.settings["final_test_trials_per_object"])
@@ -405,6 +407,9 @@ class TrainingManager():
     else:
       self.trainer.load(self.run_name, group_name=self.group_name, id=id,
                         path_to_run_folder=path_to_run_folder)
+    
+    # see if we can load the training summary as well
+    self.load_training_summary()
 
   def init_training_summary(self):
     """
@@ -437,6 +442,9 @@ class TrainingManager():
 
     # try to load any existing information first
     exists = self.load_training_summary(filepath=filepath)
+    if not exists:
+      if self.log_level >= 2:
+        print("TrainingManager did not find an existing training summary to load")
 
     job_string = f"Job number is {self.job_number}\n" if self.job_number is not None else ""
     timestamp_string = f"\tTimestamp is {self.timestamp}\n" if self.timestamp is not None else ""

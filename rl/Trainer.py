@@ -632,6 +632,9 @@ class Trainer:
       if self.log_level > 0:
         print(f"Trainer.train() warning: num_episodes={num_episodes_abs} (ignored) and num_episodes_extra={num_episodes_extra} (used) were both set. Training endpoing set as {self.params.num_episodes}")
 
+    if i_start >= self.params.num_episodes:
+      raise RuntimeError(f"Trainer.train() error: training episode start = {i_start} is greater or equal to the target number of episodes = {self.params.num_episodes}")
+
     # if this is a fresh, new training
     if i_start == 0:
       # save starting network parameters and training settings
