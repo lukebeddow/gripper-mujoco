@@ -462,7 +462,6 @@ def curriculum_change_termination(self, stage):
     # set failed termination as a complete failure
     self.env.mj.set.failed_termination.set     (-1.0,   True,  1)
 
-
 def curriculum_change_step_sizes(self, stage):
   """
   Change the step sizes
@@ -545,6 +544,7 @@ if __name__ == "__main__":
   parser.add_argument("--demo", default=0, const=30, nargs="?", type=int)  # run a demo test on model, default 30 trials, can set number with arg
   parser.add_argument("--new-endpoint",       default=None, type=int) # new episode target for continuing training
   parser.add_argument("--extra-episodes",     default=None, type=int) # extra episodes to run for continuing training
+  parser.add_argument("--smallest-job-num",   default=1)              # only used to reduce sleep time to seperate processes
   # parser.add_argument("--override-lib",       action="store_true")    # override bind.so library with loaded data
 
   args = parser.parse_args()
@@ -572,7 +572,10 @@ if __name__ == "__main__":
     print(" -> Device:", args.device)
 
   # seperate process for safety when running a training program
-  if not args.no_delay and args.job is not None and args.program is not None:
+  if (not args.no_delay and 
+      (args.job is not None and args.program is not None)
+      or args.resume is not None):
+    print(f"Sleeping for {args.job} seconds to seperate process for safety")
     sleep(args.job)
     sleep(0.25 * random())
 
@@ -643,7 +646,8 @@ if __name__ == "__main__":
     if args.timestamp is None:
       raise RuntimeError(f"launch_training.py: a timestamp [-t, --timestamp] in the following format '{datestr}' is required to load existing trainigs")
     if args.new_endpoint is None and args.extra_episodes is None:
-      raise RuntimeError("launch_training.py: [-c, --continue] must be used with either [--new-endpoint] or [--extra-episodes]")
+      if args.log_level > 0:
+        print("launch_training.py warning: [-c, --continue] has been used without either [--new-endpoint] or [--extra-episodes]. Original training endpoint will be used")
     
     if args.log_level > 0: print(f"launch_training.py is continuing a traing, new_endpoint={args.new_endpoint}, extra_episodes={args.extra_episodes}")
 
