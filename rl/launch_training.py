@@ -1855,6 +1855,100 @@ if __name__ == "__main__":
     tm.run_training(agent, env)
     print_time_taken()
 
+  elif args.program == "hyperparam_search_1":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [
+      (1e-5, 1e-5),
+      (5e-5, 1e-5),
+      (1e-5, 5e-5),
+      (5e-5, 5e-5)
+    ]
+    vary_2 = [0.95, 0.97, 0.99]
+    vary_3 = [
+      [128, 128],
+      [128, 128, 128],
+      [128, 128, 128, 128]
+    ]
+    repeats = 2
+    tm.param_1_name = "learning rate pi/vf"
+    tm.param_2_name = "gamma"
+    tm.param_3_name = "network layers"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply environment dependent settings
+    action_scale = 1.0
+    tm.settings["cpp"]["continous_actions"] = True
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 2e-3 * action_scale
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.015 * action_scale
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 4e-3 * action_scale
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3 * action_scale
+    tm.settings["cpp"]["time_for_action"] = 0.2 * action_scale
+
+    # apply training specific settings
+    palm_stable_lim = 4
+    palm_danger_lim = palm_stable_lim * 1.25
+    wrist_limit = 8
+    tm.settings["penalty_termination"] = True
+    tm.settings["exceed_style"] = "wrist_" + str(wrist_limit * 0.75)
+    tm.settings["danger_style"] = [5.0, palm_danger_lim, wrist_limit] # bend, palm, wrist
+    tm.settings["cpp"]["saturation_yield_factor"] = 1.5
+    tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
+    tm.settings["cpp"]["stable_palm_force_lim"] = palm_stable_lim
+    tm.settings["env"]["object_position_noise_mm"] = 10
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp" # "set9_fullset"
+    tm.settings["env"]["finger_hook_angle_degrees"] = 90
+
+    # add in z base noise
+    tm.settings["cpp"]["base_position_noise"] = 5e-3
+
+    # add significant mean noise to z base state sensor
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["noise_override"] = [0.1, 0.0]
+
+    # create the environment
+    env = tm.make_env()
+
+    env.mj.set.gripper_target_height = 20e-3
+    env.mj.set.object_stable.trigger = 4
+
+    # palm and wrist normalisation
+    env.mj.set.palm_sensor.normalise = palm_danger_lim * (6/5)
+    env.mj.set.wrist_sensor_Z.normalise = wrist_limit + 2
+
+    # use an action penalty
+    value = 2 * env.mj.set.exceed_limits.reward
+    # rewards                      reward  done   trigger  min  max  overshoot
+    env.mj.set.action_penalty.set (value,  False,   1,     0.1, 3.0,  -1)
+
+    # # add in curriculum where grasping gets harder
+    # tm.settings["trainer"]["use_curriculum"] = tm.param_3[0]
+    # tm.settings["curriculum"]["metric_name"] = "success_rate"
+    # tm.settings["curriculum"]["metric_thresholds"] = [0.7]
+    # tm.settings["curriculum"]["param_values"] = [(15e-3, 1), (28e-3, 4)]
+    # tm.settings["curriculum"]["change_fcn"] = curriculum_change_successful_grasp
+
+    # apply the agent settings
+    layers = tm.param_3
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1[0]
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1[1]
+    tm.settings["Agent_PPO"]["gamma"] = tm.param_2
+    tm.settings["Agent_PPO"]["use_random_action_noise"] = True
+    tm.settings["Agent_PPO"]["random_action_noise_size"] = 0.05
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
   elif args.program == "curriculum_termination_action":
 
     # define what to vary this training, dependent on job number
