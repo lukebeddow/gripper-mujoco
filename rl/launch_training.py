@@ -572,8 +572,7 @@ if __name__ == "__main__":
     print(" -> Device:", args.device)
 
   # seperate process for safety when running a training program
-  if (not args.no_delay and 
-      (args.job is not None and args.program is not None)
+  if (not args.no_delay and args.job is not None and args.program is not None
       or args.resume is not None):
     print(f"Sleeping for {args.job} seconds to seperate process for safety")
     sleep(args.job)

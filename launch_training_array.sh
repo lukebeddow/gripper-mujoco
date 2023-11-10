@@ -105,7 +105,6 @@ echo -e "\nSubmitting jobs now"
 echo Saving logs to $LOG_FOLDER/
 
 IND=0
-SMALLEST_JOB=${ARRAY_INDEXES[0]}
 
 # loop through the jobs we have been assigned
 for I in ${ARRAY_INDEXES[@]}
@@ -128,7 +127,6 @@ do
         ${PY_ARGS[@]} \
         $PRINT \
         $DEBUG \
-        --smallest-job-num $SMALLEST_JOB \
         &
 
     # return output to terminal
