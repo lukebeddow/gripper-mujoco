@@ -297,6 +297,8 @@ class Trainer:
     self.agent = agent
     self.env = env
     self.saved_trainer_params = False
+    self.last_loaded_agent_id = None
+    self.last_saved_agent_id = None
     self.curriculum_dict = {
       "stage" : 0,
       "metric_name" : "",
@@ -398,10 +400,13 @@ class Trainer:
       torch.use_deterministic_algorithms(mode=True)
     else: self.training_reproducible = False
 
-  def save(self, txtfilename=None, txtfilestr=None, extra_data=None, force_train_params=False):
+  def save(self, txtfilename=None, txtfilestr=None, extra_data=None, force_train_params=False,
+           force_save_number=None):
     """
-    Save the state of the current trainer and agent. 
+    Save the state of the current trainer and agent.
     """
+
+    print("force save number is", force_save_number)
 
     if not self.enable_saving: return
 
@@ -430,7 +435,9 @@ class Trainer:
 
     # save the actual agent
     self.modelsaver.save(self.agent.name, pyobj=self.agent.get_save_state(),
-                         txtstr=txtfilestr, txtlabel=txtfilename)
+                         txtstr=txtfilestr, txtlabel=txtfilename,
+                         force_suffix=force_save_number)
+    self.last_saved_agent_id = self.modelsaver.last_loaded_id
 
   def get_param_dict(self):
     """
@@ -498,6 +505,7 @@ class Trainer:
 
     load_agent = self.modelsaver.load(id=id, folderpath=path_to_run_folder,
                                       filenamestarts="Agent")
+    self.last_loaded_agent_id = self.modelsaver.last_loaded_id
     load_train = self.modelsaver.load(folderpath=path_to_run_folder,
                                       filenamestarts=self.train_param_savename)
     try:
@@ -985,11 +993,6 @@ class MujocoTrainer(Trainer):
         save_id = 1 + (self.track.test_episodes[i] // self.params.test_freq
                         + self.track.test_episodes[i] // self.params.save_freq
                         - self.track.test_episodes[i] // (np.lcm(self.params.test_freq, self.params.save_freq)))
-                        
-      if not self.params.use_curriculum:
-        stage = 0
-      else:
-        stage = self.track.test_curriculum_stages[i]
 
       log_str += row_str.format(
         save_id,
@@ -997,7 +1000,7 @@ class MujocoTrainer(Trainer):
         self.track.avg_successful_grasp[i],
         self.track.test_rewards[i],
         self.track.test_durations[i],
-        stage,
+        self.track.test_curriculum_stages[i],
       )
 
     return log_str
@@ -1040,23 +1043,23 @@ class MujocoTrainer(Trainer):
         "{0} | " * 1 # name
       + "{1} | " * 1 # number of instances
       + "{2} | " * 1 # success rate
-      + "{3} | " * 4 # float fields - reward, steps, palm f, fing.f
+      + "{3} | " * 5 # float fields - reward, steps, palm f, fing.f, avg. action
       + "{4} | " * 8 # end conditions - Lft, Stb, oob, t.h, s.h, dB, dP, dW
       + "{5} | " * 7 # percentages - pLft, pCon, pPlmFrc, pXLim, pXBend, pXPalm, pXWrist #pXAxial, pXlaT, pXPalm
       + "\n"
     )
 
     # insert string formatting information for each column style
-    header_str = col_str.format    ("{}",     "{:<4}", "{:<7}",    "{:<6}",    "{:<4}",    "{:<3}")
-    normal_row_str = col_str.format("{:<51}", "{:<4}", "{:<7}",    "{:<6.2f}", "{:<4}",    "{:<3.0f}")
-    avg_row_str = col_str.format   ("{:<51}", "{:<4}", "{:<7.3f}", "{:<6.2f}", "{:<4.2f}", "{:<3.0f}")
+    header_str = col_str.format    ("{}",     "{:<4}", "{:<7}",    "{:<7}",    "{:<4}",    "{:<3}")
+    normal_row_str = col_str.format("{:<51}", "{:<4}", "{:<7}",    "{:<7.2f}", "{:<4}",    "{:<3.0f}")
+    avg_row_str = col_str.format   ("{:<51}", "{:<4}", "{:<7.3f}", "{:<7.2f}", "{:<4.2f}", "{:<3.0f}")
 
     # insert the names into the top of each column - notice the grouping of styles
     table_header = header_str.format(
       "{:<51}",
       "Num",
       "Success",
-      "Reward", "Steps", "Palm f", "Fing.f",
+      "Reward", "Steps", "Palm f", "Fing.f", "Act.pen",
       "lft", "stb", "oob", "l2h", "s.h", "dB", "dP", "dW",
       "%Lt", "%Cn", "%PF", "%XL", "%XB", "%XP", "%XW"
     )
@@ -1121,11 +1124,12 @@ class MujocoTrainer(Trainer):
         num_trials,
         # success rate x1
         obj_counter.successful_grasp.active_sum,
-        # float style x4
+        # float style x5
         avg_rewards[-1], 
         obj_counter.step_num.abs / float(num_trials),
         obj_counter.palm_force.last_value / float(num_trials),
         obj_counter.finger_force.last_value / float(num_trials),
+        obj_counter.action_penalty.last_value / float(num_trials),
         # end state style x8
         obj_counter.lifted.active_sum, 
         obj_counter.object_stable.active_sum, 
@@ -1171,11 +1175,12 @@ class MujocoTrainer(Trainer):
       int(N),
       # success rate x1 (averaged)
       total_counter.successful_grasp.active_sum / N,
-      # float style x4
+      # float style x5
       mean_reward, 
       total_counter.step_num.abs / N,
       total_counter.palm_force.last_value / N,
       total_counter.finger_force.last_value / N,
+      total_counter.action_penalty.last_value / N,
       # end state style (averaged) x8
       total_counter.lifted.active_sum / N, 
       total_counter.object_stable.active_sum / N, 
@@ -1243,6 +1248,7 @@ class MujocoTrainer(Trainer):
     step_num_per_obj = []
     palm_force_per_obj = []
     finger_force_per_obj = []
+    action_penalty_per_obj = []
     lifted_per_obj = []
     stable_per_obj = []
     oob_per_obj = []
@@ -1271,6 +1277,7 @@ class MujocoTrainer(Trainer):
       step_num_per_obj.append(category_dict[cat]["counter"].step_num.abs / category_dict[cat]["num"])
       palm_force_per_obj.append(category_dict[cat]["counter"].palm_force.last_value / category_dict[cat]["num"])
       finger_force_per_obj.append(category_dict[cat]["counter"].finger_force.last_value / category_dict[cat]["num"])
+      action_penalty_per_obj.append(category_dict[cat]["counter"].action_penalty.last_value / category_dict[cat]["num"])
 
       lifted_per_obj.append(category_dict[cat]["counter"].lifted.active_sum / category_dict[cat]["num"])
       stable_per_obj.append(category_dict[cat]["counter"].object_stable.active_sum / category_dict[cat]["num"])
@@ -1298,11 +1305,12 @@ class MujocoTrainer(Trainer):
         int(category_dict[self.track.object_categories[c]]["num"]),
         # success rate
         successful_grasp_per_obj[c],
-        # float style x4
+        # float style x5
         reward_per_obj[c], 
         step_num_per_obj[c],
         palm_force_per_obj[c],
         finger_force_per_obj[c],
+        action_penalty_per_obj[c],
         # end state style x8
         lifted_per_obj[c], 
         stable_per_obj[c], 

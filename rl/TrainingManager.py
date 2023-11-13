@@ -357,7 +357,7 @@ class TrainingManager():
     Continue a training (already loaded), either to a new endpoint, or simply adding a
     given number of episodes. A trainer must be loaded before this function is called.
     If neither new_endpoint or extra_episodes are set, the training will continue to the
-    original endpointy
+    original endpoint
     """
 
     if not hasattr(self, "trainer") or self.trainer is None:
@@ -368,7 +368,8 @@ class TrainingManager():
     self.save_training_summary()
 
   def load(self, job_num=None, timestamp=None, run_name=None, group_name=None, 
-           best_id=False, id=None, path_to_run_folder=None, use_abs_path=False):
+           best_id=False, id=None, path_to_run_folder=None, use_abs_path=False,
+           new_run_group_name=False):
     """
     Load the training currently specified. Either pass:
       1) nothing - run_name and group_name are already set in the class
@@ -378,6 +379,10 @@ class TrainingManager():
     Alongside all pass either the id to load, or best_id=True to find the id with
     the best test performance and load that one.
     """
+
+    if new_run_group_name:
+      keep_run_name = self.run_name
+      keep_group_name = self.group_name
 
     if job_num is not None and timestamp is not None:
       self.set_group_run_name(job_num=job_num, timestamp=timestamp)
@@ -411,6 +416,16 @@ class TrainingManager():
     # see if we can load the training summary as well
     self.load_training_summary()
 
+    print("last loaded id is", self.trainer.last_loaded_agent_id)
+
+    # if we are not using the loaded run and group name
+    if new_run_group_name:
+      self.run_name = keep_run_name
+      self.group_name = keep_group_name
+      self.trainer.setup_saving(run_name=keep_run_name, group_name=keep_group_name)
+      self.trainer.save(force_save_number=self.trainer.last_loaded_agent_id)
+      self.save_training_summary(printout=True)
+
   def init_training_summary(self):
     """
     Remove any existing training summary data
@@ -430,7 +445,7 @@ class TrainingManager():
     self.full_test_sr = None
     self.trained_to = None
 
-  def get_training_summary(self, filepath=None):
+  def get_training_summary(self, filepath=None, load_existing=True):
     """
     Get a string summary of training details (not to be confused with hyperparameters,
     see Trainer.py to print or get any hyperparameters. Alternatively print the settings
@@ -441,10 +456,11 @@ class TrainingManager():
       filepath = self.trainer.savedir + "/" + self.trainer.group_name + "/" + self.trainer.run_name
 
     # try to load any existing information first
-    exists = self.load_training_summary(filepath=filepath)
-    if not exists:
-      if self.log_level >= 2:
-        print("TrainingManager did not find an existing training summary to load")
+    if load_existing:
+      exists = self.load_training_summary(filepath=filepath)
+      if not exists:
+        if self.log_level >= 2:
+          print("TrainingManager did not find an existing training summary to load")
 
     job_string = f"Job number is {self.job_number}\n" if self.job_number is not None else ""
     timestamp_string = f"\tTimestamp is {self.timestamp}\n" if self.timestamp is not None else ""
@@ -541,7 +557,8 @@ class TrainingManager():
 
     return True
 
-  def save_training_summary(self, filepath=None, force=True, printout=False):
+  def save_training_summary(self, filepath=None, force=True, printout=False,
+                            load_existing=True):
     """
     Save a text file summarising the whole training
     """
@@ -554,7 +571,7 @@ class TrainingManager():
     if filepath is None:
       filepath = self.trainer.savedir + "/" + self.trainer.group_name + "/" + self.trainer.run_name
 
-    summary_string = self.get_training_summary(filepath=filepath)
+    summary_string = self.get_training_summary(filepath=filepath, load_existing=load_existing)
 
     if printout and self.log_level > 0:
       print(summary_string)

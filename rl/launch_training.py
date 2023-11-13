@@ -572,8 +572,8 @@ if __name__ == "__main__":
     print(" -> Device:", args.device)
 
   # seperate process for safety when running a training program
-  if (not args.no_delay and args.job is not None and args.program is not None
-      or args.resume is not None):
+  if (not args.no_delay and args.job is not None and (args.program is not None
+      or args.resume is not None)):
     print(f"Sleeping for {args.job} seconds to seperate process for safety")
     sleep(args.job)
     sleep(0.25 * random())
@@ -2031,6 +2031,43 @@ if __name__ == "__main__":
 
     # complete the training
     tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "finetune_test_1":
+
+    # load the best training, but we continue from the end
+    job = 60
+    timestamp = "08-11-23_17-30"
+    tm.load(job_num=job, timestamp=timestamp, best_id=True,
+            new_run_group_name=True)
+    
+    # loading puts back the old training summary
+    tm.program = args.program
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [0.01, 0.05]
+    vary_2 = [4, 8]
+    vary_3 = [1, 2]
+    repeats = 2
+    tm.param_1_name = "action_noise"
+    tm.param_2_name = "stable trigger"
+    tm.param_3_name = "action penalty scale"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply parameter changes
+    tm.trainer.agent.params.random_action_noise_size = tm.param_1
+    tm.trainer.env.mj.set.object_stable.trigger = tm.param_2
+    tm.trainer.env.mj.set.action_penalty.reward *= tm.param_3
+    tm.save_training_summary(load_existing=False)
+
+    # record that our curriculum has changed
+    tm.trainer.curriculum_dict["stage"] += 1
+
+    # now continue training
+    extra_episodes = 40_000
+    tm.continue_training(extra_episodes=extra_episodes)
     print_time_taken()
 
   elif args.program == "example_template":
