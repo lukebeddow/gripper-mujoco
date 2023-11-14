@@ -2068,6 +2068,41 @@ if __name__ == "__main__":
     tm.continue_training(extra_episodes=extra_episodes)
     print_time_taken()
 
+  elif args.program == "finetune_test_2":
+
+    # load the best training, but we continue from the end
+    job = 60
+    timestamp = "08-11-23_17-30"
+    tm.load(job_num=job, timestamp=timestamp, best_id=True,
+            load_into_new_training=True)
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [0.01, 0.05]
+    vary_2 = [8, 12]
+    vary_3 = [3, 5]
+    repeats = 2
+    tm.param_1_name = "action_noise"
+    tm.param_2_name = "stable trigger"
+    tm.param_3_name = "action penalty scale"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply parameter changes
+    tm.trainer.agent.params.random_action_noise_size = tm.param_1
+    tm.trainer.env.mj.set.object_stable.trigger = tm.param_2
+    tm.trainer.env.mj.set.action_penalty.reward *= tm.param_3
+
+    # record that our curriculum has changed and final test should be new model only
+    tm.trainer.curriculum_dict["stage"] += 1
+    tm.settings["final_test_max_stage"] = True
+    tm.settings["final_test_only_stage"] = None
+
+    # now continue training
+    extra_episodes = 60_000
+    tm.continue_training(extra_episodes=extra_episodes)
+    print_time_taken()
+
   elif args.program == "hyperparam_search_2":
 
     # define what to vary this training, dependent on job number

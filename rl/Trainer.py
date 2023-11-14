@@ -1005,13 +1005,8 @@ class MujocoTrainer(Trainer):
     )
     log_str += top_row
     row_str = "{0:<10} | {1:<10} | {2:<15.3f} | {3:<10.3f} | {4:<10.3f} | {5:<10}\n"
+
     for i in range(len(self.track.test_episodes)):
-      # if self.params.test_freq == self.params.save_freq:
-      #   save_id = 1 + (self.track.test_episodes[i] // self.params.test_freq)
-      # else:
-      #   save_id = 1 + (self.track.test_episodes[i] // self.params.test_freq
-      #                   + self.track.test_episodes[i] // self.params.save_freq
-      #                   - self.track.test_episodes[i] // (np.lcm(self.params.test_freq, self.params.save_freq)))
 
       log_str += row_str.format(
         self.get_save_id(self.track.test_episodes[i]),
@@ -1479,7 +1474,8 @@ class MujocoTrainer(Trainer):
       if as_string:
         return f"TrainDQN.read_test_performance() error: {e}"
       else:
-        return np.zeros((5,1))
+        # make sure this is correct length!
+        return np.zeros((6,1))
     
     if as_string: return txt
 
@@ -1621,8 +1617,8 @@ class MujocoTrainer(Trainer):
       else: 
         # return the best_sr, best_ep from the test performance file
         matrix = self.read_test_performance()
-        if stage is not None:
-          if matrix.shape[0] < 5:
+        if stage is not None and np.argmax(matrix[2]) < 1e-5:
+          if matrix.shape[0] <= 5:
             raise RuntimeError("read_best_performance_from_text() failed as 'stage' was given but old training is incompatible")
           if isinstance(stage, int):
             stage_indexes = np.nonzero(abs(matrix[5] - stage) < 1e-5)[0]
