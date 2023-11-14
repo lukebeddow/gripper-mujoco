@@ -55,7 +55,7 @@ do
     -s | --stagger ) (( i++ )); STAGGER=${!i}; echo stagger is $STAGGER ;;
     # without arguments
     -f | --no-faketty ) FAKETTY=; echo faketty disabled ;;
-    -d | --debug ) LOGGING='N'; PRINT_RESULTS_AFTER='N'; DEBUG=" --no-delay"; echo Debug mode on, terminal logging or printing results after ;;
+    -d | --debug ) LOGGING='N'; PRINT_RESULTS_AFTER='N'; echo Debug mode on, terminal logging or printing results after ;;
     --print ) LOGGING='N'; PRINT="--print"; echo Printing mode on, no training ;;
     --print-results ) PRINT_RESULTS='Y' ;;
     # everything else passed directly to python
@@ -106,6 +106,9 @@ echo Saving logs to $LOG_FOLDER/
 
 IND=0
 
+# extracts the first job number (so an input of "2 3 1" gives 2 incorrectly)
+MIN_JOB_NUM=${ARRAY_INDEXES%% *} # https://stackoverflow.com/questions/15685736/how-to-extract-a-particular-element-from-an-array-in-bash
+
 # loop through the jobs we have been assigned
 for I in ${ARRAY_INDEXES[@]}
 do
@@ -127,6 +130,7 @@ do
         ${PY_ARGS[@]} \
         $PRINT \
         $DEBUG \
+        --smallest-job-num $MIN_JOB_NUM \
         &
 
     # return output to terminal
