@@ -105,6 +105,8 @@ echo -e "\nSubmitting jobs now"
 echo Saving logs to $LOG_FOLDER/
 
 IND=0
+
+# extracts the first job number (so an input of "2 3 1" gives 2 incorrectly)
 MIN_JOB_NUM=${ARRAY_INDEXES%% *} # https://stackoverflow.com/questions/15685736/how-to-extract-a-particular-element-from-an-array-in-bash
 
 # loop through the jobs we have been assigned
