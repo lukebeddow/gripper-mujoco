@@ -511,9 +511,6 @@ if __name__ == "__main__":
   # key default settings
   datestr = "%d-%m-%y_%H-%M" # all date inputs must follow this format
 
-  # # print all the inputs we have received
-  # print("array_training_DQN.py inputs are:", sys.argv[1:])
-
   # define arguments and parse them
   parser = argparse.ArgumentParser()
   parser.add_argument("-j", "--job",          default=None, type=int) # job input number
@@ -544,7 +541,7 @@ if __name__ == "__main__":
   parser.add_argument("--demo", default=0, const=30, nargs="?", type=int)  # run a demo test on model, default 30 trials, can set number with arg
   parser.add_argument("--new-endpoint",       default=None, type=int) # new episode target for continuing training
   parser.add_argument("--extra-episodes",     default=None, type=int) # extra episodes to run for continuing training
-  parser.add_argument("--smallest-job-num",   default=1)              # only used to reduce sleep time to seperate processes
+  parser.add_argument("--smallest-job-num",   default=1, type=int)    # only used to reduce sleep time to seperate processes
   # parser.add_argument("--override-lib",       action="store_true")    # override bind.so library with loaded data
 
   args = parser.parse_args()
@@ -574,9 +571,11 @@ if __name__ == "__main__":
   # seperate process for safety when running a training program
   if (not args.no_delay and args.job is not None and (args.program is not None
       or args.resume is not None)):
-    print(f"Sleeping for {args.job} seconds to seperate process for safety")
-    sleep(args.job)
-    sleep(0.25 * random())
+    sleep_for = args.job - args.smallest_job_num
+    if sleep_for < 0: sleep_for = args.job # in case of jobstr "4 5 6 1"
+    print(f"Sleeping for {sleep_for} seconds to seperate process for safety")
+    sleep(sleep_for)
+    sleep(0.25 * random()) # extra safety
 
   # ----- special cases ----- #
 
