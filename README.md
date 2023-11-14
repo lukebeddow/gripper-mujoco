@@ -36,7 +36,7 @@ The c++ outputs will be put into a folder called ```bin```, the python module in
 
 In order to build, the locations of the dependent libraries needs to be specified. This is specified in the ```buildsettings.mk``` file. **You will need to edit ```buildsettings.mk``` in order to build**. This file contains library locations for a variety of compile locations, you will need to add your compile location to this file. The file is structured as an ```if ... else if ... else if ... endif```. Copy the following code to the bottom of the file:
 
-```
+```make
 ifeq ($(filter mybuild, $(MAKECMDGOALS)), mybuild)
 
 # set this command goal as a phony target (important)
@@ -101,7 +101,7 @@ To build the project simply naviage to the root directory and run ```make all my
 
 Make options:
 
-```make
+```
 make all     # build all targets
 make py      # build only the python targets
 make cpp     # build only the cpp targets
@@ -183,7 +183,7 @@ For the majority of cases, the workflow is to define a new 'program' in ```rl/la
 
 You define a new program by addding it to the bottom of ```rl/launch_training.py```, after ```if __name__ == "__main__":```. The very bottom part of this file is structured as an ```if args.program == "A"...elif args.program == "B"...elif args.program == "C" etc...```, switching between different training programs. You can add your own training program by copying the following template into the ```if..elif...``` and before the last ```else:```. Note that the python object ```tm``` is the training manager from ```rl/TrainingManager.py```.
 
-```
+```python
 elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number
@@ -228,7 +228,7 @@ Agents are defined in the folder ```rl/agents``` and the actual trainer which pe
 
 The program template given above expects that multiple different jobs will be run within this program, performing a grid search across a set of parameters. For example, if you wanted to check three different learning rates, ```1e-5, 1e-4, 1e-3``` and two different lengths of training ```10_000, 20_000``` that would take 6 trainings to cover all the possible combinations. Say we wanted to repeat each training 3 times, now we will have 18 total trainings. So our job numbers will vary from 1 to 18, and we can write that like this:
 
-```
+```python
 elif args.program == "vary_lr_and_num_ep":
 
     # define what to vary this training, dependent on job number
