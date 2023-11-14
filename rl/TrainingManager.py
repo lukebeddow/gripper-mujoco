@@ -235,7 +235,9 @@ class TrainingManager():
     "save" : True,
     "plot" : False,
     "render" : False,
-    "final_test_trials_per_object" : 10
+    "final_test_trials_per_object" : 10,
+    "final_test_max_stage" : True,
+    "final_test_only_stage" : None,
   }
 
   def __init__(self, rngseed=None, device="cpu", log_level=1,
@@ -307,20 +309,36 @@ class TrainingManager():
     # now train
     self.trainer.train()
 
-    # finish with an in depth test
-    self.run_test(trials_per_obj=self.settings["final_test_trials_per_object"])
-
+    # finish by loading the best training and running an in depth test on it
+    self.run_test(trials_per_obj=self.settings["final_test_trials_per_object"],
+                  load_best_id=True)
+      
     # save final summary of training
     self.save_training_summary()
 
-  def run_test(self, heuristic=False, trials_per_obj=10, render=False, pause=False, demo=False,
-               different_object_set=None):
+  def run_test(self, heuristic=False, trials_per_obj=10, render=False, pause=False,
+               demo=False, different_object_set=None, load_best_id=False):
     """
     Perform a thorough test on the model, including loading the best performing network
     """
 
     if self.log_level > 0:
       print("\nPreparing to perform a model test, heuristic =", heuristic)
+
+    # are we loading the best performing model before this test
+    if load_best_id:
+      # check if we should only finalise tests on trainings that reached a certain stage
+      if self.settings["final_test_only_stage"] is not None:
+        stage = self.settings["final_test_only_stage"]
+      elif self.settings["final_test_max_stage"]:
+        stage = "max"
+      else: stage = None
+      # try to load the best training
+      found = self.trainer.load_best_id(stage=stage)
+      if not found:
+        if self.log_level > 0:
+          print(f"TrainingManager.run_test() not run, as training did not statisfy stage = {stage}")
+        return
 
     # adjust settingss
     if demo:
@@ -342,7 +360,7 @@ class TrainingManager():
 
     # save data to a text file
     if self.settings["save"]:
-      savetxt = f"array_training_DQN.test(...) final success rate = {self.trainer.last_test_success_rate}\n"
+      savetxt = f"TrainingMananger.run_test() final success rate = {self.trainer.last_test_success_rate}\n"
       savetxt += "\n" + test_report
       if heuristic: savename = "heuristic_test_"
       elif demo: savename = "demo_test_"
@@ -407,16 +425,21 @@ class TrainingManager():
 
     # now load the specified model
     if best_id:
-      self.trainer.load_best_id(self.run_name, group_name=self.group_name,
-                                path_to_run_folder=path_to_run_folder)
+      if self.settings["final_test_only_stage"] is not None:
+        stage = self.settings["final_test_only_stage"]
+      elif self.settings["final_test_max_stage"]:
+        stage = "max"
+      else: stage = None
+      found = self.trainer.load_best_id(self.run_name, group_name=self.group_name,
+                                        path_to_run_folder=path_to_run_folder, stage=stage)
+      if not found:
+        raise RuntimeError(f"TrainingMananger.load() error: load_best_id failed (stage = {stage})")
     else:
       self.trainer.load(self.run_name, group_name=self.group_name, id=id,
                         path_to_run_folder=path_to_run_folder)
     
     # see if we can load the training summary as well
     self.load_training_summary()
-
-    print("last loaded id is", self.trainer.last_loaded_agent_id)
 
     # if we are not using the loaded run and group name
     if new_run_group_name:

@@ -2041,8 +2041,11 @@ if __name__ == "__main__":
     tm.load(job_num=job, timestamp=timestamp, best_id=True,
             new_run_group_name=True)
     
-    # loading puts back the old training summary
+    # loading puts back the old training summary, lets overwrite
     tm.program = args.program
+    tm.job_number = args.job
+    tm.timestamp = timestamp
+    tm.save_training_summary(load_existing=False)
 
     # define what to vary this training, dependent on job number
     vary_1 = [0.01, 0.05]
@@ -2060,10 +2063,11 @@ if __name__ == "__main__":
     tm.trainer.agent.params.random_action_noise_size = tm.param_1
     tm.trainer.env.mj.set.object_stable.trigger = tm.param_2
     tm.trainer.env.mj.set.action_penalty.reward *= tm.param_3
-    tm.save_training_summary(load_existing=False)
 
-    # record that our curriculum has changed
+    # record that our curriculum has changed and final test should be new model only
     tm.trainer.curriculum_dict["stage"] += 1
+    tm.settings["final_test_max_stage"] = True
+    tm.settings["final_test_only_stage"] = None
 
     # now continue training
     extra_episodes = 40_000

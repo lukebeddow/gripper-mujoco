@@ -406,8 +406,6 @@ class Trainer:
     Save the state of the current trainer and agent.
     """
 
-    print("force save number is", force_save_number)
-
     if not self.enable_saving: return
 
     if not self.modelsaver.in_folder:
@@ -429,15 +427,36 @@ class Trainer:
       self.modelsaver.save(self.train_param_savename, pyobj=trainer_save)
       self.saved_trainer_params = True
 
+    # determine what save_id to use
+    save_id = self.get_save_id(self.track.episodes_done)
+    save_id_agent = save_id if force_save_number is None else force_save_number
+    save_id_track = save_id if self.trackinfo_numbering else None
+
     # save tracking information
     self.modelsaver.save(self.track_savename, pyobj=self.track, 
-                         suffix_numbering=self.trackinfo_numbering)
+                         suffix_numbering=self.trackinfo_numbering,
+                         force_suffix=save_id_track)
 
     # save the actual agent
     self.modelsaver.save(self.agent.name, pyobj=self.agent.get_save_state(),
                          txtstr=txtfilestr, txtlabel=txtfilename,
-                         force_suffix=force_save_number)
-    self.last_saved_agent_id = self.modelsaver.last_loaded_id
+                         force_suffix=save_id_agent)
+    self.last_saved_agent_id = self.modelsaver.last_saved_id
+
+  def get_save_id(self, episode):
+    """
+    Return the save id associated with a given episode. Note: if the test_freq
+    or save_freq is changed, this function will no longer output correct ids
+    """
+    first_save = 1
+    if self.params.test_freq == self.params.save_freq:
+      save_id = first_save + (episode // self.params.test_freq)
+    else:
+      save_id = first_save + (episode // self.params.test_freq
+                              + episode // self.params.save_freq
+                              - episode // (np.lcm(self.params.test_freq, 
+                                                   self.params.save_freq)))
+    return save_id
 
   def get_param_dict(self):
     """
@@ -987,15 +1006,15 @@ class MujocoTrainer(Trainer):
     log_str += top_row
     row_str = "{0:<10} | {1:<10} | {2:<15.3f} | {3:<10.3f} | {4:<10.3f} | {5:<10}\n"
     for i in range(len(self.track.test_episodes)):
-      if self.params.test_freq == self.params.save_freq:
-        save_id = 1 + (self.track.test_episodes[i] // self.params.test_freq)
-      else:
-        save_id = 1 + (self.track.test_episodes[i] // self.params.test_freq
-                        + self.track.test_episodes[i] // self.params.save_freq
-                        - self.track.test_episodes[i] // (np.lcm(self.params.test_freq, self.params.save_freq)))
+      # if self.params.test_freq == self.params.save_freq:
+      #   save_id = 1 + (self.track.test_episodes[i] // self.params.test_freq)
+      # else:
+      #   save_id = 1 + (self.track.test_episodes[i] // self.params.test_freq
+      #                   + self.track.test_episodes[i] // self.params.save_freq
+      #                   - self.track.test_episodes[i] // (np.lcm(self.params.test_freq, self.params.save_freq)))
 
       log_str += row_str.format(
-        save_id,
+        self.get_save_id(self.track.test_episodes[i]),
         self.track.test_episodes[i], 
         self.track.avg_successful_grasp[i],
         self.track.test_rewards[i],
@@ -1531,10 +1550,11 @@ class MujocoTrainer(Trainer):
 
     return matrix
 
-  def read_best_performance_from_text(self, silence=False, fulltest=False, heuristic=False):
+  def read_best_performance_from_text(self, silence=False, fulltest=False, heuristic=False,
+                                      stage=None):
     """
     Read a text file to get the best model performance. This function contains
-    hardcoding
+    hardcoding. Stage can be None, or a number, or "max" to choose the highest
     """
 
     readroot = self.savedir + "/" + self.group_name + "/"
@@ -1601,13 +1621,31 @@ class MujocoTrainer(Trainer):
       else: 
         # return the best_sr, best_ep from the test performance file
         matrix = self.read_test_performance()
+        if stage is not None:
+          if matrix.shape[0] < 5:
+            raise RuntimeError("read_best_performance_from_text() failed as 'stage' was given but old training is incompatible")
+          if isinstance(stage, int):
+            stage_indexes = np.nonzero(abs(matrix[5] - stage) < 1e-5)[0]
+            if len(stage_indexes) == 0:
+              raise RuntimeError(f"read_best_performance_from_text() failed as stage = {stage} but this was not reached in this training")
+            matrix = matrix[:,stage_indexes[0]:stage_indexes[-1]]
+          elif stage == "max":
+            stage_index_min = np.argmax(matrix[5])
+            matrix = matrix[:,stage_index_min:]
+          else:
+            raise RuntimeError(f"read_best_performance_from_text() failed as 'stage' was not None, int, or 'max', instead stage = {stage}")
         best_index = np.argmax(matrix[2])
         return matrix[2][best_index], int(matrix[1][best_index])
 
       if self.log_level > 0: print(f"Reading text file: {readpath + readname}")
       with open(readpath + readname, 'r') as openfile:
         file_txt = openfile.read()
+
     except FileNotFoundError as e:
+      if not silence: print("read_best_performance_from_text() failed with error:", e)
+      return None, None
+    
+    except RuntimeError as e:
       if not silence: print("read_best_performance_from_text() failed with error:", e)
       return None, None
 
@@ -1645,41 +1683,52 @@ class MujocoTrainer(Trainer):
 
     return best_sr, best_ep
 
-  def load_best_id(self, run_name, group_name=None, path_to_run_folder=None):
+  def load_best_id(self, run_name, group_name=None, path_to_run_folder=None, stage=None):
     """
-    Try to find the best performing agent and load that
+    Try to find the best performing agent and load that. Stage indicates requirements
+    for which curriulum stage we can load. If an int, we load that stage, or if "max"
+    we load the highest reached stage
     """
 
     id = None
     best_id_found = False
 
-    if self.log_level > 0: print("MujocoTrainer.load_best_id() is now trying to find the best agent id to load")
+    if self.log_level > 0: 
+      print(f"MujocoTrainer.load_best_id() is now trying to find the best agent id to load, stage = {stage}")
 
-    best_sr, best_ep = self.read_best_performance_from_text()
+    best_sr, best_ep = self.read_best_performance_from_text(stage=stage)
     if best_sr is None or best_sr < 1e-5:
-      if self.log_level > 0: print("MujocoTrainer.load_best_id() cannot find best id as best success rate is zero")
+      if self.log_level > 0: 
+        print("MujocoTrainer.load_best_id() cannot find best id as best success rate is zero")
     elif best_ep % self.params.save_freq != 0:
-      if self.log_level > 0: print(f"MujocoTrainer.load_best_id() cannot find best id as best_episode = {best_ep} and save_freq = {self.params.save_freq}, these are incompatible")
+      if self.log_level > 0: 
+        print(f"MujocoTrainer.load_best_id() cannot find best id as best_episode = {best_ep} and save_freq = {self.params.save_freq}, these are incompatible")
     else:
-      id = int((best_ep / self.params.save_freq) + 1)
-      if self.log_level > 0: print(f"id set to {id} with best_ep={best_ep}, save_freq={self.params.save_freq} and best_sr={best_sr}")
+      id = self.get_save_id(best_ep)
+      if self.log_level > 0: 
+        print(f"id set to {id} with best_ep={best_ep}, save_freq={self.params.save_freq} and best_sr={best_sr}")
       best_id_found = True
 
     # try to load, if best id not found it loads most recent (ie id=None)
     self.load(run_name, id=id, group_name=group_name, path_to_run_folder=path_to_run_folder)
 
     if not best_id_found:
-      best_sr, best_ep = self.calc_best_performance()
-      if self.log_level > 0: print(f"BEST_ID_FAILED  -> Preparing to reload with best id in model.load(...)")
+      if stage == "max": stage = self.curriculum_dict["stage"]
+      best_sr, best_ep = self.calc_best_performance(from_stage=stage, to_stage=stage)
+      if self.log_level > 0: 
+        print(f"BEST_ID_FAILED  -> Preparing to reload with best id in model.load(...)")
       if best_sr < 1e-5:
-        if self.log_level > 0: print("BEST_ID_FAILED  -> load(...) cannot find best id as best success rate is zero")
-      elif int(best_ep) % self.params.save_freq != 0:
-        if self.log_level > 0: print(f"BEST_ID_FAILED  -> load(...) cannot find best id as best_episode = {int(best_ep)} and save_freq = {self.params.save_freq}, these are incompatible")
+        if self.log_level > 0: 
+          print("BEST_ID_FAILED  -> load(...) cannot find best id as best success rate is zero")
       else:
-        best_id = int((best_ep / self.params.save_freq) + 1)
-        if self.log_level > 0: print(f"BEST_ID_SUCCESS -> best_id set to {best_id} with best_ep={best_ep}, save_freq={self.params.save_freq} and best_sr={best_sr}")
+        best_id_found = True
+        best_id = self.get_save_id(best_ep)
+        if self.log_level > 0: 
+          print(f"BEST_ID_SUCCESS -> best_id set to {best_id} with best_ep={best_ep}, save_freq={self.params.save_freq} and best_sr={best_sr}")
         # try to load again
         self.load(run_name, id=best_id, group_name=group_name, path_to_run_folder=path_to_run_folder)
+
+    return best_id_found
 
   def curriculum_fcn(self, i):
     """

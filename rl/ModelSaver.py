@@ -418,10 +418,6 @@ class ModelSaver:
     Save the given object using pickle
     """
 
-    print("force suffix is", force_suffix)
-    print("last loaded id is", self.last_loaded_id)
-    print("")
-
     # use class default unless user indicates preference
     if compression is None: compression = self.use_compression
 
@@ -450,6 +446,7 @@ class ModelSaver:
 
       # create the file name
       savename = name + '_' + self.file_num.format(force_suffix) + file_extension
+      save_id = force_suffix
 
     elif suffix_numbering:
 
