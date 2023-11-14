@@ -5,6 +5,8 @@ import sys
 import yaml
 import subprocess
 from copy import deepcopy
+import numpy as np
+from dataclasses import dataclass, asdict
 
 # get the path to this file and insert it to python path (for mjpy.bind)
 pathhere = os.path.dirname(os.path.abspath(__file__))
@@ -12,10 +14,6 @@ sys.path.insert(0, pathhere)
 
 # with env in path, we can now import the shared cpp library
 from mjpy.bind import MjClass, EventTrack
-
-import time
-import numpy as np
-from dataclasses import dataclass, asdict
 
 # random generators for training time and test time
 random_train = np.random.default_rng()
@@ -71,7 +69,7 @@ class MjEnv():
     # training parameters
     max_episode_steps: int = 250
     object_position_noise_mm: int = 10
-    object_rotation_noise_deg: int = 5
+    object_rotation_noise_deg: int = 5 # depreciated, now spawns in any available orientation
 
     # file and testing parameters
     test_obj_per_file: int = 20
@@ -80,7 +78,7 @@ class MjEnv():
     test_objects: int = 100
 
     # model parameters (for loading xml files)
-    object_set_name: str = "set8_fullset_1500"
+    object_set_name: str = "set9_fullset"
     num_segments: int = 8
     finger_thickness: float = 0.9e-3
     finger_length: float = 235e-3
@@ -1183,10 +1181,7 @@ class MjEnv():
         seed = self.myseed
       else:
         # otherwise, get a random seed from [0, maxint]
-        seed = random_train.integers(0, 2_147_483_647) #np.random.randint(0, 2_147_483_647)
-
-    # set the python random seed in numpy
-    # np.random.seed(seed)
+        seed = random_train.integers(0, 2_147_483_647)
 
     # create a new generator with the given seed
     random_train = np.random.default_rng(seed)

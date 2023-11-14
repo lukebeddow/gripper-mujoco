@@ -74,7 +74,7 @@ class TrainingManager():
       "target_kl" : 0.01,
       "max_kl_ratio" : 1.5,
       "use_random_action_noise" : False,
-      "random_action_noise_size" : 0.2,
+      "random_action_noise_size" : 0.05,
       "optimiser" : "adam",
       "adam_beta1" : 0.9,
       "adam_beta2" : 0.999,
@@ -304,7 +304,7 @@ class TrainingManager():
     # save initial training summary (requires creating the training folder before train())
     if self.settings["save"] and not self.trainer.modelsaver.in_folder:
       self.trainer.modelsaver.new_folder(name=self.trainer.run_name, notimestamp=True)
-    self.save_training_summary(printout=True)
+    self.save_training_summary(printout=True, load_existing=False)
 
     # now train
     self.trainer.train()
@@ -323,7 +323,7 @@ class TrainingManager():
     """
 
     if self.log_level > 0:
-      print("\nPreparing to perform a model test, heuristic =", heuristic)
+      print(f"\nPreparing to perform a model test, trials_per_obj = {trials_per_obj}, load_best_id = {load_best_id}, heuristic = {heuristic}")
 
     # are we loading the best performing model before this test
     if load_best_id:
@@ -334,11 +334,13 @@ class TrainingManager():
         stage = "max"
       else: stage = None
       # try to load the best training
-      found = self.trainer.load_best_id(stage=stage)
+      found = self.trainer.load_best_id(self.run_name, stage=stage)
       if not found:
         if self.log_level > 0:
           print(f"TrainingManager.run_test() not run, as training did not statisfy stage = {stage}")
         return
+      elif self.log_level > 0:
+        print("TrainingMananger.run_test() has loaded best_id =", self.trainer.last_loaded_agent_id)
 
     # adjust settingss
     if demo:
@@ -381,13 +383,15 @@ class TrainingManager():
     if not hasattr(self, "trainer") or self.trainer is None:
       raise RuntimeError("TrainingManager.continue_training() has been called but no trainer is loaded. The load() function must be run before calling this function")
 
+    self.save_training_summary(printout=True, load_existing=False)
     self.trainer.train(num_episodes_abs=new_endpoint, num_episodes_extra=extra_episodes)
-    self.run_test(trials_per_obj=self.settings["final_test_trials_per_object"])
+    self.run_test(trials_per_obj=self.settings["final_test_trials_per_object"],
+                  load_best_id=True)
     self.save_training_summary()
 
   def load(self, job_num=None, timestamp=None, run_name=None, group_name=None, 
            best_id=False, id=None, path_to_run_folder=None, use_abs_path=False,
-           new_run_group_name=False):
+           load_into_new_training=False):
     """
     Load the training currently specified. Either pass:
       1) nothing - run_name and group_name are already set in the class
@@ -398,7 +402,10 @@ class TrainingManager():
     the best test performance and load that one.
     """
 
-    if new_run_group_name:
+    if load_into_new_training:
+      # save details which will be restored after load
+      keep_job_num = self.job_number
+      keep_timestamp = self.timestamp
       keep_run_name = self.run_name
       keep_group_name = self.group_name
 
@@ -437,17 +444,19 @@ class TrainingManager():
     else:
       self.trainer.load(self.run_name, group_name=self.group_name, id=id,
                         path_to_run_folder=path_to_run_folder)
-    
-    # see if we can load the training summary as well
-    self.load_training_summary()
 
-    # if we are not using the loaded run and group name
-    if new_run_group_name:
+    if load_into_new_training:
+      # apply new training details, for saving in a new folder
       self.run_name = keep_run_name
       self.group_name = keep_group_name
+      self.job_number = keep_job_num
+      self.timestamp = keep_timestamp
       self.trainer.setup_saving(run_name=keep_run_name, group_name=keep_group_name)
+      # save a copy of the model we just loaded in our new folder
       self.trainer.save(force_save_number=self.trainer.last_loaded_agent_id)
-      self.save_training_summary(printout=True)
+    else:
+      # see if we can load the existing training summary
+      self.load_training_summary()
 
   def init_training_summary(self):
     """
@@ -500,7 +509,9 @@ class TrainingManager():
     trained_to_str = f"\tTrained to episode = {int(traintime_test_np[1][-1])}\n"
 
     # include the table of test performances
-    test_table = self.trainer.read_test_performance(as_string=True)
+    if load_existing:
+      test_table = self.trainer.read_test_performance(as_string=True)
+    else: test_table = "No test table loaded as load_existing=False"
 
     best_fulltest_sr, best_ep = self.trainer.read_best_performance_from_text(fulltest=True, silence=True)
     if best_fulltest_sr is not None:
