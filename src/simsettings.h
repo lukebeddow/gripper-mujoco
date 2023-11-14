@@ -34,7 +34,7 @@
   /*
   automatic settings value detection, and parameters for guiding this */\
   XX(  auto_set_timestep,       bool,     true)     /* find the highest stable timestep, overrides mujoco_timestep */\
-  XX(  auto_calibrate_gauges,   bool,     true)     /* normalise gauges between +-5N, overrides bending_gauge.normalise */\
+  XX(  auto_calibrate_gauges,   bool,     false)     /* normalise gauges between +-5N, overrides bending_gauge.normalise */\
   XX(  auto_sim_steps,          bool,     true)     /* automatically find the sim steps per action, overrides sim_steps_per_action */\
   XX(  auto_exceed_lateral_lim, bool,     false)     /* calculate safe finger bending automaticalled based on yield load */\
   XX(  time_for_action,         double,    0.2)      /* time in seconds to give for each action to complete, only used if auto_sim_steps=true */\
@@ -60,23 +60,26 @@
   XX(  state_noise_mag,         double,   0.0)      /* noise magnitude if using uniform distribution (std <= 0)*/\
   XX(  state_noise_mu,          double,   0.025)    /* abs range of state sensor mean shift*/\
   XX(  state_noise_std,         double,   0.0)      /* std deviation of noise, <= 0 means uniform*/\
+  XX(  base_position_noise,     double,   6e-3)     /* uniform noise on base starting position, is tracked by base sensor */\
   /* 
   update_env() settings */\
   XX(  oob_distance,            double,   75e-3)    /* distance to consider object out of bounds */\
-  XX(  done_height,             double,   15e-3)    /* the object AND the gripper must go up by this height from starting positions */\
+  XX(  lift_height,             double,   15e-3)    /* the object must go up by this height from its starting position */\
+  XX(  gripper_target_height,   double,   28e-3)    /* height the gripper z state must reach for a target height grasp */\
   XX(  stable_finger_force,     double,   1.0)      /* finger force (N) on object to consider stable */\
   XX(  stable_palm_force,       double,   1.0)      /* palm force (N) on object to consider stable */\
   XX(  stable_finger_force_lim, double,   100.0)    /* finger force (N) limit on the object to stop considering stable */\
   XX(  stable_palm_force_lim,   double,   100.0)    /* palm force (N) limit on the object to stop considering stable*/\
   /* 
   is_done() settings */\
-  XX(  use_quit_on_reward,      bool,     true)     /* cap reward at quit_on_reward_below */\
-  XX(  quit_on_reward_above,    float,    1.01)     /* done=true if reward rises above this value */\
-  XX(  quit_on_reward_below,    float,    -1.01)    /* done=true if reward drops below this value */\
+  XX(  cap_reward,              bool,     true)    /* prevent reward from moving outside specified bounds */\
+  XX(  quit_if_cap_exceeded,    bool,     false)    /* cap_reward MUST be true, quit if cap is exceeded */\
+  XX(  reward_cap_lower_bound,  float,    -1.00)    /* lower bound of reward cap, only used if cap_reward=true */\
+  XX(  reward_cap_upper_bound,  float,    1.00)     /* upper bound of reward cap, only used if cap_reward=true */\
   /* 
   set_action() settings */\
   XX(  continous_actions,       bool,     false)    /* are actions continous or discrete */\
-  XX(  use_termination_action,  bool,     true)    /* include an action for termination signalling to end grasp */\
+  XX(  use_termination_action,  bool,     false)    /* include an action for termination signalling to end grasp */\
   XX(  termination_threshold,   float,    0.9)      /* threshold for termination action to trigger (only relevant for continous actions) */\
   XX(  sim_steps_per_action,    int,      200)      /* number of sim steps performed to complete one action */\
   XX(  fingertip_min_mm,        double,   -12.5)    /* minimum allowable fingertip depth below start position before within_limits=false */\
@@ -130,16 +133,17 @@
       name                      reward    done      trigger */\
   BR(  step_num,                -0.01,    false,    1)      /* when a step is made */\
   BR(  lifted,                  0.005,    false,    1)      /* object leaves the ground */\
-  BR(  oob,                     0.0,      1,        1)      /* object out of bounds */\
+  BR(  oob,                     -1.0,     1,        1)      /* object out of bounds */\
   BR(  dropped,                 0.0,      false,    1000)   /* object lifted and then touches gnd */\
-  BR(  target_height,           1.0,      false,    1000)   /* object lifted to done_height */\
+  BR(  lifted_to_height,        0.01,     false,    1)      /* object lifted to lift_height */\
+  BR(  target_height,           0.01,     false,    1)      /* object lifted to lift_height and gripper at target_height */\
   BR(  exceed_limits,           -0.1,     false,    1)      /* gripper motor limits exceeded */\
   BR(  object_contact,          0.005,    false,    1)      /* fingers or palm touches object */\
-  BR(  object_stable,           1.0,      false,    1)      /* fingers and palm apply min force */\
-  BR(  stable_height,           0.0,      1,        1)      /* object stable and at height target */\
+  BR(  object_stable,           0.01,     false,    1)      /* fingers and palm apply min force */\
+  BR(  stable_height,           1.0,      1,        1)      /* object stable and at height target */\
   BR(  stable_termination,      1.0,      1,        1)      /* object stable and termination signal sent */\
   BR(  failed_termination,      -1.0,     1,        1)      /* termination signal sent but object not stable */\
-  BR(  successful_grasp,        0.0,      1,        1)      /* metric to indicate a grasp is stable, shouldn't have associated reward */
+  BR(  successful_grasp,        0.01,     1,        1)      /* metric to indicate a grasp is stable, shouldn't have associated reward */
   
   
 #define LUKE_MJSETTINGS_LINEAR_REWARD \
@@ -161,6 +165,7 @@
   LR(  dangerous_bend_sensor,   0.0,      true,     1,    10.0, 11.0, -1)     /* dangerous bending force, direct sensor limit */\
   LR(  dangerous_wrist_sensor,  0.0,      true,     1,    12.0, 13.0, -1)     /* dangerous wrist force, direct sensor limit */\
   LR(  dangerous_palm_sensor,   0.0,      true,     1,    20.0, 21.0, -1)     /* dangerous palm force, direct sensor limit */\
+  LR(  action_penalty,          -0.1,     false,    1,    0.1,  1.5,  -1)     /* penalty applied for large actions in continous domains */\ 
   /* testing extras for goals */\
   LR(  finger1_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 1 force */\
   LR(  finger2_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 2 force */\

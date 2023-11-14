@@ -133,7 +133,8 @@ def get_jobs_from_timestamp(timestamp, run_name_prefix=None):
 
   return job_nums
 
-def update_training_summaries(timestamp, jobstr=None, job_numbers=None, run_name_prefix=None):
+def update_training_summaries(timestamp, jobstr=None, job_numbers=None, run_name_prefix=None,
+                              silent=True):
   """
   Regenerate training_summaries from a currently running training, or any trainings where
   there is no up to date training_summary.txt files
@@ -147,17 +148,17 @@ def update_training_summaries(timestamp, jobstr=None, job_numbers=None, run_name
   if jobstr is not None:
     job_numbers = parse_job_string(jobstr)
 
-  tm = make_training_manager_from_args(args, silent=True)
+  tm = make_training_manager_from_args(args, silent=silent)
 
   for j in job_numbers:
 
     # determine the path required for this job
     tm.init_training_summary()
     tm.set_group_run_name(job_num=j, timestamp=timestamp, prefix=run_name_prefix)
-    tm.save_training_summary()
+    tm.save_training_summary(force=True)
 
 def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefix=None,
-                        min_ep=None, max_ep=None):
+                        min_ep=None, max_ep=None, silent=True, min_stage=None, max_stage=None):
   """
   Print a table of results for a training
   """
@@ -170,7 +171,7 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
   if jobstr is not None:
     job_numbers = parse_job_string(jobstr)
 
-  tm = make_training_manager_from_args(args, silent=True)
+  tm = make_training_manager_from_args(args, silent=silent)
 
   # prepare to find information from training_summary files
   headings = []
@@ -188,9 +189,12 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
   found_train_best_sr = False
   found_full_test_sr = False
 
-  if min_ep or max_ep is not None:
+  if min_ep is not None or max_ep is not None:
     do_min_max_ep = True
   else: do_min_max_ep = False
+  if min_stage is not None or max_stage is not None:
+    do_min_max_stage = True
+  else: do_min_max_stage = False
 
   for j in job_numbers:
 
@@ -241,12 +245,24 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
   if found_param_3: headings.append(tm.param_3_name)
   if found_trained_to: headings.append("Trained to")
   if do_min_max_ep:
-    if min_ep and max_ep is not None:
+    if min_ep is not None and max_ep is not None:
       headings.append(f"Best SR range {min_ep} - {max_ep}")
     elif min_ep is not None:
       headings.append(f"Best SR from ep {min_ep}")
     elif max_ep is not None:
       headings.append(f"Best SR up to ep {max_ep}")
+    else: raise RuntimeError("code error in print_results_table()")
+    headings.append("At episode")
+  if do_min_max_stage:
+    if min_stage is not None and max_stage is not None:
+      if min_stage == max_stage:
+        headings.append(f"Best SR during stage {min_stage}")
+      else:
+        headings.append(f"Best SR stages {min_stage} - {max_stage}")
+    elif min_stage is not None:
+      headings.append(f"Best SR from stage {min_stage}")
+    elif max_stage is not None:
+      headings.append(f"Best SR up to stage {max_stage}")
     else: raise RuntimeError("code error in print_results_table()")
     headings.append("At episode")
   if found_train_best_ep: headings.append("Train best episode")
@@ -299,8 +315,21 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
     if do_min_max_ep:
       data = tm.trainer.read_test_performance()
       sr, ep = tm.trainer.calc_best_performance(from_episode=min_ep, to_episode=max_ep,
-                                                success_rate_vector=data[1,:],
-                                                episodes_vector=data[0,:])
+                                                success_rate_vector=data[2,:],
+                                                episodes_vector=data[1,:],
+                                                stages_vector=data[5,:])
+      if sr == 0 and ep == 0:
+        new_elem.append("nodata")
+        new_elem.append("nodata")
+      else:
+        new_elem.append(sr)
+        new_elem.append(int(ep))
+    if do_min_max_stage:
+      data = tm.trainer.read_test_performance()
+      sr, ep = tm.trainer.calc_best_performance(from_stage=min_stage, to_stage=max_stage,
+                                                success_rate_vector=data[2,:],
+                                                episodes_vector=data[1,:],
+                                                stages_vector=data[5,:])
       if sr == 0 and ep == 0:
         new_elem.append("nodata")
         new_elem.append("nodata")
@@ -345,7 +374,7 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
     while len(table[i]) < len(headings): table[i] += ["N/F"]
     for j, elem in enumerate(table[i]):
       if isinstance(elem, float):
-        table[i][j] = "{:.4f}".format(elem)
+        table[i][j] = "{:.3f}".format(elem)
     # print(row_str.format(*table[i]))
     print_str += row_str.format(*table[i]) + "\n"
 
@@ -416,6 +445,44 @@ def make_training_manager_from_args(args, silent=False, save=True):
 
   return tm
 
+def curriculum_change_termination(self, stage):
+  """
+  Toggle the termination threshold over stages. Below -1.0 or above 1.0 is
+  impossible to trigger.
+  """
+  if stage == 0:
+    self.env.mj.set.termination_threshold = self.curriculum_dict["param_values"][stage]
+  elif stage == 1:
+    self.env.mj.set.termination_threshold = self.curriculum_dict["param_values"][stage]
+    # disable stable height and enable stable_termination, penalise failed temrination
+    self.env.mj.set.stable_height.set          (0.0,    False,  1000)
+    self.env.mj.set.stable_termination.set     (1.0,    True,   1)
+    self.env.mj.set.failed_termination.set     (-0.05,  False,  1)
+  elif stage == 2:
+    # set failed termination as a complete failure
+    self.env.mj.set.failed_termination.set     (-1.0,   True,  1)
+
+def curriculum_change_step_sizes(self, stage):
+  """
+  Change the step sizes
+  """
+
+  # set the action step sizes
+  self.env.mj.set.gripper_prismatic_X.value = self.curriculum_dict["param_values"][stage][0]
+  self.env.mj.set.gripper_revolute_Y.value = self.curriculum_dict["param_values"][stage][1]
+  self.env.mj.set.gripper_Z.value = self.curriculum_dict["param_values"][stage][2]
+  self.env.mj.set.base_Z.value = self.curriculum_dict["param_values"][stage][3]
+
+  # now adjust the time per action to match the step sizes
+  self.env.mj.set.time_for_action = self.curriculum_dict["param_values"][stage][4]
+
+def curriculum_change_successful_grasp(self, stage):
+  """
+  Make the gripper height required for a successful grasp change over the stages
+  """
+  self.env.mj.set.gripper_target_height = self.curriculum_dict["param_values"][stage][0]
+  env.mj.set.object_stable.trigger = self.curriculum_dict["param_values"][stage][1]
+
 if __name__ == "__main__":
 
   """
@@ -463,6 +530,9 @@ if __name__ == "__main__":
   parser.add_argument("--print-results",      action="store_true")    # prepare and print all 
   parser.add_argument("--print-from-ep",      default=None, type=int) # print best SR from a specific episode
   parser.add_argument("--print-up-to-ep",     default=None, type=int) # print best SR up until a specific episode
+  parser.add_argument("--print-stage",        default=None, type=int) # print best SR during a specific stage
+  parser.add_argument("--print-from-stage",   default=None, type=int) # print best SR from a specific curriculum stage
+  parser.add_argument("--print-up-to-stage",  default=None, type=int) # print best SR up until a specific curriculum stage
   parser.add_argument("--rngseed",            default=None)           # turns on reproducible training with given seed (slower)
   parser.add_argument("--log-level",          type=int, default=1)    # set script log level
   parser.add_argument("--no-delay",           action="store_true")    # prevent a sleep(...) to seperate processes
@@ -470,10 +540,11 @@ if __name__ == "__main__":
   parser.add_argument("--no-saving",          action="store_true")    # do we save any data from this training
   parser.add_argument("--savedir",            default=None)           # override save/load directory
   parser.add_argument("--pause",              default=False)          # pause between episodes in a test
-  parser.add_argument("--test",               action="store_true")    # run a thorough test on existing model
-  parser.add_argument("--demo",               action="store_true")    # run a demo test on model, can specify id number
+  parser.add_argument("--test", default=0, const="saved", nargs="?")  # run a thorough test on existing model, default training set, can choose object set with arg
+  parser.add_argument("--demo", default=0, const=30, nargs="?", type=int)  # run a demo test on model, default 30 trials, can set number with arg
   parser.add_argument("--new-endpoint",       default=None, type=int) # new episode target for continuing training
   parser.add_argument("--extra-episodes",     default=None, type=int) # extra episodes to run for continuing training
+  parser.add_argument("--smallest-job-num",   default=1)              # only used to reduce sleep time to seperate processes
   # parser.add_argument("--override-lib",       action="store_true")    # override bind.so library with loaded data
 
   args = parser.parse_args()
@@ -500,8 +571,10 @@ if __name__ == "__main__":
     print(" -> Program name:", args.program)
     print(" -> Device:", args.device)
 
-  # seperate process for safety
-  if not args.no_delay and args.job is not None:
+  # seperate process for safety when running a training program
+  if (not args.no_delay and args.job is not None and (args.program is not None
+      or args.resume is not None)):
+    print(f"Sleeping for {args.job} seconds to seperate process for safety")
     sleep(args.job)
     sleep(0.25 * random())
 
@@ -512,10 +585,18 @@ if __name__ == "__main__":
     if args.timestamp is None:
       raise RuntimeError(f"launch_training.py: a timestamp [-t, --timestamp] in the following format '{datestr}' is required to load existing trainigs")
 
-    if args.log_level > 0: print("\nPreparing to print a results table in launch_training.py")
-    update_training_summaries(args.timestamp, jobstr=args.job_string, run_name_prefix=args.name_prefix)
+    if args.log_level > 0: 
+      print("\nPreparing to print a results table in launch_training.py")
+    silent = True if args.log_level <= 1 else False
+    if not silent: print("Not silent, log_level set to:", args.log_level)
+    if args.print_stage is not None:
+      args.print_from_stage = args.print_stage
+      args.print_up_to_stage = args.print_stage
+    update_training_summaries(args.timestamp, jobstr=args.job_string, run_name_prefix=args.name_prefix,
+                              silent=silent)
     print_results_table(args.timestamp, jobstr=args.job_string, run_name_prefix=args.name_prefix,
-                        min_ep=args.print_from_ep, max_ep=args.print_up_to_ep)
+                        min_ep=args.print_from_ep, max_ep=args.print_up_to_ep, silent=silent,
+                        min_stage=args.print_from_stage, max_stage=args.print_up_to_stage)
     exit()
 
   if args.job is None:
@@ -541,13 +622,22 @@ if __name__ == "__main__":
     if args.timestamp is None:
       raise RuntimeError(f"launch_training.py: a timestamp [-t, --timestamp] in the following format '{datestr}' is required to load existing trainigs")
 
+    # sort out input arguments
     if args.demo: args.render = True # always render for demonstration tests
     best_id = True if args.load_id is None else False
+    if args.test == "saved": args.test = None # don't load a new object set
 
-    if args.log_level > 0: print("launch_training.py is running a test, render =", args.render)
+    if args.log_level > 0: 
+      print("launch_training.py is running a test")
+      if args.test is not None: print(" -> Object set changed to", args.test)
+      print(" -> ID set to", "best_id" if best_id else args.load_id)
+      print(" -> Render set to", args.render)
+      print(" -> Heuristic set to", args.heuristic)
+      if args.demo: print(" -> Demo set, number of trials is", args.demo)
 
     tm.load(job_num=args.job, timestamp=args.timestamp, best_id=best_id, id=args.load_id)
-    tm.run_test(heuristic=args.heuristic, demo=args.demo, render=args.render, pause=args.pause)
+    tm.run_test(heuristic=args.heuristic, demo=args.demo, render=args.render, pause=args.pause,
+                different_object_set=args.test)
     exit()
 
   if args.resume:
@@ -555,7 +645,8 @@ if __name__ == "__main__":
     if args.timestamp is None:
       raise RuntimeError(f"launch_training.py: a timestamp [-t, --timestamp] in the following format '{datestr}' is required to load existing trainigs")
     if args.new_endpoint is None and args.extra_episodes is None:
-      raise RuntimeError("launch_training.py: [-c, --continue] must be used with either [--new-endpoint] or [--extra-episodes]")
+      if args.log_level > 0:
+        print("launch_training.py warning: [-c, --continue] has been used without either [--new-endpoint] or [--extra-episodes]. Original training endpoint will be used")
     
     if args.log_level > 0: print(f"launch_training.py is continuing a traing, new_endpoint={args.new_endpoint}, extra_episodes={args.extra_episodes}")
 
@@ -638,6 +729,51 @@ if __name__ == "__main__":
     tm.run_training(agent, env)
     print_time_taken()
 
+  elif args.program == "test_2":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-5, 5e-5]
+    vary_2 = [0.1, 0.2]
+    vary_3 = None
+    repeats = None
+    tm.param_1_name = "learning_rate"
+    tm.param_2_name = "clip_ratio"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+    
+    # apply the varied settings (very important!)
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1
+    tm.settings["Agent_PPO"]["clip_ratio"] = tm.param_2
+
+    # choose any additional settings to change
+    tm.settings["trainer"]["num_episodes"] = 18
+    tm.settings["trainer"]["test_freq"] = 6
+    tm.settings["trainer"]["save_freq"] = 4
+    tm.settings["final_test_trials_per_object"] = 1
+    tm.settings["env"]["test_objects"] = 3
+    tm.settings["env"]["max_episode_steps"] = 5
+    tm.settings["episode_log_rate"] = 5
+    tm.settings["track_avg_num"] = 3
+    tm.settings["Agent_PPO"]["steps_per_epoch"] = 15
+    tm.settings["cpp"]["continous_actions"] = True
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent, may depend on variable settings above
+    layers = [20, 20]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                               continous_actions=True)
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
   elif args.program == "sac_test_1":
 
     # define what to vary this training, dependent on job number
@@ -705,7 +841,7 @@ if __name__ == "__main__":
     env = tm.make_env()
 
     # make the agent, may depend on variable settings above
-    layers = [256, 256]
+    layers = [20, 20]
     network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
                                continous_actions=tm.param_1)
     agent = Agent_PPO(device=args.device)
@@ -1277,6 +1413,665 @@ if __name__ == "__main__":
 
     # complete the training
     tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "try_improve_transfer":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1, 2, 4]
+    vary_2 = [6.0, 10.0]
+    vary_3 = [False, True]
+    repeats = 5
+    tm.param_1_name = "object_stable num"
+    tm.param_2_name = "wrist sensor max"
+    tm.param_3_name = "use action penalty"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply environment dependent settings
+    tm.settings["cpp"]["continous_actions"] = True
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 2e-3
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.015
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 4e-3
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3
+    tm.settings["cpp"]["time_for_action"] = 0.2
+
+    # apply training specific settings
+    tm.settings["penalty_termination"] = True
+    tm.settings["danger_style"] = [5.0, 15.0, tm.param_2] # bend, palm, wrist
+    tm.settings["cpp"]["saturation_yield_factor"] = 1.5
+    tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
+    tm.settings["cpp"]["stable_palm_force_lim"] = 10.0
+    tm.settings["env"]["object_position_noise_mm"] = 10
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp" # "set9_fullset"
+    tm.settings["env"]["finger_hook_angle_degrees"] = 90
+
+    # create the environment
+    env = tm.make_env()
+
+    # how many steps in a row do we require stability
+    env.mj.set.object_stable.trigger = tm.param_1
+
+    # wrist normalisation
+    env.mj.set.wrist_sensor_Z.normalise = tm.param_2 + 1
+
+    # are we using an action penalty
+    if tm.param_3:
+      value = 1 * env.mj.set.exceed_limits.reward
+      # rewards                      reward  done   trigger  min  max  overshoot
+      env.mj.set.action_penalty.set (value,  False,   1,     0.1, 1.5,  -1)
+      
+    # apply the agent settings
+    layers = [128, 128, 128]
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = 5e-5
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = 5e-5
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "sensitive_wrist":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [0.5, 0.75, 1.0]
+    vary_2 = [1.0, 2.0, 4.0, 6.0]
+    vary_3 = None
+    repeats = 5
+    tm.param_1_name = "action scaling"
+    tm.param_2_name = "wrist sensor max"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply environment dependent settings
+    tm.settings["cpp"]["continous_actions"] = True
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 2e-3 * tm.param_1
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.015 * tm.param_1
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 4e-3 * tm.param_1
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3 * tm.param_1
+    tm.settings["cpp"]["time_for_action"] = 0.2 * tm.param_1
+
+    # apply training specific settings
+    tm.settings["penalty_termination"] = True
+    tm.settings["exceed_style"] = "wrist_" + str(tm.param_2 * 0.5)
+    tm.settings["danger_style"] = [5.0, 15.0, tm.param_2] # bend, palm, wrist
+    tm.settings["cpp"]["saturation_yield_factor"] = 1.5
+    tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
+    tm.settings["cpp"]["stable_palm_force_lim"] = 10.0
+    tm.settings["env"]["object_position_noise_mm"] = 10
+    tm.settings["trainer"]["num_episodes"] = 60_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp" # "set9_fullset"
+    tm.settings["env"]["finger_hook_angle_degrees"] = 90
+
+    # create the environment
+    env = tm.make_env()
+
+    # wrist normalisation
+    env.mj.set.wrist_sensor_Z.normalise = tm.param_2 * 1.5
+
+    # apply the agent settings
+    layers = [128, 128, 128]
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = 5e-5
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = 5e-5
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "try_action_noise":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [0.5, 1.0]
+    vary_2 = [0.05, 0.15, 0.3]
+    vary_3 = [False, True]
+    repeats = 5
+    tm.param_1_name = "action scaling"
+    tm.param_2_name = "action noise"
+    tm.param_3_name = "action penalty"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply environment dependent settings
+    tm.settings["cpp"]["continous_actions"] = True
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 2e-3 * tm.param_1
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.015 * tm.param_1
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 4e-3 * tm.param_1
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3 * tm.param_1
+    tm.settings["cpp"]["time_for_action"] = 0.2 * tm.param_1
+
+    # apply training specific settings
+    wrist_limit = 4
+    tm.settings["penalty_termination"] = True
+    tm.settings["exceed_style"] = "wrist_" + str(wrist_limit * 0.5)
+    tm.settings["danger_style"] = [5.0, 15.0, wrist_limit] # bend, palm, wrist
+    tm.settings["cpp"]["saturation_yield_factor"] = 1.5
+    tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
+    tm.settings["cpp"]["stable_palm_force_lim"] = 10.0
+    tm.settings["env"]["object_position_noise_mm"] = 10
+    tm.settings["trainer"]["num_episodes"] = 60_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp" # "set9_fullset"
+    tm.settings["env"]["finger_hook_angle_degrees"] = 90
+
+    # create the environment
+    env = tm.make_env()
+
+    # wrist normalisation
+    env.mj.set.wrist_sensor_Z.normalise = wrist_limit * 1.5
+
+    # are we using an action penalty
+    if tm.param_3:
+      value = 2 * env.mj.set.exceed_limits.reward
+      # rewards                      reward  done   trigger  min  max  overshoot
+      env.mj.set.action_penalty.set (value,  False,   1,     0.1, 3.0,  -1)
+
+    # apply the agent settings
+    layers = [128, 128, 128]
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = 5e-5
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = 5e-5
+    tm.settings["Agent_PPO"]["use_random_action_noise"] = True
+    tm.settings["Agent_PPO"]["random_action_noise_size"] = tm.param_2
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "evaluate_action_noise":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [0.5, 1.0]
+    vary_2 = [0.025, 0.05, 0.075]
+    vary_3 = [4, 6, 10]
+    repeats = 5
+    tm.param_1_name = "action scaling"
+    tm.param_2_name = "action noise"
+    tm.param_3_name = "wrist limit"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply environment dependent settings
+    tm.settings["cpp"]["continous_actions"] = True
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 2e-3 * tm.param_1
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.015 * tm.param_1
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 4e-3 * tm.param_1
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3 * tm.param_1
+    tm.settings["cpp"]["time_for_action"] = 0.2 * tm.param_1
+
+    # apply training specific settings
+    wrist_limit = tm.param_3
+    tm.settings["penalty_termination"] = True
+    tm.settings["exceed_style"] = "wrist_" + str(wrist_limit * 0.5)
+    tm.settings["danger_style"] = [5.0, 15.0, wrist_limit] # bend, palm, wrist
+    tm.settings["cpp"]["saturation_yield_factor"] = 1.5
+    tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
+    tm.settings["cpp"]["stable_palm_force_lim"] = 10.0
+    tm.settings["env"]["object_position_noise_mm"] = 10
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp" # "set9_fullset"
+    tm.settings["env"]["finger_hook_angle_degrees"] = 90
+
+    # create the environment
+    env = tm.make_env()
+
+    # wrist normalisation
+    env.mj.set.wrist_sensor_Z.normalise = wrist_limit + 2
+
+    # are we using an action penalty
+    if True:
+      value = 2 * env.mj.set.exceed_limits.reward
+      # rewards                      reward  done   trigger  min  max  overshoot
+      env.mj.set.action_penalty.set (value,  False,   1,     0.1, 3.0,  -1)
+
+    # apply the agent settings
+    layers = [128, 128, 128]
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = 5e-5
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = 5e-5
+    tm.settings["Agent_PPO"]["use_random_action_noise"] = True
+    tm.settings["Agent_PPO"]["random_action_noise_size"] = tm.param_2
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "try_z_noise":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [0, 2e-3, 5e-3]
+    vary_2 = [
+      (False, None),
+      (True, None),
+      (True, (0.05, 0.0)),
+      (True, (0.10, 0.0))
+    ]
+    vary_3 = None
+    repeats = 5
+    tm.param_1_name = "base pos noise"
+    tm.param_2_name = "(use Z sensor, noise override)"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply environment dependent settings
+    action_scale = 1.0
+    tm.settings["cpp"]["continous_actions"] = True
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 2e-3 * action_scale
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.015 * action_scale
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 4e-3 * action_scale
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3 * action_scale
+    tm.settings["cpp"]["time_for_action"] = 0.2 * action_scale
+
+    # apply training specific settings
+    wrist_limit = 4
+    tm.settings["penalty_termination"] = True
+    tm.settings["exceed_style"] = "wrist_" + str(wrist_limit * 0.5)
+    tm.settings["danger_style"] = [5.0, 15.0, wrist_limit] # bend, palm, wrist
+    tm.settings["cpp"]["saturation_yield_factor"] = 1.5
+    tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
+    tm.settings["cpp"]["stable_palm_force_lim"] = 10.0
+    tm.settings["env"]["object_position_noise_mm"] = 10
+    tm.settings["trainer"]["num_episodes"] = 60_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp" # "set9_fullset"
+    tm.settings["env"]["finger_hook_angle_degrees"] = 90
+
+    # add in z base noise
+    tm.settings["cpp"]["base_position_noise"] = tm.param_1
+
+    # are we using z base state sensor
+    if tm.param_2[0]:
+      tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = True
+      tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["noise_override"] = tm.param_2[1]
+    else:
+      tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = False
+
+    # create the environment
+    env = tm.make_env()
+
+    # wrist normalisation
+    env.mj.set.wrist_sensor_Z.normalise = wrist_limit + 2
+
+    # use an action penalty
+    value = 2 * env.mj.set.exceed_limits.reward
+    # rewards                      reward  done   trigger  min  max  overshoot
+    env.mj.set.action_penalty.set (value,  False,   1,     0.1, 3.0,  -1)
+
+    # apply the agent settings
+    layers = [128, 128, 128]
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = 5e-5
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = 5e-5
+    tm.settings["Agent_PPO"]["use_random_action_noise"] = True
+    tm.settings["Agent_PPO"]["random_action_noise_size"] = 0.05
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "improve_on_z_noise":
+
+    """
+    Palm in simulation gives much smaller readings, in real life it reaches up to 10N much faster
+    and leads to corrective actions by the policy interrupting the normal grasp. Should make
+    the palm more sensitive in simultion, perhaps 2x as sensitive then manually adjust for
+    real life grasping.
+
+    Wrist sensor avoidance also seems to be working okay with these trainings. Perhaps more
+    can be done, likely the wrist sensor moves faster in real life. Also, the fingers getting
+    caught on the foam causes a sim2real gap as the policy is not used to that. Could I 
+    greatly increase the friction of the ground to reflect this?
+
+    Lastly, the raising to 30mm whilst keeping stable is not really working. Partly this is
+    probably due to the palm being much more sensitive in real life. However, I should also
+    enforce a slower trigger on the 'object stable' and perhaps rethink how trainings
+    terminate (and in real life as well).
+
+    Revisiting a termination signal would be nice, as easy grasps can then be completed 
+    quicker. However, it does introduce another point of failure. Perhaps I could try a 
+    training which has the termination signal but is not able to trigger it and just uses
+    stable height. Then when it is performing well I change the criteria and keep training
+    to try and get it to learn to use the termination signal when it thinks the grasp is
+    stable.
+      - beware though the termination signal introduces another point of failure - just
+      imagine in real life how many good grasps would be terminated incorrectly and be
+      chalked up as failures
+
+    At what point do I start training with set9 with sharp edged objects? Would that help
+    or hinder the learning? It may well improve the real life performance.
+    """
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [4, 8]
+    vary_2 = [4, 8]
+    vary_3 = [
+      (False, 15e-3, 1),
+      (False, 28e-3, 4),
+      (True,  15e-3, 1),
+    ]
+    repeats = 5
+    tm.param_1_name = "palm limit"
+    tm.param_2_name = "wrist limit"
+    tm.param_3_name = "curriculum/t.h/stb trigger"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply environment dependent settings
+    action_scale = 1.0
+    tm.settings["cpp"]["continous_actions"] = True
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 2e-3 * action_scale
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.015 * action_scale
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 4e-3 * action_scale
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3 * action_scale
+    tm.settings["cpp"]["time_for_action"] = 0.2 * action_scale
+
+    # apply training specific settings
+    palm_stable_lim = tm.param_1
+    palm_danger_lim = palm_stable_lim * 1.25
+    wrist_limit = tm.param_2
+    tm.settings["penalty_termination"] = True
+    tm.settings["exceed_style"] = "wrist_" + str(wrist_limit * 0.75)
+    tm.settings["danger_style"] = [5.0, palm_danger_lim, wrist_limit] # bend, palm, wrist
+    tm.settings["cpp"]["saturation_yield_factor"] = 1.5
+    tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
+    tm.settings["cpp"]["stable_palm_force_lim"] = palm_stable_lim
+    tm.settings["env"]["object_position_noise_mm"] = 10
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp" # "set9_fullset"
+    tm.settings["env"]["finger_hook_angle_degrees"] = 90
+
+    # add in z base noise
+    tm.settings["cpp"]["base_position_noise"] = 5e-3
+
+    # add significant mean noise to z base state sensor
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["noise_override"] = [0.1, 0.0]
+
+    # create the environment
+    env = tm.make_env()
+
+    env.mj.set.gripper_target_height = tm.param_3[1]
+    env.mj.set.object_stable.trigger = tm.param_3[2]
+
+    # palm and wrist normalisation
+    env.mj.set.palm_sensor.normalise = palm_danger_lim * (6/5)
+    env.mj.set.wrist_sensor_Z.normalise = wrist_limit + 2
+
+    # use an action penalty
+    value = 2 * env.mj.set.exceed_limits.reward
+    # rewards                      reward  done   trigger  min  max  overshoot
+    env.mj.set.action_penalty.set (value,  False,   1,     0.1, 3.0,  -1)
+
+    # add in curriculum where grasping gets harder
+    tm.settings["trainer"]["use_curriculum"] = tm.param_3[0]
+    tm.settings["curriculum"]["metric_name"] = "success_rate"
+    tm.settings["curriculum"]["metric_thresholds"] = [0.7]
+    tm.settings["curriculum"]["param_values"] = [(15e-3, 1), (28e-3, 4)]
+    tm.settings["curriculum"]["change_fcn"] = curriculum_change_successful_grasp
+
+    # apply the agent settings
+    layers = [128, 128, 128]
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = 5e-5
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = 5e-5
+    tm.settings["Agent_PPO"]["use_random_action_noise"] = True
+    tm.settings["Agent_PPO"]["random_action_noise_size"] = 0.05
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "hyperparam_search_1":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [
+      (1e-5, 1e-5),
+      (5e-5, 1e-5),
+      (1e-5, 5e-5),
+      (5e-5, 5e-5)
+    ]
+    vary_2 = [0.95, 0.97, 0.99]
+    vary_3 = [
+      [128, 128],
+      [128, 128, 128],
+      [128, 128, 128, 128]
+    ]
+    repeats = 2
+    tm.param_1_name = "learning rate pi/vf"
+    tm.param_2_name = "gamma"
+    tm.param_3_name = "network layers"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply environment dependent settings
+    action_scale = 1.0
+    tm.settings["cpp"]["continous_actions"] = True
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 2e-3 * action_scale
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.015 * action_scale
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 4e-3 * action_scale
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3 * action_scale
+    tm.settings["cpp"]["time_for_action"] = 0.2 * action_scale
+
+    # apply training specific settings
+    palm_stable_lim = 4
+    palm_danger_lim = palm_stable_lim * 1.25
+    wrist_limit = 8
+    tm.settings["penalty_termination"] = True
+    tm.settings["exceed_style"] = "wrist_" + str(wrist_limit * 0.75)
+    tm.settings["danger_style"] = [5.0, palm_danger_lim, wrist_limit] # bend, palm, wrist
+    tm.settings["cpp"]["saturation_yield_factor"] = 1.5
+    tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
+    tm.settings["cpp"]["stable_palm_force_lim"] = palm_stable_lim
+    tm.settings["env"]["object_position_noise_mm"] = 10
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp" # "set9_fullset"
+    tm.settings["env"]["finger_hook_angle_degrees"] = 90
+
+    # add in z base noise
+    tm.settings["cpp"]["base_position_noise"] = 5e-3
+
+    # add significant mean noise to z base state sensor
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["noise_override"] = [0.1, 0.0]
+
+    # create the environment
+    env = tm.make_env()
+
+    env.mj.set.gripper_target_height = 20e-3
+    env.mj.set.object_stable.trigger = 4
+
+    # palm and wrist normalisation
+    env.mj.set.palm_sensor.normalise = palm_danger_lim * (6/5)
+    env.mj.set.wrist_sensor_Z.normalise = wrist_limit + 2
+
+    # use an action penalty
+    value = 2 * env.mj.set.exceed_limits.reward
+    # rewards                      reward  done   trigger  min  max  overshoot
+    env.mj.set.action_penalty.set (value,  False,   1,     0.1, 3.0,  -1)
+
+    # # add in curriculum where grasping gets harder
+    # tm.settings["trainer"]["use_curriculum"] = tm.param_3[0]
+    # tm.settings["curriculum"]["metric_name"] = "success_rate"
+    # tm.settings["curriculum"]["metric_thresholds"] = [0.7]
+    # tm.settings["curriculum"]["param_values"] = [(15e-3, 1), (28e-3, 4)]
+    # tm.settings["curriculum"]["change_fcn"] = curriculum_change_successful_grasp
+
+    # apply the agent settings
+    layers = tm.param_3
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1[0]
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1[1]
+    tm.settings["Agent_PPO"]["gamma"] = tm.param_2
+    tm.settings["Agent_PPO"]["use_random_action_noise"] = True
+    tm.settings["Agent_PPO"]["random_action_noise_size"] = 0.05
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "curriculum_termination_action":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-5, 5e-5]
+    vary_2 = [
+      (-1, -1),
+      (60_000, 90_000), 
+      (40_000, 90_000)
+    ]
+    vary_3 = None
+    repeats = 2
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "ep thresholds"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply environment dependent settings
+    tm.settings["cpp"]["continous_actions"] = True
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 2e-3
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.015
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 4e-3
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3
+    tm.settings["cpp"]["time_for_action"] = 0.2
+
+    # ensure we are training with the termination action
+    tm.settings["cpp"]["use_termination_action"] = True
+
+    # apply training specific settings
+    palm_stable_lim = 8
+    palm_danger_lim = palm_stable_lim * 1.25
+    wrist_limit = 8
+    tm.settings["penalty_termination"] = True
+    tm.settings["exceed_style"] = "wrist_" + str(wrist_limit * 0.75)
+    tm.settings["danger_style"] = [5.0, palm_danger_lim, wrist_limit] # bend, palm, wrist
+    tm.settings["cpp"]["saturation_yield_factor"] = 1.5
+    tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
+    tm.settings["cpp"]["stable_palm_force_lim"] = palm_stable_lim
+    tm.settings["env"]["object_position_noise_mm"] = 10
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp" # "set9_fullset"
+    tm.settings["env"]["finger_hook_angle_degrees"] = 90
+
+    # add in z base noise
+    tm.settings["cpp"]["base_position_noise"] = 5e-3
+
+    # create the environment
+    env = tm.make_env()
+
+    env.mj.set.gripper_target_height = 15e-3
+    env.mj.set.object_stable.trigger = 1
+
+    # palm and wrist normalisation
+    env.mj.set.palm_sensor.normalise = palm_danger_lim * (6/5)
+    env.mj.set.wrist_sensor_Z.normalise = wrist_limit + 2
+
+    # add in curriculum where grasping gets harder
+    tm.settings["trainer"]["use_curriculum"] = True
+    tm.settings["curriculum"]["metric_name"] = "episode_number"
+    tm.settings["curriculum"]["metric_thresholds"] = tm.param_2
+    tm.settings["curriculum"]["param_values"] = [1.1, 0.8]
+    tm.settings["curriculum"]["change_fcn"] = curriculum_change_termination
+    
+    # apply the agent settings
+    layers = [128, 128, 128]
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1
+    tm.settings["Agent_PPO"]["use_random_action_noise"] = True
+    tm.settings["Agent_PPO"]["random_action_noise_size"] = 0.05
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "finetune_test_1":
+
+    # load the best training, but we continue from the end
+    job = 60
+    timestamp = "08-11-23_17-30"
+    tm.load(job_num=job, timestamp=timestamp, best_id=True,
+            new_run_group_name=True)
+    
+    # loading puts back the old training summary, lets overwrite
+    tm.program = args.program
+    tm.job_number = args.job
+    tm.timestamp = timestamp
+    tm.save_training_summary(load_existing=False)
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [0.01, 0.05]
+    vary_2 = [4, 8]
+    vary_3 = [1, 2]
+    repeats = 2
+    tm.param_1_name = "action_noise"
+    tm.param_2_name = "stable trigger"
+    tm.param_3_name = "action penalty scale"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply parameter changes
+    tm.trainer.agent.params.random_action_noise_size = tm.param_1
+    tm.trainer.env.mj.set.object_stable.trigger = tm.param_2
+    tm.trainer.env.mj.set.action_penalty.reward *= tm.param_3
+
+    # record that our curriculum has changed and final test should be new model only
+    tm.trainer.curriculum_dict["stage"] += 1
+    tm.settings["final_test_max_stage"] = True
+    tm.settings["final_test_only_stage"] = None
+
+    # now continue training
+    extra_episodes = 40_000
+    tm.continue_training(extra_episodes=extra_episodes)
     print_time_taken()
 
   elif args.program == "example_template":

@@ -449,14 +449,14 @@ void MjClass::reset()
   // reset variables for use with real gripper
   samples_since_last_obs = 0;
 
-  // wipe any signalling
-  termination_signal_sent = false;
-
   // empty any curve validation data
   curve_validation_data_.reset();
 
   // ensure the simulation settings are all ready to go
   configure_settings();
+
+  // move the base to a random new position
+  random_base_movement(s_.base_position_noise);
 }
 
 void MjClass::hard_reset()
@@ -822,11 +822,11 @@ void MjClass::monitor_sensors()
     // read
     luke::gfloat z = data->userdata[2];
 
-    // save SI
-    sim_sensors_SI_.wrist_Z_sensor.add(z);
-
     // zero the reading (this step is unique to wrist Z sensor)
     z -= s_.wrist_sensor_Z.raw_value_offset;
+
+    // save SI (with reading zero applied!)
+    sim_sensors_SI_.wrist_Z_sensor.add(z);
 
     // normalise
     z = s_.wrist_sensor_Z.apply_normalisation(z);
@@ -1041,6 +1041,7 @@ void MjClass::update_env()
 
     env_.obj[i].lifted = false;
     env_.obj[i].oob = false;
+    env_.obj[i].lifted_to_height = false;
     env_.obj[i].target_height = false;
     env_.obj[i].contact = false;
     env_.obj[i].stable = false;
@@ -1060,10 +1061,16 @@ void MjClass::update_env()
       env_.obj[i].oob = true;
     }
 
-    // lifted above the target height and not oob (env_.cnt.lifted and env_.cnt.oob must be set)
-    if (env_.obj_values.highest_lift > s_.done_height and
-        gripper_z_height > s_.done_height and
-        env_.obj[i].lifted and not env_.obj[i].oob) { // newest version, lift object AND gripper
+    // object lifted past minimum required and not oob (env_.cnt.lifted and env_.cnt.oob must be set)
+    if (env_.obj_values.highest_lift > s_.lift_height - ftol and
+        env_.obj[i].lifted and not env_.obj[i].oob) {
+      env_.cnt.lifted_to_height.value = true;
+      env_.obj[i].lifted_to_height = true;
+    }
+
+    // object is lifted and the gripper has reached the target height
+    if (env_.obj[i].lifted_to_height and
+        gripper_z_height > s_.gripper_target_height - ftol) {
       env_.cnt.target_height.value = true;
       env_.obj[i].target_height = true;
     }
@@ -1146,6 +1153,9 @@ void MjClass::update_env()
   env_.cnt.dangerous_palm_sensor.value = last_palm_N;
   env_.cnt.exceed_wrist_sensor.value = last_wrist_N;
   env_.cnt.dangerous_wrist_sensor.value = last_wrist_N;
+
+  // scale the action penalty based on the number of actions (not counting termination action)
+  env_.cnt.action_penalty.value /= float(n_actions - s_.use_termination_action);
 
   /* ----- determine the reported success rate (as a proxy, should not have associated reward) ----- */
 
@@ -1231,6 +1241,19 @@ bool MjClass::move_step_target(int x, int y, int z)
   return luke::move_gripper_target_step(x, y, z);
 }
 
+double MjClass::random_base_movement(double size)
+{
+  /* Perform a random movement of the base taken from a uniform distribution of
+  [-size, size] in metres */
+
+  std::uniform_real_distribution<double> distribution(-size, size);
+  double z_move = distribution(*MjType::generator);
+
+  luke::set_base_to_position(data, z_move);
+
+  return z_move;
+}
+
 /* ----- learning functions ----- */
 
 void MjClass::action_step()
@@ -1284,6 +1307,7 @@ std::vector<float> MjClass::set_action(int action, float continous_fraction)
   new state vector */
 
   bool wl = true; // within limits
+  termination_signal_sent = false; // reset whether we received a termination action
 
   if (action < 0 or action >= n_actions) {
     std::cout << "MjClass::set_action() received action = " << action << " which is out of bounds.\n"
@@ -1320,6 +1344,7 @@ std::vector<float> MjClass::set_action(int action, float continous_fraction)
           std::cout << ", fraction = " << continous_fraction;   \
         }                                                       \
         wl = s_.NAME.call_action_function(s_.NAME.value * continous_fraction); \
+        env_.cnt.action_penalty.value += (continous_fraction * continous_fraction);\
         break;                                                  \
 
       // run the macro to create the code
@@ -1339,8 +1364,8 @@ std::vector<float> MjClass::set_action(int action, float continous_fraction)
       }
       if (triggered) {
         termination_signal_sent = true;
+        // luke::lift_base_to_height(base_max_[2]); // this is max z height
       }
-      luke::lift_base_to_height(base_max_[2]); // this is max z height
       wl = true;
       break;
     }
@@ -1364,7 +1389,8 @@ std::vector<float> MjClass::set_action(int action, float continous_fraction)
   //     << ", minimum allowed is " << s_.fingertip_min_mm << "\n";
 
   // update whether this action was within limits or not
-  env_.cnt.exceed_limits.value = not wl;
+  // use += so True is latching when using continous actions
+  env_.cnt.exceed_limits.value += not wl;
 
   // get the target state and return it as a vector
   return luke::get_target_state_vector();
@@ -1411,17 +1437,28 @@ bool MjClass::is_done()
   //   return true;
   // }
 
-  // if a termination signal has been sent
-  if (termination_signal_sent) {
-    if (s_.debug) std::cout << "is_done = true, termination signal sent\n";
-    return true;
-  }
+  /* termination rewards should set done=true,
+      -> stable_termination
+      -> failed_termination
+  */
+  // // if a termination signal has been sent
+  // if (termination_signal_sent) {
+  //   if (s_.debug) std::cout << "is_done = true, termination signal sent\n";
+  //   return true;
+  // }
 
   // if the cumulative reward drops below a given threshold
-  if (env_.cumulative_reward < s_.quit_on_reward_below) {
-    if (s_.debug) std::printf("Reward dropped below limit of %.3f, is_done() = true\n",
-      s_.quit_on_reward_below);
-    return true;
+  if (s_.cap_reward and s_.quit_if_cap_exceeded) {
+    if (env_.cumulative_reward - ftol < s_.reward_cap_lower_bound) {
+      if (s_.debug) std::printf("Reward dropped below limit of %.3f, is_done() = true\n",
+        s_.reward_cap_lower_bound);
+      return true;
+    }
+    if (env_.cumulative_reward + ftol > s_.reward_cap_upper_bound) {
+      if (s_.debug) std::printf("Reward exceeded upper limit of %.3f, is_done() = true\n",
+        s_.reward_cap_upper_bound);
+      return true;
+    }
   }
 
   return false;
@@ -2511,20 +2548,20 @@ float MjClass::reward()
   env_.cumulative_reward += transition_reward;
 
   // if we are capping the maximum cumulative negative reward
-  if (env_.cumulative_reward < s_.quit_on_reward_below) {
-    if (s_.use_quit_on_reward) {
+  if (env_.cumulative_reward < s_.reward_cap_lower_bound) {
+    if (s_.cap_reward) {
       // reduce the reward to not put us below the cap
-      transition_reward += s_.quit_on_reward_below - env_.cumulative_reward - ftol;
-      env_.cumulative_reward = s_.quit_on_reward_below - ftol;
+      transition_reward += s_.reward_cap_lower_bound - env_.cumulative_reward;
+      env_.cumulative_reward = s_.reward_cap_lower_bound;
     }
   }
 
   // if we are capping the maximum cumulative positive reward
-  if (env_.cumulative_reward > s_.quit_on_reward_above) {
-    if (s_.use_quit_on_reward) {
+  if (env_.cumulative_reward > s_.reward_cap_upper_bound) {
+    if (s_.cap_reward) {
       // reduce the reward to not put us above the cap
-      transition_reward += s_.quit_on_reward_above - env_.cumulative_reward - ftol;
-      env_.cumulative_reward = s_.quit_on_reward_above - ftol;
+      transition_reward += s_.reward_cap_upper_bound - env_.cumulative_reward;
+      env_.cumulative_reward = s_.reward_cap_upper_bound;
     }
   }
 
@@ -3970,17 +4007,18 @@ float MjClass::yield_load(float thickness, float width)
 
 MjType::EventTrack MjClass::add_events(MjType::EventTrack& e1, MjType::EventTrack& e2)
 {
-  /* add the absolute count and last value of two events, all else is ignored */
+  /* add the absolute count and activity of two events, all else is ignored */
 
   MjType::EventTrack out;
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             out.NAME.abs = e1.NAME.abs + e2.NAME.abs;                          \
-            out.NAME.last_value = e1.NAME.last_value + e2.NAME.last_value;
+            out.NAME.active_sum = e1.NAME.active_sum + e2.NAME.active_sum;
 
   #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)                 \
             out.NAME.abs = e1.NAME.abs + e2.NAME.abs;                          \
-            out.NAME.last_value = e1.NAME.last_value + e2.NAME.last_value;  
+            out.NAME.active_sum = e1.NAME.active_sum + e2.NAME.active_sum;     \
+            out.NAME.last_value = e1.NAME.last_value + e2.NAME.last_value;    
 
     // run the macro to create the code
     LUKE_MJSETTINGS_BINARY_REWARD
@@ -4696,13 +4734,14 @@ void update_events(MjType::EventTrack& events, MjType::Settings& settings)
 {
   /* update the count of each event and reset recent event information */
 
-  bool active = false; // is a linear reward active
+  bool active = false; // is an event active
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                    \
             events.NAME.row = events.NAME.row *                              \
                                   events.NAME.value + events.NAME.value;     \
             events.NAME.abs += events.NAME.value;                            \
             events.NAME.last_value = events.NAME.value;                      \
+            events.NAME.active_sum = bool(events.NAME.row);                  \
             events.NAME.value = false; // reset for next step
 
   #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)               \
@@ -4714,6 +4753,7 @@ void update_events(MjType::EventTrack& events, MjType::Settings& settings)
             events.NAME.row = events.NAME.row * active + active;             \
             events.NAME.abs += active;                                       \
             events.NAME.last_value = events.NAME.value;                      \
+            events.NAME.active_sum = active;                                 \
             events.NAME.value = 0.0; // reset for next step
 
     // run the macro to create the code
@@ -4747,7 +4787,7 @@ float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings)
               float scaled_reward = settings.NAME.reward * fraction;            \
               if (settings.debug)                                               \
                 std::printf("%s triggered by value %.1f, reward += %.4f\n",     \
-                  #NAME, events.NAME.last_value, settings.NAME.reward);         \
+                  #NAME, events.NAME.last_value, scaled_reward);                \
               reward += scaled_reward;                                          \
             }
             

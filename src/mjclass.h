@@ -520,22 +520,24 @@ namespace MjType
 
     struct BinaryEvent {
       bool value { false };
-      int last_value { false }; // can represent sum of booleans (eg 2 = true twice)
+      int last_value { false };
+      int active_sum { 0 };     // was this activated last step, can be summed
       int row { 0 };
       int abs { 0 };
       float percent { 0.0 };
 
-      void reset() { value = 0; last_value = 0; row = 0; abs = 0; percent = 0; }
+      void reset() { value = 0; last_value = 0; row = 0; abs = 0; percent = 0; active_sum = 0; }
     };
 
     struct LinearEvent {
       float value { 0.0 };
-      float last_value { 0.0 };
+      float last_value { 0.0 }; // can be summed
+      int active_sum { 0 };     // was this activated last step, can be summed
       int row { 0 };
       int abs { 0 };
       float percent { 0.0 };
 
-      void reset() { value = 0; last_value = 0; row = 0; abs = 0; percent = 0; }
+      void reset() { value = 0; last_value = 0; row = 0; abs = 0; percent = 0; active_sum = 0;}
     };
 
     // create an event for each reward, binary->binary, linear->linear
@@ -772,6 +774,7 @@ namespace MjType
       float lift_height {};
       bool lifted {};
       bool oob {};
+      bool lifted_to_height {};
       bool target_height {};
       bool contact {};
       bool stable {};
@@ -784,6 +787,7 @@ namespace MjType
           << "; lft(" << lifted
           << "); oob(" << oob
           << "); con(" << contact
+          << "); l2h(" << lifted_to_height
           << "); t.h(" << target_height
           << "); stb(" << stable
           << "); s.h(" << stable_height
@@ -1495,6 +1499,7 @@ public:
   bool move_motor_target(double x, double y, double z);
   bool move_joint_target(double x, double th, double z);
   bool move_step_target(int x, int y, int z);
+  double random_base_movement(double size);
 
   // learning functions
   void action_step();

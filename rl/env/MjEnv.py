@@ -102,7 +102,7 @@ class MjEnv():
 
   def __init__(self, object_set=None, seed=None, num_segments=None, finger_width=None, 
                depth_camera=None, finger_thickness=None, finger_modulus=None,
-               log_level=0, render=False):
+               log_level=0, render=False, continous_actions=False):
     """
     A mujoco environment, optionally set the random seed or prevent loading a
     model, in which case the user should call load() before using the class
@@ -138,6 +138,7 @@ class MjEnv():
     
     # create mujoco instance
     self.mj = MjClass()
+    self.mj.set.continous_actions = continous_actions
     if self.log_level <= 3: self.mj.set.debug = False
     elif self.log_level >= 4: self.mj.set.debug = True
 

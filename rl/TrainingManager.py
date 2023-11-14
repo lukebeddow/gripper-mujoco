@@ -11,6 +11,7 @@ from agents.DQN import Agent_DQN
 from agents.ActorCritic import Agent_SAC
 from agents.PolicyGradient import Agent_PPO
 import networks
+import functools
 
 class TrainingManager():
 
@@ -22,6 +23,7 @@ class TrainingManager():
       "num_episodes" : 60_000,
       "test_freq" : 4000,
       "save_freq" : 4000,
+      "use_curriculum" : False,
     },
 
     # agent hyperparameters
@@ -71,7 +73,9 @@ class TrainingManager():
       "lam" : 0.97,
       "target_kl" : 0.01,
       "max_kl_ratio" : 1.5,
-      "optimiser": "adam",
+      "use_random_action_noise" : False,
+      "random_action_noise_size" : 0.2,
+      "optimiser" : "adam",
       "adam_beta1" : 0.9,
       "adam_beta2" : 0.999,
     },
@@ -113,12 +117,15 @@ class TrainingManager():
       "sensor_noise_std" : 0.025,
       "state_noise_mu" : 0.025,
       "state_noise_std" : 0.0,
+      "base_position_noise" : 0.0,
       "oob_distance" : 75e-3,
-      "done_height" : 15e-3,
+      "lift_height" : 15e-3,
+      "gripper_target_height" : 28e-3,
       "stable_finger_force" : 1.0,
       "stable_palm_force" : 1.0,
       "stable_finger_force_lim" : 100,
       "stable_palm_force_lim" : 100,
+      "cap_reward" : False,
       "fingertip_min_mm" : -12.5, # below (from start position) sets within_limits=false;
       "continous_actions" : False,
       "use_termination_action" : False,
@@ -209,7 +216,16 @@ class TrainingManager():
     "scale_penalties" : 1.0,
     "penalty_termination" : False,
     "min_style" : None,
+    "exceed_style" : None,
     "danger_style" : "safe",
+
+    # curriculum settings
+    "curriculum" : {
+      "metric_name" : "",
+      "metric_thresholds" : [],
+      "param_values" : [],
+      "change_fcn" : None,
+    },
     
     # this class other settings
     "episode_log_rate" : 250,
@@ -219,7 +235,9 @@ class TrainingManager():
     "save" : True,
     "plot" : False,
     "render" : False,
-    "final_test_trials_per_object" : 10
+    "final_test_trials_per_object" : 10,
+    "final_test_max_stage" : True,
+    "final_test_only_stage" : None,
   }
 
   def __init__(self, rngseed=None, device="cpu", log_level=1,
@@ -286,18 +304,20 @@ class TrainingManager():
     # save initial training summary (requires creating the training folder before train())
     if self.settings["save"] and not self.trainer.modelsaver.in_folder:
       self.trainer.modelsaver.new_folder(name=self.trainer.run_name, notimestamp=True)
-    self.save_training_summary()
+    self.save_training_summary(printout=True)
 
     # now train
     self.trainer.train()
 
-    # finish with an in depth test
-    self.run_test(trials_per_obj=self.settings["final_test_trials_per_object"])
-
+    # finish by loading the best training and running an in depth test on it
+    self.run_test(trials_per_obj=self.settings["final_test_trials_per_object"],
+                  load_best_id=True)
+      
     # save final summary of training
     self.save_training_summary()
 
-  def run_test(self, heuristic=False, trials_per_obj=10, render=False, pause=False, demo=False):
+  def run_test(self, heuristic=False, trials_per_obj=10, render=False, pause=False,
+               demo=False, different_object_set=None, load_best_id=False):
     """
     Perform a thorough test on the model, including loading the best performing network
     """
@@ -305,15 +325,34 @@ class TrainingManager():
     if self.log_level > 0:
       print("\nPreparing to perform a model test, heuristic =", heuristic)
 
+    # are we loading the best performing model before this test
+    if load_best_id:
+      # check if we should only finalise tests on trainings that reached a certain stage
+      if self.settings["final_test_only_stage"] is not None:
+        stage = self.settings["final_test_only_stage"]
+      elif self.settings["final_test_max_stage"]:
+        stage = "max"
+      else: stage = None
+      # try to load the best training
+      found = self.trainer.load_best_id(stage=stage)
+      if not found:
+        if self.log_level > 0:
+          print(f"TrainingManager.run_test() not run, as training did not statisfy stage = {stage}")
+        return
+
     # adjust settingss
     if demo:
       self.trainer.env.params.test_trials_per_object = 1
-      self.trainer.env.params.test_objects = 30
+      self.trainer.env.params.test_objects = demo
     else:
       self.trainer.env.params.test_trials_per_object = trials_per_obj
     if render:
       self.trainer.render = True 
       self.trainer.env.render_window = True
+    if different_object_set is not None and isinstance(different_object_set, str):
+      if self.log_level > 0:
+        print(f"Loading a different object set for the test, name = {different_object_set}")
+      self.trainer.env.load(object_set_name=different_object_set)
 
     # perform the test
     test_data = self.trainer.test(save=False, heuristic=heuristic, pause_each_episode=pause)
@@ -321,29 +360,34 @@ class TrainingManager():
 
     # save data to a text file
     if self.settings["save"]:
-      savetxt = f"array_training_DQN.test(...) final success rate = {self.trainer.last_test_success_rate}\n"
+      savetxt = f"TrainingMananger.run_test() final success rate = {self.trainer.last_test_success_rate}\n"
       savetxt += "\n" + test_report
       if heuristic: savename = "heuristic_test_"
       elif demo: savename = "demo_test_"
       else: savename = "full_test_"
+      if different_object_set is not None and isinstance(different_object_set, str):
+        savename = different_object_set + "_" + savename
       savename += datetime.now().strftime(self.datestr)
       self.trainer.modelsaver.save(savename, txtonly=True, txtstr=savetxt)
 
   def continue_training(self, new_endpoint=None, extra_episodes=None):
     """
     Continue a training (already loaded), either to a new endpoint, or simply adding a
-    given number of episodes. A trainer must be loaded when this function is called.
+    given number of episodes. A trainer must be loaded before this function is called.
+    If neither new_endpoint or extra_episodes are set, the training will continue to the
+    original endpoint
     """
 
-    if new_endpoint is None and extra_episodes is None:
-      raise RuntimeError("TrainingManager.continue_training() requires either 'new_endpoint' or 'extra_episodes' to be set")
+    if not hasattr(self, "trainer") or self.trainer is None:
+      raise RuntimeError("TrainingManager.continue_training() has been called but no trainer is loaded. The load() function must be run before calling this function")
 
     self.trainer.train(num_episodes_abs=new_endpoint, num_episodes_extra=extra_episodes)
     self.run_test(trials_per_obj=self.settings["final_test_trials_per_object"])
     self.save_training_summary()
 
   def load(self, job_num=None, timestamp=None, run_name=None, group_name=None, 
-           best_id=False, id=None, path_to_run_folder=None, use_abs_path=False):
+           best_id=False, id=None, path_to_run_folder=None, use_abs_path=False,
+           new_run_group_name=False):
     """
     Load the training currently specified. Either pass:
       1) nothing - run_name and group_name are already set in the class
@@ -353,6 +397,10 @@ class TrainingManager():
     Alongside all pass either the id to load, or best_id=True to find the id with
     the best test performance and load that one.
     """
+
+    if new_run_group_name:
+      keep_run_name = self.run_name
+      keep_group_name = self.group_name
 
     if job_num is not None and timestamp is not None:
       self.set_group_run_name(job_num=job_num, timestamp=timestamp)
@@ -377,11 +425,29 @@ class TrainingManager():
 
     # now load the specified model
     if best_id:
-      self.trainer.load_best_id(self.run_name, group_name=self.group_name,
-                                path_to_run_folder=path_to_run_folder)
+      if self.settings["final_test_only_stage"] is not None:
+        stage = self.settings["final_test_only_stage"]
+      elif self.settings["final_test_max_stage"]:
+        stage = "max"
+      else: stage = None
+      found = self.trainer.load_best_id(self.run_name, group_name=self.group_name,
+                                        path_to_run_folder=path_to_run_folder, stage=stage)
+      if not found:
+        raise RuntimeError(f"TrainingMananger.load() error: load_best_id failed (stage = {stage})")
     else:
       self.trainer.load(self.run_name, group_name=self.group_name, id=id,
                         path_to_run_folder=path_to_run_folder)
+    
+    # see if we can load the training summary as well
+    self.load_training_summary()
+
+    # if we are not using the loaded run and group name
+    if new_run_group_name:
+      self.run_name = keep_run_name
+      self.group_name = keep_group_name
+      self.trainer.setup_saving(run_name=keep_run_name, group_name=keep_group_name)
+      self.trainer.save(force_save_number=self.trainer.last_loaded_agent_id)
+      self.save_training_summary(printout=True)
 
   def init_training_summary(self):
     """
@@ -402,7 +468,7 @@ class TrainingManager():
     self.full_test_sr = None
     self.trained_to = None
 
-  def get_training_summary(self, filepath=None):
+  def get_training_summary(self, filepath=None, load_existing=True):
     """
     Get a string summary of training details (not to be confused with hyperparameters,
     see Trainer.py to print or get any hyperparameters. Alternatively print the settings
@@ -413,11 +479,11 @@ class TrainingManager():
       filepath = self.trainer.savedir + "/" + self.trainer.group_name + "/" + self.trainer.run_name
 
     # try to load any existing information first
-    exists = self.load_training_summary(filepath=filepath)
-
-    if not self.settings["save"]: 
-      if self.log_level > 0: print("Saving is disabled, not saving a training summary")
-      return
+    if load_existing:
+      exists = self.load_training_summary(filepath=filepath)
+      if not exists:
+        if self.log_level >= 2:
+          print("TrainingManager did not find an existing training summary to load")
 
     job_string = f"Job number is {self.job_number}\n" if self.job_number is not None else ""
     timestamp_string = f"\tTimestamp is {self.timestamp}\n" if self.timestamp is not None else ""
@@ -427,19 +493,14 @@ class TrainingManager():
     param_3_string = f"\tParam 3: {self.param_3_name} is {self.param_3}\n" if self.param_3 is not None else ""
 
     traintime_test_np = self.trainer.read_test_performance()
-    best_index = np.argmax(traintime_test_np[1])
-    best_traintime_success = traintime_test_np[1][best_index]
-    best_traintime_episode = int(traintime_test_np[0][best_index])
+    best_index = np.argmax(traintime_test_np[2])
+    best_traintime_success = traintime_test_np[2][best_index]
+    best_traintime_episode = int(traintime_test_np[1][best_index])
     best_traintime_str = f"\tBest training time test performance = {best_traintime_success} at episode = {best_traintime_episode}\n"
-    trained_to_str = f"\tTrained to episode = {int(traintime_test_np[0][-1])}\n"
+    trained_to_str = f"\tTrained to episode = {int(traintime_test_np[1][-1])}\n"
 
-    # create table of test performances
-    test_table = "Test time performance (success rate metric = stable height):\n\n"
-    top_row = "{0:<10} | {1:<15}\n".format("Episode", "Success rate")
-    test_table += top_row
-    row_str = "{0:<10} | {1:<15.3f}\n"
-    for i in range(len(traintime_test_np[0])):
-      test_table += row_str.format(int(traintime_test_np[0,i]), traintime_test_np[1,i])
+    # include the table of test performances
+    test_table = self.trainer.read_test_performance(as_string=True)
 
     best_fulltest_sr, best_ep = self.trainer.read_best_performance_from_text(fulltest=True, silence=True)
     if best_fulltest_sr is not None:
@@ -519,12 +580,13 @@ class TrainingManager():
 
     return True
 
-  def save_training_summary(self, filepath=None):
+  def save_training_summary(self, filepath=None, force=True, printout=False,
+                            load_existing=True):
     """
     Save a text file summarising the whole training
     """
 
-    if self.settings["save"] is False: 
+    if self.settings["save"] is False and force is False: 
       if self.log_level > 0:
         print("TrainingMananger.save_training_summary() warning: trainer.enable_saving = False, nothing saved")
       return
@@ -532,7 +594,10 @@ class TrainingManager():
     if filepath is None:
       filepath = self.trainer.savedir + "/" + self.trainer.group_name + "/" + self.trainer.run_name
 
-    summary_string = self.get_training_summary(filepath=filepath)
+    summary_string = self.get_training_summary(filepath=filepath, load_existing=load_existing)
+
+    if printout and self.log_level > 0:
+      print(summary_string)
 
     # save to a textfile
     with open(filepath + "/" + self.summary_filename, 'w') as f:
@@ -563,9 +628,10 @@ class TrainingManager():
 
     # remove any rewards and ensure none trigger
     env.mj.set.wipe_rewards()
-    env.mj.set.quit_on_reward_below = -1e6
-    env.mj.set.quit_on_reward_above = 1e6
-    env.mj.set.use_quit_on_reward = False
+    env.mj.set.cap_reward = False
+    env.mj.set.quit_if_cap_exceeded = False
+    env.mj.set.reward_cap_lower_bound = -1e6
+    env.mj.set.reward_cap_upper_bound = 1e6
     env.mj.set.use_HER = False
 
     # disable use of all sensors
@@ -586,6 +652,7 @@ class TrainingManager():
     env.mj.set.state_noise_mag = 0
     env.mj.set.state_noise_mu = 0
     env.mj.set.state_noise_std = 0
+    env.mj.set.base_position_noise = 0
 
     return env
 
@@ -638,6 +705,12 @@ class TrainingManager():
 
     # apply trainer settings
     trainer.params.update(self.settings["trainer"])
+    trainer.curriculum_dict["metric_name"] = self.settings["curriculum"]["metric_name"]
+    trainer.curriculum_dict["metric_thresholds"] = self.settings["curriculum"]["metric_thresholds"]
+    trainer.curriculum_dict["param_values"] = self.settings["curriculum"]["param_values"]
+    if trainer.params.use_curriculum and trainer.curriculum_change is not None:
+      trainer.curriculum_change = functools.partial(self.settings["curriculum"]["change_fcn"], trainer)
+      trainer.curriculum_change(trainer.curriculum_dict["stage"]) # apply initial stage settings
 
     return trainer
 
@@ -663,9 +736,11 @@ class TrainingManager():
     env.mj.set.sensor_noise_std = set["cpp"]["sensor_noise_std"]
     env.mj.set.state_noise_mu = set["cpp"]["state_noise_mu"]
     env.mj.set.state_noise_std = set["cpp"]["state_noise_std"]
+    env.mj.set.base_position_noise = set["cpp"]["base_position_noise"]
 
     env.mj.set.oob_distance = set["cpp"]["oob_distance"]
-    env.mj.set.done_height = set["cpp"]["done_height"]
+    env.mj.set.lift_height = set["cpp"]["lift_height"]
+    env.mj.set.gripper_target_height = set["cpp"]["gripper_target_height"]
     env.mj.set.stable_finger_force = set["cpp"]["stable_finger_force"]
     env.mj.set.stable_palm_force = set["cpp"]["stable_palm_force"]
     env.mj.set.stable_finger_force_lim = set["cpp"]["stable_finger_force_lim"]
@@ -754,7 +829,8 @@ class TrainingManager():
                                       scale_penalties=self.settings["scale_penalties"],
                                       penalty_termination=self.settings["penalty_termination"],
                                       min_style=self.settings["min_style"],
-                                      danger_style=self.settings["danger_style"])
+                                      danger_style=self.settings["danger_style"],
+                                      exceed_style=self.settings["exceed_style"])
     
     return env
 
@@ -763,7 +839,7 @@ class TrainingManager():
     Determine the reward thresholds
     """
 
-    printout = True #if self.log_level >= 2 else False
+    printout = True if self.log_level >= 2 else False
 
     @dataclass
     class RewardThresholds:
@@ -815,6 +891,8 @@ class TrainingManager():
     elif exceed_style == "factor_0.8":
       self.RT.xBend = self.RT.gBend + 0.8 * (self.RT.dBend - self.RT.gBend)
       self.RT.xPalm = self.RT.gPalm + 0.8 * (self.RT.dPalm - self.RT.gPalm)
+    elif isinstance(exceed_style, str) and exceed_style.startswith("wrist_"):
+      self.RT.xWrist = float(exceed_style.split("_")[-1])
     elif exceed_style is not None: 
       raise RuntimeError(f"set_sensor_reward_thresholds() got invalid 'exceed_style' of {exceed_style}")
     
@@ -871,7 +949,7 @@ class TrainingManager():
 
     # rewards                        reward   done   trigger    min             max      overshoot
     env.mj.set.lifted.set           (value,  False,   1)
-    env.mj.set.target_height.set    (value,  False,   1)
+    env.mj.set.lifted_to_height.set (value,  False,   1)
     env.mj.set.object_stable.set    (value,  False,   1)
     env.mj.set.good_bend_sensor.set (value,  False,   1,     self.RT.mBend, self.RT.gBend,  -1)
     env.mj.set.good_palm_sensor.set (value,  False,   1,     self.RT.mPalm, self.RT.gPalm,  -1)
@@ -904,17 +982,19 @@ class TrainingManager():
     return env
 
   def create_reward_function(self, env, style, options=[], scale_rewards=1, scale_penalties=1,
-                             penalty_termination=False, min_style=None, danger_style=None):
+                             penalty_termination=False, min_style=None, danger_style=None,
+                             exceed_style=None):
     """
     Set the reward structure for the learning, with different style options
     """
 
     if style == "sensor_mixed_v1":
       # prepare reward thresholds
-      if (env.mj.set.stable_finger_force_lim > 99.0 and
+      
+      if (exceed_style is None and
+          env.mj.set.stable_finger_force_lim > 99.0 and
           env.mj.set.stable_palm_force_lim > 99.0):
         exceed_style = [3.0, 10.0]
-      else: exceed_style = None
       self.set_sensor_reward_thresholds(env, exceed_style=exceed_style, min_style=min_style,
                                         dangerous_style=danger_style)
       # reward each step               reward   done   trigger
@@ -932,10 +1012,10 @@ class TrainingManager():
 
     elif style == "termination_action_v1":
       # prepare reward thresholds
-      if (env.mj.set.stable_finger_force_lim > 99.0 and
+      if (exceed_style is None and
+          env.mj.set.stable_finger_force_lim > 99.0 and
           env.mj.set.stable_palm_force_lim > 99.0):
         exceed_style = [3.0, 10.0]
-      else: exceed_style = None
       self.set_sensor_reward_thresholds(env, exceed_style=exceed_style, min_style=min_style,
                                         dangerous_style=danger_style)
       # reward each step               reward   done   trigger
@@ -959,11 +1039,6 @@ class TrainingManager():
     if "terminate_on_exceed_limits" in options:
       # reward each step                     reward   done   trigger
       env.mj.set.exceed_limits.set     (-1.0,   True,    3)
-
-    # termination on specific reward
-    env.mj.set.quit_on_reward_below = -1.0 if "neg_cap" in options else -1e6
-    env.mj.set.quit_on_reward_above = +1.0 if "pos_cap" in options else 1e6
-    env.mj.set.use_quit_on_reward = True
 
     return env
 

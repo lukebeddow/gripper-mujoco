@@ -125,6 +125,7 @@ bool move_gripper_target_step(int x, int y, int z);
 bool move_base_target_m(double x, double y, double z);
 bool move_base_target_rad(double roll, double pitch, double yaw);
 bool lift_base_to_height(double z);
+void set_base_to_position(mjData* data, float z_pos);
 void set_base_to_max_height(mjData* data);
 void print_target();
 void update_target();

@@ -284,6 +284,8 @@ class Agent_PPO:
     lam: float = 0.97
     target_kl: float = 0.01
     max_kl_ratio: float = 1.5
+    use_random_action_noise: bool = True
+    random_action_noise_size: float = 0.2
 
     # options
     optimiser: str = "adam" # adam/adamW/RMSProp
@@ -308,6 +310,7 @@ class Agent_PPO:
     self.params = Agent_PPO.Parameters()
     self.device = torch.device(device)
     self.rngseed = rngseed
+    self.rng = np.random.default_rng(rngseed)
     self.mode = mode
     self.steps_done = 0
 
@@ -418,6 +421,14 @@ class Agent_PPO:
     #   return torch.tensor([2*self.rng.random() - 1 for x in range(self.action_dim)], dtype=torch.float32)
 
     action, value, logprob = self.mlp_ac.step(state)
+
+    if not test and self.params.use_random_action_noise:
+      a = self.params.random_action_noise_size
+      noise = 2 * a * self.rng.random((1, len(action[0]))) - a
+      # print("action is", action)
+      # print("noise is", noise)
+      action += noise
+      # print("result is", action)
 
     # print("action", action.shape)
     # print("logprob", logprob.shape)
