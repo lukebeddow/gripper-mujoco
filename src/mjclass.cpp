@@ -1036,7 +1036,6 @@ void MjClass::update_env()
   // another step has been made
   env_.cnt.step_num.value = true;
 
-  
   for (int i = 0; i < num_obj; i++) {
 
     env_.obj[i].lifted = false;
@@ -1658,12 +1657,12 @@ std::vector<luke::gfloat> MjClass::get_observation(MjType::SensorData sensors)
   return observation;
 }
 
-std::string MjClass::debug_observation(std::vector<luke::gfloat> observation)
+std::string MjClass::debug_observation(std::vector<luke::gfloat> observation, bool printout = false)
 {
   /* get an observation from a provided set of sensors */
 
   // use for printing detailed observation debug information
-  constexpr bool debug_obs = true;
+  bool debug_obs = printout;
 
   std::vector<luke::gfloat> real_obs = get_observation();
 

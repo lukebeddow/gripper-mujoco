@@ -1525,7 +1525,7 @@ public:
   bool is_done();
   std::vector<luke::gfloat> get_observation();
   std::vector<luke::gfloat> get_observation(MjType::SensorData sensors);
-  std::string debug_observation(std::vector<luke::gfloat> state_vector);
+  std::string debug_observation(std::vector<luke::gfloat> state_vector, bool printout);
   std::vector<float> get_event_state();
   std::vector<float> get_goal();
   std::vector<float> assess_goal();
