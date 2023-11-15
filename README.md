@@ -158,7 +158,7 @@ Command line syntax:
 
 ### Run a python training
 
-To run a python training, we can use ```rl/launch_training.py```. This file has a variety of command line arguments (with are specified under ```if __name__ == "__main__":```. The main ones are:
+To run a python training, we can use ```rl/launch_training.py```. This file has a variety of command line arguments (which are specified under ```if __name__ == "__main__":```). The main ones are:
 
 ```
 rl/launch_training.py
@@ -222,7 +222,7 @@ elif args.program == "example_template":
     print_time_taken()
 ```
 
-Agents are defined in the folder ```rl/agents``` and the actual trainer which performs the training is defined in ```rl/Trainer.py```. The environment is defined in ```env/MjEnv.py``` and is dependent also on the compiled c++ code. These are the three essential parts, and each have their own settings, which are then managed by the ```TrainingMananger```. By writing these settings in the dictionary ```TrainingManager.settings``` when you call ```TrainingMananger.make_env()``` the environment settings are overwritten into the resultant environment called ```env```. Hence, changing the dictionary after this point will not change the actual ```env```, instead you would have to edit the env directly (advanced usage). During the call to ```TrainingManager.run_training()``` settings for the trainer and the agent are overwritten from the dictionary to the underlying objects, therefore the dictionary can be edited at any time before that call.
+Agents are defined in the folder ```rl/agents``` and the actual trainer which performs the training is defined in ```rl/Trainer.py```. The environment is defined in ```rl/env/MjEnv.py``` and is dependent also on the compiled c++ code. These are the three essential parts, and each have their own settings, which are then managed by the ```TrainingMananger```. By writing these settings in the dictionary ```TrainingManager.settings``` when you call ```TrainingMananger.make_env()``` the environment settings are overwritten into the resultant environment called ```env```. Hence, changing the dictionary after this point will not change the actual ```env```, instead you would have to edit the env directly (advanced usage). During the call to ```TrainingManager.run_training()``` settings for the trainer and the agent are overwritten from the dictionary to the underlying objects, therefore the dictionary can be edited at any time before that call.
 
 ### Python training batch example
 
@@ -261,9 +261,9 @@ elif args.program == "vary_lr_and_num_ep":
     print_time_taken()
 ```
 
-Then, multiple terminals we can run our trainings with our job_numbers going 1 to 18.
+Then, with multiple terminals we can run our trainings with our job_numbers going 1 to 18.
 
-However, rather than make 18 different terminals, a convienience script, ```launch_training_array.sh``` is provided. We can run all 18 trainings with only one command:
+However, rather than make 18 different terminals, a convenience script, ```launch_training_array.sh``` is provided. We can run all 18 trainings with only one command:
 
 ```
 ./launch_training_array.sh -p vary_lr_and_num_ep -j "1:18"
