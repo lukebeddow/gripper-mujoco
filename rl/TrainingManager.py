@@ -4,6 +4,9 @@ import torch
 import numpy as np
 from datetime import datetime
 from dataclasses import dataclass
+import yaml
+import os
+import functools
 
 from Trainer import MujocoTrainer
 from env.MjEnv import MjEnv
@@ -11,7 +14,6 @@ from agents.DQN import Agent_DQN
 from agents.ActorCritic import Agent_SAC
 from agents.PolicyGradient import Agent_PPO
 import networks
-import functools
 
 class TrainingManager():
 
@@ -21,8 +23,8 @@ class TrainingManager():
     # trainer settings
     "trainer" : {
       "num_episodes" : 60_000,
-      "test_freq" : 4000,
-      "save_freq" : 4000,
+      "test_freq" : 5000,
+      "save_freq" : 5000,
       "use_curriculum" : False,
     },
 
@@ -63,8 +65,8 @@ class TrainingManager():
     },
 
     "Agent_PPO" : {
-      "learning_rate_pi" : 3e-4,
-      "learning_rate_vf" : 1e-3,
+      "learning_rate_pi" : 5e-5,
+      "learning_rate_vf" : 5e-5,
       "gamma" : 0.99,
       "steps_per_epoch" : 4000,
       "clip_ratio" : 0.2,
@@ -73,7 +75,7 @@ class TrainingManager():
       "lam" : 0.97,
       "target_kl" : 0.01,
       "max_kl_ratio" : 1.5,
-      "use_random_action_noise" : False,
+      "use_random_action_noise" : True,
       "random_action_noise_size" : 0.05,
       "optimiser" : "adam",
       "adam_beta1" : 0.9,
@@ -89,7 +91,7 @@ class TrainingManager():
       "task_reload_chance" : 0.05,
       "test_trials_per_object" : 3,
       "test_objects" : 100,
-      "object_set_name" : "set8_fullset_1500",
+      "object_set_name" : "set9_fullset",
       "num_segments" : 8,
       "finger_thickness" : 0.9e-3,
       "finger_length" : 235e-3,
@@ -108,7 +110,7 @@ class TrainingManager():
     "cpp" : {
       "randomise_colours" : False,
       "time_for_action" : 0.2,
-      "saturation_yield_factor" : 1.0,
+      "saturation_yield_factor" : 1.5,
       "sensor_sample_mode" : 2,
       "state_sample_mode" : 4,
       "sensor_n_prev_steps" : 3,
@@ -117,33 +119,33 @@ class TrainingManager():
       "sensor_noise_std" : 0.025,
       "state_noise_mu" : 0.025,
       "state_noise_std" : 0.0,
-      "base_position_noise" : 0.0,
+      "base_position_noise" : 5e-3,
       "oob_distance" : 75e-3,
       "lift_height" : 15e-3,
-      "gripper_target_height" : 28e-3,
+      "gripper_target_height" : 20e-3,
       "stable_finger_force" : 1.0,
       "stable_palm_force" : 1.0,
-      "stable_finger_force_lim" : 100,
-      "stable_palm_force_lim" : 100,
+      "stable_finger_force_lim" : 4.0,
+      "stable_palm_force_lim" : 4.0,
       "cap_reward" : False,
       "fingertip_min_mm" : -12.5, # below (from start position) sets within_limits=false;
-      "continous_actions" : False,
+      "continous_actions" : True,
       "use_termination_action" : False,
       "termination_threshold" : 0.9,
       "action" : {
         "gripper_prismatic_X" : { 
           "in_use" : True, 
-          "value" : 1e-3, # value = size of discrete, max size of continous
+          "value" : 2e-3, # value = size of discrete, max size of continous
           "sign" : -1
         },
         "gripper_revolute_Y" : { 
           "in_use" : True, 
-          "value" : 0.01,
+          "value" : 0.015,
           "sign" : -1
         },
         "gripper_Z" : { 
           "in_use" : True, 
-          "value" : 2e-3,
+          "value" : 4e-3,
           "sign" : 1
         },
         "base_X" : { 
@@ -174,7 +176,7 @@ class TrainingManager():
           "in_use" : True,
           "normalise" : 0.0,
           "read_rate" : -1,
-          "noise_override" : None
+          "noise_override" : [0.1, 0.0]
         },
         "base_state_sensor_XY" : {
           "in_use" : False,
@@ -190,7 +192,7 @@ class TrainingManager():
         },
         "palm_sensor" : {
           "in_use" : True,
-          "normalise" : 10.0,
+          "normalise" : 6.0,
           "read_rate" : 10,
           "noise_override" : None
         },
@@ -210,14 +212,36 @@ class TrainingManager():
     },
 
     # this class reward settings
-    "reward_style" : "sensor_mixed_v1",
-    "reward_options" : [],
-    "scale_rewards" : 1.0,
-    "scale_penalties" : 1.0,
-    "penalty_termination" : False,
-    "min_style" : None,
-    "exceed_style" : None,
-    "danger_style" : "safe",
+    "reward" : {
+      "style" : "sensor_mixed_v1",
+      "options" : [],
+      "scale_rewards" : 1.0,
+      "scale_penalties" : 1.0,
+      "penalty_termination" : True,
+      "stable_trigger" : 4,
+      "bend" : {
+        "min" : 0.0,
+        "good" : "stable",        # can use "stable"
+        "exceed" : "stable_lim",  # can use "stable_lim"
+        "dangerous" : 5.0,        # can use "yield"
+      },
+      "palm" : {
+        "min" : 0.0,
+        "good" : "stable",        # can use "stable"
+        "exceed" : "stable_lim",  # can use "stable_lim"
+        "dangerous" : 5.0,
+      },
+      "wrist" : {
+        "exceed" : 6.0,
+        "dangerous" : 8.0,
+      },
+      "action" : {
+        "used" : True,
+        "scaling" : 2,
+        "min" : 0.1,
+        "max" : 3.0,
+      },
+    },
 
     # curriculum settings
     "curriculum" : {
@@ -251,6 +275,8 @@ class TrainingManager():
     self.group_name = group_name
     self.run_name = run_name
     self.device = device
+    self.baseline_folder = "baseline_settings"
+    self.baseline_file_name = "baseline_{}.yaml"
 
     # key training information
     self.run_name_prefix = "run"
@@ -288,6 +314,50 @@ class TrainingManager():
     # save details
     if job_num is not None: self.job_number = job_num
     self.timestamp = timestamp
+
+  def save_baseline_params(self):
+    """
+    Save the settings dictionary as a set of baseline parameters. Checks to see if
+    these settings already exist first.
+    """
+
+    create_new = True
+
+    if not os.path.exists(self.baseline_folder):
+      try:
+        os.makedirs(self.baseline_folder)
+      except FileExistsError:
+        # file must have just been created
+        pass
+
+    baseline_files = [x for x in os.listdir(self.baseline_folder)
+                      if x.endswith(".yaml")]
+    
+    if len(baseline_files) != 0:
+
+      # with open(self.baseline_folder + "/temp_settings", "w") as outfile:
+      #   yaml.dump(self.settings, outfile, default_flow_style=False)
+      # with open(self.baseline_folder + "/temp_settings") as file:
+      #   my_settings = yaml.safe_load(file)
+
+      for f in baseline_files:
+        with open(self.baseline_folder + "/" + f) as file:
+          loaded_settings = yaml.safe_load(file)
+        if loaded_settings == self.settings:
+          create_new = False
+          break
+
+    if create_new:
+      new_filename = self.baseline_file_name.format(datetime.now().strftime(self.datestr))
+      if self.log_level > 0:
+        print("TrainingManager.save_baseline_params(): Creating a new baseline settings yaml file:", self.baseline_folder + "/" + new_filename)
+      with open(self.baseline_folder + "/" + new_filename, "w") as outfile:
+        yaml.dump(self.settings, outfile, default_flow_style=False)
+    else:
+      if self.log_level > 0:
+        print("TrainingManager.save_baseline_params(): Not creating a new baseline settings yaml file, these settings already exist")
+
+    return create_new
 
   def run_training(self, agent, env):
     """
@@ -834,95 +904,51 @@ class TrainingManager():
 
     env = self.wipe_cpp_settings(env)
     env = self.apply_env_settings(env, self.settings)
-    env = self.create_reward_function(env, self.settings["reward_style"],
-                                      options=self.settings["reward_options"],
-                                      scale_rewards=self.settings["scale_rewards"],
-                                      scale_penalties=self.settings["scale_penalties"],
-                                      penalty_termination=self.settings["penalty_termination"],
-                                      min_style=self.settings["min_style"],
-                                      danger_style=self.settings["danger_style"],
-                                      exceed_style=self.settings["exceed_style"])
+    env = self.create_reward_function(env)
     
     return env
 
-  def set_sensor_reward_thresholds(self, env, exceed_style=None, min_style=None, dangerous_style=None):
+  def set_sensor_reward_thresholds(self, env):
     """
     Determine the reward thresholds
     """
 
     printout = True if self.log_level >= 2 else False
 
+    if self.settings["reward"]["bend"]["good"] == "stable":
+      set_gBend = env.mj.set.stable_finger_force
+    else: set_gBend = self.settings["reward"]["bend"]["good"]
+    if self.settings["reward"]["bend"]["exceed"] == "stable_lim":
+      set_xBend = env.mj.set.stable_finger_force_lim
+    else: set_xBend = self.settings["reward"]["bend"]["exceed"]
+    if self.settings["reward"]["bend"]["dangerous"] == "yield":
+      set_dBend = env.yield_load()
+    else: set_dBend = self.settings["reward"]["bend"]["dangerous"]
+
+    if self.settings["reward"]["palm"]["good"] == "stable":
+      set_gPalm = env.mj.set.stable_palm_force
+    else: set_gPalm = self.settings["reward"]["palm"]["good"]
+    if self.settings["reward"]["palm"]["exceed"] == "stable_lim":
+      set_xPalm = env.mj.set.stable_palm_force_lim
+    else: set_xPalm = self.settings["reward"]["palm"]["exceed"]
+
     @dataclass
     class RewardThresholds:
       # m=minimum, g=good, x=exceed, d=dangerous
-      mBend = 0.0
-      gBend = env.mj.set.stable_finger_force
-      xBend = env.mj.set.stable_finger_force_lim
-      dBend = env.yield_load()
+      mBend = self.settings["reward"]["bend"]["min"]
+      gBend = set_gBend
+      xBend = set_xBend
+      dBend = set_dBend
 
-      mPalm = 0.0
-      gPalm = env.mj.set.stable_palm_force
-      xPalm = env.mj.set.stable_palm_force_lim
-      dPalm = 30.0
+      mPalm = self.settings["reward"]["palm"]["min"]
+      gPalm = set_gPalm
+      xPalm = set_xPalm
+      dPalm = self.settings["reward"]["palm"]["dangerous"]
 
-      xWrist = 5.0
-      dWrist = 10.0
+      xWrist = self.settings["reward"]["wrist"]["exceed"]
+      dWrist = self.settings["reward"]["wrist"]["dangerous"]
 
     self.RT = RewardThresholds()
-
-    # check if minimum handling is specified
-    if isinstance(min_style, float):
-      self.RT.mBend = min_style
-      self.RT.mPalm = min_style
-    elif isinstance(min_style, list) and len(min_style) == 2:
-      self.RT.mBend = min_style[0]
-      self.RT.mPalm = min_style[1]
-    elif min_style == "binary":
-      self.RT.mBend = self.RT.gBend
-      self.RT.mPalm = self.RT.gPalm
-    elif min_style == "middle":
-      self.RT.mBend = 0.5 * self.RT.gBend
-      self.RT.mPalm = 0.5 * self.RT.gPalm
-    elif min_style is not None: 
-      raise RuntimeError(f"set_sensor_reward_thresholds() got invalid 'min_style' of {min_style}")
-
-    # check if we are given how 'exceed bend' and 'exceed palm' should work
-    if isinstance(exceed_style, float):
-      self.RT.xBend = exceed_style
-      self.RT.xPalm = exceed_style
-    elif isinstance(exceed_style, list) and len(exceed_style) == 2:
-      self.RT.xBend = exceed_style[0]
-      self.RT.xPalm = exceed_style[1]
-    elif exceed_style == "dangerous":
-      self.RT.xBend = self.RT.dBend
-      self.RT.xPalm = self.RT.dPalm
-    elif exceed_style == "middle":
-      self.RT.xBend = self.RT.gBend + 0.5 * (self.RT.dBend - self.RT.gBend)
-      self.RT.xPalm = self.RT.gPalm + 0.5 * (self.RT.dPalm - self.RT.gPalm)
-    elif exceed_style == "factor_0.8":
-      self.RT.xBend = self.RT.gBend + 0.8 * (self.RT.dBend - self.RT.gBend)
-      self.RT.xPalm = self.RT.gPalm + 0.8 * (self.RT.dPalm - self.RT.gPalm)
-    elif isinstance(exceed_style, str) and exceed_style.startswith("wrist_"):
-      self.RT.xWrist = float(exceed_style.split("_")[-1])
-    elif exceed_style is not None: 
-      raise RuntimeError(f"set_sensor_reward_thresholds() got invalid 'exceed_style' of {exceed_style}")
-    
-    # check if dangerous handling is specified
-    if isinstance(dangerous_style, float):
-      self.RT.dBend = dangerous_style
-      self.RT.dPalm = dangerous_style
-      self.RT.dWrist = dangerous_style
-    elif isinstance(dangerous_style, list) and len(dangerous_style) == 3:
-      self.RT.dBend = dangerous_style[0]
-      self.RT.dPalm = dangerous_style[1]
-      self.RT.dWrist = dangerous_style[2]
-    elif dangerous_style == "safe":
-      if self.RT.dBend < self.RT.xBend:
-        self.RT.dBend = self.RT.xBend + 1
-      if self.RT.dPalm < self.RT.dPalm:
-        self.RT.dPalm = self.RT.xPalm + 1
-    elif dangerous_style is not None: 
-      raise RuntimeError(f"set_sensor_reward_thresholds() got invalid 'dangerous_style' of {dangerous_style}")
 
     # confirm that the thresholds make sense
     if self.RT.mBend > self.RT.gBend:
@@ -972,11 +998,18 @@ class TrainingManager():
     Set penalty rewards with given value, alongside defaults
     """
 
-    # penalties                              reward   done   trigger  min               max        overshoot
+    # penalties                        reward   done   trigger  min               max        overshoot
     env.mj.set.exceed_limits.set       (value,  False,    1)
     env.mj.set.exceed_bend_sensor.set  (value,  False,    1,    self.RT.xBend,  self.RT.dBend,  -1)
     env.mj.set.exceed_palm_sensor.set  (value,  False,    1,    self.RT.xPalm,  self.RT.dPalm,  -1)
     env.mj.set.exceed_wrist_sensor.set (value,  False,    1,    self.RT.xWrist, self.RT.dWrist, -1)
+
+    if self.settings["reward"]["action"]["used"]:
+      x = self.settings["reward"]["action"]["scaling"]
+      amin = self.settings["reward"]["action"]["min"]
+      amax = self.settings["reward"]["action"]["max"]
+      # rewards                      reward     done  trigger  min  max  overshoot
+      env.mj.set.action_penalty.set (value * x, False,   1,   amin, amax,  -1)
 
     return env
 
@@ -992,64 +1025,56 @@ class TrainingManager():
 
     return env
 
-  def create_reward_function(self, env, style, options=[], scale_rewards=1, scale_penalties=1,
-                             penalty_termination=False, min_style=None, danger_style=None,
-                             exceed_style=None):
+  def create_reward_function(self, env):
     """
     Set the reward structure for the learning, with different style options
     """
 
-    if style == "sensor_mixed_v1":
+    if self.settings["reward"]["style"] == "sensor_mixed_v1":
       # prepare reward thresholds
       
-      if (exceed_style is None and
-          env.mj.set.stable_finger_force_lim > 99.0 and
-          env.mj.set.stable_palm_force_lim > 99.0):
-        exceed_style = [3.0, 10.0]
-      self.set_sensor_reward_thresholds(env, exceed_style=exceed_style, min_style=min_style,
-                                        dangerous_style=danger_style)
+
+      self.set_sensor_reward_thresholds(env)
       # reward each step               reward   done   trigger
       env.mj.set.step_num.set          (-0.01,  False,   1)
       # penalties and bonuses
-      env = self.set_sensor_bonuses(env, 0.002 * scale_rewards)
-      env = self.set_sensor_penalties(env, -0.002 * scale_penalties)
+      env = self.set_sensor_bonuses(env, 0.002 * self.settings["reward"]["scale_rewards"])
+      env = self.set_sensor_penalties(env, -0.002 * self.settings["reward"]["scale_penalties"])
       # scale based on steps allowed per episode
       env.mj.set.scale_rewards(100 / env.params.max_episode_steps)
       # end criteria                   reward   done   trigger
       env.mj.set.stable_height.set     (1.0,    True,    1)
       env.mj.set.oob.set               (-1.0,   True,    1)
-      if penalty_termination:
+      if self.settings["reward"]["penalty_termination"]:
         env = self.set_sensor_terminations(env)
 
-    elif style == "termination_action_v1":
+    elif self.settings["reward"]["style"] == "termination_action_v1":
       # prepare reward thresholds
-      if (exceed_style is None and
-          env.mj.set.stable_finger_force_lim > 99.0 and
-          env.mj.set.stable_palm_force_lim > 99.0):
-        exceed_style = [3.0, 10.0]
-      self.set_sensor_reward_thresholds(env, exceed_style=exceed_style, min_style=min_style,
-                                        dangerous_style=danger_style)
+      self.set_sensor_reward_thresholds(env)
       # reward each step               reward   done   trigger
       env.mj.set.step_num.set          (-0.01,  False,   1)
       # penalties and bonuses
-      env = self.set_sensor_bonuses(env, 0.002 * scale_rewards)
-      env = self.set_sensor_penalties(env, -0.002 * scale_penalties)
+      env = self.set_sensor_bonuses(env, 0.002 * self.settings["reward"]["scale_rewards"])
+      env = self.set_sensor_penalties(env, -0.002 * self.settings["reward"]["scale_penalties"])
       # scale based on steps allowed per episode
       env.mj.set.scale_rewards(100 / env.params.max_episode_steps)
       # end criteria                        reward   done   trigger
       env.mj.set.stable_termination.set     (1.0,    True,   1)
       env.mj.set.failed_termination.set     (-1.0,   True,   1)
       env.mj.set.oob.set                    (-1.0,   True,   1)
-      if penalty_termination:
+      if self.settings["reward"]["penalty_termination"]:
         env = self.set_sensor_terminations(env)
     
     else:
-      raise RuntimeError(f"style={style} is not a valid option in TrainingManager.create_reward_function()")
+      raise RuntimeError(f"style={self.settings['reward']['style']} is not a valid option in TrainingManager.create_reward_function()")
 
     # specific options
-    if "terminate_on_exceed_limits" in options:
+    if "terminate_on_exceed_limits" in self.settings["reward"]["options"]:
       # reward each step                     reward   done   trigger
       env.mj.set.exceed_limits.set     (-1.0,   True,    3)
+    
+    # how many stable steps before 'object_stable' triggers
+    env.mj.set.object_stable.trigger = self.settings["reward"]["stable_trigger"]
 
     return env
 

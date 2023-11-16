@@ -667,6 +667,9 @@ if __name__ == "__main__":
   # set the name of this training in the training manager
   tm.set_group_run_name(job_num=args.job, timestamp=timestamp, prefix=args.name_prefix)
 
+  # save the baseline settings (only in case they have changed)
+  tm.save_baseline_params()
+
   if args.program == "baseline_basic":
 
     # create the environment
@@ -1501,8 +1504,10 @@ if __name__ == "__main__":
 
     # apply training specific settings
     tm.settings["penalty_termination"] = True
-    tm.settings["exceed_style"] = "wrist_" + str(tm.param_2 * 0.5)
-    tm.settings["danger_style"] = [5.0, 15.0, tm.param_2] # bend, palm, wrist
+    tm.settings["reward"]["bend"]["dangerous"] = 5.0
+    tm.settings["reward"]["palm"]["dangerous"] = 15.0
+    tm.settings["reward"]["wrist"]["exceed"] = tm.param_2 * 0.5
+    tm.settings["reward"]["wrist"]["dangerous"] = tm.param_2
     tm.settings["cpp"]["saturation_yield_factor"] = 1.5
     tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
     tm.settings["cpp"]["stable_palm_force_lim"] = 10.0
@@ -1557,8 +1562,10 @@ if __name__ == "__main__":
     # apply training specific settings
     wrist_limit = 4
     tm.settings["penalty_termination"] = True
-    tm.settings["exceed_style"] = "wrist_" + str(wrist_limit * 0.5)
-    tm.settings["danger_style"] = [5.0, 15.0, wrist_limit] # bend, palm, wrist
+    tm.settings["reward"]["bend"]["dangerous"] = 5.0
+    tm.settings["reward"]["palm"]["dangerous"] = 15.0
+    tm.settings["reward"]["wrist"]["exceed"] = wrist_limit * 0.5
+    tm.settings["reward"]["wrist"]["dangerous"] = wrist_limit
     tm.settings["cpp"]["saturation_yield_factor"] = 1.5
     tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
     tm.settings["cpp"]["stable_palm_force_lim"] = 10.0
@@ -1621,8 +1628,10 @@ if __name__ == "__main__":
     # apply training specific settings
     wrist_limit = tm.param_3
     tm.settings["penalty_termination"] = True
-    tm.settings["exceed_style"] = "wrist_" + str(wrist_limit * 0.5)
-    tm.settings["danger_style"] = [5.0, 15.0, wrist_limit] # bend, palm, wrist
+    tm.settings["reward"]["bend"]["dangerous"] = 5.0
+    tm.settings["reward"]["palm"]["dangerous"] = 15.0
+    tm.settings["reward"]["wrist"]["exceed"] = wrist_limit * 0.5
+    tm.settings["reward"]["wrist"]["dangerous"] = wrist_limit
     tm.settings["cpp"]["saturation_yield_factor"] = 1.5
     tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
     tm.settings["cpp"]["stable_palm_force_lim"] = 10.0
@@ -1691,8 +1700,10 @@ if __name__ == "__main__":
     # apply training specific settings
     wrist_limit = 4
     tm.settings["penalty_termination"] = True
-    tm.settings["exceed_style"] = "wrist_" + str(wrist_limit * 0.5)
-    tm.settings["danger_style"] = [5.0, 15.0, wrist_limit] # bend, palm, wrist
+    tm.settings["reward"]["bend"]["dangerous"] = 5.0
+    tm.settings["reward"]["palm"]["dangerous"] = 15.0
+    tm.settings["reward"]["wrist"]["exceed"] = wrist_limit * 0.5
+    tm.settings["reward"]["wrist"]["dangerous"] = wrist_limit
     tm.settings["cpp"]["saturation_yield_factor"] = 1.5
     tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
     tm.settings["cpp"]["stable_palm_force_lim"] = 10.0
@@ -1801,8 +1812,10 @@ if __name__ == "__main__":
     palm_danger_lim = palm_stable_lim * 1.25
     wrist_limit = tm.param_2
     tm.settings["penalty_termination"] = True
-    tm.settings["exceed_style"] = "wrist_" + str(wrist_limit * 0.75)
-    tm.settings["danger_style"] = [5.0, palm_danger_lim, wrist_limit] # bend, palm, wrist
+    tm.settings["reward"]["bend"]["dangerous"] = 5.0
+    tm.settings["reward"]["palm"]["dangerous"] = palm_danger_lim
+    tm.settings["reward"]["wrist"]["exceed"] = wrist_limit * 0.75
+    tm.settings["reward"]["wrist"]["dangerous"] = wrist_limit
     tm.settings["cpp"]["saturation_yield_factor"] = 1.5
     tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
     tm.settings["cpp"]["stable_palm_force_lim"] = palm_stable_lim
@@ -1894,8 +1907,10 @@ if __name__ == "__main__":
     palm_danger_lim = palm_stable_lim * 1.25
     wrist_limit = 8
     tm.settings["penalty_termination"] = True
-    tm.settings["exceed_style"] = "wrist_" + str(wrist_limit * 0.75)
-    tm.settings["danger_style"] = [5.0, palm_danger_lim, wrist_limit] # bend, palm, wrist
+    tm.settings["reward"]["bend"]["dangerous"] = 5.0
+    tm.settings["reward"]["palm"]["dangerous"] = palm_danger_lim
+    tm.settings["reward"]["wrist"]["exceed"] = wrist_limit * 0.75
+    tm.settings["reward"]["wrist"]["dangerous"] = wrist_limit
     tm.settings["cpp"]["saturation_yield_factor"] = 1.5
     tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
     tm.settings["cpp"]["stable_palm_force_lim"] = palm_stable_lim
@@ -1985,8 +2000,10 @@ if __name__ == "__main__":
     palm_danger_lim = palm_stable_lim * 1.25
     wrist_limit = 8
     tm.settings["penalty_termination"] = True
-    tm.settings["exceed_style"] = "wrist_" + str(wrist_limit * 0.75)
-    tm.settings["danger_style"] = [5.0, palm_danger_lim, wrist_limit] # bend, palm, wrist
+    tm.settings["reward"]["bend"]["dangerous"] = 5.0
+    tm.settings["reward"]["palm"]["dangerous"] = palm_danger_lim
+    tm.settings["reward"]["wrist"]["exceed"] = wrist_limit * 0.75
+    tm.settings["reward"]["wrist"]["dangerous"] = wrist_limit
     tm.settings["cpp"]["saturation_yield_factor"] = 1.5
     tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
     tm.settings["cpp"]["stable_palm_force_lim"] = palm_stable_lim
@@ -2128,19 +2145,21 @@ if __name__ == "__main__":
     # apply environment dependent settings
     action_scale = 1.0
     tm.settings["cpp"]["continous_actions"] = True
-    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 2e-3 * action_scale
-    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.015 * action_scale
-    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 4e-3 * action_scale
-    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3 * action_scale
-    tm.settings["cpp"]["time_for_action"] = 0.2 * action_scale
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] *= action_scale
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] *= action_scale
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] *= action_scale
+    tm.settings["cpp"]["action"]["base_Z"]["value"] *= action_scale
+    tm.settings["cpp"]["time_for_action"] *= action_scale
 
     # apply training specific settings
     palm_stable_lim = 4
     palm_danger_lim = palm_stable_lim * 1.25
     wrist_limit = 8
     tm.settings["penalty_termination"] = True
-    tm.settings["exceed_style"] = "wrist_" + str(wrist_limit * 0.75)
-    tm.settings["danger_style"] = [5.0, palm_danger_lim, wrist_limit] # bend, palm, wrist
+    tm.settings["reward"]["bend"]["dangerous"] = 5.0
+    tm.settings["reward"]["palm"]["dangerous"] = palm_danger_lim
+    tm.settings["reward"]["wrist"]["exceed"] = wrist_limit * 0.75
+    tm.settings["reward"]["wrist"]["dangerous"] = wrist_limit
     tm.settings["cpp"]["saturation_yield_factor"] = 1.5
     tm.settings["cpp"]["stable_finger_force_lim"] = 4.0
     tm.settings["cpp"]["stable_palm_force_lim"] = palm_stable_lim
@@ -2182,6 +2201,45 @@ if __name__ == "__main__":
     tm.settings["Agent_PPO"]["use_random_action_noise"] = True
     tm.settings["Agent_PPO"]["random_action_noise_size"] = 0.05
     tm.settings["Agent_PPO"]["steps_per_epoch"] = tm.param_2
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "object_set_baseline":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [
+      "set9_nosharp",
+      "set9_fullset",
+      "set9_nosharp_smallspheres",
+      "set9_full_smallspheres",
+    ]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    tm.param_1_name = "object_set"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply training specific settings
+    tm.settings["trainer"]["num_episodes"] = 80_000
+    tm.settings["env"]["object_set_name"] = tm.param_1
+
+    # create the environment
+    env = tm.make_env()
+
+    # apply the agent settings
+    layers = [128, 128, 128, 128]
     network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
                                 continous_actions=True)
 
