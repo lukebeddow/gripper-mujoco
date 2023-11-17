@@ -2251,6 +2251,83 @@ if __name__ == "__main__":
     tm.run_training(agent, env)
     print_time_taken()
 
+  elif args.program == "finger_angle_baseline":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [45, 60, 75, 90]
+    vary_2 = [0.9e-3, 1.0e-3]
+    vary_3 = None
+    repeats = 10
+    tm.param_1_name = "hook angle"
+    tm.param_2_name = "finger thickness"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply training specific settings
+    tm.settings["trainer"]["num_episodes"] = 80_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp_smallspheres"
+    tm.settings["env"]["finger_hook_angle_degrees"] = tm.param_1
+    tm.settings["env"]["finger_thickness"] = tm.param_2
+
+    # create the environment
+    env = tm.make_env()
+
+    # apply the agent settings
+    layers = [128, 128, 128, 128]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+
+  elif args.program == "discrim_test_1":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-6, 1e-5, 1e-4, 1e-3]
+    vary_2 = None
+    vary_3 = None
+    repeats = 5
+    tm.param_1_name = None
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply training specific settings
+    tm.settings["trainer"]["num_episodes"] = 80_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp"
+    tm.settings["Agent_PPO_Discriminator"]["learning_rate_discrim"] = tm.param_1
+
+    # create the environment
+    env = tm.make_env()
+
+    # apply the agent settings
+    n_discrim = 8 # must match the size of the target vector
+    dlayers = [env.n_obs + n_discrim, 64, 64, n_discrim]
+    discrim = networks.VariableNetwork(dlayers, args.device)
+    layers = [128, 128, 128, 128]
+    network = MLPActorCriticPG(env.n_obs + n_discrim, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+    
+    # make the agent
+    agent = Agent_PPO_Discriminator(device=args.device)
+    agent.params.steps_per_epoch = 10
+    agent.init(network, discrim)
+    agent.get_target_vector = env._object_discrimination_target
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number
