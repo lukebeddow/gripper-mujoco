@@ -147,6 +147,7 @@ PYBIND11_MODULE(bind, m) {
     .def("get_finger_length", &MjClass::get_finger_length)
     .def("get_finger_hook_length", &MjClass::get_finger_hook_length)
     .def("get_finger_hook_angle_degrees", &MjClass::get_finger_hook_angle_degrees)
+    .def("get_object_xyz_bounding_box", &MjClass::get_object_xyz_bounding_box)
     .def("is_finger_hook_fixed", &MjClass::is_finger_hook_fixed)
     .def("get_fingertip_clearance", &MjClass::get_fingertip_clearance)
     .def("using_xyz_base_actions", &MjClass::using_xyz_base_actions)

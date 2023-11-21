@@ -69,7 +69,8 @@ namespace MjType
       change,     // add the change between values ie (a, b-a, b)
       average,    // add the average between values ie (a, (a+b)/2, b)
       median,     // add the median between values ie (a, med(a...b), b)
-      sign        // add the sign of the change ie (a, sign(b-a), b) where sign() outputs -1,0,+1
+      sign,       // add the sign of the change ie (a, sign(b-a), b) where sign() outputs -1,0,+1
+      scaled_change // change but scale it as a ratio of some maximum amount (eg max state change)
     };
   };
 
@@ -100,6 +101,9 @@ namespace MjType
     float rand_mu_1 = 0;
     float rand_mu_2 = 0;
     float rand_mu_3 = 0;
+
+    // hardcoded variable for 'scaled_change_sample' testing
+    float max_change_amount = 0.07;
 
     Sensor(bool in_use, float normalise, float read_rate)
       : in_use(in_use), normalise(normalise), read_rate(read_rate)
@@ -398,6 +402,32 @@ namespace MjType
         else {
           result[i * 2 + 1] = 0.0;
         }
+      }
+
+      return result;
+    }
+
+    std::vector<luke::gfloat> scaled_change_sample(luke::SlidingWindow<luke::gfloat> data)
+    {
+      /* sample the first and last reading as well as the change, but scale
+      the change by the maximum possible change [x0, dx, x1] */
+
+      // make the return vector, first element is furthest back reading
+      std::vector<luke::gfloat> result(2 * prev_steps + 1);
+      result[0] = data.read_element(total_readings - 1); // read_element is 0 indexed
+
+      // loop through steps to add in elements
+      for (int i = 0; i < prev_steps; i++) {
+        int first_sample = total_readings - 1 - i * readings_per_step;
+        result[i * 2 + 2] = data.read_element(first_sample - readings_per_step);
+        float scaled_change = (result[i * 2 + 2] - result[i * 2]) / (max_change_amount);
+        std::cout << "result[i * 2 + 2] is " << result[i * 2 + 2]
+          << ", result[i * 2] is " << result[i * 2]
+          << ", max change amount is " << max_change_amount
+          << ", scaled change is " << scaled_change << "\n";
+        // if (scaled_change > 1.0) scaled_change = 1.0;
+        // else if (scaled_change < -1.0) scaled_change = -1.0;
+        result[i * 2 + 1] = scaled_change;
       }
 
       return result;
@@ -1580,6 +1610,7 @@ public:
   double get_fingertip_clearance();
   bool using_xyz_base_actions();
   std::vector<luke::gfloat> get_finger_stiffnesses();
+  std::vector<double> get_object_xyz_bounding_box();
   MjType::CurveFitData::PoseData validate_curve(int force_style = 0);
   MjType::CurveFitData::PoseData validate_curve_under_force(float force, int force_style = 0);
   MjType::CurveFitData curve_validation_regime(bool print = false, int force_style = 0);

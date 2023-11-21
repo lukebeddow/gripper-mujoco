@@ -162,6 +162,10 @@ void MjClass::configure_settings()
       sampleFcnPtr = &MjType::Sensor::sign_sample;
       break;
     }
+    // case MjType::Sample::scaled_change: {
+    //   sampleFcnPtr = &MjType::Sensor::scaled_change_sample;
+    //   break;
+    // }
     default: {
       throw std::runtime_error("s_.sensor_sample_mode not set to legal value");
     }
@@ -187,6 +191,10 @@ void MjClass::configure_settings()
     }
     case MjType::Sample::sign: {
       stateFcnPtr = &MjType::Sensor::sign_sample;
+      break;
+    }
+    case MjType::Sample::scaled_change: {
+      stateFcnPtr = &MjType::Sensor::scaled_change_sample;
       break;
     }
     default: {
@@ -3322,6 +3330,16 @@ std::vector<luke::gfloat> MjClass::get_finger_stiffnesses()
   /* return a vector of the joint stiffnesses */
 
   return luke::get_stiffnesses();
+}
+
+std::vector<double> MjClass::get_object_xyz_bounding_box()
+{
+  /* return the x, y, z bounding box of the object */
+
+  int live_id = env_.obj[0].spawn_info.index;
+  luke::Vec3 xyz = luke::get_object_xyz_bounding_box(live_id);
+  std::vector<double> vec = { xyz.x, xyz.y, xyz.z };
+  return vec;
 }
 
 MjType::CurveFitData::PoseData MjClass::validate_curve(int force_style)
