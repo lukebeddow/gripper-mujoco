@@ -421,12 +421,8 @@ namespace MjType
         int first_sample = total_readings - 1 - i * readings_per_step;
         result[i * 2 + 2] = data.read_element(first_sample - readings_per_step);
         float scaled_change = (result[i * 2 + 2] - result[i * 2]) / (max_change_amount);
-        std::cout << "result[i * 2 + 2] is " << result[i * 2 + 2]
-          << ", result[i * 2] is " << result[i * 2]
-          << ", max change amount is " << max_change_amount
-          << ", scaled change is " << scaled_change << "\n";
-        // if (scaled_change > 1.0) scaled_change = 1.0;
-        // else if (scaled_change < -1.0) scaled_change = -1.0;
+        if (scaled_change > 1.0) scaled_change = 1.0;
+        else if (scaled_change < -1.0) scaled_change = -1.0;
         result[i * 2 + 1] = scaled_change;
       }
 
