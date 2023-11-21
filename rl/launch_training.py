@@ -2287,6 +2287,78 @@ if __name__ == "__main__":
     tm.run_training(agent, env)
     print_time_taken()
 
+  elif args.program == "state_sensor_compare":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1, 3, 5, 7]
+    vary_2 = [0, 4, 5]
+    vary_3 = None
+    repeats = 5
+    tm.param_1_name = "num state sense readings"
+    tm.param_2_name = "sample mode"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply training specific settings
+    tm.settings["trainer"]["num_episodes"] = 80_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp_smallspheres"
+    tm.settings["cpp"]["state_n_prev_steps"] = tm.param_1
+    tm.settings["cpp"]["state_sample_mode"] = tm.param_2
+
+    # create the environment
+    env = tm.make_env()
+
+    # apply the agent settings
+    layers = [128, 128, 128, 128]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "hyperparam_search_3":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [40, 80, 120, 160]
+    vary_2 = [4000, 6000, 8000, 10_000]
+    vary_3 = None
+    repeats = 10
+    tm.param_1_name = "train iters"
+    tm.param_2_name = "steps per epoch"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply training specific settings
+    tm.settings["trainer"]["num_episodes"] = 80_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp_smallspheres"
+    tm.settings["agent"]["train_pi_iters"] = tm.param_1
+    tm.settings["agent"]["train_vf_iters"] = tm.param_1
+    tm.settings["agent"]["steps_per_epoch"] = tm.param_2
+
+    # create the environment
+    env = tm.make_env()
+
+    # apply the agent settings
+    layers = [128, 128, 128, 128]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
 
   elif args.program == "discrim_test_1":
 
