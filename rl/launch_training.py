@@ -2340,9 +2340,9 @@ if __name__ == "__main__":
     # apply training specific settings
     tm.settings["trainer"]["num_episodes"] = 80_000
     tm.settings["env"]["object_set_name"] = "set9_nosharp_smallspheres"
-    tm.settings["agent"]["train_pi_iters"] = tm.param_1
-    tm.settings["agent"]["train_vf_iters"] = tm.param_1
-    tm.settings["agent"]["steps_per_epoch"] = tm.param_2
+    tm.settings["Agent_PPO"]["train_pi_iters"] = tm.param_1
+    tm.settings["Agent_PPO"]["train_vf_iters"] = tm.param_1
+    tm.settings["Agent_PPO"]["steps_per_epoch"] = tm.param_2
 
     # create the environment
     env = tm.make_env()
