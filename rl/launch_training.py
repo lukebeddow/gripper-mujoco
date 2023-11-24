@@ -2329,7 +2329,7 @@ if __name__ == "__main__":
     vary_1 = [40, 80, 120, 160]
     vary_2 = [4000, 6000, 8000, 10_000]
     vary_3 = None
-    repeats = 10
+    repeats = 5
     tm.param_1_name = "train iters"
     tm.param_2_name = "steps per epoch"
     tm.param_3_name = None
@@ -2363,10 +2363,10 @@ if __name__ == "__main__":
   elif args.program == "discrim_test_1":
 
     # define what to vary this training, dependent on job number
-    vary_1 = [1e-6, 1e-5, 1e-4, 1e-3]
+    vary_1 = [1e-7, 1e-6, 1e-5, 1e-4, 1e-3]
     vary_2 = None
     vary_3 = None
-    repeats = 5
+    repeats = 2
     tm.param_1_name = None
     tm.param_2_name = None
     tm.param_3_name = None
@@ -2392,7 +2392,7 @@ if __name__ == "__main__":
     
     # make the agent
     agent = Agent_PPO_Discriminator(device=args.device)
-    agent.params.steps_per_epoch = 10
+    # agent.params.steps_per_epoch = 10 # for testing only!! Disable at runtime
     agent.init(network, discrim)
     agent.get_target_vector = env._object_discrimination_target
 
