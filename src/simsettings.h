@@ -112,10 +112,10 @@
 
   3. Actions
       name                      used      value   sign */\
-  AA(  gripper_X,               false,    1.0e-3,  -1)        /* move gripper X motor by m */\
-  AA(  gripper_prismatic_X,     true,     1.0e-3,  -1)        /* move gripper X and Y motors to move prismatically by m */\
-  AA(  gripper_Y,               false,    1.0e-3,  -1)        /* move gripper Y motor by m */\
-  AA(  gripper_revolute_Y,      true,     0.01,    -1)        /* move gripper Y motor with angular motions/targets in radians */\
+  AA(  gripper_X,               true,    2.0e-3,  -1)        /* move gripper X motor by m */\
+  AA(  gripper_prismatic_X,     false,     1.0e-3,  -1)        /* move gripper X and Y motors to move prismatically by m */\
+  AA(  gripper_Y,               true,    2.0e-3,  -1)        /* move gripper Y motor by m */\
+  AA(  gripper_revolute_Y,      false,     0.01,    -1)        /* move gripper Y motor with angular motions/targets in radians */\
   AA(  gripper_Z,               true,     2.0e-3,   1)        /* move gripper Z motor by m */\
   AA(  base_X,                  true,     2.0e-3,   1)        /* move gripper base X by m */\
   AA(  base_Y,                  true,     2.0e-3,   1)        /* move gripper base Y by m */\
@@ -165,7 +165,8 @@
   LR(  dangerous_bend_sensor,   0.0,      true,     1,    10.0, 11.0, -1)     /* dangerous bending force, direct sensor limit */\
   LR(  dangerous_wrist_sensor,  0.0,      true,     1,    12.0, 13.0, -1)     /* dangerous wrist force, direct sensor limit */\
   LR(  dangerous_palm_sensor,   0.0,      true,     1,    20.0, 21.0, -1)     /* dangerous palm force, direct sensor limit */\
-  LR(  action_penalty,          -0.1,     false,    1,    0.1,  1.5,  -1)     /* penalty applied for large actions in continous domains */\ 
+  LR(  action_penalty_lin,      -0.1,     false,    1,    0.1,  1.5,  -1)     /* penalty applied for large actions in continous domains, linear scaling */\ 
+  LR(  action_penalty_sq,       -0.1,     false,    1,    0.1,  1.5,  -1)     /* penalty applied for large actions in continous domains, squared scaling */\ 
   /* testing extras for goals */\
   LR(  finger1_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 1 force */\
   LR(  finger2_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 2 force */\

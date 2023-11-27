@@ -1162,7 +1162,8 @@ void MjClass::update_env()
   env_.cnt.dangerous_wrist_sensor.value = last_wrist_N;
 
   // scale the action penalty based on the number of actions (not counting termination action)
-  env_.cnt.action_penalty.value /= float(n_actions - s_.use_termination_action);
+  env_.cnt.action_penalty_lin.value /= float(n_actions - s_.use_termination_action);
+  env_.cnt.action_penalty_sq.value /= float(n_actions - s_.use_termination_action);
 
   /* ----- determine the reported success rate (as a proxy, should not have associated reward) ----- */
 
@@ -1350,8 +1351,9 @@ std::vector<float> MjClass::set_action(int action, float continous_fraction)
           std::cout << s_.NAME.name + "_continous";             \
           std::cout << ", fraction = " << continous_fraction;   \
         }                                                       \
-        wl = s_.NAME.call_action_function(s_.NAME.value * continous_fraction); \
-        env_.cnt.action_penalty.value += (continous_fraction * continous_fraction);\
+        wl = s_.NAME.call_action_function(s_.NAME.value * continous_fraction);         \
+        env_.cnt.action_penalty_lin.value += abs(continous_fraction);                  \
+        env_.cnt.action_penalty_sq.value += (continous_fraction * continous_fraction); \
         break;                                                  \
 
       // run the macro to create the code

@@ -1463,7 +1463,7 @@ if __name__ == "__main__":
     if tm.param_3:
       value = 1 * env.mj.set.exceed_limits.reward
       # rewards                      reward  done   trigger  min  max  overshoot
-      env.mj.set.action_penalty.set (value,  False,   1,     0.1, 1.5,  -1)
+      env.mj.set.action_penalty_sq.set (value,  False,   1,     0.1, 1.5,  -1)
       
     # apply the agent settings
     layers = [128, 128, 128]
@@ -1584,7 +1584,7 @@ if __name__ == "__main__":
     if tm.param_3:
       value = 2 * env.mj.set.exceed_limits.reward
       # rewards                      reward  done   trigger  min  max  overshoot
-      env.mj.set.action_penalty.set (value,  False,   1,     0.1, 3.0,  -1)
+      env.mj.set.action_penalty_sq.set (value,  False,   1,     0.1, 3.0,  -1)
 
     # apply the agent settings
     layers = [128, 128, 128]
@@ -1650,7 +1650,7 @@ if __name__ == "__main__":
     if True:
       value = 2 * env.mj.set.exceed_limits.reward
       # rewards                      reward  done   trigger  min  max  overshoot
-      env.mj.set.action_penalty.set (value,  False,   1,     0.1, 3.0,  -1)
+      env.mj.set.action_penalty_sq.set (value,  False,   1,     0.1, 3.0,  -1)
 
     # apply the agent settings
     layers = [128, 128, 128]
@@ -1731,7 +1731,7 @@ if __name__ == "__main__":
     # use an action penalty
     value = 2 * env.mj.set.exceed_limits.reward
     # rewards                      reward  done   trigger  min  max  overshoot
-    env.mj.set.action_penalty.set (value,  False,   1,     0.1, 3.0,  -1)
+    env.mj.set.action_penalty_sq.set (value,  False,   1,     0.1, 3.0,  -1)
 
     # apply the agent settings
     layers = [128, 128, 128]
@@ -1844,7 +1844,7 @@ if __name__ == "__main__":
     # use an action penalty
     value = 2 * env.mj.set.exceed_limits.reward
     # rewards                      reward  done   trigger  min  max  overshoot
-    env.mj.set.action_penalty.set (value,  False,   1,     0.1, 3.0,  -1)
+    env.mj.set.action_penalty_sq.set (value,  False,   1,     0.1, 3.0,  -1)
 
     # add in curriculum where grasping gets harder
     tm.settings["trainer"]["use_curriculum"] = tm.param_3[0]
@@ -1939,7 +1939,7 @@ if __name__ == "__main__":
     # use an action penalty
     value = 2 * env.mj.set.exceed_limits.reward
     # rewards                      reward  done   trigger  min  max  overshoot
-    env.mj.set.action_penalty.set (value,  False,   1,     0.1, 3.0,  -1)
+    env.mj.set.action_penalty_sq.set (value,  False,   1,     0.1, 3.0,  -1)
 
     # # add in curriculum where grasping gets harder
     # tm.settings["trainer"]["use_curriculum"] = tm.param_3[0]
@@ -2072,7 +2072,7 @@ if __name__ == "__main__":
     # apply parameter changes
     tm.trainer.agent.params.random_action_noise_size = tm.param_1
     tm.trainer.env.mj.set.object_stable.trigger = tm.param_2
-    tm.trainer.env.mj.set.action_penalty.reward *= tm.param_3
+    tm.trainer.env.mj.set.action_penalty_sq.reward *= tm.param_3
 
     # record that our curriculum has changed and final test should be new model only
     tm.trainer.curriculum_dict["stage"] += 1
@@ -2107,7 +2107,7 @@ if __name__ == "__main__":
     # apply parameter changes
     tm.trainer.agent.params.random_action_noise_size = tm.param_1
     tm.trainer.env.mj.set.object_stable.trigger = tm.param_2
-    tm.trainer.env.mj.set.action_penalty.reward *= tm.param_3
+    tm.trainer.env.mj.set.action_penalty_sq.reward *= tm.param_3
 
     # record that our curriculum has changed and final test should be new model only
     tm.trainer.curriculum_dict["stage"] += 1
@@ -2192,7 +2192,7 @@ if __name__ == "__main__":
     # use an action penalty
     value = 2 * env.mj.set.exceed_limits.reward
     # rewards                      reward  done   trigger  min  max  overshoot
-    env.mj.set.action_penalty.set (value,  False,   1,     0.1, 3.0,  -1)
+    env.mj.set.action_penalty_sq.set (value,  False,   1,     0.1, 3.0,  -1)
 
     # apply the agent settings
     layers = [128, 128, 128, 128]
@@ -2395,6 +2395,58 @@ if __name__ == "__main__":
     # agent.params.steps_per_epoch = 10 # for testing only!! Disable at runtime
     agent.init(network, discrim)
     agent.get_target_vector = env._object_discrimination_target
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "improve_small_spheres":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [False, True]
+    vary_2 = [10, 20]
+    vary_3 = [
+      (1.0, False),
+      (1.0, True),
+      (1.5, False),
+      (1.5, True),
+    ]
+    repeats = 5
+    tm.param_1_name = "extra action penalty"
+    tm.param_2_name = "object pos noise"
+    tm.param_3_name = "palm action scale/Y motor"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply training specific settings
+    tm.settings["trainer"]["num_episodes"] = 80_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp_smallspheres"
+    tm.settings["reward"]["action_pen_lin"]["used"] = tm.param_1
+    tm.settings["env"]["object_position_noise_mm"] = tm.param_2
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] *= tm.param_3[0]
+
+    # create the environment
+    env = tm.make_env()
+
+    if tm.param_3[1]:
+
+      # disable existing prismatic/revolute joints
+      env.mj.set.gripper_prismatic_X.in_use = False
+      env.mj.set.gripper_revolute_Y.in_use = False
+
+      # enable direct motor control joints
+      env.mj.set.gripper_X.set(True, 2e-3, -1)
+      env.mj.set.gripper_Y.set(True, 2e-3, -1)
+
+    # apply the agent settings
+    layers = [128, 128, 128, 128]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+    
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
 
     # complete the training
     tm.run_training(agent, env)

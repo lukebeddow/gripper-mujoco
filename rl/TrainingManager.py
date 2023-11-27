@@ -255,7 +255,13 @@ class TrainingManager():
         "exceed" : 6.0,
         "dangerous" : 8.0,
       },
-      "action" : {
+      "action_pen_lin" : {
+        "used" : False,
+        "scaling" : 2,
+        "min" : 0.1,
+        "max" : 2.0,
+      },
+      "action_pen_sq" : {
         "used" : True,
         "scaling" : 2,
         "min" : 0.1,
@@ -1024,12 +1030,19 @@ class TrainingManager():
     env.mj.set.exceed_palm_sensor.set  (value,  False,    1,    self.RT.xPalm,  self.RT.dPalm,  -1)
     env.mj.set.exceed_wrist_sensor.set (value,  False,    1,    self.RT.xWrist, self.RT.dWrist, -1)
 
-    if self.settings["reward"]["action"]["used"]:
-      x = self.settings["reward"]["action"]["scaling"]
-      amin = self.settings["reward"]["action"]["min"]
-      amax = self.settings["reward"]["action"]["max"]
-      # rewards                      reward     done  trigger  min  max  overshoot
-      env.mj.set.action_penalty.set (value * x, False,   1,   amin, amax,  -1)
+    if self.settings["reward"]["action_pen_lin"]["used"]:
+      x = self.settings["reward"]["action_pen_lin"]["scaling"]
+      amin = self.settings["reward"]["action_pen_lin"]["min"]
+      amax = self.settings["reward"]["action_pen_lin"]["max"]
+      # rewards                          reward     done  trigger  min  max  overshoot
+      env.mj.set.action_penalty_lin.set (value * x, False,   1,   amin, amax,  -1)
+
+    if self.settings["reward"]["action_pen_sq"]["used"]:
+      x = self.settings["reward"]["action_pen_sq"]["scaling"]
+      amin = self.settings["reward"]["action_pen_sq"]["min"]
+      amax = self.settings["reward"]["action_pen_sq"]["max"]
+      # rewards                         reward     done  trigger  min  max  overshoot
+      env.mj.set.action_penalty_sq.set (value * x, False,   1,   amin, amax,  -1)
 
     return env
 

@@ -455,6 +455,13 @@ namespace MjType
         }
       }
 
+      void set(bool in_use_, double value_, int sign_)
+      {
+        in_use = in_use_;
+        value = value_;
+        sign = sign_;
+      }
+
       void update_action_function()
       {
         /* determine what action we are, and which action function we should call */

@@ -638,6 +638,7 @@ PYBIND11_MODULE(bind, m) {
   {py::class_<MjType::ActionSetting>(m, "ActionSetting")
 
     .def(py::init<std::string, bool, double, int>())
+    .def("set", &MjType::ActionSetting::set)
     .def_readwrite("name", &MjType::ActionSetting::name)
     .def_readwrite("in_use", &MjType::ActionSetting::in_use)
     .def_readwrite("value", &MjType::ActionSetting::value)
