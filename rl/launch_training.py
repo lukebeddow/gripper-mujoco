@@ -14,7 +14,7 @@ from Trainer import MujocoTrainer
 from TrainingManager import TrainingManager
 from agents.DQN import Agent_DQN
 from agents.ActorCritic import MLPActorCriticAC, Agent_SAC
-from agents.PolicyGradient import MLPActorCriticPG, Agent_PPO
+from agents.PolicyGradient import MLPActorCriticPG, Agent_PPO, Agent_PPO_Discriminator
 import networks
 
 def vary_all_inputs(raw_inputarg=None, param_1=None, param_2=None, param_3=None, repeats=None):

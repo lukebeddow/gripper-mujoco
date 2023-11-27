@@ -38,6 +38,7 @@ faketty() {
 
 # default inputs
 timestamp="$(date +%d-%m-%y_%H-%M)"
+KEEP_TIMESTAMP='N'
 FAKETTY=faketty
 LOGGING='Y'
 PRINT_RESULTS='N'
@@ -54,6 +55,7 @@ do
     -t | --timestamp ) (( i++ )); timestamp=${!i}; echo Timestamp set to $timestamp ;;
     -s | --stagger ) (( i++ )); STAGGER=${!i}; echo stagger is $STAGGER ;;
     # without arguments
+    -k | --keep-time ) KEEP_TIMESTAMP='Y'; echo Keeping current timestamp ;;
     -f | --no-faketty ) FAKETTY=; echo faketty disabled ;;
     -d | --debug ) LOGGING='N'; PRINT_RESULTS_AFTER='N'; echo Debug mode on, terminal logging or printing results after ;;
     --print ) LOGGING='N'; PRINT="--print"; echo Printing mode on, no training ;;
@@ -112,8 +114,13 @@ MIN_JOB_NUM=${ARRAY_INDEXES%% *} # https://stackoverflow.com/questions/15685736/
 # loop through the jobs we have been assigned
 for I in ${ARRAY_INDEXES[@]}
 do
-
-    JOB_NAME="${RUN_PREFIX}_${timestamp}_A${I}"
+    if [ $KEEP_TIMESTAMP = 'Y' ]
+    then
+        keep_timestamp="$(date +%d-%m-%y_%H-%M)"
+        JOB_NAME="${RUN_PREFIX}_${keep_timestamp}_A${I}"
+    else
+        JOB_NAME="${RUN_PREFIX}_${timestamp}_A${I}"
+    fi
 
     # if we are logging terminal output to a seperate log file
     if [ $LOGGING = 'Y' ]

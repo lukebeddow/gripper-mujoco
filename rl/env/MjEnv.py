@@ -667,6 +667,47 @@ class MjEnv():
 
     return self.mj.reward()
 
+  def _object_discrimination_target(self):
+    """
+    Get the reward from predicting the object from a vector:
+      [a, b] where:
+        a = [x, y, z] envelope of the object normalised -1 to +1
+        b = [b1, b2, b3, ... , bn] from -1 to +1 for n categories
+    """
+
+    [x, y, z] = self.mj.get_object_xyz_bounding_box()
+    name = self.mj.get_current_object_name()
+
+    cat = np.zeros(5, dtype=np.float64)
+
+    if name.startswith("sphere"):
+      cat[0] = 1
+    elif name.startswith("cube"):
+      cat[1] = 1
+    elif name.startswith("cuboid"):
+      cat[2] = 1
+    elif name.startswith("cylinder"):
+      cat[3] = 1
+    elif name.startswith("ellipse"):
+      cat[4] = 1
+
+    # scale the bounding box to the range [0, 1]
+    box_min = 0e-3
+    box_max = 200e-3
+
+    x = max(box_min, min(box_max, x)) * (1.0/(box_max - box_min))
+    y = max(box_min, min(box_max, y)) * (1.0/(box_max - box_min))
+    z = max(box_min, min(box_max, z)) * (1.0/(box_max - box_min))
+
+    box = np.array([x, y, z], dtype=np.float32) # float32 for torch
+    target = np.concatenate((box, cat))
+
+    # convert target from [0,1] to [-1,1]
+    target *= 2
+    target -= 1
+
+    return target
+
   def _goal_reward(self, goal, state):
     """
     Calculate the reward based on a state and goal
