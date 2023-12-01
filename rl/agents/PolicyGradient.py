@@ -291,6 +291,7 @@ class Agent_PPO:
     optimiser: str = "adam" # adam/adamW/RMSProp
     adam_beta1: float = 0.9
     adam_beta2: float = 0.999
+    grad_clamp_value: float = None
     # loss_criterion: str = "MSELoss" # smoothL1Loss/MSELoss/Huber
 
     def update(self, newdict, hard=True):
@@ -540,6 +541,8 @@ class Agent_PPO:
         # print('Early stopping at step %d due to reaching max kl.'%i)
         break
       loss_pi.backward()
+      if self.params.grad_clamp_value is not None:
+        torch.nn.utils.clip_grad_value_(self.mlp_ac.pi.parameters(), self.params.grad_clamp_value)
       self.pi_optimiser.step()
 
     # logger.store(StopIter=i)
@@ -549,6 +552,8 @@ class Agent_PPO:
       self.vf_optimiser.zero_grad()
       loss_v = self.compute_loss_v(data)
       loss_v.backward()
+      if self.params.grad_clamp_value is not None:
+        torch.nn.utils.clip_grad_value_(self.mlp_ac.vf.parameters(), self.params.grad_clamp_value)
       self.vf_optimiser.step()
 
     # Log changes from update

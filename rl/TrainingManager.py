@@ -80,6 +80,7 @@ class TrainingManager():
       "optimiser" : "adam",
       "adam_beta1" : 0.9,
       "adam_beta2" : 0.999,
+      "grad_clamp_value" : None,
     },
 
     "Agent_PPO_Discriminator" : {
