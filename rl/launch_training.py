@@ -2452,6 +2452,42 @@ if __name__ == "__main__":
     tm.run_training(agent, env)
     print_time_taken()
 
+  elif args.program == "pre_paper_baseline":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [60, 75, 90]
+    vary_2 = [0.9e-3, 1.0e-3]
+    vary_3 = None
+    repeats = 10
+    tm.param_1_name = "finger hook angle"
+    tm.param_2_name = "finger thickness"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply training specific settings
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp_smallspheres"
+    tm.settings["env"]["finger_hook_angle_degrees"] = tm.param_1
+    tm.settings["env"]["finger_thickness"] = tm.param_2
+
+    # create the environment
+    env = tm.make_env()
+
+    # apply the agent settings
+    layers = [128, 128, 128, 128]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+    
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number
