@@ -240,6 +240,7 @@ class TrainingManager():
       "scale_penalties" : 1.0,
       "penalty_termination" : True,
       "stable_trigger" : 4,
+      "dangerous_trigger" : 1,
       "bend" : {
         "min" : 0.0,
         "good" : "stable",        # can use "stable"
@@ -1066,8 +1067,6 @@ class TrainingManager():
 
     if self.settings["reward"]["style"] == "sensor_mixed_v1":
       # prepare reward thresholds
-      
-
       self.set_sensor_reward_thresholds(env)
       # reward each step               reward   done   trigger
       env.mj.set.step_num.set          (-0.01,  False,   1)
@@ -1080,7 +1079,7 @@ class TrainingManager():
       env.mj.set.stable_height.set     (1.0,    True,    1)
       env.mj.set.oob.set               (-1.0,   True,    1)
       if self.settings["reward"]["penalty_termination"]:
-        env = self.set_sensor_terminations(env)
+        env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"])
 
     elif self.settings["reward"]["style"] == "termination_action_v1":
       # prepare reward thresholds
@@ -1097,7 +1096,7 @@ class TrainingManager():
       env.mj.set.failed_termination.set     (-1.0,   True,   1)
       env.mj.set.oob.set                    (-1.0,   True,   1)
       if self.settings["reward"]["penalty_termination"]:
-        env = self.set_sensor_terminations(env)
+        env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"])
     
     else:
       raise RuntimeError(f"style={self.settings['reward']['style']} is not a valid option in TrainingManager.create_reward_function()")

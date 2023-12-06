@@ -1617,7 +1617,7 @@ class MujocoTrainer(Trainer):
       else: 
         # return the best_sr, best_ep from the test performance file
         matrix = self.read_test_performance()
-        if stage is not None and np.argmax(matrix[2]) < 1e-5:
+        if stage is not None and np.argmax(matrix[2]) > 1e-5:
           if matrix.shape[0] <= 5:
             raise RuntimeError("read_best_performance_from_text() failed as 'stage' was given but old training is incompatible")
           if isinstance(stage, int):
@@ -1709,10 +1709,10 @@ class MujocoTrainer(Trainer):
     self.load(run_name, id=id, group_name=group_name, path_to_run_folder=path_to_run_folder)
 
     if not best_id_found:
-      if stage == "max": stage = self.curriculum_dict["stage"]
+      if stage == "max": stage = self.track.test_curriculum_stages[-1]
       best_sr, best_ep = self.calc_best_performance(from_stage=stage, to_stage=stage)
       if self.log_level > 0: 
-        print(f"BEST_ID_FAILED  -> Preparing to reload with best id in model.load(...)")
+        print(f"BEST_ID_FAILED  -> Preparing to reload with best id in model.load(...) (stage = {stage})")
       if best_sr < 1e-5:
         if self.log_level > 0: 
           print("BEST_ID_FAILED  -> load(...) cannot find best id as best success rate is zero")

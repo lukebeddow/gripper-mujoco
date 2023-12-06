@@ -2488,6 +2488,143 @@ if __name__ == "__main__":
     tm.run_training(agent, env)
     print_time_taken()
 
+  elif args.program == "finetune_pre_paper_baseline":
+
+    # Program: pre_paper_baseline
+    timestamp = "01-12-23_17-23"
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [
+      5, 8,   # 60x0.9
+      18, 20, # 75x0.9
+      22, 25, # 90x0.9
+    ]
+    vary_2 = None
+    vary_3 = None
+    repeats = 5
+    tm.param_1_name = "job num"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    tm.load(job_num=param_1, timestamp=timestamp, best_id=True,
+            load_into_new_training=True)
+    tm.param_1 = param_1
+    tm.param_2 = param_2
+    tm.param_3 = param_3
+
+    # apply parameter changes
+    wrist_limit = 4
+    tm.settings["reward"]["wrist"]["exceed"] = wrist_limit * 0.75
+    tm.settings["reward"]["wrist"]["dangerous"] = wrist_limit
+    tm.trainer.env.mj.set.wrist_sensor_Z.normalise = wrist_limit * 1.5
+    tm.create_reward_function(tm.trainer.env)
+
+    # record that our curriculum has changed and final test should be new model only
+    tm.trainer.curriculum_dict["stage"] += 1
+    tm.settings["final_test_max_stage"] = True
+    tm.settings["final_test_only_stage"] = None
+
+    # now continue training
+    extra_episodes = 60_000
+    tm.continue_training(extra_episodes=extra_episodes)
+    print_time_taken()
+
+  elif args.program == "finetune_pre_paper_baseline_2":
+
+    # Program: pre_paper_baseline
+    timestamp = "01-12-23_17-23"
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [
+      5, 8,   # 60x0.9
+      18, 20, # 75x0.9
+      22, 25, # 90x0.9
+    ]
+    vary_2 = None
+    vary_3 = None
+    repeats = 5
+    tm.param_1_name = "job num"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    tm.load(job_num=param_1, timestamp=timestamp, best_id=True,
+            load_into_new_training=True)
+    tm.param_1 = param_1
+    tm.param_2 = param_2
+    tm.param_3 = param_3
+
+    # apply parameter changes
+    wrist_limit = 4
+    tm.settings["reward"]["wrist"]["exceed"] = wrist_limit * 0.75
+    tm.settings["reward"]["wrist"]["dangerous"] = wrist_limit
+    tm.settings["reward"]["action_pen_lin"]["used"] = True
+    tm.create_reward_function(tm.trainer.env)
+    tm.trainer.env.mj.set.wrist_sensor_Z.normalise = wrist_limit * 1.5
+    tm.trainer.env.mj.set.object_stable.trigger = 8
+    tm.trainer.env.mj.set.palm_sensor.normalise = 4
+
+    # record that our curriculum has changed and final test should be new model only
+    tm.trainer.curriculum_dict["stage"] += 1
+    tm.settings["final_test_max_stage"] = True
+    tm.settings["final_test_only_stage"] = None
+
+    # now continue training
+    extra_episodes = 60_000
+    tm.continue_training(extra_episodes=extra_episodes)
+    print_time_taken()
+
+  elif args.program == "paper_testing":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1, 3]
+    vary_2 = [4, 6]
+    vary_3 = None
+    repeats = 5
+    tm.param_1_name = "dangerous trigger"
+    tm.param_2_name = "palm normalise"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply training specific settings
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp_smallspheres"
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["finger_thickness"] = 0.9e-3
+
+    # try tuning
+    wrist_limit = 4
+    tm.settings["reward"]["wrist"]["exceed"] = wrist_limit * 0.75
+    tm.settings["reward"]["wrist"]["dangerous"] = wrist_limit
+    tm.settings["reward"]["action_pen_lin"]["used"] = True
+    tm.settings["reward"]["dangerous_trigger"] = tm.param_1
+    tm.trainer.env.mj.set.wrist_sensor_Z.normalise = wrist_limit * 1.5
+    tm.trainer.env.mj.set.object_stable.trigger = 8
+    tm.trainer.env.mj.set.palm_sensor.normalise = tm.param_2
+
+    # create the environment
+    env = tm.make_env()
+
+    # apply the agent settings
+    layers = [128, 128, 128, 128]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+    
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number
