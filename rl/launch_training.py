@@ -2605,12 +2605,13 @@ if __name__ == "__main__":
     tm.settings["reward"]["wrist"]["dangerous"] = wrist_limit
     tm.settings["reward"]["action_pen_lin"]["used"] = True
     tm.settings["reward"]["dangerous_trigger"] = tm.param_1
-    tm.trainer.env.mj.set.wrist_sensor_Z.normalise = wrist_limit * 1.5
-    tm.trainer.env.mj.set.object_stable.trigger = 8
-    tm.trainer.env.mj.set.palm_sensor.normalise = tm.param_2
 
     # create the environment
     env = tm.make_env()
+
+    env.mj.set.wrist_sensor_Z.normalise = wrist_limit * 1.5
+    env.mj.set.object_stable.trigger = 8
+    env.mj.set.palm_sensor.normalise = tm.param_2
 
     # apply the agent settings
     layers = [128, 128, 128, 128]
