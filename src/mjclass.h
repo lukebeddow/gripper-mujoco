@@ -153,25 +153,19 @@ namespace MjType
 
       if (not use_normalisation) return value;
 
-      if (in_use) {
-        // bumper sensor only
-        if (normalise <= 0) {
-          if (value < 0) return -1;
-          else return 1;
-        }
-        // regular normalisation
-        else if (value > normalise) {
-        return 1.0;
-        }
-        if (value < -normalise) {
-          return -1.0;
-        }
-        return value / normalise;
+      // bumper sensor only
+      if (normalise <= 0) {
+        if (value < 0) return -1;
+        else return 1;
       }
-      // not in use
-      else {
-        return 0.0;
+      // regular normalisation
+      else if (value > normalise) {
+      return 1.0;
       }
+      if (value < -normalise) {
+        return -1.0;
+      }
+      return value / normalise;
     }
 
     float apply_noise(float value, std::uniform_real_distribution<float>& uniform_dist, int i = 1)
@@ -228,7 +222,8 @@ namespace MjType
       /* return true if the sensor is ready to read, also saves last read time
          as the current time */
 
-      if (not in_use) return false;
+      // still take readings from sensors not in use for rewards/dangerous states
+      // if (not in_use) return false;
 
       double time_between_reads = 1 / read_rate;
 
@@ -1254,8 +1249,9 @@ namespace MjType
       double norm = 0;
 
       Calibration() {}
-      Calibration(double scale, double offset)
-        : scale(scale), offset(offset), norm(0) {}
+      Calibration(double scale) : scale(scale) {}
+      // Calibration(double scale, double offset)
+      //   : scale(scale), offset(offset), norm(0) {}
 
       double apply_calibration(double value) {
         return (value - offset) * scale;
@@ -1268,19 +1264,32 @@ namespace MjType
     };
 
     // gauge calibrations  scale        offset (note ALL offsets are wiped at runtime for zero-ing)
-    Calibration g1_0p9_28 {2.7996e-6,   260576};
-    Calibration g2_0p9_28 {2.7440e-6,   911830};
-    Calibration g3_0p9_28 {2.7303e-6,   1000000};
-    Calibration g1_1p0_24 {2.6866e-6,   196784};
-    Calibration g2_1p0_24 {2.7391e-6,   615652};
-    Calibration g3_1p0_24 {2.7146e-6,   869492};
-    Calibration g1_1p0_28 {3.1321e-6,   96596};
-    Calibration g2_1p0_28 {3.1306e-6,   7583};
-    Calibration g3_1p0_28 {3.1390e-6,   66733};
+    // Calibration g1_0p9_28 {2.7996e-6,   260576};
+    // Calibration g2_0p9_28 {2.7440e-6,   911830};
+    // Calibration g3_0p9_28 {2.7303e-6,   1000000};
+    // Calibration g1_1p0_24 {2.6866e-6,   196784};
+    // Calibration g2_1p0_24 {2.7391e-6,   615652};
+    // Calibration g3_1p0_24 {2.7146e-6,   869492};
+    // Calibration g1_1p0_28 {3.1321e-6,   96596};
+    // Calibration g2_1p0_28 {3.1306e-6,   7583};
+    // Calibration g3_1p0_28 {3.1390e-6,   66733};
     // Calibration palm      {7.4626e-5,   0};  // calibration used for pb4, TRO paper, etc
     // Calibration palm      {2.793e-5,   0};  // new calibration 24 Aug 2023
-    Calibration palm      {-4.6199e-5,   0};  // new calibration gripper_v3 palm 9 Dec 2023
-    Calibration wrist_Z   {-1,          0};
+    Calibration palm      {-4.6199e-5};  // new calibration gripper_v3 palm 9 Dec 2023
+    Calibration wrist_Z   {-1};
+
+    Calibration g1_0p9_28 {2.7996e-6};
+    Calibration g2_0p9_28 {2.7440e-6};
+    Calibration g3_0p9_28 {2.7303e-6};
+    Calibration g1_1p0_24 {2.6866e-6};
+    Calibration g2_1p0_24 {2.7391e-6};
+    Calibration g3_1p0_24 {2.7146e-6};
+    Calibration g1_1p0_28 {3.1321e-6};
+    Calibration g2_1p0_28 {3.1306e-6};
+    Calibration g3_1p0_28 {3.1390e-6};
+
+    // TESTING: all gauges given this currently
+    Calibration new_gauges {1.30e-6}; // for 75deg fingers, 28x0.9, 12/12/23
 
     // get the correct calibration for the fingers
     Calibration get_gauge_calibration(int gauge_num, double thickness, double width)
