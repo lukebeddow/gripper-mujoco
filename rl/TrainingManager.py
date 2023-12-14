@@ -68,7 +68,28 @@ class TrainingManager():
       "learning_rate_pi" : 5e-5,
       "learning_rate_vf" : 5e-5,
       "gamma" : 0.99,
-      "steps_per_epoch" : 4000,
+      "steps_per_epoch" : 6000,
+      "clip_ratio" : 0.2,
+      "train_pi_iters" : 80,
+      "train_vf_iters" : 80,
+      "lam" : 0.97,
+      "target_kl" : 0.01,
+      "max_kl_ratio" : 1.5,
+      "use_random_action_noise" : True,
+      "random_action_noise_size" : 0.05,
+      "optimiser" : "adam",
+      "adam_beta1" : 0.9,
+      "adam_beta2" : 0.999,
+      "grad_clamp_value" : None,
+    },
+
+    "Agent_PPO_Discriminator" : {
+      "learning_rate_discrim" : 5e-5,
+      "loss_criterion_discrim" : "MSELoss",
+      "learning_rate_pi" : 5e-5,
+      "learning_rate_vf" : 5e-5,
+      "gamma" : 0.99,
+      "steps_per_epoch" : 6000,
       "clip_ratio" : 0.2,
       "train_pi_iters" : 80,
       "train_vf_iters" : 80,
@@ -219,6 +240,7 @@ class TrainingManager():
       "scale_penalties" : 1.0,
       "penalty_termination" : True,
       "stable_trigger" : 4,
+      "dangerous_trigger" : 1,
       "bend" : {
         "min" : 0.0,
         "good" : "stable",        # can use "stable"
@@ -235,7 +257,13 @@ class TrainingManager():
         "exceed" : 6.0,
         "dangerous" : 8.0,
       },
-      "action" : {
+      "action_pen_lin" : {
+        "used" : False,
+        "scaling" : 2,
+        "min" : 0.1,
+        "max" : 2.0,
+      },
+      "action_pen_sq" : {
         "used" : True,
         "scaling" : 2,
         "min" : 0.1,
@@ -1004,12 +1032,19 @@ class TrainingManager():
     env.mj.set.exceed_palm_sensor.set  (value,  False,    1,    self.RT.xPalm,  self.RT.dPalm,  -1)
     env.mj.set.exceed_wrist_sensor.set (value,  False,    1,    self.RT.xWrist, self.RT.dWrist, -1)
 
-    if self.settings["reward"]["action"]["used"]:
-      x = self.settings["reward"]["action"]["scaling"]
-      amin = self.settings["reward"]["action"]["min"]
-      amax = self.settings["reward"]["action"]["max"]
-      # rewards                      reward     done  trigger  min  max  overshoot
-      env.mj.set.action_penalty.set (value * x, False,   1,   amin, amax,  -1)
+    if self.settings["reward"]["action_pen_lin"]["used"]:
+      x = self.settings["reward"]["action_pen_lin"]["scaling"]
+      amin = self.settings["reward"]["action_pen_lin"]["min"]
+      amax = self.settings["reward"]["action_pen_lin"]["max"]
+      # rewards                          reward     done  trigger  min  max  overshoot
+      env.mj.set.action_penalty_lin.set (value * x, False,   1,   amin, amax,  -1)
+
+    if self.settings["reward"]["action_pen_sq"]["used"]:
+      x = self.settings["reward"]["action_pen_sq"]["scaling"]
+      amin = self.settings["reward"]["action_pen_sq"]["min"]
+      amax = self.settings["reward"]["action_pen_sq"]["max"]
+      # rewards                         reward     done  trigger  min  max  overshoot
+      env.mj.set.action_penalty_sq.set (value * x, False,   1,   amin, amax,  -1)
 
     return env
 
@@ -1032,8 +1067,6 @@ class TrainingManager():
 
     if self.settings["reward"]["style"] == "sensor_mixed_v1":
       # prepare reward thresholds
-      
-
       self.set_sensor_reward_thresholds(env)
       # reward each step               reward   done   trigger
       env.mj.set.step_num.set          (-0.01,  False,   1)
@@ -1046,7 +1079,7 @@ class TrainingManager():
       env.mj.set.stable_height.set     (1.0,    True,    1)
       env.mj.set.oob.set               (-1.0,   True,    1)
       if self.settings["reward"]["penalty_termination"]:
-        env = self.set_sensor_terminations(env)
+        env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"])
 
     elif self.settings["reward"]["style"] == "termination_action_v1":
       # prepare reward thresholds
@@ -1063,7 +1096,7 @@ class TrainingManager():
       env.mj.set.failed_termination.set     (-1.0,   True,   1)
       env.mj.set.oob.set                    (-1.0,   True,   1)
       if self.settings["reward"]["penalty_termination"]:
-        env = self.set_sensor_terminations(env)
+        env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"])
     
     else:
       raise RuntimeError(f"style={self.settings['reward']['style']} is not a valid option in TrainingManager.create_reward_function()")

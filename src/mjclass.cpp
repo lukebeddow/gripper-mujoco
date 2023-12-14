@@ -797,32 +797,32 @@ void MjClass::monitor_sensors()
     palm_timestamps.add(data->time);
   }
 
-  // check the wrist sensor XY force
-  if (s_.wrist_sensor_XY.ready_to_read(data->time)) {
+  // // check the wrist sensor XY force
+  // if (s_.wrist_sensor_XY.ready_to_read(data->time)) {
 
-    // read
-    luke::gfloat x = data->userdata[0];
-    luke::gfloat y = data->userdata[1];
+  //   // read
+  //   luke::gfloat x = data->userdata[0];
+  //   luke::gfloat y = data->userdata[1];
 
-    // save SI
-    sim_sensors_SI_.wrist_X_sensor.add(x);
-    sim_sensors_SI_.wrist_Y_sensor.add(y);
+  //   // save SI
+  //   sim_sensors_SI_.wrist_X_sensor.add(x);
+  //   sim_sensors_SI_.wrist_Y_sensor.add(y);
 
-    // normalise
-    x = s_.wrist_sensor_XY.apply_normalisation(x);
-    y = s_.wrist_sensor_XY.apply_normalisation(y);
+  //   // normalise
+  //   x = s_.wrist_sensor_XY.apply_normalisation(x);
+  //   y = s_.wrist_sensor_XY.apply_normalisation(y);
 
-    // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
-    x = s_.wrist_sensor_XY.apply_noise(x, uniform_dist, 1);
-    y = s_.wrist_sensor_XY.apply_noise(y, uniform_dist, 2);
+  //   // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
+  //   x = s_.wrist_sensor_XY.apply_noise(x, uniform_dist, 1);
+  //   y = s_.wrist_sensor_XY.apply_noise(y, uniform_dist, 2);
 
-    // save
-    sim_sensors_.wrist_X_sensor.add(x);
-    sim_sensors_.wrist_Y_sensor.add(y);
+  //   // save
+  //   sim_sensors_.wrist_X_sensor.add(x);
+  //   sim_sensors_.wrist_Y_sensor.add(y);
     
-    // record time
-    wristXY_timestamps.add(data->time);
-  }
+  //   // record time
+  //   wristXY_timestamps.add(data->time);
+  // }
 
   // check the wrist sensor Z force
   if (s_.wrist_sensor_Z.ready_to_read(data->time)) {
@@ -1162,7 +1162,8 @@ void MjClass::update_env()
   env_.cnt.dangerous_wrist_sensor.value = last_wrist_N;
 
   // scale the action penalty based on the number of actions (not counting termination action)
-  env_.cnt.action_penalty.value /= float(n_actions - s_.use_termination_action);
+  env_.cnt.action_penalty_lin.value /= float(n_actions - s_.use_termination_action);
+  env_.cnt.action_penalty_sq.value /= float(n_actions - s_.use_termination_action);
 
   /* ----- determine the reported success rate (as a proxy, should not have associated reward) ----- */
 
@@ -1350,8 +1351,9 @@ std::vector<float> MjClass::set_action(int action, float continous_fraction)
           std::cout << s_.NAME.name + "_continous";             \
           std::cout << ", fraction = " << continous_fraction;   \
         }                                                       \
-        wl = s_.NAME.call_action_function(s_.NAME.value * continous_fraction); \
-        env_.cnt.action_penalty.value += (continous_fraction * continous_fraction);\
+        wl = s_.NAME.call_action_function(s_.NAME.value * continous_fraction);         \
+        env_.cnt.action_penalty_lin.value += abs(continous_fraction);                  \
+        env_.cnt.action_penalty_sq.value += (continous_fraction * continous_fraction); \
         break;                                                  \
 
       // run the macro to create the code
@@ -3024,6 +3026,7 @@ std::vector<float> MjClass::get_simple_state_vector(MjType::SensorData sensor)
 
   // use for printing detailed observation debug information
   constexpr bool debug_obs = false;
+  constexpr bool return_all = true;
 
   std::vector<luke::gfloat> simple_state;
 
@@ -3036,7 +3039,7 @@ std::vector<float> MjClass::get_simple_state_vector(MjType::SensorData sensor)
   }
 
   // get axial strain gauge sensor output
-  if (s_.axial_gauge.in_use) {
+  if (return_all or s_.axial_gauge.in_use) {
 
     simple_state.push_back(sensor.read_finger1_axial_gauge());
     simple_state.push_back(sensor.read_finger2_axial_gauge());
@@ -3044,41 +3047,41 @@ std::vector<float> MjClass::get_simple_state_vector(MjType::SensorData sensor)
   }
 
   // get palm sensor output
-  if (s_.palm_sensor.in_use) {
+  if (return_all or s_.palm_sensor.in_use) {
 
     simple_state.push_back(sensor.read_palm_sensor());
   }
 
   // get wrist sensor XY output
-  if (s_.wrist_sensor_XY.in_use) {
+  if (return_all or s_.wrist_sensor_XY.in_use) {
 
     simple_state.push_back(sensor.read_wrist_X_sensor());
     simple_state.push_back(sensor.read_wrist_Y_sensor());
   }
 
   // get wrist sensor Z output
-  if (s_.wrist_sensor_Z.in_use) {
+  if (return_all or s_.wrist_sensor_Z.in_use) {
     
     simple_state.push_back(sensor.read_wrist_Z_sensor());
   }
 
   // get motor state output
-  if (s_.motor_state_sensor.in_use) {
+  if (return_all or s_.motor_state_sensor.in_use) {
 
     simple_state.push_back(sensor.read_x_motor_position());
     simple_state.push_back(sensor.read_y_motor_position());
     simple_state.push_back(sensor.read_z_motor_position());
   }
 
-  // get base XY state
-  if (s_.base_state_sensor_XY.in_use) {
+  // // get base XY state
+  // if (return_all or s_.base_state_sensor_XY.in_use) {
 
-    simple_state.push_back(sensor.read_x_base_position());
-    simple_state.push_back(sensor.read_y_base_position());
-  }
+  //   simple_state.push_back(sensor.read_x_base_position());
+  //   simple_state.push_back(sensor.read_y_base_position());
+  // }
 
   // get base Z state
-  if (s_.base_state_sensor_Z.in_use) {
+  if (return_all or s_.base_state_sensor_Z.in_use) {
 
     simple_state.push_back(sensor.read_z_base_position());
   }

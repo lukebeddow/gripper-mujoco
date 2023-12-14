@@ -291,13 +291,14 @@ class Agent_PPO:
     optimiser: str = "adam" # adam/adamW/RMSProp
     adam_beta1: float = 0.9
     adam_beta2: float = 0.999
+    grad_clamp_value: float = None
     # loss_criterion: str = "MSELoss" # smoothL1Loss/MSELoss/Huber
 
-    def update(self, newdict):
+    def update(self, newdict, hard=True):
       for key, value in newdict.items():
         if hasattr(self, key):
           setattr(self, key, value)
-        else: raise RuntimeError(f"incorrect key: {key}")
+        elif hard: raise RuntimeError(f"incorrect key: {key}")
       
   Transition = namedtuple('Transition',
                           ('state', 'action', 'reward', 'advantage', 'log_prob', 'terminal'))
@@ -356,7 +357,7 @@ class Agent_PPO:
                                            betas=(self.params.adam_beta1,
                                                   self.params.adam_beta2),
                                            amsgrad=True)
-      self.pi_optimiser = torch.optim.AdamW(self.mlp_ac.parameters(),
+      self.pi_optimiser = torch.optim.AdamW(self.mlp_ac.pi.parameters(),
                                             lr=self.params.learning_rate_pi,
                                             betas=(self.params.adam_beta1,
                                                    self.params.adam_beta2),
@@ -419,6 +420,8 @@ class Agent_PPO:
 
     # if decay_num < self.params.random_start_episodes:
     #   return torch.tensor([2*self.rng.random() - 1 for x in range(self.action_dim)], dtype=torch.float32)
+
+    if self.mode == "test": test = True
 
     action, value, logprob = self.mlp_ac.step(state)
 
@@ -538,6 +541,8 @@ class Agent_PPO:
         # print('Early stopping at step %d due to reaching max kl.'%i)
         break
       loss_pi.backward()
+      if self.params.grad_clamp_value is not None:
+        torch.nn.utils.clip_grad_value_(self.mlp_ac.pi.parameters(), self.params.grad_clamp_value)
       self.pi_optimiser.step()
 
     # logger.store(StopIter=i)
@@ -547,6 +552,8 @@ class Agent_PPO:
       self.vf_optimiser.zero_grad()
       loss_v = self.compute_loss_v(data)
       loss_v.backward()
+      if self.params.grad_clamp_value is not None:
+        torch.nn.utils.clip_grad_value_(self.mlp_ac.vf.parameters(), self.params.grad_clamp_value)
       self.vf_optimiser.step()
 
     # Log changes from update
@@ -617,4 +624,250 @@ class Agent_PPO:
     """
     self.mode = "test"
     self.mlp_ac.testing_mode()
+
+class Agent_PPO_Discriminator:
+
+  name = "Agent_PPO_Discriminator"
+
+  @dataclass
+  class Parameters:
+
+    # discriminator only parameters
+    learning_rate_discrim: float = 5e-5
+    loss_criterion_discrim: str = "MSELoss"
+
+    # PPO hyperparameters
+    learning_rate_pi: float = 3e-4
+    learning_rate_vf: float = 1e-3
+    gamma: float = 0.99
+    steps_per_epoch: int = 4000
+    clip_ratio: float = 0.2
+    train_pi_iters: int = 80
+    train_vf_iters: int = 80
+    lam: float = 0.97
+    target_kl: float = 0.01
+    max_kl_ratio: float = 1.5
+    use_random_action_noise: bool = True
+    random_action_noise_size: float = 0.2
+
+    # options
+    optimiser: str = "adam" # adam/adamW/RMSProp
+    adam_beta1: float = 0.9
+    adam_beta2: float = 0.999
+    # loss_criterion: str = "MSELoss" # smoothL1Loss/MSELoss/Huber
+
+    def update(self, newdict, hard=True):
+      for key, value in newdict.items():
+        if hasattr(self, key):
+          setattr(self, key, value)
+        elif hard: raise RuntimeError(f"incorrect key: {key}")
+      
+  Transition = namedtuple('Transition',
+                          ('state', 'action', 'reward', 'advantage', 'log_prob', 'terminal'))
+
+  def __init__(self, device="cpu", rngseed=None, mode="train"):
+    """
+    Soft actor-critic agent for a given environment
+    """
+
+    self.params = Agent_PPO_Discriminator.Parameters()
+    self.device = torch.device(device)
+    self.rngseed = rngseed
+    self.rng = np.random.default_rng(rngseed)
+    self.mode = mode
+    self.steps_done = 0
+    self.episodes_done = 0
+    self.first_step = True
+    self.running_loss = 0
+
+  def init(self, network, discriminator=None, obs_dim=None, action_dim=None, n_discrim=None):
+    """
+    Main initialisation of the agent, applies settings and creates network. This
+    function can be called with network='loaded' to initialise settings but not
+    reinitialise the networks
+    """
+
+    if network != "loaded":
+
+      self.ppo = Agent_PPO(device=self.device, rngseed=self.rngseed, mode=self.mode)
+      self.ppo.params.update(asdict(self.params), hard=False)
+
+      self.discrim = discriminator
+
+      if obs_dim is None: obs_dim = network.n_obs
+      if action_dim is None: action_dim = network.action_dim
+      if n_discrim is None: n_discrim = discriminator.n_output
+
+      self.ppo.init(network, obs_dim=obs_dim, action_dim=action_dim)
+
+      self.n_discrim = n_discrim
+      self.action_dim = action_dim + n_discrim
+      self.n_actions = network.n_actions + discriminator.n_output
+      self.n_obs = obs_dim
+
+    self.optimiser = torch.optim.Adam(self.discrim.parameters(),
+                                      lr=self.params.learning_rate_discrim,
+                                      betas=(self.params.adam_beta1,
+                                              self.params.adam_beta2))
+    
+    if self.params.loss_criterion_discrim.lower() == "smoothl1loss":
+      self.loss_criterion = nn.SmoothL1Loss()
+    elif self.params.loss_criterion_discrim.lower() == "mseloss":
+      self.loss_criterion = nn.MSELoss()
+    elif self.params.loss_criterion_discrim.lower() == "huber":
+      self.loss_criterion = nn.HuberLoss()
+
+    self.set_device(self.device)
+    self.seed()
+
+    if self.mode == "train": self.training_mode()
+    elif self.mode == "test": self.testing_mode()
+    else: raise RuntimeError(f"Agent given mode={self.mode} but valid options are 'test' and 'train'")
+  
+  def set_device(self, device):
+    """
+    Set whether on cpu or gpu, and move all the memory replay buffer to that device
+    """
+
+    if device == "cuda" and not torch.cuda.is_available(): 
+      print("Agent.set_device() received request for 'cuda', but torch.cuda.is_available() == False, hence using cpu")
+      device = "cpu"
+
+    self.device = torch.device(device)
+
+    self.ppo.set_device(device)
+    self.discrim.to(self.device)
+  
+  def seed(self, rngseed=None):
+    """
+    Set a random seed for the entire environment
+    """
+    if rngseed is None:
+      if self.rngseed is not None: rngseed = self.rngseed
+      else: rngseed = np.random.randint(0, 2_147_483_647)
+    self.rngseed = rngseed
+    self.rng = np.random.default_rng(rngseed)
+    self.ppo.seed(rngseed=self.rngseed)
+
+  def select_action(self, state, decay_num, test=False):
+    """
+    Choose action values, a vector of values which should be [-1, +1]
+
+    This function should return a tensor([x, y, z, ...])
+    """
+
+    # take the state and feed it through the discriminator
+    if self.first_step:
+      extra = torch.zeros(self.n_discrim, requires_grad=True).unsqueeze(0)
+    else:
+      with torch.no_grad():
+        extra = self.discrim(self.copy_last_state)
+
+    # create the new state vector
+    augmented_state = torch.concat((state, extra), axis=1)
+
+    # copy the state variable for the discriminator
+    self.copy_last_state = augmented_state.detach().clone()
+    self.copy_last_state.requires_grad_(True)
+
+    # get the action from PPO and return it
+    return self.ppo.select_action(augmented_state.detach(), None)
+      
+  def get_save_state(self):
+    """
+    Return the state of the model that should be saved
+    """
+
+    to_save = {
+      "name" : self.name,
+      "parameters" : self.params,
+      "main" : self.ppo.get_save_state(),
+      "discrim" : self.discrim,
+    }
+
+    return to_save
+  
+  def load_save_state(self, saved_dict):
+    """
+    Load the agent with a given saved state
+    """
+
+    # check we are compatible
+    if self.name != saved_dict["name"]:
+      raise RuntimeError(f"{self.name}.load_save_state() failed as given save state has agent name: {saved_dict['name']}")
+    
+    # input the saved data
+    self.params = saved_dict["parameters"]
+    self.ppo.load_save_state(saved_dict["main"])
+    self.discrim = saved_dict["discrim"]
+
+  def get_params_dict(self):
+    """
+    Return a dictionary of hyperparameters
+    """
+    param_dict = asdict(self.params)
+    param_dict.update({
+      "main" : self.ppo.get_params_dict()
+    })
+    return param_dict
+
+  def update_step(self, state, action, next_state, reward, terminal, truncated):
+    """
+    Run this every training action step to update the model
+    """
+
+    if self.mode != "train": return
+
+    self.steps_done += 1
+
+    self.ppo.update_step(state, action, next_state, reward, terminal, truncated)
+
+    # do supervised learning on the discriminator
+    if self.first_step:
+      self.first_step = False
+    else:
+      target = self.get_target_vector()
+      target = torch.tensor(target, dtype=torch.float32).unsqueeze(0)
+      self.optimiser.zero_grad()
+
+      # get and scale the network outputs from [-1,1] to [0,1]
+      from_net = self.copy_last_state[0][-self.n_discrim:].unsqueeze(0)
+      loss = self.loss_criterion(from_net, target)
+      loss.backward()
+      self.optimiser.step()
+      self.running_loss += loss.item()
+
+    # try to normalise the loss by the number of steps
+    if terminal or truncated:
+      self.running_loss /= self.steps_done
+
+  def update_episode(self, i_episode, finished=False):
+    """
+    Run this at the end of every training episode
+    """
+
+    self.episodes_done += 1
+    print_loss = 125
+    if self.episodes_done % print_loss == 0:
+      print("Discriminator loss =", self.running_loss)
+
+    self.first_step = True
+    self.running_loss = 0.0
+    self.ppo.update_episode(i_episode, finished)
+
+  def training_mode(self):
+    """
+    Put the agent into training mode
+    """
+    self.mode = "train"
+    self.ppo.training_mode()
+    self.discrim.train()
+
+  def testing_mode(self):
+    """
+    Put the agent in testing mode
+    """
+    self.mode = "test"
+    self.ppo.testing_mode()
+    self.discrim.eval()
 

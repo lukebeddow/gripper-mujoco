@@ -1,0 +1,226 @@
+Agent_DQN:
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  batch_size: 128
+  eps_decay: 4000
+  eps_end: 0.05
+  eps_start: 0.9
+  gamma: 0.999
+  grad_clamp_value: 1.0
+  learning_rate: 5.0e-05
+  loss_criterion: smoothL1Loss
+  memory_replay: 75000
+  min_memory_replay: 5000
+  optimiser: adam
+  soft_target_tau: 0.05
+  soft_target_update: false
+  target_update: 50
+Agent_PPO:
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  clip_ratio: 0.2
+  gamma: 0.99
+  grad_clamp_value: null
+  lam: 0.97
+  learning_rate_pi: 5.0e-05
+  learning_rate_vf: 5.0e-05
+  max_kl_ratio: 1.5
+  optimiser: adam
+  random_action_noise_size: 0.05
+  steps_per_epoch: 6000
+  target_kl: 0.01
+  train_pi_iters: 80
+  train_vf_iters: 80
+  use_random_action_noise: true
+Agent_PPO_Discriminator:
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  clip_ratio: 0.2
+  gamma: 0.99
+  lam: 0.97
+  learning_rate_discrim: 5.0e-05
+  learning_rate_pi: 5.0e-05
+  learning_rate_vf: 5.0e-05
+  loss_criterion_discrim: MSELoss
+  max_kl_ratio: 1.5
+  optimiser: adam
+  random_action_noise_size: 0.05
+  steps_per_epoch: 6000
+  target_kl: 0.01
+  train_pi_iters: 80
+  train_vf_iters: 80
+  use_random_action_noise: true
+Agent_SAC:
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  alpha: 0.2
+  batch_size: 128
+  gamma: 0.999
+  learning_rate: 5.0e-05
+  memory_replay: 75000
+  min_memory_replay: 5000
+  optimiser: adam
+  random_start_episodes: 1000
+  soft_target_tau: 0.05
+  update_after_steps: 1000
+  update_every_steps: 50
+cpp:
+  action:
+    base_X:
+      in_use: false
+      sign: 1
+      value: 0.002
+    base_Y:
+      in_use: false
+      sign: 1
+      value: 0.002
+    base_Z:
+      in_use: true
+      sign: 1
+      value: 0.002
+    gripper_Z:
+      in_use: true
+      sign: 1
+      value: 0.004
+    gripper_prismatic_X:
+      in_use: true
+      sign: -1
+      value: 0.002
+    gripper_revolute_Y:
+      in_use: true
+      sign: -1
+      value: 0.015
+  base_position_noise: 0.005
+  cap_reward: false
+  continous_actions: true
+  fingertip_min_mm: -12.5
+  gripper_target_height: 0.02
+  lift_height: 0.015
+  oob_distance: 0.075
+  randomise_colours: false
+  saturation_yield_factor: 1.5
+  sensor:
+    base_state_sensor_XY:
+      in_use: false
+      noise_override: null
+      normalise: 0.0
+      read_rate: -1
+    base_state_sensor_Z:
+      in_use: true
+      noise_override:
+      - 0.1
+      - 0.0
+      normalise: 0.0
+      read_rate: -1
+    bending_gauge:
+      in_use: true
+      noise_override: null
+      normalise: 20.0
+      read_rate: 10
+    motor_state_sensor:
+      in_use: true
+      noise_override: null
+      normalise: 0.0
+      read_rate: -1
+    palm_sensor:
+      in_use: true
+      noise_override: null
+      normalise: 6.0
+      read_rate: 10
+    wrist_sensor_XY:
+      in_use: false
+      noise_override: null
+      normalise: 5.0
+      read_rate: 10
+    wrist_sensor_Z:
+      in_use: true
+      noise_override: null
+      normalise: 10.0
+      read_rate: 10
+  sensor_n_prev_steps: 3
+  sensor_noise_mu: 0.05
+  sensor_noise_std: 0.025
+  sensor_sample_mode: 2
+  stable_finger_force: 1.0
+  stable_finger_force_lim: 4.0
+  stable_palm_force: 1.0
+  stable_palm_force_lim: 4.0
+  state_n_prev_steps: 3
+  state_noise_mu: 0.025
+  state_noise_std: 0.0
+  state_sample_mode: 4
+  termination_threshold: 0.9
+  time_for_action: 0.2
+  use_termination_action: false
+curriculum:
+  change_fcn: null
+  metric_name: ''
+  metric_thresholds: []
+  param_values: []
+env:
+  XY_base_actions: false
+  depth_camera: false
+  finger_hook_angle_degrees: 90.0
+  finger_hook_length: 0.035
+  finger_length: 0.235
+  finger_modulus: 193000000000.0
+  finger_thickness: 0.0009
+  finger_width: 0.028
+  fingertip_clearance: 0.01
+  fixed_finger_hook: true
+  max_episode_steps: 250
+  num_segments: 8
+  object_position_noise_mm: 10
+  object_rotation_noise_deg: 5
+  object_set_name: set9_fullset
+  segment_inertia_scaling: 50.0
+  task_reload_chance: 0.05
+  test_obj_per_file: 20
+  test_objects: 100
+  test_trials_per_object: 3
+episode_log_rate: 250
+final_test_max_stage: true
+final_test_only_stage: null
+final_test_trials_per_object: 10
+plot: false
+print_avg_return: false
+render: true
+reward:
+  action_pen_lin:
+    max: 2.0
+    min: 0.1
+    scaling: 2
+    used: false
+  action_pen_sq:
+    max: 3.0
+    min: 0.1
+    scaling: 2
+    used: true
+  bend:
+    dangerous: 5.0
+    exceed: stable_lim
+    good: stable
+    min: 0.0
+  dangerous_trigger: 1
+  options: []
+  palm:
+    dangerous: 5.0
+    exceed: stable_lim
+    good: stable
+    min: 0.0
+  penalty_termination: true
+  scale_penalties: 1.0
+  scale_rewards: 1.0
+  stable_trigger: 4
+  style: sensor_mixed_v1
+  wrist:
+    dangerous: 8.0
+    exceed: 6.0
+save: true
+savedir: models
+track_avg_num: 250
+trainer:
+  num_episodes: 60000
+  save_freq: 5000
+  test_freq: 5000
+  use_curriculum: false

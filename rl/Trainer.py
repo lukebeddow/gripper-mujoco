@@ -1143,7 +1143,7 @@ class MujocoTrainer(Trainer):
         obj_counter.step_num.abs / float(num_trials),
         obj_counter.palm_force.last_value / float(num_trials),
         obj_counter.finger_force.last_value / float(num_trials),
-        obj_counter.action_penalty.last_value / float(num_trials),
+        obj_counter.action_penalty_lin.last_value / float(num_trials),
         # end state style x8
         obj_counter.lifted.active_sum, 
         obj_counter.object_stable.active_sum, 
@@ -1194,7 +1194,7 @@ class MujocoTrainer(Trainer):
       total_counter.step_num.abs / N,
       total_counter.palm_force.last_value / N,
       total_counter.finger_force.last_value / N,
-      total_counter.action_penalty.last_value / N,
+      total_counter.action_penalty_lin.last_value / N,
       # end state style (averaged) x8
       total_counter.lifted.active_sum / N, 
       total_counter.object_stable.active_sum / N, 
@@ -1262,7 +1262,7 @@ class MujocoTrainer(Trainer):
     step_num_per_obj = []
     palm_force_per_obj = []
     finger_force_per_obj = []
-    action_penalty_per_obj = []
+    action_penalty_lin_per_obj = []
     lifted_per_obj = []
     stable_per_obj = []
     oob_per_obj = []
@@ -1291,7 +1291,7 @@ class MujocoTrainer(Trainer):
       step_num_per_obj.append(category_dict[cat]["counter"].step_num.abs / category_dict[cat]["num"])
       palm_force_per_obj.append(category_dict[cat]["counter"].palm_force.last_value / category_dict[cat]["num"])
       finger_force_per_obj.append(category_dict[cat]["counter"].finger_force.last_value / category_dict[cat]["num"])
-      action_penalty_per_obj.append(category_dict[cat]["counter"].action_penalty.last_value / category_dict[cat]["num"])
+      action_penalty_lin_per_obj.append(category_dict[cat]["counter"].action_penalty_lin.last_value / category_dict[cat]["num"])
 
       lifted_per_obj.append(category_dict[cat]["counter"].lifted.active_sum / category_dict[cat]["num"])
       stable_per_obj.append(category_dict[cat]["counter"].object_stable.active_sum / category_dict[cat]["num"])
@@ -1324,7 +1324,7 @@ class MujocoTrainer(Trainer):
         step_num_per_obj[c],
         palm_force_per_obj[c],
         finger_force_per_obj[c],
-        action_penalty_per_obj[c],
+        action_penalty_lin_per_obj[c],
         # end state style x8
         lifted_per_obj[c], 
         stable_per_obj[c], 
@@ -1617,7 +1617,7 @@ class MujocoTrainer(Trainer):
       else: 
         # return the best_sr, best_ep from the test performance file
         matrix = self.read_test_performance()
-        if stage is not None and np.argmax(matrix[2]) < 1e-5:
+        if stage is not None and np.argmax(matrix[2]) > 1e-5:
           if matrix.shape[0] <= 5:
             raise RuntimeError("read_best_performance_from_text() failed as 'stage' was given but old training is incompatible")
           if isinstance(stage, int):
@@ -1709,10 +1709,10 @@ class MujocoTrainer(Trainer):
     self.load(run_name, id=id, group_name=group_name, path_to_run_folder=path_to_run_folder)
 
     if not best_id_found:
-      if stage == "max": stage = self.curriculum_dict["stage"]
+      if stage == "max": stage = self.track.test_curriculum_stages[-1]
       best_sr, best_ep = self.calc_best_performance(from_stage=stage, to_stage=stage)
       if self.log_level > 0: 
-        print(f"BEST_ID_FAILED  -> Preparing to reload with best id in model.load(...)")
+        print(f"BEST_ID_FAILED  -> Preparing to reload with best id in model.load(...) (stage = {stage})")
       if best_sr < 1e-5:
         if self.log_level > 0: 
           print("BEST_ID_FAILED  -> load(...) cannot find best id as best success rate is zero")
