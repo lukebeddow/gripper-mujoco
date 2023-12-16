@@ -7,6 +7,7 @@ import subprocess
 from copy import deepcopy
 import numpy as np
 from dataclasses import dataclass, asdict
+import time
 
 # get the path to this file and insert it to python path (for mjpy.bind)
 pathhere = os.path.dirname(os.path.abspath(__file__))
@@ -862,9 +863,9 @@ class MjEnv():
     """
 
     self.heuristic_params = {
-      "target_angle_deg" : 10,
-      "target_wrist_force_N" : 1,
-      "min_x_value_m" : 55e-3,
+      "target_angle_deg" : 15,
+      "target_wrist_force_N" : 2,
+      "min_x_value_m" : 80e-3,
       "target_x_constrict_m" : 110e-3,
       "target_palm_bend_increase_percentage" : 10,
       "target_z_position_m" : 80e-3,
@@ -874,10 +875,12 @@ class MjEnv():
       "final_z_height_target_m" : -20e-3,
       "initial_bend_target_N" : 1.5,
       "initial_palm_target_N" : 1.5,
+      "limit_bend_target_N" : 3, #self.mj.set.stable_finger_force_lim,
+      "limit_palm_target_N" : 3, # self.mj.set.stable_palm_force_lim,
       "final_bend_target_N" : 1.5,
       "final_palm_target_N" : 1.5,
       "final_squeeze" : True,
-      "fixed_angle" : False,
+      "fixed_angle" : True,
       # "palm_first" : True,
     }
 
@@ -930,7 +933,7 @@ class MjEnv():
       - 6. Loop squeezing actions to aim for specific grasp force
     """
 
-    def bend_to_force(target_force_N, possible_action=None):
+    def bend_to_force(target_force_N, possible_action=None, limit_force_N=10):
       """
       Try to bend the fingers to a certain force
       """
@@ -949,9 +952,13 @@ class MjEnv():
           action = possible_action
           # if we have closed as much as we can
           if state_readings[0] < min_x_value_m:
+            # bend a bit more
+            action = Y_close
             # halt as we have reached gripper limits
             if print_on:
               print(f"minimum x is {min_x_value_m}, actual is {state_readings[0]}")
+        elif avg_bend > limit_force_N:
+          action = possible_action + 1
 
       else:
         # simply constrict to a predetermined point
@@ -962,19 +969,23 @@ class MjEnv():
 
       return action
 
-    def palm_push_to_force(target_force_N):
+    def palm_push_to_force(target_force_N, limit_force_N=10):
       """
       Try to push with the palm to a specific force
       """
 
+      time.sleep(0.2)
+
       action = None
 
       # if we have palm sensing
-      if palm:
+      if True or palm:
         if print_on:
           print(f"target palm force is {target_force_N}, actual is {palm_reading}")
         if palm_reading < target_force_N:
           action = Z_plus
+        elif palm_reading > limit_force_N:
+          action = Z_minus
 
       # if we don't have palm sensing, but we do have bend sensing
       elif bending:
@@ -1014,6 +1025,10 @@ class MjEnv():
     palm = self.mj.set.palm_sensor.in_use
     wrist = self.mj.set.wrist_sensor_Z.in_use
 
+    bending = True
+    palm = True
+    wrist = True
+
     # extract parameters from dictionary
     target_angle_deg = self.heuristic_params["target_angle_deg"]
     target_wrist_force_N = self.heuristic_params["target_wrist_force_N"]
@@ -1027,6 +1042,8 @@ class MjEnv():
     final_z_height_target_m = self.heuristic_params["final_z_height_target_m"]
     initial_bend_target_N = self.heuristic_params["initial_bend_target_N"]
     initial_palm_target_N = self.heuristic_params["initial_palm_target_N"]
+    limit_bend_target_N = self.heuristic_params["limit_bend_target_N"]
+    limit_palm_target_N = self.heuristic_params["limit_palm_target_N"]
     final_bend_target_N = self.heuristic_params["final_bend_target_N"]
     final_palm_target_N = self.heuristic_params["final_palm_target_N"]
     final_squeeze = self.heuristic_params["final_squeeze"]
@@ -1052,6 +1069,7 @@ class MjEnv():
       # avg_bend = max_bend
     if palm:
       palm_reading = self.mj.get_palm_force(self.heuristic_real_world)
+      print("palm reading is", palm_reading)
     if wrist:
       wrist_reading = self.mj.get_wrist_force(self.heuristic_real_world)
 
@@ -1161,15 +1179,15 @@ class MjEnv():
 
         # squeeze fingers
         if fixed_angle:
-          action = bend_to_force(final_bend_target_N, possible_action=X_close)
+          action = bend_to_force(final_bend_target_N, possible_action=X_close, limit_force_N=limit_bend_target_N)
           action_name = "finger Y close"
         else:
-          action = bend_to_force(final_bend_target_N, possible_action=Y_close)
+          action = bend_to_force(final_bend_target_N, possible_action=Y_close, limit_force_N=limit_bend_target_N)
           action_name = "finger X close"
 
         # squeeze palm
         if action is None:
-          action = palm_push_to_force(final_palm_target_N)
+          action = palm_push_to_force(final_palm_target_N, limit_force_N=limit_palm_target_N)
           action_name = "palm forward"
 
       # or just try to lift higher
