@@ -1,14 +1,8 @@
 #!/usr/bin/env python3
-# coding: utf-8
-
-# In[1]:
-
-
-#!/usr/bin/env python3
 
 # add the path to the folder above, hardcoded
 import sys
-pathhere = "/home/luke/mymujoco/rl/"
+pathhere = "/home/luke/mujoco-devel/rl/"
 sys.path.insert(0, pathhere)
 
 from env.MjEnv import MjEnv
@@ -22,9 +16,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-t", "--thickness", type=float, default=0.9e-3)
 parser.add_argument("-w", "--width", type=float, default=28e-3)
 parser.add_argument("-f", "--force-style", type=int, default=0)
-parser.add_argument("-s", "--set", default="set6_testing")
+parser.add_argument("-s", "--set", default="set9_testing")
 parser.add_argument("-e", "--end", default="")
-parser.add_argument("-E", "--youngs-modulus", type=float, default=200e9)
+parser.add_argument("-E", "--youngs-modulus", type=float, default=193e9)
 parser.add_argument("--no-tuned", action="store_true")
 
 args = parser.parse_args()
@@ -34,9 +28,10 @@ max_force = 4
 set_name = args.set # object set to use
 
 # create and prepare the mujoco instance
-mj = MjEnv(noload=True)
-mj.testing_xmls = 0
-mj.task_reload_chance = -1
+mj = MjEnv()
+mj.params.test_objects = 1
+mj.params.task_reload_chance = -1
+mj.log_level = 4
 
 # specify finger dimensions
 mj.params.finger_thickness = args.thickness
@@ -142,40 +137,42 @@ overwrite = True
 # In[4]:
 
 
-from FEA_data import fea_data
+# from FEA_data import fea_data
 
-# this data uses MASSES, it is [100g, 200g, 300g, 400g]
-FEA_xy2 = [ 
-  fea_data[1],
-  fea_data[2],
-  fea_data[3],
-  fea_data[4]
-]
-
-
-# In[5]:
+# # this data uses MASSES, it is [100g, 200g, 300g, 400g]
+# FEA_xy2 = [ 
+#   fea_data[1],
+#   fea_data[2],
+#   fea_data[3],
+#   fea_data[4]
+# ]
 
 
-from real_data import real_data
+# # In[5]:
 
-# this data uses MASSES, it is [100g, 200g, 300g, 400g]
-REAL_xy = [
-  real_data[2],
-  real_data[4],
-  real_data[6],
-  real_data[8]
-]
+
+# from real_data import real_data
+
+# # this data uses MASSES, it is [100g, 200g, 300g, 400g]
+# REAL_xy = [
+#   real_data[2],
+#   real_data[4],
+#   real_data[6],
+#   real_data[8]
+# ]
 
 
 # In[6]:
 
 
 def run_curve_data(mjenv, segments, converge_to=None, converge_target_accuracy=5e-4, 
-                   auto=True, stiffness=-7.5, force_style=0):
+                   auto=True, force_style=0):
   """
   This function returns a data structure containing curve validation data for
   a given mjenv across a given list of segments eg [5, 10, 15, 20]
   """
+
+  print("in run_curve_data")
 
   data = []
 
@@ -185,9 +182,6 @@ def run_curve_data(mjenv, segments, converge_to=None, converge_target_accuracy=5
   # turn off automatic finding of calibrations as they are not needed
   mjenv.mj.set.auto_calibrate_gauges = False
 
-  # set finger stiffness style (-7.5=final theory, -100=hardcoded real, -101=hardcoded theory)
-  mjenv.mj.set.finger_stiffness = stiffness
-
   if converge_to is not None: 
     stiffness_code_string = ""
     loops_code_string = "std::vector<int> loops { "
@@ -196,8 +190,15 @@ def run_curve_data(mjenv, segments, converge_to=None, converge_target_accuracy=5
   # loop through each object set and gather data
   for N in segments:
 
-    mjenv.load(object_set_name=set_name, num_segments=N)
+    print("Segment", N)
+
+    mjenv.load(object_set_name=set_name, num_segments=N, depth_camera=False)
+
+    print("after load")
+
     mjenv.reset(hard=True)
+
+    print("after reset")
 
     # if we are converging stiffness before recording data
     if converge_to is not None:
@@ -249,9 +250,6 @@ def run_curve_data(mjenv, segments, converge_to=None, converge_target_accuracy=5
 
   return data
 
-# set finger stiffness algorithm
-finger_stiffness = -7.5 # finalised theory result
-
 auto_timestep = True
 converge = None
 accuracy = None
@@ -262,7 +260,7 @@ accuracy = None
 # finger_stiffness = -7.5 # finalised theory as intial guess
 
 if get_data:
-  data = run_curve_data(mj, segments, auto=auto_timestep, stiffness=finger_stiffness, 
+  data = run_curve_data(mj, segments, auto=auto_timestep, 
                         converge_to=converge, converge_target_accuracy=accuracy, 
                         force_style=args.force_style)
 

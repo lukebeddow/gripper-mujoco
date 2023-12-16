@@ -422,7 +422,7 @@ class MjEnv():
       print(f"Training xmls: {self.training_xmls}, testing xmls: {self.testing_xmls}")
 
     if self.training_xmls < 1:
-      raise RuntimeError(f"enough training xmls failed to be found in MjEnv at: {self.xml_path}")
+      raise RuntimeError(f"enough training xmls failed to be found in MjEnv at: {self.xml_path}. xml files = {len(xml_files)}, testing xmls = {self.testing_xmls}")
 
   def _update_n_actions_obs(self):
     """
@@ -1327,7 +1327,7 @@ class MjEnv():
     self._update_n_actions_obs()
 
     # check if the depth camera is included in the object set chosen
-    if self.load_next.depth_camera: 
+    if self.load_next.depth_camera:
       self.load_next.depth_camera = self._init_rgbd()
     else:
       self.params.depth_camera = False
@@ -1385,7 +1385,7 @@ class MjEnv():
 
     return to_return
 
-  def reset(self, hard=None, timestep=None, realworld=False):
+  def reset(self, hard=None, timestep=None, realworld=False, nospawn=False):
     """
     Reset the simulation to the start
     """
@@ -1410,7 +1410,7 @@ class MjEnv():
     if realworld is True: self.mj.calibrate_real_sensors() # re-zero sensors
     
     # spawn a new random object
-    if not realworld:
+    if not realworld or nospawn:
       self._spawn_object()
 
     # if we are using a camera, randomise colours
