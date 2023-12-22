@@ -13,50 +13,53 @@ BACKGROUND=&
 SLEEP=1
 LOGGING_TO=data_gather_logs
 
+THICK_1=0.86e-3
+THICK_2=0.96e-3
+
 # direct all logging to /dev/null except last (to keep an eye on progress)
 : > $LOGGING_TO/log_0p87_28_1.txt
 exec > $LOGGING_TO/log_0p87_28_1.txt
-python3 plot_finger_models_2.py -t 0.87e-3 -w 28e-3 -E $MODULUS -f 0 &
+python3 plot_finger_models.py -t $THICK_1 -w 28e-3 -E $MODULUS -f 0 &
 
 sleep $SLEEP
 : > $LOGGING_TO/log_0p97_24_1.txt
 exec > $LOGGING_TO/log_0p97_24_1.txt
-python3 plot_finger_models_2.py -t 0.97e-3 -w 24e-3 -E $MODULUS -f 0 &
+python3 plot_finger_models.py -t $THICK_2 -w 24e-3 -E $MODULUS -f 0 &
 
 sleep $SLEEP
 : > $LOGGING_TO/log_0p97_28_1.txt
 exec > $LOGGING_TO/log_0p97_28_1.txt
-python3 plot_finger_models_2.py -t 0.97e-3 -w 28e-3 -E $MODULUS -f 0 &
+python3 plot_finger_models.py -t $THICK_2 -w 28e-3 -E $MODULUS -f 0 &
 
 sleep $SLEEP
 : > $LOGGING_TO/log_0p87_28_2.txt
 exec > $LOGGING_TO/log_0p87_28_2.txt
-python3 plot_finger_models_2.py -t 0.87e-3 -w 28e-3 -E $MODULUS -f 1 &
+python3 plot_finger_models.py -t $THICK_1 -w 28e-3 -E $MODULUS -f 1 &
 
 sleep $SLEEP
 : > $LOGGING_TO/log_0p97_24_2.txt
 exec > $LOGGING_TO/log_0p97_24_2.txt
-python3 plot_finger_models_2.py -t 0.97e-3 -w 24e-3 -E $MODULUS -f 1 &
+python3 plot_finger_models.py -t $THICK_2 -w 24e-3 -E $MODULUS -f 1 &
 
 sleep $SLEEP
 : > $LOGGING_TO/log_0p97_28_2.txt
 exec > $LOGGING_TO/log_0p97_28_2.txt
-python3 plot_finger_models_2.py -t 0.97e-3 -w 28e-3 -E $MODULUS -f 1 &
+python3 plot_finger_models.py -t $THICK_2 -w 28e-3 -E $MODULUS -f 1 &
 
 sleep $SLEEP
 : > $LOGGING_TO/log_0p87_28_3.txt
 exec > $LOGGING_TO/log_0p87_28_3.txt
-python3 plot_finger_models_2.py -t 0.97e-3 -w 24e-3 -E $MODULUS -f 2 &
+python3 plot_finger_models.py -t $THICK_1 -w 28e-3 -E $MODULUS -f 2 &
 
 sleep $SLEEP
 : > $LOGGING_TO/log_0p97_24_3.txt
 exec > $LOGGING_TO/log_0p97_24_3.txt
-python3 plot_finger_models_2.py -t 0.87e-3 -w 28e-3 -E $MODULUS -f 2 &
+python3 plot_finger_models.py -t $THICK_2 -w 24e-3 -E $MODULUS -f 2 &
 
 sleep $SLEEP
 : > $LOGGING_TO/log_0p97_28_3.txt
 exec > $LOGGING_TO/log_0p97_28_3.txt
-python3 plot_finger_models_2.py -t 0.97e-3 -w 28e-3 -E $MODULUS -f 2 &
+python3 plot_finger_models.py -t $THICK_2 -w 28e-3 -E $MODULUS -f 2 &
 
 echo All jobs submitted
 

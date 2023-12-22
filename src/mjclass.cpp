@@ -324,6 +324,7 @@ std::string MjClass::file_from_from_command_line(int argc, char **argv)
   std::string object_set = input.getCmdFromList("-o", "--object-set");
   std::string task = input.getCmdFromList("-t", "--task");
   std::string path = input.getCmdFromList("-p", "--path");
+  std::string thickness = input.getCmdFromList("T", "--thickness");
 
   // debug information
   std::cout << "MjClass::load_from_command_line(...) recieved the following:\n";
@@ -333,6 +334,7 @@ std::string MjClass::file_from_from_command_line(int argc, char **argv)
   if (not object_set.empty()) std::cout << "    -> object_set  " << object_set << '\n';
   if (not task.empty())       std::cout << "    -> task        " << task << '\n';
   if (not path.empty())       std::cout << "    -> path        " << path << '\n';
+  if (not thickness.empty())  std::cout << "    -> thickness   " << thickness << '\n';
   if (not gripper.empty() and (not width.empty() or not segments.empty())) {
     std::cout << "Warning: gripper overrides values of width and segments\n";
   }
@@ -344,6 +346,12 @@ std::string MjClass::file_from_from_command_line(int argc, char **argv)
   if (object_set.empty()) { object_set = "set9_fullset"; };
   if (task.empty()) { task = "0"; };
   if (path.empty()) { path = LUKE_MJCF_PATH; };
+
+  // apply given thickness
+  if (not thickness.empty()) {
+    double thickness_double = std::stod(thickness);
+    set_finger_thickness(thickness_double * 1e-3);
+  }
 
   // use default templates to assemble filepath
   if (path.back() != '/') { path += '/'; };
@@ -3408,7 +3416,7 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force, 
   s_.tip_force_applied = force;
 
   // step the simulation to allow the forces to settle
-  float time_to_settle = 100; // 30; // have tried up to 100
+  float time_to_settle = 50; // 30; // have tried up to 100
   int steps_to_make = time_to_settle / s_.mujoco_timestep;
   // std::cout << "Stepping for " << steps_to_make << " steps to allow settling\n";
 
@@ -3430,7 +3438,7 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force, 
       // do we catch instability? If so reduce timestep
       if (dynamic_timestep_adjustment) {
         if (luke::is_sim_unstable(model, data)) {
-          s_.mujoco_timestep *= 0.9;
+          s_.mujoco_timestep *= 0.8;
           reset();
           dynamic_repeats_done += 1;
           if (dynamic_repeats_done > dynamic_repeats_allowed)

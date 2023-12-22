@@ -1075,7 +1075,7 @@ namespace MjType
         }
 
         void print_table() {
-          float to_deg = (180.0 / 3.1415926535897);
+          double to_deg = (180.0 / 3.1415926535897);
           std::cout << "n \t x \t x_p \t E_x \t y_t \t y \t y_p \t E_y \t j \t j_p \t E_j (units mm/deg)\n";
           for (uint i = 0; i < x.size(); i++) {
             std::printf("%i \t %.1f \t %.1f \t %.1f \t %.1f \t %.1f \t %.1f \t %.1f \t %.1f \t %.1f \t %.1f\n",
@@ -1289,7 +1289,9 @@ namespace MjType
     Calibration g3_1p0_28 {3.1390e-6};
 
     // TESTING: all gauges given this currently
-    Calibration new_gauges {1.30e-6}; // for 75deg fingers, 28x0.9, 12/12/23
+    // Calibration new_gauges {1.30e-6}; // for 75deg fingers, 28x0.9, 12/12/23
+    // Calibration new_gauges {1.53e-6}; // for cut fingers, 28x1.0, 14/12/23
+    Calibration new_gauges {1.28e-6}; // for cut fingers, 24x1.0, 14/12/23
 
     // get the correct calibration for the fingers
     Calibration get_gauge_calibration(int gauge_num, double thickness, double width)
@@ -1304,6 +1306,9 @@ namespace MjType
       }
 
       double tol = 1e-5;
+
+      // TESTING:
+      return new_gauges;
 
       if (abs(thickness - 0.9e-3) < tol) {
 
