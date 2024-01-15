@@ -2766,10 +2766,10 @@ if __name__ == "__main__":
   elif args.program == "test_cnn_ppo":
 
     # define what to vary this training, dependent on job number
-    vary_1 = [1e-5, 1e-7, 1e-6, 1e-4, 1e-3]
-    vary_2 = [(25, 25), (50, 50)]
+    vary_1 = [1e-6, 1e-5, 1e-4]
+    vary_2 = [(50, 50)]
     vary_3 = None
-    repeats = 5
+    repeats = None
     tm.param_1_name = "learning rate"
     tm.param_2_name = "image size"
     tm.param_3_name = None
@@ -2795,8 +2795,7 @@ if __name__ == "__main__":
     # make the agent
     tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
     tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1
-    tm.settings["Agent_PPO"]["steps_per_epoch"] = 3000
-    # tm.settings["Agent_PPO"]["steps_per_epoch"] = 15
+    tm.settings["Agent_PPO"]["steps_per_epoch"] = 6000
     agent = Agent_PPO(device=args.device)
     agent.init(network)
 

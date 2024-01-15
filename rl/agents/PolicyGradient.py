@@ -769,8 +769,6 @@ class Agent_PPO:
 
   def optimise_model(self):
 
-    print("OPTIMISING MODEL")
-
     data = self.buffer.get()
 
     pi_l_old, pi_info_old = self.compute_loss_pi(data)
