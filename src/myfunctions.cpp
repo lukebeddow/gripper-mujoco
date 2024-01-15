@@ -3433,6 +3433,20 @@ void set_object_visibility(mjModel* model, bool visible)
   oh_.set_object_visibility(model, visible);
 }
 
+void set_everything_colour(mjModel* model, std::vector<float> rgba)
+{
+  /* set everything in the simulation one colour */
+
+  set_all_objects_colour(model, rgba);
+  set_finger_colour(model, rgba, 1);
+  set_finger_colour(model, rgba, 2);
+  set_finger_colour(model, rgba, 3);
+  set_finger_colour(model, rgba, 4); // 4 means palm
+  std::vector<float> black { 0, 0, 0, 1 };
+  set_ground_colour(model, black);
+  // set_main_body_colour(model, rgba);
+}
+
 void set_object_colour(mjModel* model, std::vector<float> rgba)
 {
   /* set the colour of the main object */

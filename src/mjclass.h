@@ -1570,6 +1570,10 @@ public:
   void randomise_ground_colour();
   void randomise_finger_colours(bool all_same=true);
   void set_neat_colours();
+  void create_object_mask();
+  void create_gripper_mask();
+  void create_finger_mask(int num);
+  void create_ground_mask();
   bool is_done();
   std::vector<luke::gfloat> get_observation();
   std::vector<luke::gfloat> get_observation(MjType::SensorData sensors);

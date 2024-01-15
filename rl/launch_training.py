@@ -15,6 +15,7 @@ from TrainingManager import TrainingManager
 from agents.DQN import Agent_DQN
 from agents.ActorCritic import MLPActorCriticAC, Agent_SAC
 from agents.PolicyGradient import MLPActorCriticPG, Agent_PPO, Agent_PPO_Discriminator
+from agents.PolicyGradient import CNNActorCriticPG
 import networks
 
 def vary_all_inputs(raw_inputarg=None, param_1=None, param_2=None, param_3=None, repeats=None):
@@ -2755,6 +2756,47 @@ if __name__ == "__main__":
                                 continous_actions=True)
     
     # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "test_cnn_ppo":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-5, 1e-7, 1e-6, 1e-4, 1e-3]
+    vary_2 = [(25, 25), (50, 50)]
+    vary_3 = None
+    repeats = 5
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "image size"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply training specific settings
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp_smallspheres"
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["finger_thickness"] = 0.9e-3
+    tm.settings["env"]["depth_camera"] = True
+
+    # create the environment
+    env = tm.make_env()
+    env._set_rgbd_size(*tm.param_2)
+
+    # apply the agent settings
+    network = CNNActorCriticPG([3, *tm.param_2], env.n_obs, env.n_actions,
+                               continous_actions=True, device=args.device)
+    
+    # make the agent
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1
+    tm.settings["Agent_PPO"]["steps_per_epoch"] = 3000
+    # tm.settings["Agent_PPO"]["steps_per_epoch"] = 15
     agent = Agent_PPO(device=args.device)
     agent.init(network)
 

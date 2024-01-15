@@ -160,6 +160,10 @@ class MjEnv():
     self.rgbd_width = 848
     self.rgbd_height = 480
 
+    # set image collection defaults
+    self.collect_images = False
+    self.image_collection_chance = 0.01
+
     return
 
   # ----- semi-private functions, advanced use ----- #
@@ -615,6 +619,49 @@ class MjEnv():
 
     plt.show()
 
+  def _get_scene_mask(self, mask="object"):
+    """
+    Get a mask of the scene:
+      - 'object'
+      - 'gripper'
+      - 'fingers' / 'finger1' / 'finger2' / 'finger3'
+      - 'palm'
+      - 'ground'
+    """
+
+    # make the mask in the simulation
+    if mask == "object":
+      self.mj.create_ground_mask()
+    elif mask == "gripper":
+      self.mj.create_gripper_mask()
+    elif mask.startswith("finger"):
+      if mask.endswith("s"):
+        for i in range(3):
+          self.mj.create_finger_mask(i + 1)
+      elif mask.endswith("1"):
+        self.mj.create_finger_mask(1)
+      elif mask.endswith("2"):
+        self.mj.create_finger_mask(2)
+      elif mask.endswith("3"):
+        self.mj.create_finger_mask(3)
+    elif mask == "palm":
+      self.mj.create_finger_mask(4)
+    elif mask == "ground":
+      self.mj.create_ground_mask()
+
+    # now get an rgbd image of the mask
+    rgb, depth = self._get_rgbd_image()
+
+    # now reset the mask in simulation
+    self.mj.randomise_every_colour()
+
+    # finally, process the mask into binary
+    print("rgb datatype", rgb.dtype)
+    print("rgb before", rgb)
+    rgb = np.array((rgb < 10) * 255, dtype=np.uint8)
+    print("rgb after", rgb)
+    return rgb
+
   def _next_observation(self):
     """
     Returns the next observation from the simuation
@@ -631,6 +678,7 @@ class MjEnv():
     if self.params.depth_camera:
       include_depth = False
       rgb, depth = self._get_rgbd_image()
+      rgb = np.divide(rgb, 255, dtype=np.float32) # normalise to range 0-1
       if include_depth:
         rgb = np.concatenate((rgb, depth), axis=0)
       # resize and pad with zeros the observation vector
@@ -639,7 +687,44 @@ class MjEnv():
         raise RuntimeError(f"MjEnv()._next_observation() failed as observation length {len(obs)} exceeds image number of pixels {new_size}")
       obs.resize(new_size)
       obs = obs.reshape((1, self.rgbd_width, self.rgbd_height))
-      obs = np.concatenate((rgb, obs), axis=0)
+      obs = np.concatenate((rgb, obs), axis=0, dtype=np.float32)
+
+      if self.collect_images:
+        global random_train
+        if self.image_collection_chance < random_train.random():
+
+          # we want to save the observation
+
+          # we also want to add to it masks of
+          #   1) the object
+          #   2) the fingers/palm
+          #   3) the background
+
+          # we would also like to save what the object was and how
+          # big it was. Maybe we save the category of the object
+          # (eg 1=cube, 2=sphere, etc) and also the bounding box
+
+          # if we save it all as a numpy array it will be smaller and
+          # we can use smaller integers
+          """
+          Layers, all shaped as the rgb size
+
+          1) red channel
+          2) green channel
+          3) blue channel
+          4) depth channel
+          5) observation, flattened and zero padded
+          6) object mask
+          7) fingers/palm mask
+          8) background mask
+          9) details vector
+              [0] = object category
+              [1] = bounding box x
+              [2] = bounding box y
+              [3] = bounding box z
+          """
+
+          pass
 
     return obs
 
@@ -1470,17 +1555,31 @@ if __name__ == "__main__":
   mj.mj.set.auto_set_timestep = False
 
   mj.load("set8_fullset_1500", num_segments=8, finger_width=28e-3, finger_thickness=0.9e-3)
+  
   mj._spawn_object()
-  mj._set_rgbd_size(100, 100)
+  mj._set_rgbd_size(10, 10)
 
   mj.reset()
-  num = 101
+  num = 100
   for i in range(num):
     mj.step(random_train.integers(0, mj.n_actions))
 
   x = mj._next_observation()
+  exit()
+  # print(x[3][0][:5])
+    
+  # mj.mj.create_ground_mask()
+  # mj._plot_rgbd_image()
 
-  print(x[3][0][:5])
+  # mj.mj.randomise_every_colour()
+  mj._plot_rgbd_image()
+  
+  rgb = mj._get_scene_mask(mask="gripper")
+
+  import matplotlib.pyplot as plt
+  fig, axs = plt.subplots(1, 1)
+  axs.imshow(np.einsum("ijk->kji", rgb)) # swap to numpy style rows/cols (eg 3x640x480 -> 480x640x3)
+  plt.show()
 
   # widths = [24e-3, 28e-3]
   # segments = [8]

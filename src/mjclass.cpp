@@ -2545,6 +2545,61 @@ void MjClass::set_neat_colours()
 
 }
 
+void MjClass::create_object_mask()
+{
+  /* mask out only all the objects in the scene */
+
+  // turn everything black first
+  std::vector<float> black { 0, 0, 0, 0 };
+  luke::set_everything_colour(model, black);
+
+  // now turn all the objects white
+  std::vector<float> white { 1, 1, 1, 1 };
+  luke::set_all_objects_colour(model, white);
+}
+
+void MjClass::create_gripper_mask()
+{
+  /* mask out the gripper parts in the scene */
+
+  // turn everything black first
+  std::vector<float> black { 0, 0, 0, 0 };
+  luke::set_everything_colour(model, black);
+
+  // now turn all the gripper parts white
+  std::vector<float> white { 1, 1, 1, 1 };
+  luke::set_finger_colour(model, white, 1);
+  luke::set_finger_colour(model, white, 2);
+  luke::set_finger_colour(model, white, 3);
+  luke::set_finger_colour(model, white, 4); // 4 means palm
+}
+
+void MjClass::create_finger_mask(int num)
+{
+  /* mask out only one gripper finger (1,2,3) or the palm (4)*/
+
+  // turn everything black first
+  std::vector<float> black { 0, 0, 0, 0 };
+  luke::set_everything_colour(model, black);
+
+  // now turn all the gripper parts white
+  std::vector<float> white { 1, 1, 1, 1 };
+  luke::set_finger_colour(model, white, num);
+}
+
+void MjClass::create_ground_mask()
+{
+  /* show up only the ground in view */
+
+  // turn everything black first
+  std::vector<float> black { 0, 0, 0, 1 };
+  luke::set_everything_colour(model, black);
+
+  // now turn the ground white
+  std::vector<float> white { 1, 1, 1, 1 };
+  luke::set_ground_colour(model, white);
+}
+
 float MjClass::reward()
 {
   /* calculate the reward available at the current simulation state */

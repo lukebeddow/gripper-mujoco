@@ -152,6 +152,7 @@ luke::Vec3 get_object_xyz_bounding_box(int idx);
 // Forces get_object_forces(const mjModel* model, mjData* data);
 Forces_faster get_object_forces_faster(const mjModel* model, mjData* data);
 void set_object_visibility(mjModel* model, bool visible);
+void set_everything_colour(mjModel* model, std::vector<float> rgba);
 void set_object_colour(mjModel* model, std::vector<float> rgba);
 void set_all_objects_colour(mjModel* model, std::vector<float> rgba);
 void set_ground_colour(mjModel* model, std::vector<float> rgba);
