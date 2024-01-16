@@ -2840,15 +2840,14 @@ if __name__ == "__main__":
     tm.settings["cpp"]["action"]["base_Y"]["in_use"] = True
     tm.settings["cpp"]["sensor"]["base_state_sensor_XY"]["in_use"] = True
 
-    # # choose any additional settings to change
-    # tm.settings["A"]["B"] = X
-    # tm.settings["C"]["D"] = Y
-    # tm.settings["E"]["F"] = Z
+    # make grasping easier - no penalty termination for dangerous forces
+    tm.settings["reward"]["penalty_termination"] = False
 
-    # create the environment
+    # initial testing parameters for PPO   
     rgb_size = (50, 50)
     lr = 1e-5
 
+    # create the environment
     env = tm.make_env()
     env._set_rgbd_size(*rgb_size)
 
