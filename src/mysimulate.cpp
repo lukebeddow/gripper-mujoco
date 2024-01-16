@@ -1647,6 +1647,7 @@ void makeObjectUI(int oldstate)
         {mjITEM_SLIDERNUM,  "scene X",         2, &settings.scene_x, "0 1"},
         {mjITEM_SLIDERNUM,  "scene Y",         2, &settings.scene_y, "0 1"},
         {mjITEM_BUTTON,   "random base",    2, NULL,                 " #317"},
+        {mjITEM_BUTTON,   "set base XY",    2, NULL,                 " #317"},
         {mjITEM_END}
     };
 
@@ -2588,8 +2589,12 @@ void uiEvent(mjuiState* state)
             }
             case 37: {         // random base movement
                 std::cout << "Performaning a random base movement with noise " << myMjClass.s_.base_position_noise << "\n";
-                double z = myMjClass.random_base_movement(myMjClass.s_.base_position_noise);
+                double z = myMjClass.random_base_Z_movement(myMjClass.s_.base_position_noise);
                 std::cout << "Amount of noise applied was " << z << "\n";
+            }
+            case 38: {         // set base XY position
+                std::cout << "Setting base position to (0.1, 0.1)\n";
+                double z = myMjClass.set_new_base_XY(0.1, 0.1);
             }
             }
         }

@@ -1481,6 +1481,8 @@ public:
   int n_actions;                          // number of possible actions
   std::vector<int> action_options;        // possible action codes
   bool termination_signal_sent = false;   // has termination action been triggered
+  int scene_grasp_target = 0;             // number of target grasps to achieve in a scene
+  int current_grasp_num = 0;              // number of grasps achieved
 
   // track the timestamps of sensor updates, this is for plotting in mysimlulate.cpp
   luke::SlidingWindow<float> step_timestamps { MjType::SensorData::buffer_size };
@@ -1547,7 +1549,8 @@ public:
   bool move_motor_target(double x, double y, double z);
   bool move_joint_target(double x, double th, double z);
   bool move_step_target(int x, int y, int z);
-  double random_base_movement(double size);
+  bool set_new_base_XY(double x, double y);
+  double random_base_Z_movement(double size);
 
   // learning functions
   void action_step();
@@ -1565,6 +1568,7 @@ public:
     double xrange, double yrange, double rotrange);
   bool spawn_into_scene(MjType::SpawnParams params);
   int spawn_scene(int num_objects, double xrange, double yrange, double smallest_gap);
+  void set_scene_grasp_target(int num_objects);
   void randomise_every_colour();
   void randomise_object_colour(bool all_objects=false);
   void randomise_ground_colour();
@@ -1618,6 +1622,7 @@ public:
   void set_finger_thickness(double thickness);
   void set_finger_width(double width);
   void set_finger_modulus(double E);
+  void set_base_XYZ_limits(double x, double y, double z);
   int get_n_actions();
   int get_n_obs();
   int get_N();

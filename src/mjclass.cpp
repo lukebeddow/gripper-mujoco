@@ -472,7 +472,7 @@ void MjClass::reset()
   configure_settings();
 
   // move the base to a random new position
-  random_base_movement(s_.base_position_noise);
+  random_base_Z_movement(s_.base_position_noise);
 }
 
 void MjClass::hard_reset()
@@ -1257,7 +1257,17 @@ bool MjClass::move_step_target(int x, int y, int z)
   return luke::move_gripper_target_step(x, y, z);
 }
 
-double MjClass::random_base_movement(double size)
+bool MjClass::set_new_base_XY(double x, double y)
+{
+  /* instantly move the base to a new XY position, this position will be 
+  tracked by the base XY sensors */
+
+  bool within_limits = luke::set_base_to_XY_position(data, x, y);
+
+  return within_limits;
+}
+
+double MjClass::random_base_Z_movement(double size)
 {
   /* Perform a random movement of the base taken from a uniform distribution of
   [-size, size] in metres */
@@ -1265,7 +1275,7 @@ double MjClass::random_base_movement(double size)
   std::uniform_real_distribution<double> distribution(-size, size);
   double z_move = distribution(*MjType::generator);
 
-  luke::set_base_to_position(data, z_move);
+  luke::set_base_to_Z_position(data, z_move);
 
   return z_move;
 }
@@ -2448,6 +2458,20 @@ int MjClass::spawn_scene(int num_objects, double xrange, double yrange,
   return spawned_objects.size();
 }
 
+void MjClass::set_scene_grasp_target(int num_objects)
+{
+  /* set a target to grasp a certain number of objects */
+
+  if (num_objects > env_.obj.size()) {
+    std::cout << "MjClass::set_scene_grasp_target() warning: num_objects "
+      << num_objects << " is greater than number of objects in the scene "
+      << env_.obj.size() << ", capping num_objects\n";
+  }
+
+  scene_grasp_target = num_objects;
+  current_grasp_num = 0;
+}
+
 void MjClass::randomise_every_colour()
 {
   /* makes every single item in the simulation a random colour */
@@ -3288,6 +3312,13 @@ void MjClass::set_finger_modulus(double E)
 
   // changes are finished upon next call to reset()
   if (changed) resetFlags.finger_EI_changed = true;
+}
+
+void MjClass::set_base_XYZ_limits(double x, double y, double z)
+{
+  /* set the base XYZ limits */
+
+  luke::set_base_XYZ_limits(x, y, z);
 }
 
 int MjClass::get_n_actions()

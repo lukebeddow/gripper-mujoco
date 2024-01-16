@@ -2195,6 +2195,21 @@ void update_base_limits()
   target_.base_max.yaw = j_.baseLims.yaw_max;
 }
 
+void set_base_XYZ_limits(double x, double y, double z)
+{
+  /* set symettrical base XYZ limits. These do not persist through
+  a hard reset */
+
+  j_.baseLims.x_min = -x;
+  j_.baseLims.x_max = x;
+  j_.baseLims.y_min = -y;
+  j_.baseLims.y_max = y;
+  j_.baseLims.z_min = -z;
+  j_.baseLims.z_max = z;
+
+  update_base_limits();
+}
+
 /* ----- set gripper target ----- */
 
 bool set_gripper_target_step(int x, int y, int z)
@@ -2390,22 +2405,78 @@ void update_target()
   target_.end.update();
 }
 
-void set_base_to_position(mjData* data, float z_pos)
+bool set_base_to_XY_position(mjData* data, float x_pos, float y_pos)
+{
+  /* set the gripper base to a given XY position immediately */
+
+  // set the base target (ie keep track of this movement and maintain it)
+  target_.base.x = x_pos;
+  target_.base.y = y_pos;
+
+  bool within_limits = true;
+
+  // x base limits
+  if (target_.base.x > target_.base_max.x) {
+    target_.base.x = target_.base_max.x;
+    within_limits = false;
+  }
+  if (target_.base.x < target_.base_min.x) {
+    target_.base.x = target_.base_min.x;
+    within_limits = false;
+  }
+  // y base limits
+  if (target_.base.y > target_.base_max.y) {
+    target_.base.y = target_.base_max.y;
+    within_limits = false;
+  }
+  if (target_.base.y < target_.base_min.y) {
+    target_.base.y = target_.base_min.y;
+    within_limits = false;
+  }
+
+  // override qpos for the base to snap model to maximum (include equilibrium offset)
+  if (j_.in_use.base_xyz) {
+    (*j_.to_qpos.base[0]) = target_.base.x + j_.reset_qpos.base[0]; 
+    (*j_.to_qpos.base[1]) = target_.base.y + j_.reset_qpos.base[1]; 
+  }
+  else {
+    throw std::runtime_error("luke::set_base_to_XY_position() cannot move XY because these motions are not in use");
+    // (*j_.to_qpos.base[0]) = z_pos + j_.reset_qpos.base[0]; 
+  } 
+
+  return within_limits;
+}
+
+bool set_base_to_Z_position(mjData* data, float z_pos)
 {
   /* set the gripper base to a given position immediately. Note that
   +ve means downwards, so to move to the max would be for example
   z_pos = -30e-3 */
 
   // set the base target (ie keep track of this movement and maintain it)
-  set_base_target_m(0, 0, z_pos);
+  target_.base.z = z_pos;
+
+  bool within_limits = true;
+
+  // z base limits
+  if (target_.base.z > target_.base_max.z) {
+    target_.base.z = target_.base_max.z;
+    within_limits = false;
+  }
+  if (target_.base.z < target_.base_min.z) {
+    target_.base.z = target_.base_min.z;
+    within_limits = false;
+  }
 
   // override qpos for the base to snap model to maximum (include equilibrium offset)
   if (j_.in_use.base_xyz) {
-    (*j_.to_qpos.base[2]) = z_pos + j_.reset_qpos.base[2]; 
+    (*j_.to_qpos.base[2]) = target_.base.z + j_.reset_qpos.base[2]; 
   }
   else if (j_.in_use.base_z) {
-    (*j_.to_qpos.base[0]) = z_pos + j_.reset_qpos.base[0]; 
-  } 
+    (*j_.to_qpos.base[0]) = target_.base.z + j_.reset_qpos.base[0]; 
+  }
+
+  return within_limits;
 }
 
 void set_base_to_max_height(mjData* data)
@@ -2416,7 +2487,7 @@ void set_base_to_max_height(mjData* data)
   // confusingly, for the base down is +ve and up is -ve
   float max_height = target_.base_min.z;
 
-  set_base_to_position(data, max_height);
+  set_base_to_Z_position(data, max_height);
 }
 
 /* ----- sensing ------ */

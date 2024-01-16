@@ -108,6 +108,16 @@ class TrainingManager():
       "max_episode_steps" : 250,
       "object_position_noise_mm" : 10,
       "object_rotation_noise_deg" : 5,
+      "base_lim_X_mm" : 300,
+      "base_lim_Y_mm" : 200,
+      "base_lim_Z_mm" : 30,
+      "use_scene_settings" : False,
+      "num_objects_in_scene" : 1,
+      "scene_grasp_target" : 1,
+      "origin_noise_X_mm" : 150,
+      "origin_noise_Y_mm" : 50,
+      "scene_X_dimension_mm" : 300,
+      "scene_Y_dimension_mm" : 200, 
       "test_obj_per_file" : 20,
       "task_reload_chance" : 0.05,
       "test_trials_per_object" : 3,
@@ -203,7 +213,7 @@ class TrainingManager():
           "in_use" : False,
           "normalise" : 0.0,
           "read_rate" : -1,
-          "noise_override" : None
+          "noise_override" : [0.1, 0.0]
         },
         "bending_gauge" : {
           "in_use" : True,

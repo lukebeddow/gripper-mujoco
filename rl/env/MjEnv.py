@@ -67,10 +67,26 @@ class MjEnv():
   @dataclass
   class Parameters:
 
+    # note all XYZ distances are symettric
+    # eg noise_mm = 10 means +-10mm noise from central point
+    # eg base_lim_X_mm = 100 means +-100mm, so 200mm working area
+
     # training parameters
     max_episode_steps: int = 250
     object_position_noise_mm: int = 10
     object_rotation_noise_deg: int = 5 # depreciated, now spawns in any available orientation
+    base_lim_X_mm: int = 300
+    base_lim_Y_mm: int = 200
+    base_lim_Z_mm: int = 30
+
+    # grasping scene parameters
+    use_scene_settings: bool = False
+    num_objects_in_scene: int = 1
+    scene_grasp_target: int = 1
+    origin_noise_X_mm: int = 150
+    origin_noise_Y_mm: int = 50
+    scene_X_dimension_mm: int = 300
+    scene_Y_dimension_mm: int = 200
 
     # file and testing parameters
     test_obj_per_file: int = 20
@@ -124,6 +140,7 @@ class MjEnv():
     # initialise class variables
     self.test_in_progress = False
     self.test_completed = False
+    self.scene_recursion_counter = 0
 
     # if not given values, set to defaults from the dataclass
     if num_segments is not None: self.load_next.num_segments = num_segments
@@ -370,6 +387,11 @@ class MjEnv():
 
     # assume loading is correct and directly copy
     self.params.segment_inertia_scaling = self.load_next.segment_inertia_scaling
+
+    # update base limits
+    self.mj.set_base_XYZ_limits(self.params.base_lim_X_mm * 1e-3, 
+                                self.params.base_lim_Y_mm * 1e-3,
+                                self.params.base_lim_Z_mm * 1e-3)
 
   def _load_object_set(self, name=None, mjcf_path=None, num_segments=None, 
                        finger_width=None, auto_generate=False, use_hashes=True):
@@ -800,10 +822,100 @@ class MjEnv():
     """
     return self.mj.reward(goal, state)
 
+  def _spawn_scene(self):
+    """
+    Spawn objects into a scene
+    """
+
+    global random_test
+    global random_train
+
+    # are we using train or test time random generator
+    if self.test_in_progress:
+      generator = random_test
+    else:
+      generator = random_train
+
+    # # if we are doing a test, chose a specific object
+    # if self.test_in_progress:
+    #   obj_idx = self.current_test_trial.obj_idx
+    # else:
+    #   # otherwise choose a random object
+    #   obj_idx = generator.integers(0, self.num_objects)
+
+    if self.params.num_objects_in_scene > self.num_objects:
+      raise RuntimeError(f"MjEnv._spawn_scene() error: num_objects_in_scene ({self.params.num_objects_in_scene}) > num_objects {self.num_objects}")
+
+    # shuffle possible objects ensuring no duplicates
+    obj_idx = np.array(list(range(self.num_objects)))
+    generator.shuffle(obj_idx)
+
+    # determine origin noise
+    origin_noise_X_mm = generator.integers(-self.params.origin_noise_X_mm, self.params.origin_noise_X_mm + 1)
+    origin_noise_Y_mm = generator.integers(-self.params.origin_noise_Y_mm, self.params.origin_noise_Y_mm + 1)
+
+    # set the gripper to our new origin
+    self.mj.set_new_base_XY(origin_noise_X_mm * 1e-3, origin_noise_Y_mm * 1e-3)
+
+    # apply spawning parameters
+    self.mj.default_spawn_params.x = origin_noise_X_mm * 1e-3
+    self.mj.default_spawn_params.y = origin_noise_Y_mm * 1e-3
+    self.mj.default_spawn_params.xrange = self.params.object_position_noise_mm * 1e-3
+    self.mj.default_spawn_params.yrange = self.params.object_position_noise_mm * 1e-3
+    self.mj.default_spawn_params.xmin = -self.params.scene_X_dimension_mm * 1e-3
+    self.mj.default_spawn_params.xmax = self.params.scene_X_dimension_mm * 1e-3
+    self.mj.default_spawn_params.ymin = -self.params.scene_Y_dimension_mm * 1e-3
+    self.mj.default_spawn_params.ymax = self.params.scene_Y_dimension_mm * 1e-3
+    self.mj.default_spawn_params.rotrange = np.pi / 2.0
+    self.mj.default_spawn_params.smallest_gap = 5e-3 # avoid collisions after 1st action
+
+    num_spawned = 0
+
+    for i in range(self.params.num_objects_in_scene):
+
+      spawned = False
+      max_count = 3
+      count = 0
+
+      while not spawned and count < max_count:
+
+        spawned = self.mj.spawn_into_scene(obj_idx[i])
+        count += 1
+        if not spawned and self.log_level >= 3:
+          print(f"Object '{self.mj.get_object_name(obj_idx[i])}' failed to spawn, try {count}")
+
+      if spawned:
+        num_spawned += 1
+      else:
+        if self.log_level >= 2:
+          print(f"Warning: object '{self.mj.get_object_name(obj_idx[i])}' failed to spawn")
+
+    # did we fail to spawn any objects
+    if num_spawned == 0:
+      if self.log_level >= 1:
+        print(f"MjEnv._spawn_scene() warning: no objects were able to be spawned in this scene, recursively trying again, this was attempt {self.scene_recursion_counter + 1}")
+      self.scene_recursion_counter += 1
+      if self.scene_recursion_counter > 10:
+        raise RuntimeError("MjEnv._spawn_scene() failed after 10 attempts")
+      self._spawn_scene()
+      return
+    else:
+      self.scene_recursion_counter = 0
+
+    # episode done when number of target objects is grasped
+    if self.params.scene_grasp_target > num_spawned:
+      self.mj.set_scene_grasp_target(num_spawned)
+    else:
+      self.mj.set_scene_grasp_target(self.params.scene_grasp_target)
+
   def _spawn_object(self):
     """
     Spawn an object into the simulation randomly
     """
+
+    if self.params.use_scene_settings:
+      self._spawn_scene()
+      return
 
     global random_test
     global random_train
@@ -1505,9 +1617,16 @@ class MjEnv():
         self._load_xml()
 
     # reset the simulation
-    if hard is True: self.mj.hard_reset()
-    elif timestep is True: self.mj.reset_timestep() # recalibrate timestep
-    else: self.mj.reset()
+    if hard is True: 
+      self.mj.hard_reset()
+      # base limits do not persist through a hard reset, so set them again
+      self.mj.set_base_XYZ_limits(self.params.base_lim_X_mm * 1e-3, 
+                                  self.params.base_lim_Y_mm * 1e-3,
+                                  self.params.base_lim_Z_mm * 1e-3)
+    elif timestep is True: 
+      self.mj.reset_timestep() # recalibrate timestep
+    else: 
+      self.mj.reset()
 
     # if real world, recalibrate the sensors
     if realworld is True: self.mj.calibrate_real_sensors() # re-zero sensors
@@ -1554,32 +1673,32 @@ if __name__ == "__main__":
   mj.mj.set.mujoco_timestep = 3.187e-3
   mj.mj.set.auto_set_timestep = False
 
-  mj.load("set8_fullset_1500", num_segments=8, finger_width=28e-3, finger_thickness=0.9e-3)
+  # mj.load("set8_fullset_1500", num_segments=8, finger_width=28e-3, finger_thickness=0.9e-3)
   
-  mj._spawn_object()
-  mj._set_rgbd_size(10, 10)
+  # mj._spawn_object()
+  # mj._set_rgbd_size(10, 10)
 
-  mj.reset()
-  num = 100
-  for i in range(num):
-    mj.step(random_train.integers(0, mj.n_actions))
+  # mj.reset()
+  # num = 100
+  # for i in range(num):
+  #   mj.step(random_train.integers(0, mj.n_actions))
 
-  x = mj._next_observation()
-  exit()
-  # print(x[3][0][:5])
+  # x = mj._next_observation()
+
+  # # print(x[3][0][:5])
     
-  # mj.mj.create_ground_mask()
+  # # mj.mj.create_ground_mask()
+  # # mj._plot_rgbd_image()
+
+  # # mj.mj.randomise_every_colour()
   # mj._plot_rgbd_image()
-
-  # mj.mj.randomise_every_colour()
-  mj._plot_rgbd_image()
   
-  rgb = mj._get_scene_mask(mask="gripper")
+  # rgb = mj._get_scene_mask(mask="gripper")
 
-  import matplotlib.pyplot as plt
-  fig, axs = plt.subplots(1, 1)
-  axs.imshow(np.einsum("ijk->kji", rgb)) # swap to numpy style rows/cols (eg 3x640x480 -> 480x640x3)
-  plt.show()
+  # import matplotlib.pyplot as plt
+  # fig, axs = plt.subplots(1, 1)
+  # axs.imshow(np.einsum("ijk->kji", rgb)) # swap to numpy style rows/cols (eg 3x640x480 -> 480x640x3)
+  # # plt.show()
 
   # widths = [24e-3, 28e-3]
   # segments = [8]
@@ -1604,29 +1723,20 @@ if __name__ == "__main__":
   #         mj.load_next.segment_inertia_scaling = i
   #         mj._auto_generate_xml_file("set8_fullset_1500", use_hashes=True)
 
-  exit()
-
   mj.params.test_objects = 20
-  # mj.load_next.finger_hook_angle_degrees = 45.678
+  mj.load_next.finger_hook_angle_degrees = 75
   mj.load_next.finger_width = 28e-3
-  # mj.load_next.fingertip_clearance = 0.143e-3
+  mj.load_next.fingertip_clearance = 0.1
+  mj.load_next.XY_base_actions = True
   # mj.load_next.finger_length = 200e-3
   # mj.load_next.finger_thickness = 1.9e-3
 
-  mj.load("set_test", depth_camera=True)
-  mj._spawn_object()
-  mj.reset()
-
-  print(mj.get_parameters())
-
-  mj._plot_rgbd_image()
-
-  mj.reset()
-  mj._plot_rgbd_image()
-
-  # name = mj._auto_generate_xml_file("set_test", use_hashes=True)
-
-  # print(name)
+  # mj.load("set9_fullset", depth_camera=True)
+  # mj.reset(hard=True)
+  gen_obj_set = "set9_fullset"
+  name = mj._auto_generate_xml_file("set9_fullset", use_hashes=True)
+  runstr = f"bin/mysimulate -p /home/luke/mujoco-devel/mjcf -o {gen_obj_set} -g {name}"
+  print(runstr)
 
   exit()
 

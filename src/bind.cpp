@@ -78,6 +78,7 @@ PYBIND11_MODULE(bind, m) {
     .def("move_motor_target", &MjClass::move_motor_target)
     .def("move_joint_target", &MjClass::move_joint_target)
     .def("move_step_target", &MjClass::move_step_target)
+    .def("set_new_base_XY", &MjClass::set_new_base_XY)
 
     // learning functions
     .def("action_step", &MjClass::action_step)
@@ -92,6 +93,7 @@ PYBIND11_MODULE(bind, m) {
     .def("spawn_into_scene", static_cast<bool (MjClass::*)(int, double, double, double)>(&MjClass::spawn_into_scene))
     .def("spawn_into_scene", static_cast<bool (MjClass::*)(int, double, double, double, double, double, double)>(&MjClass::spawn_into_scene))
     .def("spawn_scene", &MjClass::spawn_scene)
+    .def("set_scene_grasp_target", &MjClass::set_scene_grasp_target)
     .def("randomise_every_colour", &MjClass::randomise_every_colour)
     .def("randomise_object_colour", &MjClass::randomise_object_colour)
     .def("randomise_ground_colour", &MjClass::randomise_ground_colour)
@@ -143,6 +145,7 @@ PYBIND11_MODULE(bind, m) {
     .def("set_finger_thickness", &MjClass::set_finger_thickness)
     .def("set_finger_width", &MjClass::set_finger_width)
     .def("set_finger_modulus", &MjClass::set_finger_modulus)
+    .def("set_base_XYZ_limits", &MjClass::set_base_XYZ_limits)
     .def("get_finger_thickness", &MjClass::get_finger_thickness)
     .def("get_finger_stiffnesses", &MjClass::get_finger_stiffnesses)
     .def("get_finger_width", &MjClass::get_finger_width)

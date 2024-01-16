@@ -2803,6 +2803,70 @@ if __name__ == "__main__":
     tm.run_training(agent, env)
     print_time_taken()
 
+  elif args.program == "test_scene_grasping":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = None
+    vary_2 = None
+    vary_3 = None
+    repeats = None
+    tm.param_1_name = None
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+    
+    # prepare the environment
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp_smallspheres"
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["finger_thickness"] = 0.9e-3
+    tm.settings["env"]["XY_base_actions"] = True
+    tm.settings["env"]["base_lim_X_mm"] = 150
+    tm.settings["env"]["base_lim_Y_mm"] = 50
+    tm.settings["env"]["depth_camera"] = True
+
+    # now prepare the grasping scene
+    tm.settings["env"]["use_scene_settings"] = True
+    tm.settings["env"]["object_position_noise_mm"] = 1000 # use min/max
+    tm.settings["env"]["num_objects_in_scene"] = 3
+    tm.settings["env"]["scene_X_dimension_mm"] = 300
+    tm.settings["env"]["scene_Y_dimension_mm"] = 200
+
+    # update the actions and sensors of the gripper
+    tm.settings["cpp"]["oob_distance"] = 100
+    tm.settings["cpp"]["action"]["base_X"]["in_use"] = True
+    tm.settings["cpp"]["action"]["base_Y"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["base_state_sensor_XY"]["in_use"] = True
+
+    # # choose any additional settings to change
+    # tm.settings["A"]["B"] = X
+    # tm.settings["C"]["D"] = Y
+    # tm.settings["E"]["F"] = Z
+
+    # create the environment
+    rgb_size = (50, 50)
+    lr = 1e-5
+
+    env = tm.make_env()
+    env._set_rgbd_size(*rgb_size)
+
+    # apply the agent settings
+    network = CNNActorCriticPG([3, *rgb_size], env.n_obs, env.n_actions,
+                               continous_actions=True, device=args.device)
+    
+    # make the agent
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = lr
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = lr
+    tm.settings["Agent_PPO"]["steps_per_epoch"] = 6000
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number
