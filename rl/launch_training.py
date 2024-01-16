@@ -2818,7 +2818,7 @@ if __name__ == "__main__":
     if args.print: print_training_info()
     
     # prepare the environment
-    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["trainer"]["num_episodes"] = 200_000
     tm.settings["env"]["object_set_name"] = "set9_nosharp_smallspheres"
     tm.settings["env"]["finger_hook_angle_degrees"] = 75
     tm.settings["env"]["finger_thickness"] = 0.9e-3
