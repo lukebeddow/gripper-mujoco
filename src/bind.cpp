@@ -60,12 +60,18 @@ PYBIND11_MODULE(bind, m) {
     .def("close_render", &MjClass::close_render)
     .def("init_rgbd", &MjClass::init_rgbd)
     .def("render_RGBD", &MjClass::render_RGBD)
+    .def("render_mask", &MjClass::render_mask)
     .def("read_existing_RGBD", &MjClass::read_existing_RGBD)
     .def("set_RGBD_size", &MjClass::set_RGBD_size)
     .def("get_RGBD", &MjClass::get_RGBD)
+    .def("get_mask", &MjClass::get_mask)
     .def("get_RGBD_numpy",
       [](MjClass &mj) {
         return RGBD_struct_to_tuple(mj.get_RGBD());
+      })
+    .def("get_mask_numpy",
+      [](MjClass &mj) {
+        return RGBD_struct_to_tuple(mj.get_mask());
       })
 
     // sensing
@@ -98,6 +104,7 @@ PYBIND11_MODULE(bind, m) {
     .def("randomise_object_colour", &MjClass::randomise_object_colour)
     .def("randomise_ground_colour", &MjClass::randomise_ground_colour)
     .def("randomise_finger_colours", &MjClass::randomise_finger_colours)
+    .def("convert_segmentation_array", &MjClass::convert_segmentation_array)
     .def("create_object_mask", &MjClass::create_object_mask)
     .def("create_gripper_mask", &MjClass::create_gripper_mask)
     .def("create_finger_mask", &MjClass::create_finger_mask)

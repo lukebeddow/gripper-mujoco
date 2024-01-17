@@ -165,6 +165,8 @@ struct ObjectHandler {
   void remove_collisions(mjModel* model, mjData* data);
   void settle_objects(mjModel* model, mjData* data);
   void overwrite_keyframe(mjModel* model, mjData* data, int keyid = 0);
+  int is_object_geom(int id);
+  bool is_ground_geom(int id);
 
 private:
 

@@ -665,6 +665,14 @@ luke::RGBD MjClass::get_RGBD()
   return read_existing_RGBD();
 }
 
+luke::RGBD MjClass::get_mask()
+{
+  /* perform a render of a segmentation mask then return an RGBD image */
+
+  render_mask();
+  return render::read_mask();
+}
+
 void MjClass::render_RGBD()
 {
   /* render a single frame of the current state, this can be used to bypass the
@@ -681,6 +689,24 @@ void MjClass::render_RGBD()
   }
 
   render::render_camera();
+}
+
+void MjClass::render_mask()
+{
+  /* render a single frame of the current state, this can be used to bypass the
+  normal render() and keep the window hidden. render() displays the window to
+  the screen. Renders with a segmentation mask */
+
+  // if the render window has not yet been initialised
+  if (not render_camera_init) {
+    init_rgbd();
+  }
+  else if (render_reload) {
+    render::reload_for_rendering(*this);
+    render_reload = false;
+  }
+
+  render::render_camera_with_seg_mask();
 }
 
 luke::RGBD MjClass::read_existing_RGBD()
@@ -2547,6 +2573,13 @@ void MjClass::randomise_finger_colours(bool all_same)
       luke::set_finger_colour(model, rgb, i);
     }
   }
+}
+
+std::vector<int> MjClass::convert_segmentation_array(std::vector<int>& array)
+{
+  /* convert a segmented array into the seperate gripper parts */
+
+  return luke::convert_segmentation_array(array);
 }
 
 void MjClass::set_neat_colours()

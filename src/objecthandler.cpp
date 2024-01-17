@@ -1214,4 +1214,26 @@ void ObjectHandler::default_colours(mjModel* model)
   model->geom_rgba[gnd_geom_id * 4 + 3] = 0.5;
 }
 
+int ObjectHandler::is_object_geom(int id)
+{
+  /* determine if a geom id is an object */
+
+  for (int i = 0; i < live_objects.size(); i++) {
+    if (id == geom_id[live_objects[i]]) return i + 1;
+  }
+
+  return 0;
+}
+
+bool ObjectHandler::is_ground_geom(int id)
+{
+  /* determine if a geom id is the ground */
+
+  if (id == gnd_geom_id) {
+    return true;
+  }
+
+  return false;
+}
+
 } // namespace luke

@@ -1533,7 +1533,9 @@ public:
   void close_render();
   bool init_rgbd();
   luke::RGBD get_RGBD();
+  luke::RGBD get_mask();
   void render_RGBD();
+  void render_mask();
   luke::RGBD read_existing_RGBD();
   void set_RGBD_size(int width, int height);
 
@@ -1573,6 +1575,7 @@ public:
   void randomise_object_colour(bool all_objects=false);
   void randomise_ground_colour();
   void randomise_finger_colours(bool all_same=true);
+  std::vector<int> convert_segmentation_array(std::vector<int>& array);
   void set_neat_colours();
   void create_object_mask();
   void create_gripper_mask();

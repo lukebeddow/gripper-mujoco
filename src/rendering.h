@@ -34,6 +34,7 @@ void uiLayout(mjuiState* state);
 void reload_for_rendering(MjClass& myMjClass);
 bool render_window();
 bool render_camera();
+bool render_camera_with_seg_mask();
 void render_rgbd_feed();
 void finish_window();
 void finish_camera();
@@ -43,6 +44,7 @@ void lukesensorfigsupdate();
 void lukesensorfigshow(mjrRect rect);
 
 luke::RGBD read_rgbd();
+luke::RGBD read_mask();
 
 }
 

@@ -585,7 +585,7 @@ class MjEnv():
         print("MjClass rendering is disabled in compilation settings, no RGBD images possible")
       self.rgbd_enabled = False
 
-  def _get_rgbd_image(self):
+  def _get_rgbd_image(self, mask=False):
     """
     Return rgbd data from the current state of the simulation, rescaled to match
     the size of the rgbd data from real life.
@@ -593,6 +593,8 @@ class MjEnv():
     Returns two numpy arrays ready for conversion into torch:
       - rgb    (with shape 3 x width x height)
       - depth  (with shape 1 x width x height)
+
+    If mask=True returns a segmentation mask
     """
 
     if not self.rgbd_enabled:
@@ -610,7 +612,10 @@ class MjEnv():
         return
 
     # get rgbd information out of the simulation (unit8, float)
-    rgb, depth = self.mj.get_RGBD_numpy()
+    if mask:
+      rgb, depth = self.mj.get_mask_numpy()
+    else:
+      rgb, depth = self.mj.get_RGBD_numpy()
 
     # reshape the numpy arrays to the correct aspect ratio
     rgb = rgb.reshape(self.rgbd_height, self.rgbd_width, 3)
@@ -641,48 +646,54 @@ class MjEnv():
 
     plt.show()
 
-  def _get_scene_mask(self, mask="object"):
+  def _plot_scene_mask(self):
     """
-    Get a mask of the scene:
-      - 'object'
-      - 'gripper'
-      - 'fingers' / 'finger1' / 'finger2' / 'finger3'
-      - 'palm'
-      - 'ground'
+    Plot a mask of the scene, with different colours for different parts
     """
 
-    # make the mask in the simulation
-    if mask == "object":
-      self.mj.create_ground_mask()
-    elif mask == "gripper":
-      self.mj.create_gripper_mask()
-    elif mask.startswith("finger"):
-      if mask.endswith("s"):
-        for i in range(3):
-          self.mj.create_finger_mask(i + 1)
-      elif mask.endswith("1"):
-        self.mj.create_finger_mask(1)
-      elif mask.endswith("2"):
-        self.mj.create_finger_mask(2)
-      elif mask.endswith("3"):
-        self.mj.create_finger_mask(3)
-    elif mask == "palm":
-      self.mj.create_finger_mask(4)
-    elif mask == "ground":
-      self.mj.create_ground_mask()
+    # # make the mask in the simulation
+    # if mask == "object":
+    #   self.mj.create_ground_mask()
+    # elif mask == "gripper":
+    #   self.mj.create_gripper_mask()
+    # elif mask.startswith("finger"):
+    #   if mask.endswith("s"):
+    #     for i in range(3):
+    #       self.mj.create_finger_mask(i + 1)
+    #   elif mask.endswith("1"):
+    #     self.mj.create_finger_mask(1)
+    #   elif mask.endswith("2"):
+    #     self.mj.create_finger_mask(2)
+    #   elif mask.endswith("3"):
+    #     self.mj.create_finger_mask(3)
+    # elif mask == "palm":
+    #   self.mj.create_finger_mask(4)
+    # elif mask == "ground":
+    #   self.mj.create_ground_mask()
 
-    # now get an rgbd image of the mask
-    rgb, depth = self._get_rgbd_image()
+    # get an rgbd image of the mask
+    rgb, depth = self._get_rgbd_image(mask=True)
 
-    # now reset the mask in simulation
-    self.mj.randomise_every_colour()
+    # mask is only in red channel, prepare to post-process
+    segmented_image = rgb[0]
+    max_num = np.max(segmented_image)
+    scale = 255 // max_num
 
-    # finally, process the mask into binary
-    print("rgb datatype", rgb.dtype)
-    print("rgb before", rgb)
-    rgb = np.array((rgb < 10) * 255, dtype=np.uint8)
-    print("rgb after", rgb)
-    return rgb
+    # apply scalings to give each mask integers (1-7 usually) a different colour
+    red_scaled = scale * (segmented_image)
+    green_scaled = scale * 2 * (max_num - segmented_image) * (segmented_image % 3)
+    blue_scaled = scale * 2 * (max_num - segmented_image) * (segmented_image + 2 % 3)
+
+    # reconstruct a three-channel image
+    rgb = np.array([red_scaled, green_scaled, blue_scaled], dtype=np.uint8)
+
+    # plot the visualisation of the mask
+    import matplotlib.pyplot as plt
+    fig, axs = plt.subplots(1, 1)
+    axs.imshow(np.einsum("ijk->kji", rgb)) # swap to numpy style rows/cols (eg 3x640x480 -> 480x640x3)
+    plt.show()
+
+    return
 
   def _next_observation(self):
     """
@@ -1668,209 +1679,118 @@ if __name__ == "__main__":
 
   # import pickle
 
-  mj = MjEnv(depth_camera=True, log_level=2, seed=122)
+  mj = MjEnv(depth_camera=True, log_level=2, seed=123)
   mj.render_window = False
   mj.mj.set.mujoco_timestep = 3.187e-3
   mj.mj.set.auto_set_timestep = False
 
-  # mj.load("set8_fullset_1500", num_segments=8, finger_width=28e-3, finger_thickness=0.9e-3)
+  mj.load("set8_fullset_1500", num_segments=8, finger_width=28e-3, finger_thickness=0.9e-3)
   
-  # mj._spawn_object()
-  # mj._set_rgbd_size(10, 10)
+  # ----- visualise segmentation masks ----- #
 
-  # mj.reset()
-  # num = 100
-  # for i in range(num):
-  #   mj.step(random_train.integers(0, mj.n_actions))
+  examine_scene_mask = True
+  if examine_scene_mask:
 
-  # x = mj._next_observation()
+    mj.load_next.XY_base_actions = True
+    mj.params.use_scene_settings = True
+    mj.params.scene_X_dimension_mm = 300
+    mj.params.scene_Y_dimension_mm = 300
+    mj.params.object_position_noise_mm = 1000
+    mj.params.num_objects_in_scene = 5
 
-  # # print(x[3][0][:5])
+    mj.load("set8_fullset_1500", num_segments=8, finger_width=28e-3, finger_thickness=0.9e-3)
+
+    mj._spawn_object()
+    # mj._set_rgbd_size(20, 10)
+
+    mj.reset()
+    num = 0
+    for i in range(num):
+      mj.step(random_train.integers(0, mj.n_actions))
     
-  # # mj.mj.create_ground_mask()
-  # # mj._plot_rgbd_image()
+    import time
+    t1 = time.time()
+    rgb, depth = mj._get_rgbd_image()
+    t2 = time.time()
+    rgb, depth = mj._get_rgbd_image(mask=True)
+    t3 = time.time()
+    print(f"Time taken for regular RGBD was {(t2 - t1) * 1e3:.3f} ms")
+    print(f"Time taken for mask was {(t3 - t2) * 1e3:.3f} ms")
 
-  # # mj.mj.randomise_every_colour()
-  # mj._plot_rgbd_image()
-  
-  # rgb = mj._get_scene_mask(mask="gripper")
+    mj._plot_scene_mask()
 
-  # import matplotlib.pyplot as plt
-  # fig, axs = plt.subplots(1, 1)
-  # axs.imshow(np.einsum("ijk->kji", rgb)) # swap to numpy style rows/cols (eg 3x640x480 -> 480x640x3)
-  # # plt.show()
+  # ---- automatically generate new xml files ----- #
 
-  # widths = [24e-3, 28e-3]
-  # segments = [8]
-  # xy_base = [False, True]
-  # inertia = [1, 50]
+  generate_new_xml = False
+  if generate_new_xml:
 
-  # mj.load_next.num_segments = 8
-  # angles = [90]
-  # for a in angles:
-  #   mj.load_next.finger_hook_angle_degrees = a
-  #   mj.load_next.finger_hook_length = 100e-3
-  #   mj.load_next.XY_base_actions = True
-  #   mj._auto_generate_xml_file("set_test_large", use_hashes=True, silent=True)
+    # widths = [24e-3, 28e-3]
+    # segments = [8]
+    # xy_base = [False, True]
+    # inertia = [1, 50]
 
-  # for w in widths:
-  #   for N in segments:
-  #     for xy in xy_base:
-  #       for i in inertia:
-  #         mj.load_next.finger_width = w
-  #         mj.load_next.num_segments = N
-  #         mj.load_next.XY_base_actions = xy
-  #         mj.load_next.segment_inertia_scaling = i
-  #         mj._auto_generate_xml_file("set8_fullset_1500", use_hashes=True)
+    # mj.load_next.num_segments = 8
+    # angles = [90]
+    # for a in angles:
+    #   mj.load_next.finger_hook_angle_degrees = a
+    #   mj.load_next.finger_hook_length = 100e-3
+    #   mj.load_next.XY_base_actions = True
+    #   mj._auto_generate_xml_file("set_test_large", use_hashes=True, silent=True)
 
-  mj.params.test_objects = 20
-  mj.load_next.finger_hook_angle_degrees = 75
-  mj.load_next.finger_width = 28e-3
-  mj.load_next.fingertip_clearance = 0.1
-  mj.load_next.XY_base_actions = True
-  # mj.load_next.finger_length = 200e-3
-  # mj.load_next.finger_thickness = 1.9e-3
+    # for w in widths:
+    #   for N in segments:
+    #     for xy in xy_base:
+    #       for i in inertia:
+    #         mj.load_next.finger_width = w
+    #         mj.load_next.num_segments = N
+    #         mj.load_next.XY_base_actions = xy
+    #         mj.load_next.segment_inertia_scaling = i
+    #         mj._auto_generate_xml_file("set8_fullset_1500", use_hashes=True)
 
-  # mj.load("set9_fullset", depth_camera=True)
-  # mj.reset(hard=True)
-  gen_obj_set = "set9_fullset"
-  name = mj._auto_generate_xml_file("set9_fullset", use_hashes=True)
-  runstr = f"bin/mysimulate -p /home/luke/mujoco-devel/mjcf -o {gen_obj_set} -g {name}"
-  print(runstr)
+    mj.params.test_objects = 20
+    mj.load_next.finger_hook_angle_degrees = 75
+    mj.load_next.finger_width = 28e-3
+    mj.load_next.fingertip_clearance = 0.1
+    mj.load_next.XY_base_actions = True
+    # mj.load_next.finger_length = 200e-3
+    # mj.load_next.finger_thickness = 1.9e-3
 
-  exit()
+    gen_obj_set = "set9_fullset"
+    name = mj._auto_generate_xml_file("set9_fullset", use_hashes=True)
+    runstr = f"bin/mysimulate -p /home/luke/mujoco-devel/mjcf -o {gen_obj_set} -g {name}"
+    print(runstr)
 
-  num = 10000
-  mj.mj.tick()
+  # ----- evaluate speed of rgbd function ----- #
 
-  for i in range(num):
-    mj._get_rgbd_image()
+  test_rgbd_speed = False
+  if test_rgbd_speed:
 
-  time_taken = mj.mj.tock()
-  print(f"Time taken for {num} fcn calls was {time_taken:.3f} seconds")
+      num = 1000
+      mj.mj.tick()
 
-  rgb, depth = mj._get_rgbd_image()
-  print(f"rgb size is {rgb.shape}")
-  print(f"depth size is {depth.shape}")
+      for i in range(num):
+        mj._get_rgbd_image()
 
-  mj._plot_rgbd_image()
+      time_taken = mj.mj.tock()
+      print(f"Time taken for {num} fcn calls was {time_taken:.3f} seconds")
 
-  mj._set_rgbd_size(250, 150)
-  mj._plot_rgbd_image()
+      rgb, depth = mj._get_rgbd_image()
+      print(f"rgb size is {rgb.shape}")
+      print(f"depth size is {depth.shape}")
 
-  exit()
+  # ----- examine size of RGBD images ---- #
 
-  import sys
+  see_rgbd_size = False
+  if see_rgbd_size:
 
-  # sizes of python lists (rgb, depth) = (25.9, 8.6) MB
-  rgbd = mj.mj.get_RGBD()
-  print(f"Size of rgb is: {sys.getsizeof(rgbd.rgb) * 1e-6:.3f} MB")
-  print(f"Size of depth is: {sys.getsizeof(rgbd.depth) * 1e-6:.3f} MB")
+    import sys
 
-  # sizes of numpy arrays -> (3.2, 4.3) MB, uint8 is the same as uint_fast8
-  rgb, depth = mj.mj.get_RGBD_numpy()
-  print(f"Size of numpy rgb is: {sys.getsizeof(rgb) * 1e-6:.3f} MB")
-  print(f"Size of numpy depth is: {sys.getsizeof(depth) * 1e-6:.3f} MB")
+    # sizes of python lists (rgb, depth) = (25.9, 8.6) MB
+    rgbd = mj.mj.get_RGBD()
+    print(f"Size of rgb is: {sys.getsizeof(rgbd.rgb) * 1e-6:.3f} MB")
+    print(f"Size of depth is: {sys.getsizeof(rgbd.depth) * 1e-6:.3f} MB")
 
-  exit()
-
-  # sizes = [(720, 740), (200, 740), (720, 200),
-  #          (1500, 1500)]
-  
-  # sizes = [(900, 1200)]
-
-  # import matplotlib.pyplot as plt
-  # fig, axs = plt.subplots(len(sizes), 1)
-
-  # for i, (h, w) in enumerate(sizes):
-  #   rgb, d = mj.mj.get_RGBD_numpy(h, w)
-  #   axs.imshow(rgb.reshape(h, w, 3))
-
-  # fig2, axs2 = plt.subplots(3, 1)
-
-  # from torch.nn.functional import interpolate
-  # import torch
-  # from torchvision import transforms
-
-  # resizes= [0.5, 0.1, 0.01]
-  # for i, x in enumerate(resizes):
-
-    # rgbarr = interpolate(torch.tensor([np.transpose(rgb.reshape(h, w, 3))]), scale_factor=x)
-    # axs2[i].imshow(np.array(rgbarr[0]).T)
-    
-    # trans = transforms.Compose([transforms.Resize((100, 100))])
-    # img = trans(torch.tensor(np.transpose(rgb.reshape(h, w, 3))))
-    # axs2[i].imshow(np.array(img).T)
-
-    # trans = transforms.Compose([transforms.Resize((100, 100))])
-    # img = trans(torch.tensor(rgb.reshape(3, h, w)))
-    # axs2[i].imshow(np.array(img).T)
-
-  # rgbnp, depthnp = mj.mj.get_RGBD_numpy()
-  # print(f"Size of numpy rgb is: {sys.getsizeof(rgbnp) * 1e-6:.3f} MB")
-  # print(f"Size of numpy depth is: {sys.getsizeof(depthnp) * 1e-6:.3f} MB")
-
-  # print("The rgb information is", rgbd.rgb[:10])
-  # print("The depth information is", rgbd.depth[:10])
-
-  # print(rgbnp)
-
-  # print(isinstance(rgbnp, np.ndarray))
-  # print(rgbnp.dtype)
-
-  # import matplotlib.pyplot as plt
-
-  # plt.imshow(rgbnp.reshape(720, 740, 3))
-  # plt.show()
-
-  # plt.imshow(depthnp.reshape(720, 740))
-  # plt.show()
-
-  # mj.mj.set.set_sensor_prev_steps_to(3)
-  mj.mj.set.sensor_n_prev_steps = 1
-  mj.mj.set.state_n_prev_steps = 1
-  mj.mj.set.sensor_sample_mode = 3
-  mj.mj.set.debug = False
-  mj.reset()
-
-  for i in range(20):
-    mj.step(np.random.randint(0,8))
-
-  print("\n\n\n\n\n\n\n\n\n about to set finger thickness in python")
-  mj.params.finger_thickness = 0.8e-3
-  mj._load_xml()
-  print("SET IN PYTHON, about to run reset()")
-  mj.reset()
-  print("reset is finished")
-
-  print("\n\n\nSTART")
-
-  for i in range (3):
-    print("\nObservation", i)
-    # mj.step(np.random.randint(0,8))
-    mj.step(2)
-    # print(mj.mj.get_observation())
-    
-
-  # mj.mj.set.wipe_rewards()
-  # mj.mj.set.lifted.set(100, 10, 1)
-  # print(mj._get_cpp_settings())
-
-  # with open("test_file.pickle", 'wb') as f:
-  #   pickle.dump(mj, f)
-  #   print("Pickle saved")
-
-  # with open("test_file.pickle", 'rb') as f:
-  #   mj = pickle.load(f)
-  #   print("Pickle loaded")
-
-  # mj._load_xml(index=0)
-  # mj._load_xml(index=1)
-  # mj._load_xml(index=2)
-
-  # mj.step(0)
-
-  # print(mj._get_cpp_settings())
-
-  # obs = mj.mj.get_observation()
-  # print(obs)
+    # sizes of numpy arrays -> (3.2, 4.3) MB, uint8 is the same as uint_fast8
+    rgb, depth = mj.mj.get_RGBD_numpy()
+    print(f"Size of numpy rgb is: {sys.getsizeof(rgb) * 1e-6:.3f} MB")
+    print(f"Size of numpy depth is: {sys.getsizeof(depth) * 1e-6:.3f} MB")

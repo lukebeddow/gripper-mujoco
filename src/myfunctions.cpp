@@ -1411,7 +1411,19 @@ void calibrate_reset(mjModel* model, mjData* data)
     std::cout << "Old num vs new num for panda: " << num_panda << " / " << j_.num.panda << '\n';
     std::cout << "Old num vs new num for base: " << num_base << " / " << j_.num.base << '\n';
     std::cout << "Old num vs new num for gripper: " << num_gripper << " / " << j_.num.gripper << '\n';
-    throw std::runtime_error("calibrate_reset() found changed number of joints in the model");
+    std::cout << "calibrate_reset() warning: found changed number of joints in model, did you reload an xml with more/less gripper joints? Attempting to recalibrate\n";
+    // throw std::runtime_error("calibrate_reset() found changed number of joints in the model");
+
+    // attempt to reset this function and recalibrate
+    j_.reset_qpos.panda.clear();
+    j_.reset_qpos.base.clear();
+    j_.reset_qpos.gripper.clear();
+
+    first_call = true;
+
+    num_panda = j_.num.panda;
+    num_base = j_.num.base;
+    num_gripper = j_.num.gripper;
   }
 
   if (first_call) {
@@ -3606,6 +3618,161 @@ void set_main_body_colour(mjModel* model, std::vector<float> rgba)
     if (rgba.size() == 4)
       model->geom_rgba[i * 4 + 3] = rgba[3];
   }
+}
+
+std::vector<int> convert_segmentation_array(std::vector<int>& array)
+{
+  /* take an array of segmentation ids (segids), which are geom indexes and
+  convert to universal representation:
+    background = 0
+    finger 1 = 50
+    finger 2 = 100
+    finger 3 = 150
+    palm = 200
+    object = 250
+  */
+
+  constexpr int error = 0;
+  constexpr int background = 1;
+  constexpr int finger1 = 2;
+  constexpr int finger2 = 3;
+  constexpr int finger3 = 4;
+  constexpr int palm = 5;
+  constexpr int gripper_body = 6;
+  constexpr int object = 7;
+
+  std::vector<int> to_return(array.size(), error);
+ 
+  // loop over the entire array
+  for (int a = 0; a < array.size(); a++) {
+
+    bool done_idx = false;
+
+    for (int i : j_.geom_idx.finger1) {
+      if (array[a] == i) {
+        to_return[a] = finger1;
+        done_idx = true;
+        break;
+      }
+    }
+    if (done_idx) continue;
+
+    for (int i : j_.geom_idx.finger2) {
+      if (array[a] == i) {
+        to_return[a] = finger2;
+        done_idx = true;
+        break;
+      }
+    }
+    if (done_idx) continue;
+
+    for (int i : j_.geom_idx.finger3) {
+      if (array[a] == i) {
+        to_return[a] = finger3;
+        done_idx = true;
+        break;
+      }
+    }
+    if (done_idx) continue;
+
+    for (int i : j_.geom_idx.palm) {
+      if (array[a] == i) {
+        to_return[a] = palm;
+        done_idx = true;
+        break;
+      }
+    }
+    if (done_idx) continue;
+
+    for (int i : j_.geom_idx.main_body) {
+      if (array[a] == i) {
+        to_return[a] = gripper_body;
+        done_idx = true;
+        break;
+      }
+    }
+    if (done_idx) continue;
+
+    int objectnum = oh_.is_object_geom(array[a]);
+    if (objectnum) {
+      to_return[a] = object + objectnum - 1;
+      continue;
+    }
+
+    if (oh_.is_ground_geom(array[a])) {
+      to_return[a] = background;
+      continue;
+    }
+
+    std::cout << "Warning array[a] = " << array[a] << " not found\n";
+  }
+
+  return to_return;
+}
+
+int convert_segmentation_integer(int seg_int)
+{
+  /* take an array of segmentation ids (segids), which are geom indexes and
+  convert to universal representation:
+    background = 0
+    finger 1 = 50
+    finger 2 = 100
+    finger 3 = 150
+    palm = 200
+    object = 250
+  */
+
+  constexpr int error = 0;
+  constexpr int background = 1;
+  constexpr int finger1 = 2;
+  constexpr int finger2 = 3;
+  constexpr int finger3 = 4;
+  constexpr int palm = 5;
+  constexpr int gripper_body = 6;
+  constexpr int object = 7;
+
+  if (oh_.is_ground_geom(seg_int)) {
+    return background;
+  }
+
+  int objectnum = oh_.is_object_geom(seg_int);
+  if (objectnum) {
+    return object + objectnum - 1;
+  }
+
+  for (int i : j_.geom_idx.finger1) {
+    if (seg_int == i) {
+      return finger1;
+    }
+  }
+
+  for (int i : j_.geom_idx.finger2) {
+    if (seg_int == i) {
+      return finger2;
+    }
+  }
+
+  for (int i : j_.geom_idx.finger3) {
+    if (seg_int == i) {
+      return finger3;
+    }
+  }
+
+  for (int i : j_.geom_idx.palm) {
+    if (seg_int == i) {
+      return palm;
+    }
+  }
+
+  for (int i : j_.geom_idx.main_body) {
+    if (seg_int == i) {
+      return gripper_body;
+    }
+  }
+
+  std::cout << "Warning seg_int = " << seg_int << " not found\n";
+
+  return error;
 }
 
 /* ----- misc ----- */

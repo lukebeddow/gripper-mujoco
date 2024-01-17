@@ -162,6 +162,8 @@ void randomise_all_object_colours(mjModel* model, std::shared_ptr<std::default_r
 void default_colours(mjModel* model);
 void set_finger_colour(mjModel* model, std::vector<float> rgba, int finger_num);
 void set_main_body_colour(mjModel* model, std::vector<float> rgba);
+std::vector<int> convert_segmentation_array(std::vector<int>& array);
+int convert_segmentation_integer(int seg_int);
 
 // other
 gfloat verify_armadillo_gauge(const mjData* data, int finger,
