@@ -2866,6 +2866,71 @@ if __name__ == "__main__":
     tm.run_training(agent, env)
     print_time_taken()
 
+  elif args.program == "palm_vs_no_palm_1":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [45, 60, 75, 90]
+    vary_2 = [False, True]
+    vary_3 = [(0.9e-3, 28e-3), (1.0e-3, 24e-3), (1.0e-3, 28e-3)]
+    repeats = 10
+    tm.param_1_name = "fingertip angle"
+    tm.param_2_name = "use palm"
+    tm.param_3_name = "finger thickness/width"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply training specific settings
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp_smallspheres"
+    tm.settings["env"]["finger_hook_angle_degrees"] = tm.param_1
+    tm.settings["env"]["finger_thickness"] = tm.param_3[0]
+    tm.settings["env"]["finger_width"] = tm.param_3[1]
+
+    if not tm.param_2:
+
+      # remove palm action
+      tm.settings["cpp"]["action"]["gripper_Z"]["in_use"] = False
+
+      # remove palm sensor
+      tm.settings["cpp"]["sensor"]["palm_sensor"]["in_use"] = False
+
+      # remove palm requirement for stable grasp (-ve means it is always reached with 0 force)
+      tm.settings["reward"]["palm"]["min"] = -1.1
+      tm.settings["cpp"]["stable_palm_force"] = -1.0
+
+    else:
+
+      if args.job % 10 <= 3:
+
+        # enable image data collection
+        tm.settings["env"]["depth_camera"] = True
+        tm.settings["env_image_collection"] = True
+        tm.settings["env_image_collection_chance"] = 0.001
+        tm.settings["env_image_collection_batch_size"] = 1000
+        tm.settings["env_image_collection_max_batches"] = 10
+
+    # create the environment
+    env = tm.make_env()
+
+    # apply the agent settings
+    layers = [128 for i in range(4)]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+    
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+
+    # add an extra test on the old object set
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number

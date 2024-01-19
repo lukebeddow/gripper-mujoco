@@ -3437,6 +3437,30 @@ std::vector<std::string> get_objects()
   return objects;
 }
 
+std::vector<std::string> get_live_object_names()
+{
+  /* return the names of the live objects */
+
+  return oh_.get_live_names();
+}
+
+std::vector<std::vector<double>> get_live_object_bounding_boxes()
+{
+  std::vector<luke::Vec3> boxes = oh_.get_live_bounding_boxes();
+
+  std::vector<std::vector<double>> to_return;
+  std::vector<double> xyz(3);
+
+  for (int i = 0; i < boxes.size(); i++) {
+    xyz[0] = boxes[i].x;
+    xyz[1] = boxes[i].y;
+    xyz[2] = boxes[i].z;
+    to_return.push_back(xyz);
+  }
+
+  return to_return;
+}
+
 void reset_object(mjModel* model, mjData* data)
 {
   /* reset the live object to its starting position outside the task area */
@@ -3492,6 +3516,29 @@ std::vector<QPos> get_object_qpos(mjModel* model, mjData* data)
   // return oh_.qpos[oh_.live_object];
 
   return oh_.get_live_qpos(model, data);
+}
+
+std::vector<std::vector<double>> get_object_XY_relative_to_gripper(mjModel* model, mjData* data)
+{
+  /* get the relative XY positions of objects relative to the current position
+  of the gripper */
+
+  std::vector<QPos> obj_qpos = oh_.get_live_qpos(model, data);
+
+  JointStates state = target_.get_target_m();
+
+  std::vector<std::vector<double>> to_return;
+  std::vector<double> xy_vals(2);
+
+  for (int i = 0; i < obj_qpos.size(); i++) {
+
+    xy_vals[0] = state.base_x - obj_qpos[i].x;
+    xy_vals[1] = state.base_y - obj_qpos[i].y; 
+
+    to_return.push_back(xy_vals);
+  }
+
+  return to_return;
 }
 
 luke::Vec3 get_object_xyz_bounding_box(int idx)

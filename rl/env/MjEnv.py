@@ -78,6 +78,8 @@ class MjEnv():
     base_lim_X_mm: int = 300
     base_lim_Y_mm: int = 200
     base_lim_Z_mm: int = 30
+    use_rgb_in_observation: bool = False
+    use_depth_in_observation: bool = False
 
     # grasping scene parameters
     use_scene_settings: bool = False
@@ -179,6 +181,8 @@ class MjEnv():
 
     # set image collection defaults
     self.collect_images = False
+    self.new_image_collected = False
+    self.image_collection_data = None
     self.image_collection_chance = 0.01
 
     return
@@ -709,55 +713,61 @@ class MjEnv():
 
     # if we are using a depth camera, combine this into the observation
     if self.params.depth_camera:
-      include_depth = False
-      rgb, depth = self._get_rgbd_image()
-      rgb = np.divide(rgb, 255, dtype=np.float32) # normalise to range 0-1
-      if include_depth:
-        rgb = np.concatenate((rgb, depth), axis=0)
-      # resize and pad with zeros the observation vector
-      new_size = self.rgbd_height * self.rgbd_width
-      if len(obs) > new_size:
-        raise RuntimeError(f"MjEnv()._next_observation() failed as observation length {len(obs)} exceeds image number of pixels {new_size}")
-      obs.resize(new_size)
-      obs = obs.reshape((1, self.rgbd_width, self.rgbd_height))
-      obs = np.concatenate((rgb, obs), axis=0, dtype=np.float32)
 
+      # check if we should save an image for image collection
+      do_image_collection = False
       if self.collect_images:
         global random_train
-        if self.image_collection_chance < random_train.random():
+        if self.image_collection_chance > random_train.random():
+          do_image_collection = True
 
-          # we want to save the observation
+      # determine if we are adding this image into our observation of the scene
+      image_observation = False
+      if self.params.use_rgb_in_observation or self.params.use_depth_in_observation:
+        image_observation = True
 
-          # we also want to add to it masks of
-          #   1) the object
-          #   2) the fingers/palm
-          #   3) the background
+      if image_observation or do_image_collection:
 
-          # we would also like to save what the object was and how
-          # big it was. Maybe we save the category of the object
-          # (eg 1=cube, 2=sphere, etc) and also the bounding box
+        # get the rgb and depth from the scene
+        rgb, depth = self._get_rgbd_image()
 
-          # if we save it all as a numpy array it will be smaller and
-          # we can use smaller integers
-          """
-          Layers, all shaped as the rgb size
+        if self.params.use_rgb_in_observation:
+          img_obs = np.divide(rgb, 255, dtype=np.float32) # normalise to range 0-1
+          if self.params.use_depth_in_observation:
+            img_obs = np.concatenate((img_obs, depth), axis=0)
+        elif self.params.use_depth_in_observation:
+          img_obs = depth
 
-          1) red channel
-          2) green channel
-          3) blue channel
-          4) depth channel
-          5) observation, flattened and zero padded
-          6) object mask
-          7) fingers/palm mask
-          8) background mask
-          9) details vector
-              [0] = object category
-              [1] = bounding box x
-              [2] = bounding box y
-              [3] = bounding box z
-          """
+        # add the regular observation, reshaped and padded with zeros, to the image observation
+        if image_observation:
+          new_size = self.rgbd_height * self.rgbd_width
+          if len(obs) > new_size:
+            raise RuntimeError(f"MjEnv()._next_observation() failed as observation length {len(obs)} exceeds image number of pixels {new_size}")
+          obs.resize(new_size)
+          obs = obs.reshape((1, self.rgbd_width, self.rgbd_height))
+          obs = np.concatenate((img_obs, obs), axis=0, dtype=np.float32)
 
-          pass
+        if do_image_collection:
+
+          # get segmentation mask of the scene
+          rgb_mask, _ = self._get_rgbd_image(mask=True)
+
+          # get details of the object
+          details_dict = {
+            "object_names" : self.mj.get_live_object_names(),
+            "object_bounding_boxes" : self.mj.get_object_bounding_boxes(),
+            "object_relative_XY" : self.mj.get_object_XY_relative_to_gripper(),
+          }
+
+          self.image_collection_data = {
+            "rgb" : rgb,
+            "depth" : depth,
+            "rgb_mask" : rgb_mask[0],
+            "obs" : obs,
+            "details" : details_dict,
+          }
+
+          self.new_image_collected = True
 
     return obs
 
@@ -1562,7 +1572,7 @@ class MjEnv():
     # reset any lingering goal defaults
     self.mj.reset_goal()
 
-  def step(self, action, torch=False):
+  def step(self, action, torch=True):
     """
     Perform an action and step the simulation until it is resolved
     """
@@ -1573,12 +1583,12 @@ class MjEnv():
 
     self.track.current_step += 1
 
-    # have we been given a torch tensor
+    # have we been given a torch tensor, in which case move to cpu and convert
     if torch:
       if self.mj.set.continous_actions:
-        action = action.numpy()
+        action = (action.cpu()).numpy()
       else:
-        action = action.item()
+        action = (action.cpu()).item()
     
     self._take_action(action)
     obs = self._next_observation()
@@ -1688,7 +1698,7 @@ if __name__ == "__main__":
   
   # ----- visualise segmentation masks ----- #
 
-  examine_scene_mask = True
+  examine_scene_mask = False
   if examine_scene_mask:
 
     mj.load_next.XY_base_actions = True

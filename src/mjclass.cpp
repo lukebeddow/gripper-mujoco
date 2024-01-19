@@ -3300,6 +3300,22 @@ float MjClass::get_fingertip_z_height()
   return luke::get_fingertip_z_height();
 }
 
+std::vector<std::vector<double>> MjClass::get_object_XY_relative_to_gripper()
+{
+  /* get the relative XY position of all the objects in the scene, relative
+  to where the gripper target currently is */
+
+  return luke::get_object_XY_relative_to_gripper(model, data);
+}
+
+std::vector<std::vector<double>> MjClass::get_object_bounding_boxes()
+{
+  /* get the bounding boxes of all objects in the scene. Note that these objects
+  are spawned but may not be in view of the camera */
+
+  return luke::get_live_object_bounding_boxes();
+}
+
 MjType::TestReport MjClass::get_test_report()
 {
   /* fills out and returns the test report */

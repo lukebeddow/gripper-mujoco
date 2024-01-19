@@ -1620,7 +1620,10 @@ public:
   int get_number_of_objects() { return env_.object_names.size(); }
   std::string get_object_name(int idx) { return env_.object_names[idx]; }
   std::string get_current_object_name() { return env_.obj[0].name; }
+  std::vector<std::string> get_live_object_names() { return luke::get_live_object_names(); }
+  std::vector<std::vector<double>> get_object_bounding_boxes();
   float get_fingertip_z_height();
+  std::vector<std::vector<double>> get_object_XY_relative_to_gripper();
   MjType::TestReport get_test_report();
   void set_finger_thickness(double thickness);
   void set_finger_width(double width);

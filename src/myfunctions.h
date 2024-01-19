@@ -145,11 +145,14 @@ gfloat get_target_finger_angle();
 // environment
 Gripper get_gripper_target();
 std::vector<std::string> get_objects();
+std::vector<std::string> get_live_object_names();
+std::vector<std::vector<double>> get_live_object_bounding_boxes();
 void reset_object(mjModel* model, mjData* data);
 bool is_object_live(int idx);
 luke::QPos spawn_object(mjModel* model, mjData* data, std::string name, QPos pose);
 luke::QPos spawn_object(mjModel* model, mjData* data, int idx, QPos pose);
 std::vector<QPos> get_object_qpos(mjModel* model, mjData* data);
+std::vector<std::vector<double>> get_object_XY_relative_to_gripper(mjModel* model, mjData* data);
 luke::Vec3 get_object_xyz_bounding_box(int idx);
 // Forces get_object_forces(const mjModel* model, mjData* data);
 Forces_faster get_object_forces_faster(const mjModel* model, mjData* data);

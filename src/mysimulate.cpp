@@ -2360,6 +2360,10 @@ void uiEvent(mjuiState* state)
                     if (settings.complete_action_steps and obs.size() > 0) {
                         myMjClass.action_step();
                     }
+                    std::vector<std::vector<double>> xyrel = luke::get_object_XY_relative_to_gripper(myMjClass.model, myMjClass.data);
+                    for (int i = 0; i < xyrel.size(); i++) {
+                        luke::print_vec(xyrel[i], "Object relative XY");
+                    }
                     break;
                 }
 

@@ -300,6 +300,10 @@ class TrainingManager():
     "final_test_trials_per_object" : 10,
     "final_test_max_stage" : True,
     "final_test_only_stage" : None,
+    "env_image_collection" : False,
+    "env_image_collection_chance" : 0.001,
+    "env_image_collection_batch_size" : 1000,
+    "env_image_collection_max_batches" : 10,
   }
 
   def __init__(self, rngseed=None, device="cpu", log_level=1,
@@ -830,6 +834,21 @@ class TrainingManager():
     if trainer.params.use_curriculum and trainer.curriculum_change is not None:
       trainer.curriculum_change = functools.partial(self.settings["curriculum"]["change_fcn"], trainer)
       trainer.curriculum_change(trainer.curriculum_dict["stage"]) # apply initial stage settings
+    if self.settings["env_image_collection"]:
+      if env is not None:
+        env.collect_images = True
+        if not env.params.depth_camera:
+          if self.log_level >= 1:
+            print("TrainingMananger.make_trainer() warning: env_image_collection=True but env.params.depth_camera=False. Hence image collection will NOT work")
+        env.image_collection_chance = self.settings["env_image_collection_chance"]
+        trainer.images_collected = 0
+        trainer.image_batches_collected = 0
+        trainer.image_list = []
+        trainer.image_collection_num_per_batch = self.settings["env_image_collection_batch_size"]
+        trainer.image_collection_max_batches = self.settings["env_image_collection_max_batches"]
+        trainer.episode_fcn = functools.partial(trainer.image_collection_fcn)
+      else:
+        raise RuntimeError("TrainingMananger.make_trainer() error: env_image_collection=True but env=None")
 
     return trainer
 

@@ -67,7 +67,7 @@
   XX(  lift_height,             double,   15e-3)    /* the object must go up by this height from its starting position */\
   XX(  gripper_target_height,   double,   28e-3)    /* height the gripper z state must reach for a target height grasp */\
   XX(  stable_finger_force,     double,   1.0)      /* finger force (N) on object to consider stable */\
-  XX(  stable_palm_force,       double,   1.0)      /* palm force (N) on object to consider stable */\
+  XX(  stable_palm_force,       double,   -1.0)      /* palm force (N) on object to consider stable */\
   XX(  stable_finger_force_lim, double,   100.0)    /* finger force (N) limit on the object to stop considering stable */\
   XX(  stable_palm_force_lim,   double,   100.0)    /* palm force (N) limit on the object to stop considering stable*/\
   /* 

@@ -299,6 +299,7 @@ class Trainer:
     self.saved_trainer_params = False
     self.last_loaded_agent_id = None
     self.last_saved_agent_id = None
+    self.episode_fcn = None
     self.curriculum_dict = {
       "stage" : 0,
       "metric_name" : "",
@@ -591,12 +592,8 @@ class Trainer:
       if self.log_level >= 3: print("Episode", i_episode, "action", t)
 
       # select and perform an action
-      if self.env.using_continous_actions():
-        action = self.agent.select_action(obs, decay_num=i_episode, test=test)
-        (new_obs, reward, terminated, truncated, info) = self.env.step((action.cpu()).numpy())
-      else:
-        action = self.agent.select_action(obs, decay_num=i_episode, test=test)
-        (new_obs, reward, terminated, truncated, info) = self.env.step((action.cpu()).item())
+      action = self.agent.select_action(obs, decay_num=i_episode, test=test)
+      (new_obs, reward, terminated, truncated, info) = self.env.step(action)
    
       # render the new environment
       if self.render: self.env.render()
@@ -619,6 +616,9 @@ class Trainer:
 
       obs = new_obs
       cumulative_reward += reward.cpu()
+
+      # allow end of episode function to be set by the user
+      if self.episode_fcn is not None: self.episode_fcn()
 
       # check if this episode is over and log if we aren't testing
       if done:
@@ -1793,6 +1793,44 @@ class MujocoTrainer(Trainer):
     should be overwritten if using a curriculum (params.use_curriculum = True)
     """
     raise NotImplementedError("Trainer.curriculum_change() must be overwritten if using a curriculum")
+
+  def image_collection_fcn(self):
+    """
+    Default function for in-training image collection which can be assigned to be
+    the trainer 'episode_fcn' to run after every episode
+    """
+
+    if self.image_batches_collected >= self.image_collection_max_batches:
+      return
+    
+    # check if a new image is available to be saved
+    if self.env.new_image_collected:
+      self.image_list.append(self.env.image_collection_data)
+      self.env.new_image_collected = False
+      self.env.image_collection_data = None
+      self.images_collected += 1
+
+      if self.log_level >= 3:
+        print(f"Trainer: new image collected from env, now {self.images_collected} / {self.image_collection_num_per_batch} in current batch")
+
+      # determine if we have gathered enough to save
+      if self.images_collected >= self.image_collection_num_per_batch:
+        self.image_batches_collected += 1
+        if self.log_level >= 2:
+          print(f"Trainer: saving batch number {self.image_batches_collected} containing {self.images_collected} images now")
+          if self.image_batches_collected >= self.image_collection_max_batches:
+            print("Maximum number of image batches reached, no more will be saved")
+        self.modelsaver.save("image_collection", self.image_list)
+        self.image_list = []
+        self.images_collected = 0
+
+        data = self.modelsaver.load("image_collection")
+        print("length of data is", len(data))
+        print("length of datapoint is", len(data[0]))
+        print("data obs is", data[0]["obs"])
+        for i in range(len(data)):
+          print("data details is", data[i]["details"])
+        
 
 if __name__ == "__main__":
 

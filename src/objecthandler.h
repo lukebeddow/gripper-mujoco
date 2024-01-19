@@ -184,6 +184,8 @@ public:
   QPos spawn_object(mjModel* model, mjData* data, int idx, QPos pose);
   std::vector<QPos> get_live_qpos(mjModel* model, mjData* data);
   Vec3 get_object_xyz(int obj_idx);
+  std::vector<Vec3> get_live_bounding_boxes();
+  std::vector<std::string> get_live_names();
 
   // get object information
   myNum get_object_net_force(const mjModel* model, mjData* data, int live_idx);

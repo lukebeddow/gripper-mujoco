@@ -454,6 +454,38 @@ Vec3 ObjectHandler::get_object_xyz(int obj_idx)
   return xyz_values[obj_idx];
 }
 
+std::vector<Vec3> ObjectHandler::get_live_bounding_boxes()
+{
+  /* get the names of the live objects */
+
+  if (live_objects.size() == 0)
+    throw std::runtime_error("ObjectHandler::get_live_qpos() failed as there is no live object\n");
+
+  std::vector<Vec3> out(live_objects.size());
+
+  for (int i = 0; i < live_objects.size(); i++) {
+    out[i] = get_object_xyz(live_objects[i]);
+  }
+
+  return out;
+}
+
+std::vector<std::string> ObjectHandler::get_live_names()
+{
+  /* get the names of the live objects */
+
+  if (live_objects.size() == 0)
+    throw std::runtime_error("ObjectHandler::get_live_qpos() failed as there is no live object\n");
+
+  std::vector<std::string> out(live_objects.size());
+
+  for (int i = 0; i < live_objects.size(); i++) {
+    out[i] = names[live_objects[i]];
+  }
+
+  return out;
+}
+
 // print functions
 void ObjectHandler::print()
 {
