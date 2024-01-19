@@ -1823,15 +1823,7 @@ class MujocoTrainer(Trainer):
         self.modelsaver.save("image_collection", self.image_list)
         self.image_list = []
         self.images_collected = 0
-
-        data = self.modelsaver.load("image_collection")
-        print("length of data is", len(data))
-        print("length of datapoint is", len(data[0]))
-        print("data obs is", data[0]["obs"])
-        for i in range(len(data)):
-          print("data details is", data[i]["details"])
         
-
 if __name__ == "__main__":
 
   # master seed, torch seed must be set before network creation (random initialisation)
