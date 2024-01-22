@@ -80,6 +80,8 @@ class MjEnv():
     base_lim_Z_mm: int = 30
     use_rgb_in_observation: bool = False
     use_depth_in_observation: bool = False
+    image_height: int = 50
+    image_width: int = 50
 
     # grasping scene parameters
     use_scene_settings: bool = False
@@ -175,9 +177,9 @@ class MjEnv():
     # initialise heuristic parameters
     self._initialise_heuristic_parameters()
 
-    # set default rgbd camera size
-    self.rgbd_width = 848
-    self.rgbd_height = 480
+    # save default rgbd camera size
+    self.default_rgbd_width = 848
+    self.default_rgbd_height = 480
 
     # set image collection defaults
     self.collect_images = False
@@ -570,17 +572,20 @@ class MjEnv():
     # return if the camera is running or not
     return self.params.depth_camera
 
-  def _set_rgbd_size(self, width=None, height=None):
+  def _set_rgbd_size(self, width=None, height=None, default=False):
     """
     Set the size of simulated RGBD images
     """
 
-    if width is None: width = self.rgbd_width
-    if height is None: height = self.rgbd_height
+    if width is None: width = self.params.image_width
+    if height is None: height = self.params.image_height
+    if default and width is None and height is None:
+      width = self.default_rgbd_width
+      height = self.default_rgbd_height
 
     self.rgbd_enabled = self.mj.rendering_enabled()
-    self.rgbd_width = width
-    self.rgbd_height = height
+    self.params.image_width = width
+    self.params.image_height = height
 
     if self.rgbd_enabled:
       self.mj.set_RGBD_size(width, height)
@@ -622,8 +627,8 @@ class MjEnv():
       rgb, depth = self.mj.get_RGBD_numpy()
 
     # reshape the numpy arrays to the correct aspect ratio
-    rgb = rgb.reshape(self.rgbd_height, self.rgbd_width, 3)
-    depth = depth.reshape(self.rgbd_height, self.rgbd_width, 1)
+    rgb = rgb.reshape(self.params.image_height, self.params.image_width, 3)
+    depth = depth.reshape(self.params.image_height, self.params.image_width, 1)
 
     # numpy likes image arrays like this: width x height x channels
     # torch likes image arrays like this: channels x width x height
@@ -740,11 +745,11 @@ class MjEnv():
 
         # add the regular observation, reshaped and padded with zeros, to the image observation
         if image_observation:
-          new_size = self.rgbd_height * self.rgbd_width
+          new_size = self.params.image_height * self.params.image_width
           if len(obs) > new_size:
             raise RuntimeError(f"MjEnv()._next_observation() failed as observation length {len(obs)} exceeds image number of pixels {new_size}")
           obs.resize(new_size)
-          obs = obs.reshape((1, self.rgbd_width, self.rgbd_height))
+          obs = obs.reshape((1, self.params.image_width, self.params.image_height))
           obs = np.concatenate((img_obs, obs), axis=0, dtype=np.float32)
 
         if do_image_collection:

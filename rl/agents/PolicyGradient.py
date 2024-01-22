@@ -169,9 +169,10 @@ class Actor(nn.Module):
 
 class MLPCategoricalActor(Actor):
     
-  def __init__(self, obs_dim, act_dim, hidden_sizes, activation):
+  def __init__(self, obs_dim, act_dim, hidden_sizes, activation, device="cpu"):
     super().__init__()
     self.logits_net = mlp([obs_dim] + list(hidden_sizes) + [act_dim], activation)
+    self.to_device(device)
 
   def _distribution(self, obs):
     logits = self.logits_net(obs)
@@ -180,13 +181,20 @@ class MLPCategoricalActor(Actor):
   def _log_prob_from_distribution(self, pi, act):
     return pi.log_prob(act)
 
+  def to_device(self, device=None):
+    if device is None:
+      device = self.device
+    self.logits_net.to(device)
+    self.device = device
+
 class MLPGaussianActor(Actor):
 
-  def __init__(self, obs_dim, act_dim, hidden_sizes, activation):
+  def __init__(self, obs_dim, act_dim, hidden_sizes, activation, device="cpu"):
     super().__init__()
     log_std = -0.5 * np.ones(act_dim, dtype=np.float32)
     self.log_std = torch.nn.Parameter(torch.as_tensor(log_std))
     self.mu_net = mlp([obs_dim] + list(hidden_sizes) + [act_dim], activation)
+    self.to_device(device)
 
   def _distribution(self, obs):
     mu = self.mu_net(obs)
@@ -196,34 +204,49 @@ class MLPGaussianActor(Actor):
   def _log_prob_from_distribution(self, pi, act):
     return pi.log_prob(act).sum(axis=-1)    # Last axis sum needed for Torch Normal distribution
 
+  def to_device(self, device=None):
+    if device is None:
+      device = self.device
+    self.mu_net.to(device)
+    self.device = device
+
 class MLPCritic(nn.Module):
 
-  def __init__(self, obs_dim, hidden_sizes, activation):
+  def __init__(self, obs_dim, hidden_sizes, activation, device="cpu"):
     super().__init__()
     self.v_net = mlp([obs_dim] + list(hidden_sizes) + [1], activation)
+    self.to_device(device)
 
   def forward(self, obs):
     return torch.squeeze(self.v_net(obs), -1) # Critical to ensure v has right shape.
+
+  def to_device(self, device=None):
+    if device is None:
+      device = self.device
+    self.v_net.to(device)
+    self.device = device
 
 class MLPActorCriticPG(nn.Module):
 
   name = "MLPActorCriticPG_"
 
   def __init__(self, n_obs, action_dim, continous_actions=True,
-                hidden_sizes=(64,64), activation=nn.Tanh, mode="train"):
+                hidden_sizes=(64,64), activation=nn.Tanh, mode="train",
+                device="cpu"):
     super().__init__()
 
     self.n_obs = n_obs
     self.n_actions = action_dim
     self.mode = mode
+    self.device = device
 
     # policy builder depends on action space
     if continous_actions:
       self.action_dim = action_dim
-      self.pi= MLPGaussianActor(n_obs, action_dim, hidden_sizes, activation)
+      self.pi= MLPGaussianActor(n_obs, action_dim, hidden_sizes, activation, device=device)
     else:
       self.action_dim = 1 # discrete so only one action
-      self.pi = MLPCategoricalActor(n_obs, action_dim, hidden_sizes, activation)
+      self.pi = MLPCategoricalActor(n_obs, action_dim, hidden_sizes, activation, device=device)
 
     # build value function
     self.vf  = MLPCritic(n_obs, hidden_sizes, activation)
@@ -248,8 +271,9 @@ class MLPActorCriticPG(nn.Module):
     return self.step(obs)[0]
 
   def set_device(self, device):
-    self.pi.to(device)
-    self.vf.to(device)
+    self.pi.to_device(device)
+    self.vf.to_device(device)
+    self.device = device
 
   def training_mode(self):
     """
@@ -407,6 +431,7 @@ class CNNCategoricalActor(Actor):
     super().__init__()
     self.logits_net = MixedNetwork(sensor_dim, img_dim, act_dim, device=device)
     self.name = self.logits_net.name
+    self.device = device
 
   def _distribution(self, obs):
     logits = self.logits_net(obs)
@@ -414,6 +439,12 @@ class CNNCategoricalActor(Actor):
 
   def _log_prob_from_distribution(self, pi, act):
     return pi.log_prob(act)
+  
+  def to_device(self, device=None):
+    if device is None:
+      device = self.device
+    self.logits_net.to(device)
+    self.device = device
 
 class CNNGaussianActor(Actor):
 
@@ -423,6 +454,7 @@ class CNNGaussianActor(Actor):
     self.log_std = torch.nn.Parameter(torch.as_tensor(log_std))
     self.mu_net = MixedNetwork(sensor_dim, img_dim, act_dim, device=device)
     self.name = self.mu_net.name
+    self.device = device
 
   def _distribution(self, obs):
     mu = self.mu_net(obs)
@@ -432,14 +464,27 @@ class CNNGaussianActor(Actor):
   def _log_prob_from_distribution(self, pi, act):
     return pi.log_prob(act).sum(axis=-1)    # Last axis sum needed for Torch Normal distribution
 
+  def to_device(self, device=None):
+    if device is None:
+      device = self.device
+    self.mu_net.to(device)
+    self.device = device
+
 class CNNCritic(nn.Module):
 
   def __init__(self, img_dim, sensor_dim, device):
     super().__init__()
     self.v_net = MixedNetwork(sensor_dim, img_dim, 1, device=device) # act dim = 1
+    self.device = device
 
   def forward(self, obs):
     return torch.squeeze(self.v_net(obs), -1) # Critical to ensure v has right shape.
+
+  def to_device(self, device=None):
+    if device is None:
+      device = self.device
+    self.v_net.to(device)
+    self.device = device
 
 class CNNActorCriticPG(nn.Module):
 
@@ -453,6 +498,7 @@ class CNNActorCriticPG(nn.Module):
     self.sensor_dim = sensor_dim
     self.n_actions = action_dim
     self.mode = mode
+    self.device = device
 
     self.n_obs = [img_size[0] + 1, img_size[1], img_size[2]]
 
@@ -489,8 +535,9 @@ class CNNActorCriticPG(nn.Module):
     return self.step(obs)[0]
 
   def set_device(self, device):
-    self.pi.to(device)
-    self.vf.to(device)
+    self.pi.to_device(device)
+    self.vf.to_device(device)
+    self.device = device
 
   def training_mode(self):
     """
@@ -634,7 +681,7 @@ class Agent_PPO:
 
     self.buffer.all_to(device)
     self.mlp_ac.set_device(device)
-  
+
   def seed(self, rngseed=None):
     """
     Set a random seed for the entire environment
@@ -718,9 +765,12 @@ class Agent_PPO:
     self.params = saved_dict["parameters"]
     self.init(saved_dict["network"])
     self.buffer = saved_dict["buffer"]
-    self.buffer.all_to(self.device)
     self.vf_optimiser.load_state_dict(saved_dict["optimiser_state_dict"]["vf_optimiser"])
     self.pi_optimiser.load_state_dict(saved_dict["optimiser_state_dict"]["pi_optimiser"])
+
+    # move to specified device
+    self.buffer.all_to(self.device)
+    self.mlp_ac.set_device(self.device)
 
     # prepare class variables
     self.steps_done = self.buffer.index

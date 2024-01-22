@@ -2826,6 +2826,8 @@ if __name__ == "__main__":
     tm.settings["env"]["base_lim_X_mm"] = 150
     tm.settings["env"]["base_lim_Y_mm"] = 50
     tm.settings["env"]["depth_camera"] = True
+    tm.settings["env"]["use_rgb_in_observation"] = True
+    tm.settings["env"]["use_depth_in_observation"] = False
 
     # now prepare the grasping scene
     tm.settings["env"]["use_scene_settings"] = True
@@ -2929,6 +2931,77 @@ if __name__ == "__main__":
     tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
                 load_best_id=True)
 
+    print_time_taken()
+
+  elif args.program == "debug_cnn_localisation":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-7, 1e-6, 1e-5, 1e-4, 1e-3]
+    vary_2 = [(50, 50)]
+    vary_3 = None
+    repeats = None
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "image size"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # prepare the environment
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp_smallspheres"
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["finger_thickness"] = 0.9e-3
+    tm.settings["env"]["XY_base_actions"] = True
+    tm.settings["env"]["base_lim_X_mm"] = 50
+    tm.settings["env"]["base_lim_Y_mm"] = 50
+    tm.settings["env"]["depth_camera"] = True
+    tm.settings["env"]["use_rgb_in_observation"] = True
+    tm.settings["env"]["use_depth_in_observation"] = False
+
+    # don't use scene, just add noise
+    tm.settings["env"]["use_scene_settings"] = False
+    tm.settings["env"]["object_position_noise_mm"] = 50
+
+    # update the actions and sensors of the gripper
+    tm.settings["cpp"]["oob_distance"] = 1e6
+    tm.settings["cpp"]["action"]["base_X"]["in_use"] = True
+    tm.settings["cpp"]["action"]["base_Y"]["in_use"] = True
+    tm.settings["cpp"]["action"]["base_X"]["value"] = 4e-3
+    tm.settings["cpp"]["action"]["base_Y"]["value"] = 4e-3
+    tm.settings["cpp"]["sensor"]["base_state_sensor_XY"]["in_use"] = True
+
+    # disable regular actions, only examine base movement
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["in_use"] = False
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["in_use"] = False
+    tm.settings["cpp"]["action"]["gripper_Z"]["in_use"] = False
+    tm.settings["cpp"]["action"]["base_Z"]["in_use"] = False
+
+    # disable regular rewards and prepare for distance reward
+    tm.settings["cpp"]["XY_distance_threshold"] = 10e-3
+    tm.settings["reward"]["penalty_termination"] = False
+
+    # create the environment
+    env = tm.make_env()
+    env._set_rgbd_size(*tm.param_2)
+
+    # now create distance rewards
+    env.mj.set.within_XY_distance.set(1.0, True, 1)
+    env.mj.set.object_XY_distance.set(1.0/250, False, 1, -200e-3, -10e-3, -1)
+
+    # apply the agent settings
+    network = CNNActorCriticPG([3, *tm.param_2], env.n_obs, env.n_actions,
+                               continous_actions=True, device=args.device)
+    
+    # make the agent
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1
+    tm.settings["Agent_PPO"]["steps_per_epoch"] = 6000
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
     print_time_taken()
 
   elif args.program == "example_template":

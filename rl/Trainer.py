@@ -567,6 +567,7 @@ class Trainer:
       to_exec = f"""self.agent = {load_train["agent_name"]}()"""
       exec(to_exec)
     self.agent.load_save_state(load_agent)
+    self.agent.set_device(self.device)
 
     # reseed - be aware this will not be contingous
     self.rngseed = load_train["rngseed"]

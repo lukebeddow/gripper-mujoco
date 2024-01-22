@@ -111,6 +111,8 @@ class TrainingManager():
       "base_lim_X_mm" : 300,
       "base_lim_Y_mm" : 200,
       "base_lim_Z_mm" : 30,
+      "use_rgb_in_observation" : False,
+      "use_depth_in_observation" : False,
       "use_scene_settings" : False,
       "num_objects_in_scene" : 1,
       "scene_grasp_target" : 1,
@@ -552,7 +554,11 @@ class TrainingManager():
       found = self.trainer.load_best_id(self.run_name, group_name=self.group_name,
                                         path_to_run_folder=path_to_run_folder, stage=stage)
       if not found:
-        raise RuntimeError(f"TrainingMananger.load() error: load_best_id failed (stage = {stage})")
+        if self.log_level > 0:
+          print(f"TrainingMananger.load() warning: load_best_id failed (stage = {stage}). Loading most recent id")
+        self.trainer.load(self.run_name, group_name=self.group_name, id=id,
+                        path_to_run_folder=path_to_run_folder)
+        # raise RuntimeError(f"TrainingMananger.load() error: load_best_id failed (stage = {stage})")
     else:
       self.trainer.load(self.run_name, group_name=self.group_name, id=id,
                         path_to_run_folder=path_to_run_folder)
