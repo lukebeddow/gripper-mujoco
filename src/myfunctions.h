@@ -113,6 +113,7 @@ void update_objects(const mjModel* model, mjData* data);
 void update_all(mjModel* model, mjData* data);
 void update_constraints(mjModel* model, mjData* data);
 void update_base_limits();
+void set_base_XYZ_limits(double x, double y, double z);
 
 // gripper target position
 bool set_gripper_target_m(double x, double y, double z);
@@ -124,6 +125,9 @@ bool move_gripper_target_m_rad(double x, double th, double z);
 bool move_gripper_target_step(int x, int y, int z);
 bool move_base_target_m(double x, double y, double z);
 bool move_base_target_rad(double roll, double pitch, double yaw);
+bool lift_base_to_height(double z);
+bool set_base_to_XY_position(mjData* data, float x_pos, float y_pos);
+bool set_base_to_Z_position(mjData* data, float z_pos);
 void set_base_to_max_height(mjData* data);
 void print_target();
 void update_target();
@@ -141,15 +145,19 @@ gfloat get_target_finger_angle();
 // environment
 Gripper get_gripper_target();
 std::vector<std::string> get_objects();
+std::vector<std::string> get_live_object_names();
+std::vector<std::vector<double>> get_live_object_bounding_boxes();
 void reset_object(mjModel* model, mjData* data);
 bool is_object_live(int idx);
 luke::QPos spawn_object(mjModel* model, mjData* data, std::string name, QPos pose);
 luke::QPos spawn_object(mjModel* model, mjData* data, int idx, QPos pose);
 std::vector<QPos> get_object_qpos(mjModel* model, mjData* data);
+std::vector<std::vector<double>> get_object_XY_relative_to_gripper(mjModel* model, mjData* data);
 luke::Vec3 get_object_xyz_bounding_box(int idx);
 // Forces get_object_forces(const mjModel* model, mjData* data);
 Forces_faster get_object_forces_faster(const mjModel* model, mjData* data);
 void set_object_visibility(mjModel* model, bool visible);
+void set_everything_colour(mjModel* model, std::vector<float> rgba);
 void set_object_colour(mjModel* model, std::vector<float> rgba);
 void set_all_objects_colour(mjModel* model, std::vector<float> rgba);
 void set_ground_colour(mjModel* model, std::vector<float> rgba);
@@ -157,6 +165,8 @@ void randomise_all_object_colours(mjModel* model, std::shared_ptr<std::default_r
 void default_colours(mjModel* model);
 void set_finger_colour(mjModel* model, std::vector<float> rgba, int finger_num);
 void set_main_body_colour(mjModel* model, std::vector<float> rgba);
+std::vector<int> convert_segmentation_array(std::vector<int>& array);
+int convert_segmentation_integer(int seg_int);
 
 // other
 gfloat verify_armadillo_gauge(const mjData* data, int finger,

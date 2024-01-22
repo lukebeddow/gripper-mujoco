@@ -5,6 +5,9 @@ import sys
 import yaml
 import subprocess
 from copy import deepcopy
+import numpy as np
+from dataclasses import dataclass, asdict
+import time
 
 # get the path to this file and insert it to python path (for mjpy.bind)
 pathhere = os.path.dirname(os.path.abspath(__file__))
@@ -12,10 +15,6 @@ sys.path.insert(0, pathhere)
 
 # with env in path, we can now import the shared cpp library
 from mjpy.bind import MjClass, EventTrack
-
-import time
-import numpy as np
-from dataclasses import dataclass, asdict
 
 # random generators for training time and test time
 random_train = np.random.default_rng()
@@ -68,10 +67,30 @@ class MjEnv():
   @dataclass
   class Parameters:
 
+    # note all XYZ distances are symettric
+    # eg noise_mm = 10 means +-10mm noise from central point
+    # eg base_lim_X_mm = 100 means +-100mm, so 200mm working area
+
     # training parameters
     max_episode_steps: int = 250
     object_position_noise_mm: int = 10
-    object_rotation_noise_deg: int = 5
+    object_rotation_noise_deg: int = 5 # depreciated, now spawns in any available orientation
+    base_lim_X_mm: int = 300
+    base_lim_Y_mm: int = 200
+    base_lim_Z_mm: int = 30
+    use_rgb_in_observation: bool = False
+    use_depth_in_observation: bool = False
+    image_height: int = 50
+    image_width: int = 50
+
+    # grasping scene parameters
+    use_scene_settings: bool = False
+    num_objects_in_scene: int = 1
+    scene_grasp_target: int = 1
+    origin_noise_X_mm: int = 150
+    origin_noise_Y_mm: int = 50
+    scene_X_dimension_mm: int = 300
+    scene_Y_dimension_mm: int = 200
 
     # file and testing parameters
     test_obj_per_file: int = 20
@@ -80,6 +99,7 @@ class MjEnv():
     test_objects: int = 100
 
     # model parameters (for loading xml files)
+    object_set_name: str = "set9_fullset"
     num_segments: int = 8
     finger_thickness: float = 0.9e-3
     finger_length: float = 235e-3
@@ -93,9 +113,15 @@ class MjEnv():
     segment_inertia_scaling: float = 50.0
     fingertip_clearance: float = 10e-3
 
-  def __init__(self, seed=None, noload=None, num_segments=None, finger_width=None, 
+    def update(self, newdict):
+      for key, value in newdict.items():
+        if hasattr(self, key):
+          setattr(self, key, value)
+        else: raise RuntimeError(f"incorrect key: {key}")
+
+  def __init__(self, object_set=None, seed=None, num_segments=None, finger_width=None, 
                depth_camera=None, finger_thickness=None, finger_modulus=None,
-               log_level=0):
+               log_level=0, render=False, continous_actions=False):
     """
     A mujoco environment, optionally set the random seed or prevent loading a
     model, in which case the user should call load() before using the class
@@ -111,13 +137,14 @@ class MjEnv():
 
     # general class settings
     self.log_level = log_level
-    self.disable_rendering = True
+    self.render_window = render
     self.prevent_reload = False
     self.use_yaml_hashing = False
 
     # initialise class variables
     self.test_in_progress = False
     self.test_completed = False
+    self.scene_recursion_counter = 0
 
     # if not given values, set to defaults from the dataclass
     if num_segments is not None: self.load_next.num_segments = num_segments
@@ -131,7 +158,8 @@ class MjEnv():
     
     # create mujoco instance
     self.mj = MjClass()
-    if self.log_level == 0: self.mj.set.debug = False
+    self.mj.set.continous_actions = continous_actions
+    if self.log_level <= 3: self.mj.set.debug = False
     elif self.log_level >= 4: self.mj.set.debug = True
 
     # seed the environment
@@ -139,7 +167,7 @@ class MjEnv():
     self.seed(seed)
 
     # load the mujoco models, if not then load() must be run by the user
-    if noload is not True: self.load()
+    if object_set is not None: self.load(object_set)
 
     # initialise tracking variables
     self.track = MjEnv.Track()
@@ -149,9 +177,15 @@ class MjEnv():
     # initialise heuristic parameters
     self._initialise_heuristic_parameters()
 
-    # set default rgbd camera size
-    self.rgbd_width = 848
-    self.rgbd_height = 480
+    # save default rgbd camera size
+    self.default_rgbd_width = 848
+    self.default_rgbd_height = 480
+
+    # set image collection defaults
+    self.collect_images = False
+    self.new_image_collected = False
+    self.image_collection_data = None
+    self.image_collection_chance = 0.01
 
     return
 
@@ -339,19 +373,31 @@ class MjEnv():
     self.reload_flag = False
 
     # get the parameters from the newly loaded file
-    self.params.num_segments = self.mj.get_N()
-    self.params.finger_width = self.mj.get_finger_width()
-    self.params.finger_thickness = self.mj.get_finger_thickness()
-    self.params.finger_modulus = self.mj.get_finger_modulus()
-    self.params.finger_length = self.mj.get_finger_length()
-    self.params.finger_hook_angle_degrees = self.mj.get_finger_hook_angle_degrees()
-    self.params.fixed_finger_hook = self.mj.is_finger_hook_fixed()
-    self.params.fingertip_clearance = self.mj.get_fingertip_clearance()
-    self.params.XY_base_actions = self.mj.using_xyz_base_actions()
-    self.params.finger_hook_length = self.mj.get_finger_hook_length()
+    try:
+      self.params.object_set_name = self.mj.object_set_name
+      self.params.num_segments = self.mj.get_N()
+      self.params.finger_width = self.mj.get_finger_width()
+      self.params.finger_thickness = self.mj.get_finger_thickness()
+      self.params.finger_modulus = self.mj.get_finger_modulus()
+      self.params.finger_length = self.mj.get_finger_length()
+      self.params.finger_hook_angle_degrees = self.mj.get_finger_hook_angle_degrees()
+      self.params.fixed_finger_hook = self.mj.is_finger_hook_fixed()
+      self.params.fingertip_clearance = self.mj.get_fingertip_clearance()
+      self.params.XY_base_actions = self.mj.using_xyz_base_actions()
+      self.params.finger_hook_length = self.mj.get_finger_hook_length()
+    except AttributeError as e:
+      print("WARNING: MjEnv.load_xml() failed to update parameters for gripper dimensions, you may be running an old policy")
+      print("Error is:", e)
+      print("Execution is continuing, beware saving this model will have incorrect params")
+      self.params = self.load_next
 
     # assume loading is correct and directly copy
     self.params.segment_inertia_scaling = self.load_next.segment_inertia_scaling
+
+    # update base limits
+    self.mj.set_base_XYZ_limits(self.params.base_lim_X_mm * 1e-3, 
+                                self.params.base_lim_Y_mm * 1e-3,
+                                self.params.base_lim_Z_mm * 1e-3)
 
   def _load_object_set(self, name=None, mjcf_path=None, num_segments=None, 
                        finger_width=None, auto_generate=False, use_hashes=True):
@@ -365,8 +411,13 @@ class MjEnv():
     # if a mjcf_path is given, override, otherwise we use default
     if mjcf_path != None: self.mj.model_folder_path = mjcf_path
 
-    # if a object set name is given, override, otherwise we use default
-    if name != None: self.mj.object_set_name = name
+    # if a object set name is given, override, otherwise we use default from load_next
+    if name != None: 
+      self.mj.object_set_name = name
+      self.load_next.object_set_name = name
+    else:
+      name = self.load_next.object_set_name
+      self.mj.object_set_name = self.load_next.object_set_name
 
     if auto_generate:
 
@@ -375,7 +426,7 @@ class MjEnv():
         print(f"MjEnv() warning: given mjcf_path='{mjcf_path}' is about to be overriden by MjEnv._auto_generate_xml_file()")
 
       # create the file we need
-      self.task_xml_folder = self._auto_generate_xml_file(self.mj.object_set_name, use_hashes=use_hashes)
+      self.task_xml_folder = self._auto_generate_xml_file(self.load_next.object_set_name, use_hashes=use_hashes)
 
       # apply the selected finger width in mujoco (EI change requires reset to finalise)
       self.mj.set_finger_width(self.load_next.finger_width)
@@ -404,7 +455,7 @@ class MjEnv():
       print(f"Training xmls: {self.training_xmls}, testing xmls: {self.testing_xmls}")
 
     if self.training_xmls < 1:
-      raise RuntimeError(f"enough training xmls failed to be found in MjEnv at: {self.xml_path}")
+      raise RuntimeError(f"enough training xmls failed to be found in MjEnv at: {self.xml_path}. xml files = {len(xml_files)}, testing xmls = {self.testing_xmls}")
 
   def _update_n_actions_obs(self):
     """
@@ -453,32 +504,56 @@ class MjEnv():
 
     return cpp_settings
 
+  def _set_action(self, action):
+    """
+    Set the action, either for simulation or real world. If using simulation
+    however, it is better to use the MjEnv._take_action() function
+    """
+
+    # for continous actions set them all, mag should be [-1, +1] and is clipped internally
+    if self.mj.set.continous_actions:
+      for i in range(len(action)):
+        new_state = self.mj.set_continous_action(i, action[i])
+
+    # for discrete actions, input the action to perform
+    else: new_state = self.mj.set_discrete_action(action)
+
+    return new_state
+
   def _take_action(self, action):
     """
     Take an action in the simulation
     """
 
-    # set the action and step the simulation
-    self.mj.set_action(action)
+    self._set_action(action)
+
+    # step the simulation for the given time (mj.set.time_for_action)
     self.mj.action_step()
 
     return
 
   def _is_done(self):
     """
-    Determine if the epsiode should finish
+    Determine if the epsiode should finish.
+
+    Terminated - episode reached termination condition
+    Trucnated - episode exceeded max number of steps
     """
+
+    terminated = False
+    truncated = False
 
     # if we have exceeded our time limit
     if self.track.current_step >= self.params.max_episode_steps:
       if self.log_level >= 3 or self.mj.set.debug: 
         print("is_done() = true (in python) as max step number exceeded")
-      return True
+      truncated = True
+      return terminated, truncated
 
     # check the cpp side
-    done = self.mj.is_done()
+    terminated = self.mj.is_done()
 
-    return done
+    return terminated, truncated
     
   def _init_rgbd(self, width=None, height=None):
     """
@@ -497,17 +572,20 @@ class MjEnv():
     # return if the camera is running or not
     return self.params.depth_camera
 
-  def _set_rgbd_size(self, width=None, height=None):
+  def _set_rgbd_size(self, width=None, height=None, default=False):
     """
     Set the size of simulated RGBD images
     """
 
-    if width is None: width = self.rgbd_width
-    if height is None: height = self.rgbd_height
+    if width is None: width = self.params.image_width
+    if height is None: height = self.params.image_height
+    if default and width is None and height is None:
+      width = self.default_rgbd_width
+      height = self.default_rgbd_height
 
     self.rgbd_enabled = self.mj.rendering_enabled()
-    self.rgbd_width = width
-    self.rgbd_height = height
+    self.params.image_width = width
+    self.params.image_height = height
 
     if self.rgbd_enabled:
       self.mj.set_RGBD_size(width, height)
@@ -516,7 +594,7 @@ class MjEnv():
         print("MjClass rendering is disabled in compilation settings, no RGBD images possible")
       self.rgbd_enabled = False
 
-  def _get_rgbd_image(self):
+  def _get_rgbd_image(self, mask=False):
     """
     Return rgbd data from the current state of the simulation, rescaled to match
     the size of the rgbd data from real life.
@@ -524,6 +602,8 @@ class MjEnv():
     Returns two numpy arrays ready for conversion into torch:
       - rgb    (with shape 3 x width x height)
       - depth  (with shape 1 x width x height)
+
+    If mask=True returns a segmentation mask
     """
 
     if not self.rgbd_enabled:
@@ -541,11 +621,14 @@ class MjEnv():
         return
 
     # get rgbd information out of the simulation (unit8, float)
-    rgb, depth = self.mj.get_RGBD_numpy()
+    if mask:
+      rgb, depth = self.mj.get_mask_numpy()
+    else:
+      rgb, depth = self.mj.get_RGBD_numpy()
 
     # reshape the numpy arrays to the correct aspect ratio
-    rgb = rgb.reshape(self.rgbd_height, self.rgbd_width, 3)
-    depth = depth.reshape(self.rgbd_height, self.rgbd_width, 1)
+    rgb = rgb.reshape(self.params.image_height, self.params.image_width, 3)
+    depth = depth.reshape(self.params.image_height, self.params.image_width, 1)
 
     # numpy likes image arrays like this: width x height x channels
     # torch likes image arrays like this: channels x width x height
@@ -572,13 +655,124 @@ class MjEnv():
 
     plt.show()
 
+  def _plot_scene_mask(self):
+    """
+    Plot a mask of the scene, with different colours for different parts
+    """
+
+    # # make the mask in the simulation
+    # if mask == "object":
+    #   self.mj.create_ground_mask()
+    # elif mask == "gripper":
+    #   self.mj.create_gripper_mask()
+    # elif mask.startswith("finger"):
+    #   if mask.endswith("s"):
+    #     for i in range(3):
+    #       self.mj.create_finger_mask(i + 1)
+    #   elif mask.endswith("1"):
+    #     self.mj.create_finger_mask(1)
+    #   elif mask.endswith("2"):
+    #     self.mj.create_finger_mask(2)
+    #   elif mask.endswith("3"):
+    #     self.mj.create_finger_mask(3)
+    # elif mask == "palm":
+    #   self.mj.create_finger_mask(4)
+    # elif mask == "ground":
+    #   self.mj.create_ground_mask()
+
+    # get an rgbd image of the mask
+    rgb, depth = self._get_rgbd_image(mask=True)
+
+    # mask is only in red channel, prepare to post-process
+    segmented_image = rgb[0]
+    max_num = np.max(segmented_image)
+    scale = 255 // max_num
+
+    # apply scalings to give each mask integers (1-7 usually) a different colour
+    red_scaled = scale * (segmented_image)
+    green_scaled = scale * 2 * (max_num - segmented_image) * (segmented_image % 3)
+    blue_scaled = scale * 2 * (max_num - segmented_image) * (segmented_image + 2 % 3)
+
+    # reconstruct a three-channel image
+    rgb = np.array([red_scaled, green_scaled, blue_scaled], dtype=np.uint8)
+
+    # plot the visualisation of the mask
+    import matplotlib.pyplot as plt
+    fig, axs = plt.subplots(1, 1)
+    axs.imshow(np.einsum("ijk->kji", rgb)) # swap to numpy style rows/cols (eg 3x640x480 -> 480x640x3)
+    plt.show()
+
+    return
+
   def _next_observation(self):
     """
     Returns the next observation from the simuation
     """
 
     # get an observation as a numpy array
-    obs = self.mj.get_observation_numpy()
+    try:
+      obs = self.mj.get_observation_numpy()
+    except AttributeError as e:
+      print("Error is:", e)
+      obs = self.mj.get_observation()
+
+    # if we are using a depth camera, combine this into the observation
+    if self.params.depth_camera:
+
+      # check if we should save an image for image collection
+      do_image_collection = False
+      if self.collect_images:
+        global random_train
+        if self.image_collection_chance > random_train.random():
+          do_image_collection = True
+
+      # determine if we are adding this image into our observation of the scene
+      image_observation = False
+      if self.params.use_rgb_in_observation or self.params.use_depth_in_observation:
+        image_observation = True
+
+      if image_observation or do_image_collection:
+
+        # get the rgb and depth from the scene
+        rgb, depth = self._get_rgbd_image()
+
+        if self.params.use_rgb_in_observation:
+          img_obs = np.divide(rgb, 255, dtype=np.float32) # normalise to range 0-1
+          if self.params.use_depth_in_observation:
+            img_obs = np.concatenate((img_obs, depth), axis=0)
+        elif self.params.use_depth_in_observation:
+          img_obs = depth
+
+        # add the regular observation, reshaped and padded with zeros, to the image observation
+        if image_observation:
+          new_size = self.params.image_height * self.params.image_width
+          if len(obs) > new_size:
+            raise RuntimeError(f"MjEnv()._next_observation() failed as observation length {len(obs)} exceeds image number of pixels {new_size}")
+          obs.resize(new_size)
+          obs = obs.reshape((1, self.params.image_width, self.params.image_height))
+          obs = np.concatenate((img_obs, obs), axis=0, dtype=np.float32)
+
+        if do_image_collection:
+
+          # get segmentation mask of the scene
+          rgb_mask, _ = self._get_rgbd_image(mask=True)
+
+          # get details of the object
+          details_dict = {
+            "object_names" : self.mj.get_live_object_names(),
+            "object_bounding_boxes" : self.mj.get_object_bounding_boxes(),
+            "object_relative_XY" : self.mj.get_object_XY_relative_to_gripper(),
+          }
+
+          self.image_collection_data = {
+            "rgb" : rgb,
+            "depth" : depth,
+            "rgb_mask" : rgb_mask[0],
+            "obs" : obs,
+            "details" : details_dict,
+          }
+
+          self.new_image_collected = True
 
     return obs
 
@@ -607,19 +801,152 @@ class MjEnv():
 
     return self.mj.reward()
 
+  def _object_discrimination_target(self):
+    """
+    Get the reward from predicting the object from a vector:
+      [a, b] where:
+        a = [x, y, z] envelope of the object normalised -1 to +1
+        b = [b1, b2, b3, ... , bn] from -1 to +1 for n categories
+    """
+
+    [x, y, z] = self.mj.get_object_xyz_bounding_box()
+    name = self.mj.get_current_object_name()
+
+    cat = np.zeros(5, dtype=np.float64)
+
+    if name.startswith("sphere"):
+      cat[0] = 1
+    elif name.startswith("cube"):
+      cat[1] = 1
+    elif name.startswith("cuboid"):
+      cat[2] = 1
+    elif name.startswith("cylinder"):
+      cat[3] = 1
+    elif name.startswith("ellipse"):
+      cat[4] = 1
+
+    # scale the bounding box to the range [0, 1]
+    box_min = 0e-3
+    box_max = 200e-3
+
+    x = max(box_min, min(box_max, x)) * (1.0/(box_max - box_min))
+    y = max(box_min, min(box_max, y)) * (1.0/(box_max - box_min))
+    z = max(box_min, min(box_max, z)) * (1.0/(box_max - box_min))
+
+    box = np.array([x, y, z], dtype=np.float32) # float32 for torch
+    target = np.concatenate((box, cat))
+
+    # convert target from [0,1] to [-1,1]
+    target *= 2
+    target -= 1
+
+    return target
+
   def _goal_reward(self, goal, state):
     """
     Calculate the reward based on a state and goal
     """
     return self.mj.reward(goal, state)
 
+  def _spawn_scene(self):
+    """
+    Spawn objects into a scene
+    """
+
+    global random_test
+    global random_train
+
+    # are we using train or test time random generator
+    if self.test_in_progress:
+      generator = random_test
+    else:
+      generator = random_train
+
+    # # if we are doing a test, chose a specific object
+    # if self.test_in_progress:
+    #   obj_idx = self.current_test_trial.obj_idx
+    # else:
+    #   # otherwise choose a random object
+    #   obj_idx = generator.integers(0, self.num_objects)
+
+    if self.params.num_objects_in_scene > self.num_objects:
+      raise RuntimeError(f"MjEnv._spawn_scene() error: num_objects_in_scene ({self.params.num_objects_in_scene}) > num_objects {self.num_objects}")
+
+    # shuffle possible objects ensuring no duplicates
+    obj_idx = np.array(list(range(self.num_objects)))
+    generator.shuffle(obj_idx)
+
+    # determine origin noise
+    origin_noise_X_mm = generator.integers(-self.params.origin_noise_X_mm, self.params.origin_noise_X_mm + 1)
+    origin_noise_Y_mm = generator.integers(-self.params.origin_noise_Y_mm, self.params.origin_noise_Y_mm + 1)
+
+    # set the gripper to our new origin
+    self.mj.set_new_base_XY(origin_noise_X_mm * 1e-3, origin_noise_Y_mm * 1e-3)
+
+    # apply spawning parameters
+    self.mj.default_spawn_params.x = origin_noise_X_mm * 1e-3
+    self.mj.default_spawn_params.y = origin_noise_Y_mm * 1e-3
+    self.mj.default_spawn_params.xrange = self.params.object_position_noise_mm * 1e-3
+    self.mj.default_spawn_params.yrange = self.params.object_position_noise_mm * 1e-3
+    self.mj.default_spawn_params.xmin = -self.params.scene_X_dimension_mm * 1e-3
+    self.mj.default_spawn_params.xmax = self.params.scene_X_dimension_mm * 1e-3
+    self.mj.default_spawn_params.ymin = -self.params.scene_Y_dimension_mm * 1e-3
+    self.mj.default_spawn_params.ymax = self.params.scene_Y_dimension_mm * 1e-3
+    self.mj.default_spawn_params.rotrange = np.pi / 2.0
+    self.mj.default_spawn_params.smallest_gap = 5e-3 # avoid collisions after 1st action
+
+    num_spawned = 0
+
+    for i in range(self.params.num_objects_in_scene):
+
+      spawned = False
+      max_count = 3
+      count = 0
+
+      while not spawned and count < max_count:
+
+        spawned = self.mj.spawn_into_scene(obj_idx[i])
+        count += 1
+        if not spawned and self.log_level >= 3:
+          print(f"Object '{self.mj.get_object_name(obj_idx[i])}' failed to spawn, try {count}")
+
+      if spawned:
+        num_spawned += 1
+      else:
+        if self.log_level >= 2:
+          print(f"Warning: object '{self.mj.get_object_name(obj_idx[i])}' failed to spawn")
+
+    # did we fail to spawn any objects
+    if num_spawned == 0:
+      if self.log_level >= 1:
+        print(f"MjEnv._spawn_scene() warning: no objects were able to be spawned in this scene, recursively trying again, this was attempt {self.scene_recursion_counter + 1}")
+      self.scene_recursion_counter += 1
+      if self.scene_recursion_counter > 10:
+        raise RuntimeError("MjEnv._spawn_scene() failed after 10 attempts")
+      self._spawn_scene()
+      return
+    else:
+      self.scene_recursion_counter = 0
+
+    # episode done when number of target objects is grasped
+    if self.params.scene_grasp_target > num_spawned:
+      self.mj.set_scene_grasp_target(num_spawned)
+    else:
+      self.mj.set_scene_grasp_target(self.params.scene_grasp_target)
+
   def _spawn_object(self):
     """
     Spawn an object into the simulation randomly
     """
 
+    if self.params.use_scene_settings:
+      self._spawn_scene()
+      return
+
     global random_test
     global random_train
+
+    new = True
 
     # are we using train or test time random generator
     if self.test_in_progress:
@@ -634,20 +961,63 @@ class MjEnv():
       # otherwise choose a random object
       obj_idx = generator.integers(0, self.num_objects)
 
-    # randomly generate the object (x, y) position
-    xy_noise = self.params.object_position_noise_mm
-    x_pos_mm = generator.integers(-xy_noise, xy_noise + 1)
-    y_pos_mm = generator.integers(-xy_noise, xy_noise + 1)
+    if new:
 
-    # randomly choose a z rotation
-    angle_options = [0, 60, 120]
-    th_noise = self.params.object_rotation_noise_deg
-    angle_noise_deg = generator.integers(-th_noise, th_noise + 1)
-    rand_index = generator.integers(0, len(angle_options))
-    z_rot_rad = (angle_options[rand_index] + angle_noise_deg) * (np.pi / 180.0)
+      # apply spawning parameters
+      self.mj.default_spawn_params.xrange = self.params.object_position_noise_mm * 1e-3
+      self.mj.default_spawn_params.yrange = self.params.object_position_noise_mm * 1e-3
+      self.mj.default_spawn_params.rotrange = np.pi / 2.0
 
-    # spawn in the object
-    self.mj.spawn_object(obj_idx, x_pos_mm * 1e-3, y_pos_mm * 1e-3, z_rot_rad)
+      spawned = False
+      max_count = 3
+      count = 0
+
+      while not spawned and count < max_count:
+
+        spawned = self.mj.spawn_into_scene(obj_idx)
+        count += 1
+        if not spawned and self.log_level >= 3:
+          print(f"Object '{self.mj.get_object_name(obj_idx)}' failed to spawn, try {count}")
+
+      if not spawned:
+        if self.log_level >= 2:
+          print(f"Warning: object '{self.mj.get_object_name(obj_idx)}' failed to spawn, resorting to old method")
+
+        # use old method: randomly generate the object (x, y) position
+        xy_noise = self.params.object_position_noise_mm
+        x_pos_mm = generator.integers(-xy_noise, xy_noise + 1)
+        y_pos_mm = generator.integers(-xy_noise, xy_noise + 1)
+
+        # randomly choose a z rotation
+        angle_options = [0, 60, 120]
+        th_noise = self.params.object_rotation_noise_deg
+        angle_noise_deg = generator.integers(-th_noise, th_noise + 1)
+        rand_index = generator.integers(0, len(angle_options))
+        z_rot_rad = (angle_options[rand_index] + angle_noise_deg) * (np.pi / 180.0)
+
+        # spawn in the object
+        self.mj.spawn_object(obj_idx, x_pos_mm * 1e-3, y_pos_mm * 1e-3, z_rot_rad)
+
+        # for observing failure cases
+        # self.render()
+        # input("enter to continue")
+        
+    else:
+
+      # randomly generate the object (x, y) position
+      xy_noise = self.params.object_position_noise_mm
+      x_pos_mm = generator.integers(-xy_noise, xy_noise + 1)
+      y_pos_mm = generator.integers(-xy_noise, xy_noise + 1)
+
+      # randomly choose a z rotation
+      angle_options = [0, 60, 120]
+      th_noise = self.params.object_rotation_noise_deg
+      angle_noise_deg = generator.integers(-th_noise, th_noise + 1)
+      rand_index = generator.integers(0, len(angle_options))
+      z_rot_rad = (angle_options[rand_index] + angle_noise_deg) * (np.pi / 180.0)
+
+      # spawn in the object
+      self.mj.spawn_object(obj_idx, x_pos_mm * 1e-3, y_pos_mm * 1e-3, z_rot_rad)
 
     return
 
@@ -716,9 +1086,9 @@ class MjEnv():
     """
 
     self.heuristic_params = {
-      "target_angle_deg" : 10,
-      "target_wrist_force_N" : 1,
-      "min_x_value_m" : 55e-3,
+      "target_angle_deg" : 15,
+      "target_wrist_force_N" : 2,
+      "min_x_value_m" : 80e-3,
       "target_x_constrict_m" : 110e-3,
       "target_palm_bend_increase_percentage" : 10,
       "target_z_position_m" : 80e-3,
@@ -728,10 +1098,12 @@ class MjEnv():
       "final_z_height_target_m" : -20e-3,
       "initial_bend_target_N" : 1.5,
       "initial_palm_target_N" : 1.5,
+      "limit_bend_target_N" : 3, #self.mj.set.stable_finger_force_lim,
+      "limit_palm_target_N" : 3, # self.mj.set.stable_palm_force_lim,
       "final_bend_target_N" : 1.5,
       "final_palm_target_N" : 1.5,
       "final_squeeze" : True,
-      "fixed_angle" : False,
+      "fixed_angle" : True,
       # "palm_first" : True,
     }
 
@@ -784,7 +1156,7 @@ class MjEnv():
       - 6. Loop squeezing actions to aim for specific grasp force
     """
 
-    def bend_to_force(target_force_N, possible_action=None):
+    def bend_to_force(target_force_N, possible_action=None, limit_force_N=10):
       """
       Try to bend the fingers to a certain force
       """
@@ -803,9 +1175,13 @@ class MjEnv():
           action = possible_action
           # if we have closed as much as we can
           if state_readings[0] < min_x_value_m:
+            # bend a bit more
+            action = Y_close
             # halt as we have reached gripper limits
             if print_on:
               print(f"minimum x is {min_x_value_m}, actual is {state_readings[0]}")
+        elif avg_bend > limit_force_N:
+          action = possible_action + 1
 
       else:
         # simply constrict to a predetermined point
@@ -816,19 +1192,23 @@ class MjEnv():
 
       return action
 
-    def palm_push_to_force(target_force_N):
+    def palm_push_to_force(target_force_N, limit_force_N=10):
       """
       Try to push with the palm to a specific force
       """
 
+      time.sleep(0.2)
+
       action = None
 
       # if we have palm sensing
-      if palm:
+      if True or palm:
         if print_on:
           print(f"target palm force is {target_force_N}, actual is {palm_reading}")
         if palm_reading < target_force_N:
           action = Z_plus
+        elif palm_reading > limit_force_N:
+          action = Z_minus
 
       # if we don't have palm sensing, but we do have bend sensing
       elif bending:
@@ -868,6 +1248,10 @@ class MjEnv():
     palm = self.mj.set.palm_sensor.in_use
     wrist = self.mj.set.wrist_sensor_Z.in_use
 
+    bending = True
+    palm = True
+    wrist = True
+
     # extract parameters from dictionary
     target_angle_deg = self.heuristic_params["target_angle_deg"]
     target_wrist_force_N = self.heuristic_params["target_wrist_force_N"]
@@ -881,6 +1265,8 @@ class MjEnv():
     final_z_height_target_m = self.heuristic_params["final_z_height_target_m"]
     initial_bend_target_N = self.heuristic_params["initial_bend_target_N"]
     initial_palm_target_N = self.heuristic_params["initial_palm_target_N"]
+    limit_bend_target_N = self.heuristic_params["limit_bend_target_N"]
+    limit_palm_target_N = self.heuristic_params["limit_palm_target_N"]
     final_bend_target_N = self.heuristic_params["final_bend_target_N"]
     final_palm_target_N = self.heuristic_params["final_palm_target_N"]
     final_squeeze = self.heuristic_params["final_squeeze"]
@@ -906,6 +1292,7 @@ class MjEnv():
       # avg_bend = max_bend
     if palm:
       palm_reading = self.mj.get_palm_force(self.heuristic_real_world)
+      print("palm reading is", palm_reading)
     if wrist:
       wrist_reading = self.mj.get_wrist_force(self.heuristic_real_world)
 
@@ -1015,15 +1402,15 @@ class MjEnv():
 
         # squeeze fingers
         if fixed_angle:
-          action = bend_to_force(final_bend_target_N, possible_action=X_close)
+          action = bend_to_force(final_bend_target_N, possible_action=X_close, limit_force_N=limit_bend_target_N)
           action_name = "finger Y close"
         else:
-          action = bend_to_force(final_bend_target_N, possible_action=Y_close)
+          action = bend_to_force(final_bend_target_N, possible_action=Y_close, limit_force_N=limit_bend_target_N)
           action_name = "finger X close"
 
         # squeeze palm
         if action is None:
-          action = palm_push_to_force(final_palm_target_N)
+          action = palm_push_to_force(final_palm_target_N, limit_force_N=limit_palm_target_N)
           action_name = "palm forward"
 
       # or just try to lift higher
@@ -1056,9 +1443,15 @@ class MjEnv():
 
     return action
 
+  def using_continous_actions(self):
+    """
+    Return if action space is continous or discrete
+    """
+    return bool(self.mj.set.continous_actions)
+
   def seed(self, seed=None):
     """
-    Set the seed for the environment
+    Set the seed for the environment, applied upon call to reset
     """
 
     global random_train # reseed only the training generator
@@ -1070,10 +1463,7 @@ class MjEnv():
         seed = self.myseed
       else:
         # otherwise, get a random seed from [0, maxint]
-        seed = random_train.integers(0, 2_147_483_647) #np.random.randint(0, 2_147_483_647)
-
-    # set the python random seed in numpy
-    # np.random.seed(seed)
+        seed = random_train.integers(0, 2_147_483_647)
 
     # create a new generator with the given seed
     random_train = np.random.default_rng(seed)
@@ -1110,6 +1500,38 @@ class MjEnv():
     """
 
     return asdict(self.params)
+  
+  def get_params_dict(self):
+    """
+    Return a dictionary of class parameters
+    """
+    param_dict = asdict(self.params)
+    param_dict.update({
+      "n_actions" : self.n_actions,
+      "n_observation" : self.n_obs
+    })
+    # cpp_str = self._get_cpp_settings()
+    # param_dict.update({"cpp_settings" : cpp_str})
+    return param_dict
+
+  def get_save_state(self):
+    """
+    Return a saveable state of the environment
+    """
+    save_dict = {
+      "parameters" : self.params,
+      "mjcpp" : self.mj,
+    }
+    return save_dict
+  
+  def load_save_state(self, state_dict):
+    """
+    Load the environment from a saved state
+    """
+    self.params = state_dict["parameters"]
+    self.load_next = deepcopy(state_dict["parameters"])
+    self.mj = state_dict["mjcpp"]
+    self.load()
 
   def load(self, object_set_name=None, object_set_path=None, index=None, 
            num_segments=None, finger_width=None, finger_thickness=None,
@@ -1121,6 +1543,7 @@ class MjEnv():
     """
 
     # put inputs into the 'load_next' datastructure
+    if object_set_name is not None: self.load_next.object_set_name = object_set_name
     if num_segments is not None: self.load_next.num_segments = num_segments
     if finger_width is not None: self.load_next.finger_width = finger_width
     if finger_thickness is not None: self.load_next.finger_thickness = finger_thickness
@@ -1128,10 +1551,16 @@ class MjEnv():
     if depth_camera is not None: self.load_next.depth_camera = depth_camera
 
     # set the thickness/modulus (changes only applied upon reset(), causes hard_reset() if changed)
-    self.mj.set_finger_thickness(self.load_next.finger_thickness) # required as xml thickness ignored
-    self.mj.set_finger_modulus(self.load_next.finger_modulus) # duplicate xml setting
+    try:
+      self.mj.set_finger_thickness(self.load_next.finger_thickness) # required as xml thickness ignored
+      self.mj.set_finger_modulus(self.load_next.finger_modulus) # duplicate xml setting
+    except AttributeError as e:
+      print("WARNING: MjEnv.load_xml() failed to update parameters for gripper dimensions, you may be running an old policy")
+      print("Error is:", e)
+      print("Execution is continuing, beware saving this model will have incorrect params")
+      self.params = self.load_next
 
-    self._load_object_set(name=object_set_name, mjcf_path=object_set_path,
+    self._load_object_set(name=self.load_next.object_set_name, mjcf_path=object_set_path,
                           auto_generate=auto_generate, use_hashes=use_hashes)
     self._load_xml(index=index)  
 
@@ -1139,7 +1568,7 @@ class MjEnv():
     self._update_n_actions_obs()
 
     # check if the depth camera is included in the object set chosen
-    if self.load_next.depth_camera: 
+    if self.load_next.depth_camera:
       self.load_next.depth_camera = self._init_rgbd()
     else:
       self.params.depth_camera = False
@@ -1148,7 +1577,7 @@ class MjEnv():
     # reset any lingering goal defaults
     self.mj.reset_goal()
 
-  def step(self, action):
+  def step(self, action, torch=True):
     """
     Perform an action and step the simulation until it is resolved
     """
@@ -1158,10 +1587,20 @@ class MjEnv():
       raise RuntimeError("step has been called with done=true, use reset()")
 
     self.track.current_step += 1
+
+    # have we been given a torch tensor, in which case move to cpu and convert
+    if torch:
+      if self.mj.set.continous_actions:
+        action = (action.cpu()).numpy()
+      else:
+        action = (action.cpu()).item()
     
     self._take_action(action)
     obs = self._next_observation()
-    done = self._is_done()
+    terminated, truncated = self._is_done()
+    info = {}
+
+    done = bool(terminated + truncated)
 
     # what method are we using
     if self.mj.set.use_HER:
@@ -1171,10 +1610,10 @@ class MjEnv():
       if done or not self.mj.set.reward_on_end_only:
         # do we only award a reward when the episode ends
         reward = self._goal_reward(goal, state)
-      to_return = (obs, reward, done, state, goal)
+      to_return = (obs, reward, terminated, state, goal, info)
     else:
       reward = self._reward()
-      to_return = (obs, reward, done)
+      to_return = (obs, reward, terminated, truncated, info)
 
     self.track.last_action = action
     self.track.last_reward = reward
@@ -1187,7 +1626,7 @@ class MjEnv():
 
     return to_return
 
-  def reset(self, hard=None, timestep=None, realworld=False):
+  def reset(self, hard=None, timestep=None, realworld=False, nospawn=False):
     """
     Reset the simulation to the start
     """
@@ -1204,15 +1643,22 @@ class MjEnv():
         self._load_xml()
 
     # reset the simulation
-    if hard is True: self.mj.hard_reset()
-    elif timestep is True: self.mj.reset_timestep() # recalibrate timestep
-    else: self.mj.reset()
+    if hard is True: 
+      self.mj.hard_reset()
+      # base limits do not persist through a hard reset, so set them again
+      self.mj.set_base_XYZ_limits(self.params.base_lim_X_mm * 1e-3, 
+                                  self.params.base_lim_Y_mm * 1e-3,
+                                  self.params.base_lim_Z_mm * 1e-3)
+    elif timestep is True: 
+      self.mj.reset_timestep() # recalibrate timestep
+    else: 
+      self.mj.reset()
 
     # if real world, recalibrate the sensors
     if realworld is True: self.mj.calibrate_real_sensors() # re-zero sensors
     
     # spawn a new random object
-    if not realworld:
+    if not realworld or nospawn:
       self._spawn_object()
 
     # if we are using a camera, randomise colours
@@ -1225,8 +1671,7 @@ class MjEnv():
     Render the simulation to a window
     """
 
-    if not self.disable_rendering:
-
+    if self.render_window:
       self.mj.render()
 
     if self.log_level >= 3:
@@ -1249,196 +1694,118 @@ if __name__ == "__main__":
 
   # import pickle
 
-  mj = MjEnv(noload=True, depth_camera=True, log_level=2, seed=122)
-  mj.disable_rendering = True
+  mj = MjEnv(depth_camera=True, log_level=2, seed=123)
+  mj.render_window = False
   mj.mj.set.mujoco_timestep = 3.187e-3
   mj.mj.set.auto_set_timestep = False
 
-  # mj.load("set7_fullset_1500_50i_updated", num_segments=8, finger_width=28, finger_thickness=0.9e-3)
-  # mj._spawn_object()
-  # mj._set_rgbd_size(848, 480)
-  # mj._set_rgbd_size(1000, 1000)
-
-  # widths = [24e-3, 28e-3]
-  # segments = [8]
-  # xy_base = [False, True]
-  # inertia = [1, 50]
-
-  mj.load_next.num_segments = 8
-  angles = [90]
-  for a in angles:
-    mj.load_next.finger_hook_angle_degrees = a
-    mj.load_next.finger_hook_length = 100e-3
-    mj.load_next.XY_base_actions = True
-    mj._auto_generate_xml_file("set_test_large", use_hashes=True, silent=True)
-
-  # for w in widths:
-  #   for N in segments:
-  #     for xy in xy_base:
-  #       for i in inertia:
-  #         mj.load_next.finger_width = w
-  #         mj.load_next.num_segments = N
-  #         mj.load_next.XY_base_actions = xy
-  #         mj.load_next.segment_inertia_scaling = i
-  #         mj._auto_generate_xml_file("set8_fullset_1500", use_hashes=True)
-
-  exit()
-
-  mj.params.test_objects = 20
-  # mj.load_next.finger_hook_angle_degrees = 45.678
-  mj.load_next.finger_width = 28e-3
-  # mj.load_next.fingertip_clearance = 0.143e-3
-  # mj.load_next.finger_length = 200e-3
-  # mj.load_next.finger_thickness = 1.9e-3
-
-  mj.load("set_test", depth_camera=True)
-  mj._spawn_object()
-  mj.reset()
-
-  print(mj.get_parameters())
-
-  mj._plot_rgbd_image()
-
-  mj.reset()
-  mj._plot_rgbd_image()
-
-  # name = mj._auto_generate_xml_file("set_test", use_hashes=True)
-
-  # print(name)
-
-  exit()
-
-  num = 10000
-  mj.mj.tick()
-
-  for i in range(num):
-    mj._get_rgbd_image()
-
-  time_taken = mj.mj.tock()
-  print(f"Time taken for {num} fcn calls was {time_taken:.3f} seconds")
-
-  rgb, depth = mj._get_rgbd_image()
-  print(f"rgb size is {rgb.shape}")
-  print(f"depth size is {depth.shape}")
-
-  mj._plot_rgbd_image()
-
-  mj._set_rgbd_size(250, 150)
-  mj._plot_rgbd_image()
-
-  exit()
-
-  import sys
-
-  # sizes of python lists (rgb, depth) = (25.9, 8.6) MB
-  rgbd = mj.mj.get_RGBD()
-  print(f"Size of rgb is: {sys.getsizeof(rgbd.rgb) * 1e-6:.3f} MB")
-  print(f"Size of depth is: {sys.getsizeof(rgbd.depth) * 1e-6:.3f} MB")
-
-  # sizes of numpy arrays -> (3.2, 4.3) MB, uint8 is the same as uint_fast8
-  rgb, depth = mj.mj.get_RGBD_numpy()
-  print(f"Size of numpy rgb is: {sys.getsizeof(rgb) * 1e-6:.3f} MB")
-  print(f"Size of numpy depth is: {sys.getsizeof(depth) * 1e-6:.3f} MB")
-
-  exit()
-
-  # sizes = [(720, 740), (200, 740), (720, 200),
-  #          (1500, 1500)]
+  mj.load("set8_fullset_1500", num_segments=8, finger_width=28e-3, finger_thickness=0.9e-3)
   
-  # sizes = [(900, 1200)]
+  # ----- visualise segmentation masks ----- #
 
-  # import matplotlib.pyplot as plt
-  # fig, axs = plt.subplots(len(sizes), 1)
+  examine_scene_mask = False
+  if examine_scene_mask:
 
-  # for i, (h, w) in enumerate(sizes):
-  #   rgb, d = mj.mj.get_RGBD_numpy(h, w)
-  #   axs.imshow(rgb.reshape(h, w, 3))
+    mj.load_next.XY_base_actions = True
+    mj.params.use_scene_settings = True
+    mj.params.scene_X_dimension_mm = 300
+    mj.params.scene_Y_dimension_mm = 300
+    mj.params.object_position_noise_mm = 1000
+    mj.params.num_objects_in_scene = 5
 
-  # fig2, axs2 = plt.subplots(3, 1)
+    mj.load("set8_fullset_1500", num_segments=8, finger_width=28e-3, finger_thickness=0.9e-3)
 
-  # from torch.nn.functional import interpolate
-  # import torch
-  # from torchvision import transforms
+    mj._spawn_object()
+    # mj._set_rgbd_size(20, 10)
 
-  # resizes= [0.5, 0.1, 0.01]
-  # for i, x in enumerate(resizes):
-
-    # rgbarr = interpolate(torch.tensor([np.transpose(rgb.reshape(h, w, 3))]), scale_factor=x)
-    # axs2[i].imshow(np.array(rgbarr[0]).T)
+    mj.reset()
+    num = 0
+    for i in range(num):
+      mj.step(random_train.integers(0, mj.n_actions))
     
-    # trans = transforms.Compose([transforms.Resize((100, 100))])
-    # img = trans(torch.tensor(np.transpose(rgb.reshape(h, w, 3))))
-    # axs2[i].imshow(np.array(img).T)
+    import time
+    t1 = time.time()
+    rgb, depth = mj._get_rgbd_image()
+    t2 = time.time()
+    rgb, depth = mj._get_rgbd_image(mask=True)
+    t3 = time.time()
+    print(f"Time taken for regular RGBD was {(t2 - t1) * 1e3:.3f} ms")
+    print(f"Time taken for mask was {(t3 - t2) * 1e3:.3f} ms")
 
-    # trans = transforms.Compose([transforms.Resize((100, 100))])
-    # img = trans(torch.tensor(rgb.reshape(3, h, w)))
-    # axs2[i].imshow(np.array(img).T)
+    mj._plot_scene_mask()
 
-  # rgbnp, depthnp = mj.mj.get_RGBD_numpy()
-  # print(f"Size of numpy rgb is: {sys.getsizeof(rgbnp) * 1e-6:.3f} MB")
-  # print(f"Size of numpy depth is: {sys.getsizeof(depthnp) * 1e-6:.3f} MB")
+  # ---- automatically generate new xml files ----- #
 
-  # print("The rgb information is", rgbd.rgb[:10])
-  # print("The depth information is", rgbd.depth[:10])
+  generate_new_xml = False
+  if generate_new_xml:
 
-  # print(rgbnp)
+    # widths = [24e-3, 28e-3]
+    # segments = [8]
+    # xy_base = [False, True]
+    # inertia = [1, 50]
 
-  # print(isinstance(rgbnp, np.ndarray))
-  # print(rgbnp.dtype)
+    # mj.load_next.num_segments = 8
+    # angles = [90]
+    # for a in angles:
+    #   mj.load_next.finger_hook_angle_degrees = a
+    #   mj.load_next.finger_hook_length = 100e-3
+    #   mj.load_next.XY_base_actions = True
+    #   mj._auto_generate_xml_file("set_test_large", use_hashes=True, silent=True)
 
-  # import matplotlib.pyplot as plt
+    # for w in widths:
+    #   for N in segments:
+    #     for xy in xy_base:
+    #       for i in inertia:
+    #         mj.load_next.finger_width = w
+    #         mj.load_next.num_segments = N
+    #         mj.load_next.XY_base_actions = xy
+    #         mj.load_next.segment_inertia_scaling = i
+    #         mj._auto_generate_xml_file("set8_fullset_1500", use_hashes=True)
 
-  # plt.imshow(rgbnp.reshape(720, 740, 3))
-  # plt.show()
+    mj.params.test_objects = 20
+    mj.load_next.finger_hook_angle_degrees = 75
+    mj.load_next.finger_width = 28e-3
+    mj.load_next.fingertip_clearance = 0.1
+    mj.load_next.XY_base_actions = True
+    # mj.load_next.finger_length = 200e-3
+    # mj.load_next.finger_thickness = 1.9e-3
 
-  # plt.imshow(depthnp.reshape(720, 740))
-  # plt.show()
+    gen_obj_set = "set9_fullset"
+    name = mj._auto_generate_xml_file("set9_fullset", use_hashes=True)
+    runstr = f"bin/mysimulate -p /home/luke/mujoco-devel/mjcf -o {gen_obj_set} -g {name}"
+    print(runstr)
 
-  # mj.mj.set.set_sensor_prev_steps_to(3)
-  mj.mj.set.sensor_n_prev_steps = 1
-  mj.mj.set.state_n_prev_steps = 1
-  mj.mj.set.sensor_sample_mode = 3
-  mj.mj.set.debug = False
-  mj.reset()
+  # ----- evaluate speed of rgbd function ----- #
 
-  for i in range(20):
-    mj.step(np.random.randint(0,8))
+  test_rgbd_speed = False
+  if test_rgbd_speed:
 
-  print("\n\n\n\n\n\n\n\n\n about to set finger thickness in python")
-  mj.params.finger_thickness = 0.8e-3
-  mj._load_xml()
-  print("SET IN PYTHON, about to run reset()")
-  mj.reset()
-  print("reset is finished")
+      num = 1000
+      mj.mj.tick()
 
-  print("\n\n\nSTART")
+      for i in range(num):
+        mj._get_rgbd_image()
 
-  for i in range (3):
-    print("\nObservation", i)
-    # mj.step(np.random.randint(0,8))
-    mj.step(2)
-    # print(mj.mj.get_observation())
-    
+      time_taken = mj.mj.tock()
+      print(f"Time taken for {num} fcn calls was {time_taken:.3f} seconds")
 
-  # mj.mj.set.wipe_rewards()
-  # mj.mj.set.lifted.set(100, 10, 1)
-  # print(mj._get_cpp_settings())
+      rgb, depth = mj._get_rgbd_image()
+      print(f"rgb size is {rgb.shape}")
+      print(f"depth size is {depth.shape}")
 
-  # with open("test_file.pickle", 'wb') as f:
-  #   pickle.dump(mj, f)
-  #   print("Pickle saved")
+  # ----- examine size of RGBD images ---- #
 
-  # with open("test_file.pickle", 'rb') as f:
-  #   mj = pickle.load(f)
-  #   print("Pickle loaded")
+  see_rgbd_size = False
+  if see_rgbd_size:
 
-  # mj._load_xml(index=0)
-  # mj._load_xml(index=1)
-  # mj._load_xml(index=2)
+    import sys
 
-  # mj.step(0)
+    # sizes of python lists (rgb, depth) = (25.9, 8.6) MB
+    rgbd = mj.mj.get_RGBD()
+    print(f"Size of rgb is: {sys.getsizeof(rgbd.rgb) * 1e-6:.3f} MB")
+    print(f"Size of depth is: {sys.getsizeof(rgbd.depth) * 1e-6:.3f} MB")
 
-  # print(mj._get_cpp_settings())
-
-  # obs = mj.mj.get_observation()
-  # print(obs)
+    # sizes of numpy arrays -> (3.2, 4.3) MB, uint8 is the same as uint_fast8
+    rgb, depth = mj.mj.get_RGBD_numpy()
+    print(f"Size of numpy rgb is: {sys.getsizeof(rgb) * 1e-6:.3f} MB")
+    print(f"Size of numpy depth is: {sys.getsizeof(depth) * 1e-6:.3f} MB")

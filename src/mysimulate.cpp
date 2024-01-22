@@ -717,7 +717,7 @@ void lukesensorfigsinit(void)
 void lukesensorfigsupdate(void)
 {
     // amount of data we extract for each sensor
-    int gnum = myMjClass.gauge_buffer_size;
+    int gnum = 50;
 
     // check we can plot this amount of data
     if (gnum > mjMAXLINEPNT) {
@@ -1646,6 +1646,8 @@ void makeObjectUI(int oldstate)
         {mjITEM_SLIDERINT, "scene obj",   3, &settings.scene_objects,    "1 20"},
         {mjITEM_SLIDERNUM,  "scene X",         2, &settings.scene_x, "0 1"},
         {mjITEM_SLIDERNUM,  "scene Y",         2, &settings.scene_y, "0 1"},
+        {mjITEM_BUTTON,   "random base",    2, NULL,                 " #317"},
+        {mjITEM_BUTTON,   "set base XY",    2, NULL,                 " #317"},
         {mjITEM_END}
     };
 
@@ -2354,9 +2356,13 @@ void uiEvent(mjuiState* state)
             {
                 case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7: 
                 case 8: case 9: case 10: case 11: case 12: case 13: case 14: case 15: {
-                    std::vector<float> obs = myMjClass.set_action(it->itemid);
+                    std::vector<float> obs = myMjClass.set_discrete_action(it->itemid);
                     if (settings.complete_action_steps and obs.size() > 0) {
                         myMjClass.action_step();
+                    }
+                    std::vector<std::vector<double>> xyrel = luke::get_object_XY_relative_to_gripper(myMjClass.model, myMjClass.data);
+                    for (int i = 0; i < xyrel.size(); i++) {
+                        luke::print_vec(xyrel[i], "Object relative XY");
                     }
                     break;
                 }
@@ -2393,7 +2399,7 @@ void uiEvent(mjuiState* state)
             }
 
             // if we are set to full environment steps
-            if (settings.env_steps and it->itemid < 8) {
+            if (settings.env_steps and it->itemid < 15) {
                 std::vector<luke::gfloat> obs = 
                     myMjClass.get_observation();
                 double reward = myMjClass.reward();
@@ -2584,6 +2590,15 @@ void uiEvent(mjuiState* state)
                     M_PI);
                 std::cout << "success flag is " << success << "\n";
                 break;
+            }
+            case 37: {         // random base movement
+                std::cout << "Performaning a random base movement with noise " << myMjClass.s_.base_position_noise << "\n";
+                double z = myMjClass.random_base_Z_movement(myMjClass.s_.base_position_noise);
+                std::cout << "Amount of noise applied was " << z << "\n";
+            }
+            case 38: {         // set base XY position
+                std::cout << "Setting base position to (0.1, 0.1)\n";
+                double z = myMjClass.set_new_base_XY(0.1, 0.1);
             }
             }
         }

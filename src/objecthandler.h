@@ -44,7 +44,7 @@ struct ObjectHandler {
 
   std::vector<int> live_objects;
   std::vector<std::string> live_geoms;
-
+  
   // are we showing objects not being used (default: no)
   bool object_visibility = false;
   
@@ -165,6 +165,8 @@ struct ObjectHandler {
   void remove_collisions(mjModel* model, mjData* data);
   void settle_objects(mjModel* model, mjData* data);
   void overwrite_keyframe(mjModel* model, mjData* data, int keyid = 0);
+  int is_object_geom(int id);
+  bool is_ground_geom(int id);
 
 private:
 
@@ -182,6 +184,8 @@ public:
   QPos spawn_object(mjModel* model, mjData* data, int idx, QPos pose);
   std::vector<QPos> get_live_qpos(mjModel* model, mjData* data);
   Vec3 get_object_xyz(int obj_idx);
+  std::vector<Vec3> get_live_bounding_boxes();
+  std::vector<std::string> get_live_names();
 
   // get object information
   myNum get_object_net_force(const mjModel* model, mjData* data, int live_idx);
@@ -192,6 +196,7 @@ public:
   // Forces extract_forces(const mjModel* model, mjData* data);
   Forces_faster extract_forces_faster(const mjModel* model, mjData* data);
   bool check_contact_forces(const mjModel* model, mjData* data);
+  bool apply_antiroll(mjData* data);
 
   // set object properties
   void set_object_visibility(mjModel* model, bool visible);

@@ -48,6 +48,8 @@ class ModelSaver:
     self.file_num = "{:03d}"                # digit format for saving files with numbers
     self.date_str = "%d-%m-%y-%H:%M"        # date string, must be seperated by '-'
     self.folder_names = "train_{}/"         # default name of created folders, then formatted with date
+    self.last_saved_id = None               # id of most recently saved object
+    self.last_loaded_id = None              # id of most recently loaded object
 
     # if we are given a root, we can use abs paths not relative
     if not root:
@@ -395,7 +397,7 @@ class ModelSaver:
       if forcecreate:
         self.new_folder(name=foldername)
       else:
-        raise RuntimeError("folder name does not exist")
+        raise RuntimeError(f"Modelsaver.enter_folder() error: folder name does not exist = {self.path + foldername}")
 
     if self.in_folder: self.exit_folder()
     if foldername[-1] != '/': foldername += '/'
@@ -411,7 +413,7 @@ class ModelSaver:
     self.folder = ""
 
   def save(self, name, pyobj=None, txtstr=None, txtonly=None, txtlabel=None,
-           suffix_numbering=True, compression=None):
+           suffix_numbering=True, compression=None, force_suffix=None):
     """
     Save the given object using pickle
     """
@@ -440,12 +442,21 @@ class ModelSaver:
       return savepath + savename
   
     # find out what the most recent file number in the savepath was
-    if suffix_numbering:
+    if force_suffix is not None:
+
+      # create the file name
+      savename = name + '_' + self.file_num.format(force_suffix) + file_extension
+      save_id = force_suffix
+
+    elif suffix_numbering:
+
       most_recent = self.get_recent_file(savepath, name=name)
 
       if most_recent == None: save_id = self.default_num
       else:
         save_id = 1 + self.get_file_num(most_recent)
+
+      self.last_saved_id = save_id
 
       # create the file name
       savename = name + '_' + self.file_num.format(save_id) + file_extension
@@ -519,11 +530,12 @@ class ModelSaver:
       if loadpath[-1] != '/': loadpath += '/'
       if suffix_numbering:
         loadpath = self.get_recent_file(loadpath, id=id, name=filenamestarts)
+        self.last_loaded_id = self.get_file_num(loadpath)
       else:
         if file_extension is not None:
           loadpath += filenamestarts + file_extension
         elif (filenamestarts is not None and
-              (filenamestarts.endswith(self.uncompressed_extenstion) or
+              (filenamestarts.endswith(self.uncompressed_extension) or
                filenamestarts.endswith(self.bz2_extension) or
                filenamestarts.endswith(self.lz4_extension))):
           loadpath += filenamestarts
@@ -543,6 +555,7 @@ class ModelSaver:
 
       if suffix_numbering:
         loadpath = self.get_recent_file(loadpath, id=id, name=filenamestarts)
+        self.last_loaded_id = self.get_file_num(loadpath)
       else:
         if file_extension is not None:
           loadpath += filenamestarts + file_extension

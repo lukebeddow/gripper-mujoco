@@ -109,9 +109,12 @@ void MjClass::configure_settings()
   action_options.clear();
   action_options.resize(MjType::Action::count, -1);
 
+  // set all the actions discrete or continous
+  s_.set_all_action_continous(s_.continous_actions);
+
   // use macros to determine which actions are in use
   int i = 0;
-  #define AA(NAME, USED, CONTINOUS, VALUE, SIGN)                                    \
+  #define AA(NAME, USED, VALUE, SIGN)                                    \
     if (s_.NAME.in_use) {                                                           \
       if (s_.NAME.continous) {                                                      \
         action_options[i] = MjType::Action::TOKEN_CONCAT(NAME, CONTINOUS_TOKEN);    \
@@ -128,6 +131,12 @@ void MjClass::configure_settings()
     LUKE_MJSETTINGS_ACTION
 
   #undef AA
+
+  // are we using a termination signal action
+  if (s_.use_termination_action) {
+    action_options[i] = MjType::Action::termination_signal;
+    i += 1;
+  }
 
   n_actions = i;
 
@@ -153,6 +162,10 @@ void MjClass::configure_settings()
       sampleFcnPtr = &MjType::Sensor::sign_sample;
       break;
     }
+    // case MjType::Sample::scaled_change: {
+    //   sampleFcnPtr = &MjType::Sensor::scaled_change_sample;
+    //   break;
+    // }
     default: {
       throw std::runtime_error("s_.sensor_sample_mode not set to legal value");
     }
@@ -178,6 +191,10 @@ void MjClass::configure_settings()
     }
     case MjType::Sample::sign: {
       stateFcnPtr = &MjType::Sensor::sign_sample;
+      break;
+    }
+    case MjType::Sample::scaled_change: {
+      stateFcnPtr = &MjType::Sensor::scaled_change_sample;
       break;
     }
     default: {
@@ -256,7 +273,7 @@ void MjClass::configure_settings()
     sim_gauge_raw_to_N_factor = bend_gauge_normalise / s_.bending_gauge.normalise;
     if (echo_auto_changes) {
       std::cout << "MjClass auto-setting: Bending gauge normalisation set to: " 
-        << s_.bending_gauge.normalise << " (NOT SI), based on saturation load of " << bend_gauge_normalise <<'\n';
+        << s_.bending_gauge.normalise << " (NOT SI), based on saturation load of " << bend_gauge_normalise << " newtons\n";
       std::cout << "MjClass auto-setting: Wrist Z sensor offset set to: " 
         << s_.wrist_sensor_Z.raw_value_offset << '\n';
     }
@@ -307,6 +324,7 @@ std::string MjClass::file_from_from_command_line(int argc, char **argv)
   std::string object_set = input.getCmdFromList("-o", "--object-set");
   std::string task = input.getCmdFromList("-t", "--task");
   std::string path = input.getCmdFromList("-p", "--path");
+  std::string thickness = input.getCmdFromList("T", "--thickness");
 
   // debug information
   std::cout << "MjClass::load_from_command_line(...) recieved the following:\n";
@@ -316,6 +334,7 @@ std::string MjClass::file_from_from_command_line(int argc, char **argv)
   if (not object_set.empty()) std::cout << "    -> object_set  " << object_set << '\n';
   if (not task.empty())       std::cout << "    -> task        " << task << '\n';
   if (not path.empty())       std::cout << "    -> path        " << path << '\n';
+  if (not thickness.empty())  std::cout << "    -> thickness   " << thickness << '\n';
   if (not gripper.empty() and (not width.empty() or not segments.empty())) {
     std::cout << "Warning: gripper overrides values of width and segments\n";
   }
@@ -324,9 +343,15 @@ std::string MjClass::file_from_from_command_line(int argc, char **argv)
   if (segments.empty()) { segments = "8"; };
   if (width.empty()) { width = "28"; };
   if (gripper.empty()) { gripper = "gripper_N" + segments + "_" + width; };
-  if (object_set.empty()) { object_set = "set8_fullset_1500"; };
+  if (object_set.empty()) { object_set = "set9_fullset"; };
   if (task.empty()) { task = "0"; };
   if (path.empty()) { path = LUKE_MJCF_PATH; };
+
+  // apply given thickness
+  if (not thickness.empty()) {
+    double thickness_double = std::stod(thickness);
+    set_finger_thickness(thickness_double * 1e-3);
+  }
 
   // use default templates to assemble filepath
   if (path.back() != '/') { path += '/'; };
@@ -445,6 +470,9 @@ void MjClass::reset()
 
   // ensure the simulation settings are all ready to go
   configure_settings();
+
+  // move the base to a random new position
+  random_base_Z_movement(s_.base_position_noise);
 }
 
 void MjClass::hard_reset()
@@ -637,6 +665,14 @@ luke::RGBD MjClass::get_RGBD()
   return read_existing_RGBD();
 }
 
+luke::RGBD MjClass::get_mask()
+{
+  /* perform a render of a segmentation mask then return an RGBD image */
+
+  render_mask();
+  return render::read_mask();
+}
+
 void MjClass::render_RGBD()
 {
   /* render a single frame of the current state, this can be used to bypass the
@@ -653,6 +689,24 @@ void MjClass::render_RGBD()
   }
 
   render::render_camera();
+}
+
+void MjClass::render_mask()
+{
+  /* render a single frame of the current state, this can be used to bypass the
+  normal render() and keep the window hidden. render() displays the window to
+  the screen. Renders with a segmentation mask */
+
+  // if the render window has not yet been initialised
+  if (not render_camera_init) {
+    init_rgbd();
+  }
+  else if (render_reload) {
+    render::reload_for_rendering(*this);
+    render_reload = false;
+  }
+
+  render::render_camera_with_seg_mask();
 }
 
 luke::RGBD MjClass::read_existing_RGBD()
@@ -777,32 +831,32 @@ void MjClass::monitor_sensors()
     palm_timestamps.add(data->time);
   }
 
-  // check the wrist sensor XY force
-  if (s_.wrist_sensor_XY.ready_to_read(data->time)) {
+  // // check the wrist sensor XY force
+  // if (s_.wrist_sensor_XY.ready_to_read(data->time)) {
 
-    // read
-    luke::gfloat x = data->userdata[0];
-    luke::gfloat y = data->userdata[1];
+  //   // read
+  //   luke::gfloat x = data->userdata[0];
+  //   luke::gfloat y = data->userdata[1];
 
-    // save SI
-    sim_sensors_SI_.wrist_X_sensor.add(x);
-    sim_sensors_SI_.wrist_Y_sensor.add(y);
+  //   // save SI
+  //   sim_sensors_SI_.wrist_X_sensor.add(x);
+  //   sim_sensors_SI_.wrist_Y_sensor.add(y);
 
-    // normalise
-    x = s_.wrist_sensor_XY.apply_normalisation(x);
-    y = s_.wrist_sensor_XY.apply_normalisation(y);
+  //   // normalise
+  //   x = s_.wrist_sensor_XY.apply_normalisation(x);
+  //   y = s_.wrist_sensor_XY.apply_normalisation(y);
 
-    // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
-    x = s_.wrist_sensor_XY.apply_noise(x, uniform_dist, 1);
-    y = s_.wrist_sensor_XY.apply_noise(y, uniform_dist, 2);
+  //   // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
+  //   x = s_.wrist_sensor_XY.apply_noise(x, uniform_dist, 1);
+  //   y = s_.wrist_sensor_XY.apply_noise(y, uniform_dist, 2);
 
-    // save
-    sim_sensors_.wrist_X_sensor.add(x);
-    sim_sensors_.wrist_Y_sensor.add(y);
+  //   // save
+  //   sim_sensors_.wrist_X_sensor.add(x);
+  //   sim_sensors_.wrist_Y_sensor.add(y);
     
-    // record time
-    wristXY_timestamps.add(data->time);
-  }
+  //   // record time
+  //   wristXY_timestamps.add(data->time);
+  // }
 
   // check the wrist sensor Z force
   if (s_.wrist_sensor_Z.ready_to_read(data->time)) {
@@ -810,11 +864,11 @@ void MjClass::monitor_sensors()
     // read
     luke::gfloat z = data->userdata[2];
 
-    // save SI
-    sim_sensors_SI_.wrist_Z_sensor.add(z);
-
     // zero the reading (this step is unique to wrist Z sensor)
     z -= s_.wrist_sensor_Z.raw_value_offset;
+
+    // save SI (with reading zero applied!)
+    sim_sensors_SI_.wrist_Z_sensor.add(z);
 
     // normalise
     z = s_.wrist_sensor_Z.apply_normalisation(z);
@@ -1024,11 +1078,11 @@ void MjClass::update_env()
   // another step has been made
   env_.cnt.step_num.value = true;
 
-  
   for (int i = 0; i < num_obj; i++) {
 
     env_.obj[i].lifted = false;
     env_.obj[i].oob = false;
+    env_.obj[i].lifted_to_height = false;
     env_.obj[i].target_height = false;
     env_.obj[i].contact = false;
     env_.obj[i].stable = false;
@@ -1048,10 +1102,16 @@ void MjClass::update_env()
       env_.obj[i].oob = true;
     }
 
-    // lifted above the target height and not oob (env_.cnt.lifted and env_.cnt.oob must be set)
-    if (env_.obj_values.highest_lift > s_.done_height and
-        gripper_z_height > s_.done_height and
-        env_.obj[i].lifted and not env_.obj[i].oob) { // newest version, lift object AND gripper
+    // object lifted past minimum required and not oob (env_.cnt.lifted and env_.cnt.oob must be set)
+    if (env_.obj_values.highest_lift > s_.lift_height - ftol and
+        env_.obj[i].lifted and not env_.obj[i].oob) {
+      env_.cnt.lifted_to_height.value = true;
+      env_.obj[i].lifted_to_height = true;
+    }
+
+    // object is lifted and the gripper has reached the target height
+    if (env_.obj[i].lifted_to_height and
+        gripper_z_height > s_.gripper_target_height - ftol) {
       env_.cnt.target_height.value = true;
       env_.obj[i].target_height = true;
     }
@@ -1084,8 +1144,16 @@ void MjClass::update_env()
       env_.cnt.stable_height.value = true;
       env_.obj[i].stable_height = true;
     }
-  }
 
+    // if a termination signal has been sent and criteria is met
+    if (env_.cnt.stable_height.value and termination_signal_sent) {
+      env_.cnt.stable_termination.value = true;
+      env_.obj[i].stable_termination = true;
+    }
+    else if (termination_signal_sent) {
+      env_.cnt.failed_termination.value = true;
+    }
+  }
 
   // check if the object has been dropped (env_.cnt.lifted must already be set)
   env_.cnt.dropped.value = 
@@ -1126,6 +1194,24 @@ void MjClass::update_env()
   env_.cnt.dangerous_palm_sensor.value = last_palm_N;
   env_.cnt.exceed_wrist_sensor.value = last_wrist_N;
   env_.cnt.dangerous_wrist_sensor.value = last_wrist_N;
+
+  // scale the action penalty based on the number of actions (not counting termination action)
+  env_.cnt.action_penalty_lin.value /= float(n_actions - s_.use_termination_action);
+  env_.cnt.action_penalty_sq.value /= float(n_actions - s_.use_termination_action);
+
+  /* ----- determine the reported success rate (as a proxy, should not have associated reward) ----- */
+
+  // determine successful grasp, for metric only, no associated reward
+  if (s_.use_termination_action) {
+    if (env_.cnt.stable_termination.value) {
+      env_.cnt.successful_grasp.value = true;
+    }
+  }
+  else {
+    if (env_.cnt.stable_height.value) {
+      env_.cnt.successful_grasp.value = true;
+    }
+  }
 
   /* ----- resolve linear events and update counts of all events (no editing needed) ----- */
 
@@ -1197,6 +1283,29 @@ bool MjClass::move_step_target(int x, int y, int z)
   return luke::move_gripper_target_step(x, y, z);
 }
 
+bool MjClass::set_new_base_XY(double x, double y)
+{
+  /* instantly move the base to a new XY position, this position will be 
+  tracked by the base XY sensors */
+
+  bool within_limits = luke::set_base_to_XY_position(data, x, y);
+
+  return within_limits;
+}
+
+double MjClass::random_base_Z_movement(double size)
+{
+  /* Perform a random movement of the base taken from a uniform distribution of
+  [-size, size] in metres */
+
+  std::uniform_real_distribution<double> distribution(-size, size);
+  double z_move = distribution(*MjType::generator);
+
+  luke::set_base_to_Z_position(data, z_move);
+
+  return z_move;
+}
+
 /* ----- learning functions ----- */
 
 void MjClass::action_step()
@@ -1226,12 +1335,31 @@ void MjClass::action_step()
   return;
 }
 
-std::vector<float> MjClass::set_action(int action)
+std::vector<float> MjClass::set_discrete_action(int action)
+{
+  /* call for discrete actions, only the action code */
+
+  return set_action(action, 0); // continous_fraction unused for discrete actions
+}
+
+std::vector<float> MjClass::set_continous_action(int action, float magnitude_fraction)
+{
+  /* call for discrete actions, only the action code */
+
+  // check that the magnitude_fraction is in bounds [-1, +1]
+  if (magnitude_fraction < -1.0) magnitude_fraction = -1.0;
+  else if (magnitude_fraction > 1.0) magnitude_fraction = 1.0;
+
+  return set_action(action, magnitude_fraction);
+}
+
+std::vector<float> MjClass::set_action(int action, float continous_fraction)
 {
   /* sets an action in the simulation, but does not step at all. Returns the
   new state vector */
 
   bool wl = true; // within limits
+  termination_signal_sent = false; // reset whether we received a termination action
 
   if (action < 0 or action >= n_actions) {
     std::cout << "MjClass::set_action() received action = " << action << " which is out of bounds.\n"
@@ -1253,7 +1381,7 @@ std::vector<float> MjClass::set_action(int action)
 
     // define action behaviour for positive/negative/continous
     // any new actions should be further defined in ActionSettings::update_action_function()
-    #define AA(NAME, USED, CONTINOUS, VALUE, SIGN)              \
+    #define AA(NAME, USED, VALUE, SIGN)              \
       case MjType::Action::TOKEN_CONCAT(NAME, POSITIVE_TOKEN):  \
         if (s_.debug) std::cout << s_.NAME.name + "_positive";  \
         wl = s_.NAME.call_action_function(s_.NAME.value);       \
@@ -1263,14 +1391,37 @@ std::vector<float> MjClass::set_action(int action)
         wl = s_.NAME.call_action_function(-1 * s_.NAME.value);  \
         break;                                                  \
       case MjType::Action::TOKEN_CONCAT(NAME, CONTINOUS_TOKEN): \
-        if (s_.debug) std::cout << s_.NAME.name + "_continous"; \
-        wl = s_.NAME.call_action_function(s_.NAME.value);       \
+        if (s_.debug) {                                         \
+          std::cout << s_.NAME.name + "_continous";             \
+          std::cout << ", fraction = " << continous_fraction;   \
+        }                                                       \
+        wl = s_.NAME.call_action_function(s_.NAME.value * continous_fraction);         \
+        env_.cnt.action_penalty_lin.value += abs(continous_fraction);                  \
+        env_.cnt.action_penalty_sq.value += (continous_fraction * continous_fraction); \
         break;                                                  \
 
       // run the macro to create the code
       LUKE_MJSETTINGS_ACTION
 
     #undef AA
+
+    case MjType::Action::termination_signal: {
+      float value = 0.0;
+      if (s_.continous_actions) value = continous_fraction;
+      else value = 1.0;
+      bool triggered = (value > s_.termination_threshold);
+      if (s_.debug) {
+        std::cout << "termination_signal, value = " << value <<", threshold = "
+          << s_.termination_threshold << ", hence triggered is " <<
+          ((triggered) ? "true" : "false");
+      }
+      if (triggered) {
+        termination_signal_sent = true;
+        // luke::lift_base_to_height(base_max_[2]); // this is max z height
+      }
+      wl = true;
+      break;
+    }
 
     default:
       std::cout << "Action value received is " << action_code << '\n';
@@ -1291,7 +1442,8 @@ std::vector<float> MjClass::set_action(int action)
   //     << ", minimum allowed is " << s_.fingertip_min_mm << "\n";
 
   // update whether this action was within limits or not
-  env_.cnt.exceed_limits.value = not wl;
+  // use += so True is latching when using continous actions
+  env_.cnt.exceed_limits.value += not wl;
 
   // get the target state and return it as a vector
   return luke::get_target_state_vector();
@@ -1338,11 +1490,28 @@ bool MjClass::is_done()
   //   return true;
   // }
 
+  /* termination rewards should set done=true,
+      -> stable_termination
+      -> failed_termination
+  */
+  // // if a termination signal has been sent
+  // if (termination_signal_sent) {
+  //   if (s_.debug) std::cout << "is_done = true, termination signal sent\n";
+  //   return true;
+  // }
+
   // if the cumulative reward drops below a given threshold
-  if (env_.cumulative_reward < s_.quit_on_reward_below) {
-    if (s_.debug) std::printf("Reward dropped below limit of %.3f, is_done() = true\n",
-      s_.quit_on_reward_below);
-    return true;
+  if (s_.cap_reward and s_.quit_if_cap_exceeded) {
+    if (env_.cumulative_reward - ftol < s_.reward_cap_lower_bound) {
+      if (s_.debug) std::printf("Reward dropped below limit of %.3f, is_done() = true\n",
+        s_.reward_cap_lower_bound);
+      return true;
+    }
+    if (env_.cumulative_reward + ftol > s_.reward_cap_upper_bound) {
+      if (s_.debug) std::printf("Reward exceeded upper limit of %.3f, is_done() = true\n",
+        s_.reward_cap_upper_bound);
+      return true;
+    }
   }
 
   return false;
@@ -1542,12 +1711,12 @@ std::vector<luke::gfloat> MjClass::get_observation(MjType::SensorData sensors)
   return observation;
 }
 
-std::string MjClass::debug_observation(std::vector<luke::gfloat> observation)
+std::string MjClass::debug_observation(std::vector<luke::gfloat> observation, bool printout = false)
 {
   /* get an observation from a provided set of sensors */
 
   // use for printing detailed observation debug information
-  constexpr bool debug_obs = true;
+  bool debug_obs = printout;
 
   std::vector<luke::gfloat> real_obs = get_observation();
 
@@ -2315,6 +2484,20 @@ int MjClass::spawn_scene(int num_objects, double xrange, double yrange,
   return spawned_objects.size();
 }
 
+void MjClass::set_scene_grasp_target(int num_objects)
+{
+  /* set a target to grasp a certain number of objects */
+
+  if (num_objects > env_.obj.size()) {
+    std::cout << "MjClass::set_scene_grasp_target() warning: num_objects "
+      << num_objects << " is greater than number of objects in the scene "
+      << env_.obj.size() << ", capping num_objects\n";
+  }
+
+  scene_grasp_target = num_objects;
+  current_grasp_num = 0;
+}
+
 void MjClass::randomise_every_colour()
 {
   /* makes every single item in the simulation a random colour */
@@ -2392,6 +2575,13 @@ void MjClass::randomise_finger_colours(bool all_same)
   }
 }
 
+std::vector<int> MjClass::convert_segmentation_array(std::vector<int>& array)
+{
+  /* convert a segmented array into the seperate gripper parts */
+
+  return luke::convert_segmentation_array(array);
+}
+
 void MjClass::set_neat_colours()
 {
   /* set nice colours for the items/objects in the scene */
@@ -2410,6 +2600,61 @@ void MjClass::set_neat_colours()
   for (int i = 1; i < 5; i++) // 4 means palm
     luke::set_finger_colour(model, finger_colour, i);
 
+}
+
+void MjClass::create_object_mask()
+{
+  /* mask out only all the objects in the scene */
+
+  // turn everything black first
+  std::vector<float> black { 0, 0, 0, 0 };
+  luke::set_everything_colour(model, black);
+
+  // now turn all the objects white
+  std::vector<float> white { 1, 1, 1, 1 };
+  luke::set_all_objects_colour(model, white);
+}
+
+void MjClass::create_gripper_mask()
+{
+  /* mask out the gripper parts in the scene */
+
+  // turn everything black first
+  std::vector<float> black { 0, 0, 0, 0 };
+  luke::set_everything_colour(model, black);
+
+  // now turn all the gripper parts white
+  std::vector<float> white { 1, 1, 1, 1 };
+  luke::set_finger_colour(model, white, 1);
+  luke::set_finger_colour(model, white, 2);
+  luke::set_finger_colour(model, white, 3);
+  luke::set_finger_colour(model, white, 4); // 4 means palm
+}
+
+void MjClass::create_finger_mask(int num)
+{
+  /* mask out only one gripper finger (1,2,3) or the palm (4)*/
+
+  // turn everything black first
+  std::vector<float> black { 0, 0, 0, 0 };
+  luke::set_everything_colour(model, black);
+
+  // now turn all the gripper parts white
+  std::vector<float> white { 1, 1, 1, 1 };
+  luke::set_finger_colour(model, white, num);
+}
+
+void MjClass::create_ground_mask()
+{
+  /* show up only the ground in view */
+
+  // turn everything black first
+  std::vector<float> black { 0, 0, 0, 1 };
+  luke::set_everything_colour(model, black);
+
+  // now turn the ground white
+  std::vector<float> white { 1, 1, 1, 1 };
+  luke::set_ground_colour(model, white);
 }
 
 float MjClass::reward()
@@ -2432,20 +2677,20 @@ float MjClass::reward()
   env_.cumulative_reward += transition_reward;
 
   // if we are capping the maximum cumulative negative reward
-  if (env_.cumulative_reward < s_.quit_on_reward_below) {
-    if (s_.use_quit_on_reward) {
+  if (env_.cumulative_reward < s_.reward_cap_lower_bound) {
+    if (s_.cap_reward) {
       // reduce the reward to not put us below the cap
-      transition_reward += s_.quit_on_reward_below - env_.cumulative_reward - ftol;
-      env_.cumulative_reward = s_.quit_on_reward_below - ftol;
+      transition_reward += s_.reward_cap_lower_bound - env_.cumulative_reward;
+      env_.cumulative_reward = s_.reward_cap_lower_bound;
     }
   }
 
   // if we are capping the maximum cumulative positive reward
-  if (env_.cumulative_reward > s_.quit_on_reward_above) {
-    if (s_.use_quit_on_reward) {
+  if (env_.cumulative_reward > s_.reward_cap_upper_bound) {
+    if (s_.cap_reward) {
       // reduce the reward to not put us above the cap
-      transition_reward += s_.quit_on_reward_above - env_.cumulative_reward - ftol;
-      env_.cumulative_reward = s_.quit_on_reward_above - ftol;
+      transition_reward += s_.reward_cap_upper_bound - env_.cumulative_reward;
+      env_.cumulative_reward = s_.reward_cap_upper_bound;
     }
   }
 
@@ -2901,6 +3146,7 @@ std::vector<float> MjClass::get_simple_state_vector(MjType::SensorData sensor)
 
   // use for printing detailed observation debug information
   constexpr bool debug_obs = false;
+  constexpr bool return_all = true;
 
   std::vector<luke::gfloat> simple_state;
 
@@ -2913,7 +3159,7 @@ std::vector<float> MjClass::get_simple_state_vector(MjType::SensorData sensor)
   }
 
   // get axial strain gauge sensor output
-  if (s_.axial_gauge.in_use) {
+  if (return_all or s_.axial_gauge.in_use) {
 
     simple_state.push_back(sensor.read_finger1_axial_gauge());
     simple_state.push_back(sensor.read_finger2_axial_gauge());
@@ -2921,41 +3167,41 @@ std::vector<float> MjClass::get_simple_state_vector(MjType::SensorData sensor)
   }
 
   // get palm sensor output
-  if (s_.palm_sensor.in_use) {
+  if (return_all or s_.palm_sensor.in_use) {
 
     simple_state.push_back(sensor.read_palm_sensor());
   }
 
   // get wrist sensor XY output
-  if (s_.wrist_sensor_XY.in_use) {
+  if (return_all or s_.wrist_sensor_XY.in_use) {
 
     simple_state.push_back(sensor.read_wrist_X_sensor());
     simple_state.push_back(sensor.read_wrist_Y_sensor());
   }
 
   // get wrist sensor Z output
-  if (s_.wrist_sensor_Z.in_use) {
+  if (return_all or s_.wrist_sensor_Z.in_use) {
     
     simple_state.push_back(sensor.read_wrist_Z_sensor());
   }
 
   // get motor state output
-  if (s_.motor_state_sensor.in_use) {
+  if (return_all or s_.motor_state_sensor.in_use) {
 
     simple_state.push_back(sensor.read_x_motor_position());
     simple_state.push_back(sensor.read_y_motor_position());
     simple_state.push_back(sensor.read_z_motor_position());
   }
 
-  // get base XY state
-  if (s_.base_state_sensor_XY.in_use) {
+  // // get base XY state
+  // if (return_all or s_.base_state_sensor_XY.in_use) {
 
-    simple_state.push_back(sensor.read_x_base_position());
-    simple_state.push_back(sensor.read_y_base_position());
-  }
+  //   simple_state.push_back(sensor.read_x_base_position());
+  //   simple_state.push_back(sensor.read_y_base_position());
+  // }
 
   // get base Z state
-  if (s_.base_state_sensor_Z.in_use) {
+  if (return_all or s_.base_state_sensor_Z.in_use) {
 
     simple_state.push_back(sensor.read_z_base_position());
   }
@@ -3018,7 +3264,7 @@ std::string MjClass::print_actions()
 
       // define action behaviour for positive/negative/continous
       // any new actions should be further defined in ActionSettings::update_action_function()
-      #define AA(NAME, USED, CONTINOUS, VALUE, SIGN)              \
+      #define AA(NAME, USED, VALUE, SIGN)              \
         case MjType::Action::TOKEN_CONCAT(NAME, POSITIVE_TOKEN):  \
           str += s_.NAME.name + "_positive\n";  \
           break;                                                  \
@@ -3052,6 +3298,22 @@ float MjClass::get_fingertip_z_height()
   less indicates ground contact */
 
   return luke::get_fingertip_z_height();
+}
+
+std::vector<std::vector<double>> MjClass::get_object_XY_relative_to_gripper()
+{
+  /* get the relative XY position of all the objects in the scene, relative
+  to where the gripper target currently is */
+
+  return luke::get_object_XY_relative_to_gripper(model, data);
+}
+
+std::vector<std::vector<double>> MjClass::get_object_bounding_boxes()
+{
+  /* get the bounding boxes of all objects in the scene. Note that these objects
+  are spawned but may not be in view of the camera */
+
+  return luke::get_live_object_bounding_boxes();
 }
 
 MjType::TestReport MjClass::get_test_report()
@@ -3099,6 +3361,13 @@ void MjClass::set_finger_modulus(double E)
 
   // changes are finished upon next call to reset()
   if (changed) resetFlags.finger_EI_changed = true;
+}
+
+void MjClass::set_base_XYZ_limits(double x, double y, double z)
+{
+  /* set the base XYZ limits */
+
+  luke::set_base_XYZ_limits(x, y, z);
 }
 
 int MjClass::get_n_actions()
@@ -3209,6 +3478,16 @@ std::vector<luke::gfloat> MjClass::get_finger_stiffnesses()
   return luke::get_stiffnesses();
 }
 
+std::vector<double> MjClass::get_object_xyz_bounding_box()
+{
+  /* return the x, y, z bounding box of the object */
+
+  int live_id = env_.obj[0].spawn_info.index;
+  luke::Vec3 xyz = luke::get_object_xyz_bounding_box(live_id);
+  std::vector<double> vec = { xyz.x, xyz.y, xyz.z };
+  return vec;
+}
+
 MjType::CurveFitData::PoseData MjClass::validate_curve(int force_style)
 {
   /* for testing the curvature of the fingers */
@@ -3272,7 +3551,7 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force, 
   s_.tip_force_applied = force;
 
   // step the simulation to allow the forces to settle
-  float time_to_settle = 100; // 30; // have tried up to 100
+  float time_to_settle = 50; // 30; // have tried up to 100
   int steps_to_make = time_to_settle / s_.mujoco_timestep;
   // std::cout << "Stepping for " << steps_to_make << " steps to allow settling\n";
 
@@ -3294,7 +3573,7 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force, 
       // do we catch instability? If so reduce timestep
       if (dynamic_timestep_adjustment) {
         if (luke::is_sim_unstable(model, data)) {
-          s_.mujoco_timestep *= 0.9;
+          s_.mujoco_timestep *= 0.8;
           reset();
           dynamic_repeats_done += 1;
           if (dynamic_repeats_done > dynamic_repeats_allowed)
@@ -3891,17 +4170,18 @@ float MjClass::yield_load(float thickness, float width)
 
 MjType::EventTrack MjClass::add_events(MjType::EventTrack& e1, MjType::EventTrack& e2)
 {
-  /* add the absolute count and last value of two events, all else is ignored */
+  /* add the absolute count and activity of two events, all else is ignored */
 
   MjType::EventTrack out;
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                      \
             out.NAME.abs = e1.NAME.abs + e2.NAME.abs;                          \
-            out.NAME.last_value = e1.NAME.last_value + e2.NAME.last_value;
+            out.NAME.active_sum = e1.NAME.active_sum + e2.NAME.active_sum;
 
   #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)                 \
             out.NAME.abs = e1.NAME.abs + e2.NAME.abs;                          \
-            out.NAME.last_value = e1.NAME.last_value + e2.NAME.last_value;  
+            out.NAME.active_sum = e1.NAME.active_sum + e2.NAME.active_sum;     \
+            out.NAME.last_value = e1.NAME.last_value + e2.NAME.last_value;    
 
     // run the macro to create the code
     LUKE_MJSETTINGS_BINARY_REWARD
@@ -4264,7 +4544,7 @@ std::string MjType::Settings::get_settings()
             /* add to output */\
             output_str += str;
 
-  #define AA(NAME, DONTUSE1, DONTUSE2, DONTUSE3, DONTUSE4) \
+  #define AA(NAME, DONTUSE1, DONTUSE2, DONTUSE3) \
             str.clear();\
             /* type first */\
             type_str.clear(); type_str += "Action";\
@@ -4546,7 +4826,7 @@ void MjType::Settings::set_all_action_use(bool set_as)
 {
   /* set all the actions to 'set_as' */
 
-  #define AA(NAME, DONT1, DONT2, DONT3, DONT4) NAME.in_use = set_as;
+  #define AA(NAME, DONT1, DONT2, DONT3) NAME.in_use = set_as;
 
     LUKE_MJSETTINGS_ACTION
 
@@ -4557,7 +4837,7 @@ void MjType::Settings::set_all_action_continous(bool set_as)
 {
   /* set all the actions to 'set_as' */
 
-  #define AA(NAME, DONT1, DONT2, DONT3, DONT4) NAME.continous = set_as;
+  #define AA(NAME, DONT1, DONT2, DONT3) NAME.continous = set_as;
 
     LUKE_MJSETTINGS_ACTION
 
@@ -4568,7 +4848,7 @@ void MjType::Settings::set_all_action_value(float set_as)
 {
   /* set all the actions to 'set_as' */
 
-  #define AA(NAME, DONT1, DONT2, DONT3, DONT4) NAME.value = set_as;
+  #define AA(NAME, DONT1, DONT2, DONT3) NAME.value = set_as;
 
     LUKE_MJSETTINGS_ACTION
 
@@ -4583,7 +4863,7 @@ void MjType::Settings::set_all_action_sign(int set_as)
     throw std::runtime_error("MjType::Settings::set_all_action_sign recieved a value not either +1 or -1");
   }
 
-  #define AA(NAME, DONT1, DONT2, DONT3, DONT4) NAME.sign = set_as;
+  #define AA(NAME, DONT1, DONT2, DONT3) NAME.sign = set_as;
 
     LUKE_MJSETTINGS_ACTION
 
@@ -4617,13 +4897,14 @@ void update_events(MjType::EventTrack& events, MjType::Settings& settings)
 {
   /* update the count of each event and reset recent event information */
 
-  bool active = false; // is a linear reward active
+  bool active = false; // is an event active
 
   #define BR(NAME, REWARD, DONE, TRIGGER)                                    \
             events.NAME.row = events.NAME.row *                              \
                                   events.NAME.value + events.NAME.value;     \
             events.NAME.abs += events.NAME.value;                            \
             events.NAME.last_value = events.NAME.value;                      \
+            events.NAME.active_sum = bool(events.NAME.row);                  \
             events.NAME.value = false; // reset for next step
 
   #define LR(NAME, REWARD, DONE, TRIGGER, MIN, MAX, OVERSHOOT)               \
@@ -4635,6 +4916,7 @@ void update_events(MjType::EventTrack& events, MjType::Settings& settings)
             events.NAME.row = events.NAME.row * active + active;             \
             events.NAME.abs += active;                                       \
             events.NAME.last_value = events.NAME.value;                      \
+            events.NAME.active_sum = active;                                 \
             events.NAME.value = 0.0; // reset for next step
 
     // run the macro to create the code
@@ -4668,7 +4950,7 @@ float calc_rewards(MjType::EventTrack& events, MjType::Settings& settings)
               float scaled_reward = settings.NAME.reward * fraction;            \
               if (settings.debug)                                               \
                 std::printf("%s triggered by value %.1f, reward += %.4f\n",     \
-                  #NAME, events.NAME.last_value, settings.NAME.reward);         \
+                  #NAME, events.NAME.last_value, scaled_reward);                \
               reward += scaled_reward;                                          \
             }
             

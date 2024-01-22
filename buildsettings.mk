@@ -11,26 +11,26 @@
 
 # ----- default settings, overwritten by any of the below options ----- #
 
-# what machine are we compiling for
-MACHINE = luke-laptop
+# # what machine are we compiling for
+# MACHINE = luke-laptop
 
-# mjcf files location (model files like gripper/objects)
-MJCF_PATH = /home/luke/mymujoco/mjcf
+# # mjcf files location (model files like gripper/objects)
+# MJCF_PATH = /home/luke/mymujoco/mjcf
 
-# local machine library locations
-PYTHON_PATH = /usr/include/python3.6m
-PYBIND_PATH = /home/luke/repo/pybind11
-ARMA_PATH = # none, use system library
-MUJOCO_PATH = /home/luke/repo/mujoco/mujoco-2.1.5
-MUJOCO_LIB = $(MUJOCO_PATH)/lib
-RENDER_PATH = # none, use system library
-CORE_LIBS = -L$(MUJOCO_LIB) -lmujoco -larmadillo
-RENDER_LIBS = -lglfw
-DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
-						 -DLUKE_MACHINE='"$(MACHINE)"'
+# # local machine library locations
+# PYTHON_PATH = /usr/include/python3.6m
+# PYBIND_PATH = /home/luke/repo/pybind11
+# ARMA_PATH = # none, use system library
+# MUJOCO_PATH = /home/luke/repo/mujoco/mujoco-2.1.5
+# MUJOCO_LIB = $(MUJOCO_PATH)/lib
+# RENDER_PATH = # none, use system library
+# CORE_LIBS = -L$(MUJOCO_LIB) -lmujoco -larmadillo
+# RENDER_LIBS = -lglfw
+# DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
+# 						 -DLUKE_MACHINE='"$(MACHINE)"'
 
-# extras
-MAKEFLAGS += -j4 # jN => use N parallel cores
+# # extras
+# MAKEFLAGS += -j4 # jN => use N parallel cores
 
 # ----- compiling on lukes laptop ----- #
 ifeq ($(findstring luke, $(MAKECMDGOALS)), luke)
@@ -42,7 +42,7 @@ ifeq ($(findstring luke, $(MAKECMDGOALS)), luke)
 MACHINE = luke-laptop
 
 # mjcf files location (model files like gripper/objects)
-MJCF_PATH = /home/luke/mymujoco/mjcf
+MJCF_PATH = /home/luke/mujoco-devel/mjcf
 
 # path to python executable (eg venv) and header files
 PYTHON = /home/luke/pyenv/py38_mujoco
@@ -134,14 +134,15 @@ MACHINE = luke-PC
 MJCF_PATH = /home/luke/mymujoco/mjcf
 
 # path to python executable (eg venv) and header files
-PYTHON_EXE = python3
-PYTHON_INCLUDE = /usr/include/python3.6m
+PYTHON = /home/luke/pyenv/py38_mujoco
+PYTHON_EXE = $(PYTHON)/bin/python
+PYTHON_INCLUDE = $(PYTHON)/include/python3.8
 
 # local machine library locations
 PYTHON_PATH = /usr/include/python3.6m
-PYBIND_PATH = /home/luke/mymujoco/libs/pybind11
+PYBIND_PATH = /home/luke/libs/pybind11
 ARMA_PATH = # none, use system library
-MUJOCO_PATH = /home/luke/mymujoco/libs/mujoco/mujoco-2.1.5
+MUJOCO_PATH = /home/luke/libs/mujoco/mujoco-2.1.5
 MUJOCO_LIB = $(MUJOCO_PATH)/lib
 RENDER_PATH = # none, use system library
 CORE_LIBS = -L$(MUJOCO_LIB) -lmujoco -larmadillo 

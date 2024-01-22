@@ -1,39 +1,13 @@
-# bash script to run several trainings on the lab PC
-
-# to run a new training from array_training.py and train args 1,2,3 use:
-#   $ ./pc_job.sh -j "1 2 3"
-
-# to continue a training from array_training.py and train args 1,2,3 use:
-#   $ ./pc_job.sh -j "1 2 3" -c -t 07-06-22-16:34 -m luke-PC
-#   
+# bash script to run several trainings at the same time
 
 # define key directory structure
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 path_to_mymujoco=$SCRIPT_DIR
 python_folder=rl
-mujoco_lib_path=~/mujoco-2.1.5/lib
 LOG_FOLDER=~/training_logs
+RUN_PREFIX=run
 
 # ----- helpful functions ----- #
-
-helpFunction()
-{
-   echo -e "\nHelp Information"
-   echo -e "\nScript usage:"
-   echo -e "Run jobs 1, 3 & 4:    $0 -j '1 3 4'"
-   echo -e "Run jobs 1-4:         $0 -j '1:4'"
-   echo -e "Run 2 at a time:      $0 -j '1 2 3 4' --stagger 2"
-   echo -e "Pass python args:     $0 -j '1:10' -c --stagger 2 --device cpu"
-   echo -e "\nOptions:"
-   echo -e "\t -j, --jobs ['ARGS'] jobs to run (need to be in quotes), eg -j '1 2 3 4'"
-   echo -e "\t\t ->jobs can also be colon seperated, eg '1:4' expands to '1 2 3 4'"
-   echo -e "\t -s, --stagger [ARG] staggered job, submit jobs in groups of ARG eg 3 at a time"
-   echo -e "\t -f, --no-faketty disable faketty output file logging"
-   echo -e "\t -d, --debug print output in the terminal, not a log file"
-   echo -e "\t --print special mode for array_training_dqn.py where index options are printed"
-   echo -e "\t -h print help information"
-   exit 1 # exit script after printing help
-}
 
 parseJobs()
 {
@@ -63,11 +37,12 @@ faketty() {
 # ----- handle inputs ----- #
 
 # default inputs
-machine=luke-PC
 timestamp="$(date +%d-%m-%y_%H-%M)"
+KEEP_TIMESTAMP='N'
 FAKETTY=faketty
 LOGGING='Y'
 PRINT_RESULTS='N'
+PRINT_RESULTS_AFTER='N'
 
 PY_ARGS=() # arguments passed directly into python without parsing
 
@@ -75,38 +50,45 @@ PY_ARGS=() # arguments passed directly into python without parsing
 for (( i = 1; i <= "$#"; i++ ));
 do
   case ${!i} in
-    # with arguments, incrememnt i
+    # with arguments, increment i
     -j | --jobs ) (( i++ )); jobs=$(parseJobs ${!i}); echo jobs are $jobs ;;
     -t | --timestamp ) (( i++ )); timestamp=${!i}; echo Timestamp set to $timestamp ;;
-    -m | --machine ) (( i++ )); machine=${!i}; MACHINE="-m $machine"; echo Machine set to $machine ;;
     -s | --stagger ) (( i++ )); STAGGER=${!i}; echo stagger is $STAGGER ;;
     # without arguments
+    -k | --keep-time ) KEEP_TIMESTAMP='Y'; echo Keeping current timestamp ;;
     -f | --no-faketty ) FAKETTY=; echo faketty disabled ;;
-    -d | --debug ) LOGGING='N'; DEBUG="--no-wandb --no-delay"; echo Debug mode on, terminal logging, no wandb ;;
-    --print ) LOGGING='N'; PRINT="--print --no-wandb"; echo Printing mode on, no training ;;
-    --print-results ) LOGGING='N'; PRINT="--print-results --no-wandb --no-delay"; PRINT_RESULTS='Y'; STAGGER=1; echo Print results mode, no training, stagger is 1 ;;
-    -h | --help ) helpFunction ;;
+    -d | --debug ) LOGGING='N'; PRINT_RESULTS_AFTER='N'; echo Debug mode on, terminal logging or printing results after ;;
+    --print ) LOGGING='N'; PRINT="--print"; echo Printing mode on, no training ;;
+    --print-results ) PRINT_RESULTS='Y' ;;
     # everything else passed directly to python
+    --program ) PRINT_RESULTS_AFTER='Y' ; PY_ARGS+=( ${!i} ) ;;
     * ) PY_ARGS+=( ${!i} ) ;;
   esac
 done
 
 echo Python only arguments are: ${PY_ARGS[@]}
 
-# if jobs are not specified, throw an error
-if [ -z "$jobs" ]
-then
-    echo Incorrect inputs, jobs to do must be specified with -j flag
-    helpFunction
-fi
-
 # ----- main job submission ----- #
-
-# add mujoco to the shared library path
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$mujoco_lib_path
 
 # navigate to correct directory
 cd $path_to_mymujoco/$python_folder || exit
+
+# are we printing a results table
+if [ $PRINT_RESULTS = 'Y' ]
+then
+    echo -e "\nPrinting results table\n"
+
+    python3 launch_training.py \
+        -t $timestamp \
+        ${PY_ARGS[@]} \
+        --print-results \
+        --no-delay \
+        --no-saving \
+        --log-level 0
+
+    echo -e "\nResults table complete"
+    exit
+fi
 
 # extract the job indicies
 ARRAY_INDEXES=("$jobs")
@@ -115,7 +97,7 @@ ARRAY_INDEXES=("$jobs")
 echo -e "\nThe following jobs have been selected:"
 for I in ${ARRAY_INDEXES[@]}
 do
-    echo -e "${machine}_${timestamp}_A${I}"
+    echo -e "${RUN_PREFIX}_${timestamp}_A${I}"
 done
 
 # wrapper to catch ctrl+c and kill all background processes
@@ -124,27 +106,21 @@ trap 'trap - SIGINT && kill 0' SIGINT
 echo -e "\nSubmitting jobs now"
 echo Saving logs to $LOG_FOLDER/
 
-# special case for printing a results table, not running a training
-if [ $PRINT_RESULTS = 'Y' ]
-then
-    echo Preparing to delete a results table
-    python3 array_training_DQN.py \
-        -j "1" \
-        -t $timestamp \
-        $MACHINE \
-        ${PY_ARGS[@]} \
-        --delete-results \
-        $DEBUG
-    echo Results table successfully wiped
-fi
-
 IND=0
+
+# extracts the first job number (so an input of "2 3 1" gives 2 incorrectly)
+MIN_JOB_NUM=${ARRAY_INDEXES%% *} # https://stackoverflow.com/questions/15685736/how-to-extract-a-particular-element-from-an-array-in-bash
 
 # loop through the jobs we have been assigned
 for I in ${ARRAY_INDEXES[@]}
 do
-
-    JOB_NAME="${machine}_${timestamp}_A${I}"
+    if [ $KEEP_TIMESTAMP = 'Y' ]
+    then
+        keep_timestamp="$(date +%d-%m-%y_%H-%M)"
+        JOB_NAME="${RUN_PREFIX}_${keep_timestamp}_A${I}"
+    else
+        JOB_NAME="${RUN_PREFIX}_${timestamp}_A${I}"
+    fi
 
     # if we are logging terminal output to a seperate log file
     if [ $LOGGING = 'Y' ]
@@ -155,13 +131,13 @@ do
     fi
 
     # execute the command in the background
-    $FAKETTY python3 array_training_DQN.py \
+    $FAKETTY python3 launch_training.py \
         -j $I \
         -t $timestamp \
-        $MACHINE \
         ${PY_ARGS[@]} \
         $PRINT \
         $DEBUG \
+        --smallest-job-num $MIN_JOB_NUM \
         &
 
     # return output to terminal
@@ -190,18 +166,18 @@ wait
 
 echo ...finished all jobs
 
-# special case for printing a results table, not running a training
-if [ $PRINT_RESULTS = 'Y' ]
+# print a results table upon completion of the training
+if [ $PRINT_RESULTS_AFTER = 'Y' ]
 then
     echo -e "\nNow printing final results table\n"
 
-    python3 array_training_DQN.py \
-        -j "1" \
+    python3 launch_training.py \
         -t $timestamp \
-        $MACHINE \
         ${PY_ARGS[@]} \
-        --results \
-        $DEBUG
+        --print-results \
+        --no-delay \
+        --no-saving \
+        --log-level 0
 
     echo -e "\nResults table complete"
 fi

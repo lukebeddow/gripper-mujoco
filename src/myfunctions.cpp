@@ -304,6 +304,7 @@ struct JointSettings {
   VectorStruct<int> qveladr;
   VectorStruct<mjtNum> qpos;
   VectorStruct<mjtNum> qvel;
+  VectorStruct<mjtNum> reset_qpos;
   VectorStruct<mjtNum*> to_qpos;
   VectorStruct<mjtNum*> to_qvel;
 
@@ -1398,8 +1399,6 @@ void calibrate_reset(mjModel* model, mjData* data)
   constexpr bool debug_fcn = debug_;
 
   static bool first_call = true;
-  static std::vector<mjtNum> control_signals;
-  static std::vector<mjtNum> qpos_positions;
 
   static int num_panda = j_.num.panda;
   static int num_base = j_.num.base;
@@ -1412,7 +1411,19 @@ void calibrate_reset(mjModel* model, mjData* data)
     std::cout << "Old num vs new num for panda: " << num_panda << " / " << j_.num.panda << '\n';
     std::cout << "Old num vs new num for base: " << num_base << " / " << j_.num.base << '\n';
     std::cout << "Old num vs new num for gripper: " << num_gripper << " / " << j_.num.gripper << '\n';
-    throw std::runtime_error("calibrate_reset() found changed number of joints in the model");
+    std::cout << "calibrate_reset() warning: found changed number of joints in model, did you reload an xml with more/less gripper joints? Attempting to recalibrate\n";
+    // throw std::runtime_error("calibrate_reset() found changed number of joints in the model");
+
+    // attempt to reset this function and recalibrate
+    j_.reset_qpos.panda.clear();
+    j_.reset_qpos.base.clear();
+    j_.reset_qpos.gripper.clear();
+
+    first_call = true;
+
+    num_panda = j_.num.panda;
+    num_base = j_.num.base;
+    num_gripper = j_.num.gripper;
   }
 
   if (first_call) {
@@ -1428,15 +1439,15 @@ void calibrate_reset(mjModel* model, mjData* data)
 
     // see where the joints have settled to equilibrium
     for (int i = 0; i < j_.num.panda; i++) {
-      qpos_positions.push_back(*j_.to_qpos.panda[i]);
+      j_.reset_qpos.panda.push_back(*j_.to_qpos.panda[i]);
     }
 
     for (int i = 0; i < j_.num.base; i++) {
-      qpos_positions.push_back(*j_.to_qpos.base[i]);
+      j_.reset_qpos.base.push_back(*j_.to_qpos.base[i]);
     }
 
     for (int i = 0; i < j_.num.gripper; i++) {
-      qpos_positions.push_back(*j_.to_qpos.gripper[i]);
+      j_.reset_qpos.gripper.push_back(*j_.to_qpos.gripper[i]);
     }
 
     first_call = false;
@@ -1448,22 +1459,17 @@ void calibrate_reset(mjModel* model, mjData* data)
     }
   }
 
-  int k = 0;
-
   // apply the equilibrium positions to the joints
   for (int i = 0; i < j_.num.panda; i++) { 
-    (*j_.to_qpos.panda[i]) = qpos_positions[k]; 
-    k += 1;
+    (*j_.to_qpos.panda[i]) = j_.reset_qpos.panda[i]; 
   }
 
   for (int i = 0; i < j_.num.base; i++) {
-    (*j_.to_qpos.base[i]) = qpos_positions[k]; 
-    k += 1;
+    (*j_.to_qpos.base[i]) = j_.reset_qpos.base[i]; 
   }
 
   for (int i = 0; i < j_.num.gripper; i++) {
-    (*j_.to_qpos.gripper[i]) = qpos_positions[k]; 
-    k += 1;
+    (*j_.to_qpos.gripper[i]) = j_.reset_qpos.gripper[i]; 
   }
 }
 
@@ -2021,6 +2027,8 @@ void update_all(mjModel* model, mjData* data)
     throw std::runtime_error("non-stepper not implemented");
   }
 
+  update_objects(model, data);
+
   // // for testing
   // update_state(model, data);
   // j_.print_qpos();
@@ -2091,11 +2099,15 @@ void update_objects(const mjModel* model, mjData* data)
 {
   /* update the position of the objects in the simulation */
 
+  // this isn't strictly needed
   for (int i = 0; i < oh_.names.size(); i++) {
     if (oh_.in_use[i]) {
       oh_.qpos[i].update(model, data, oh_.qposadr[i]);
     }
   }
+
+  // apply antiroll - only works if oh_.extract_forces_faster() has run this step
+  oh_.apply_antiroll(data);
 
   // // for testing
   // QPos test = get_object_qpos();
@@ -2193,6 +2205,21 @@ void update_base_limits()
 
   target_.base_min.yaw = j_.baseLims.yaw_min;
   target_.base_max.yaw = j_.baseLims.yaw_max;
+}
+
+void set_base_XYZ_limits(double x, double y, double z)
+{
+  /* set symettrical base XYZ limits. These do not persist through
+  a hard reset */
+
+  j_.baseLims.x_min = -x;
+  j_.baseLims.x_max = x;
+  j_.baseLims.y_min = -y;
+  j_.baseLims.y_max = y;
+  j_.baseLims.z_min = -z;
+  j_.baseLims.z_max = z;
+
+  update_base_limits();
 }
 
 /* ----- set gripper target ----- */
@@ -2355,6 +2382,30 @@ bool move_base_target_rad(double roll, double pitch, double yaw)
   throw std::runtime_error("move_base_target_rad(...) is not yet implemented - do not use!");
 }
 
+bool lift_base_to_height(double z) 
+{
+  /* lift base to a given z height, which should be positive */
+
+  target_.last_robot = Target::Robot::panda;
+
+  // set the new height (swap positive to negative)
+  target_.base.z = -z;
+
+  bool within_limits = true;
+
+  // z base limits
+  if (target_.base.z > target_.base_max.z) {
+    target_.base.z = target_.base_max.z;
+    within_limits = false;
+  }
+  if (target_.base.z < target_.base_min.z) {
+    target_.base.z = target_.base_min.z;
+    within_limits = false;
+  }
+
+  return within_limits;
+}
+
 void print_target()
 {
   std::cout << "The target gripper state is:";
@@ -2366,6 +2417,80 @@ void update_target()
   target_.end.update();
 }
 
+bool set_base_to_XY_position(mjData* data, float x_pos, float y_pos)
+{
+  /* set the gripper base to a given XY position immediately */
+
+  // set the base target (ie keep track of this movement and maintain it)
+  target_.base.x = x_pos;
+  target_.base.y = y_pos;
+
+  bool within_limits = true;
+
+  // x base limits
+  if (target_.base.x > target_.base_max.x) {
+    target_.base.x = target_.base_max.x;
+    within_limits = false;
+  }
+  if (target_.base.x < target_.base_min.x) {
+    target_.base.x = target_.base_min.x;
+    within_limits = false;
+  }
+  // y base limits
+  if (target_.base.y > target_.base_max.y) {
+    target_.base.y = target_.base_max.y;
+    within_limits = false;
+  }
+  if (target_.base.y < target_.base_min.y) {
+    target_.base.y = target_.base_min.y;
+    within_limits = false;
+  }
+
+  // override qpos for the base to snap model to maximum (include equilibrium offset)
+  if (j_.in_use.base_xyz) {
+    (*j_.to_qpos.base[0]) = target_.base.x + j_.reset_qpos.base[0]; 
+    (*j_.to_qpos.base[1]) = target_.base.y + j_.reset_qpos.base[1]; 
+  }
+  else {
+    throw std::runtime_error("luke::set_base_to_XY_position() cannot move XY because these motions are not in use");
+    // (*j_.to_qpos.base[0]) = z_pos + j_.reset_qpos.base[0]; 
+  } 
+
+  return within_limits;
+}
+
+bool set_base_to_Z_position(mjData* data, float z_pos)
+{
+  /* set the gripper base to a given position immediately. Note that
+  +ve means downwards, so to move to the max would be for example
+  z_pos = -30e-3 */
+
+  // set the base target (ie keep track of this movement and maintain it)
+  target_.base.z = z_pos;
+
+  bool within_limits = true;
+
+  // z base limits
+  if (target_.base.z > target_.base_max.z) {
+    target_.base.z = target_.base_max.z;
+    within_limits = false;
+  }
+  if (target_.base.z < target_.base_min.z) {
+    target_.base.z = target_.base_min.z;
+    within_limits = false;
+  }
+
+  // override qpos for the base to snap model to maximum (include equilibrium offset)
+  if (j_.in_use.base_xyz) {
+    (*j_.to_qpos.base[2]) = target_.base.z + j_.reset_qpos.base[2]; 
+  }
+  else if (j_.in_use.base_z) {
+    (*j_.to_qpos.base[0]) = target_.base.z + j_.reset_qpos.base[0]; 
+  }
+
+  return within_limits;
+}
+
 void set_base_to_max_height(mjData* data)
 {
   /* moves the base position to maximum height, should only ber used for specific
@@ -2374,16 +2499,7 @@ void set_base_to_max_height(mjData* data)
   // confusingly, for the base down is +ve and up is -ve
   float max_height = target_.base_min.z;
 
-  // set the base target to maximum
-  set_base_target_m(0, 0, max_height);
-
-  // override qpos for the base to snap model to maximum
-  if (j_.in_use.base_xyz) {
-    (*j_.to_qpos.base[2]) = max_height; 
-  }
-  else if (j_.in_use.base_z) {
-    (*j_.to_qpos.base[0]) = max_height; 
-  } 
+  set_base_to_Z_position(data, max_height);
 }
 
 /* ----- sensing ------ */
@@ -3321,6 +3437,30 @@ std::vector<std::string> get_objects()
   return objects;
 }
 
+std::vector<std::string> get_live_object_names()
+{
+  /* return the names of the live objects */
+
+  return oh_.get_live_names();
+}
+
+std::vector<std::vector<double>> get_live_object_bounding_boxes()
+{
+  std::vector<luke::Vec3> boxes = oh_.get_live_bounding_boxes();
+
+  std::vector<std::vector<double>> to_return;
+  std::vector<double> xyz(3);
+
+  for (int i = 0; i < boxes.size(); i++) {
+    xyz[0] = boxes[i].x;
+    xyz[1] = boxes[i].y;
+    xyz[2] = boxes[i].z;
+    to_return.push_back(xyz);
+  }
+
+  return to_return;
+}
+
 void reset_object(mjModel* model, mjData* data)
 {
   /* reset the live object to its starting position outside the task area */
@@ -3378,20 +3518,35 @@ std::vector<QPos> get_object_qpos(mjModel* model, mjData* data)
   return oh_.get_live_qpos(model, data);
 }
 
+std::vector<std::vector<double>> get_object_XY_relative_to_gripper(mjModel* model, mjData* data)
+{
+  /* get the relative XY positions of objects relative to the current position
+  of the gripper */
+
+  std::vector<QPos> obj_qpos = oh_.get_live_qpos(model, data);
+
+  JointStates state = target_.get_target_m();
+
+  std::vector<std::vector<double>> to_return;
+  std::vector<double> xy_vals(2);
+
+  for (int i = 0; i < obj_qpos.size(); i++) {
+
+    xy_vals[0] = state.base_x - obj_qpos[i].x;
+    xy_vals[1] = state.base_y - obj_qpos[i].y; 
+
+    to_return.push_back(xy_vals);
+  }
+
+  return to_return;
+}
+
 luke::Vec3 get_object_xyz_bounding_box(int idx)
 {
   /* return the xyz bounding box of a given object */
 
   return oh_.get_object_xyz(idx);
 }
-
-// Forces get_object_forces(const mjModel* model, mjData* data)
-// {
-//   /* get the contact forces on the live object */
-
-//   // use the faster version of the extract_forces() function
-//   return oh_.extract_forces(model, data);
-// }
 
 Forces_faster get_object_forces_faster(const mjModel* model, mjData* data)
 {
@@ -3406,6 +3561,20 @@ void set_object_visibility(mjModel* model, bool visible)
   /* set the colour of the main object */
 
   oh_.set_object_visibility(model, visible);
+}
+
+void set_everything_colour(mjModel* model, std::vector<float> rgba)
+{
+  /* set everything in the simulation one colour */
+
+  set_all_objects_colour(model, rgba);
+  set_finger_colour(model, rgba, 1);
+  set_finger_colour(model, rgba, 2);
+  set_finger_colour(model, rgba, 3);
+  set_finger_colour(model, rgba, 4); // 4 means palm
+  std::vector<float> black { 0, 0, 0, 1 };
+  set_ground_colour(model, black);
+  // set_main_body_colour(model, rgba);
 }
 
 void set_object_colour(mjModel* model, std::vector<float> rgba)
@@ -3496,6 +3665,161 @@ void set_main_body_colour(mjModel* model, std::vector<float> rgba)
     if (rgba.size() == 4)
       model->geom_rgba[i * 4 + 3] = rgba[3];
   }
+}
+
+std::vector<int> convert_segmentation_array(std::vector<int>& array)
+{
+  /* take an array of segmentation ids (segids), which are geom indexes and
+  convert to universal representation:
+    background = 0
+    finger 1 = 50
+    finger 2 = 100
+    finger 3 = 150
+    palm = 200
+    object = 250
+  */
+
+  constexpr int error = 0;
+  constexpr int background = 1;
+  constexpr int finger1 = 2;
+  constexpr int finger2 = 3;
+  constexpr int finger3 = 4;
+  constexpr int palm = 5;
+  constexpr int gripper_body = 6;
+  constexpr int object = 7;
+
+  std::vector<int> to_return(array.size(), error);
+ 
+  // loop over the entire array
+  for (int a = 0; a < array.size(); a++) {
+
+    bool done_idx = false;
+
+    for (int i : j_.geom_idx.finger1) {
+      if (array[a] == i) {
+        to_return[a] = finger1;
+        done_idx = true;
+        break;
+      }
+    }
+    if (done_idx) continue;
+
+    for (int i : j_.geom_idx.finger2) {
+      if (array[a] == i) {
+        to_return[a] = finger2;
+        done_idx = true;
+        break;
+      }
+    }
+    if (done_idx) continue;
+
+    for (int i : j_.geom_idx.finger3) {
+      if (array[a] == i) {
+        to_return[a] = finger3;
+        done_idx = true;
+        break;
+      }
+    }
+    if (done_idx) continue;
+
+    for (int i : j_.geom_idx.palm) {
+      if (array[a] == i) {
+        to_return[a] = palm;
+        done_idx = true;
+        break;
+      }
+    }
+    if (done_idx) continue;
+
+    for (int i : j_.geom_idx.main_body) {
+      if (array[a] == i) {
+        to_return[a] = gripper_body;
+        done_idx = true;
+        break;
+      }
+    }
+    if (done_idx) continue;
+
+    int objectnum = oh_.is_object_geom(array[a]);
+    if (objectnum) {
+      to_return[a] = object + objectnum - 1;
+      continue;
+    }
+
+    if (oh_.is_ground_geom(array[a])) {
+      to_return[a] = background;
+      continue;
+    }
+
+    std::cout << "Warning array[a] = " << array[a] << " not found\n";
+  }
+
+  return to_return;
+}
+
+int convert_segmentation_integer(int seg_int)
+{
+  /* take an array of segmentation ids (segids), which are geom indexes and
+  convert to universal representation:
+    background = 0
+    finger 1 = 50
+    finger 2 = 100
+    finger 3 = 150
+    palm = 200
+    object = 250
+  */
+
+  constexpr int error = 0;
+  constexpr int background = 1;
+  constexpr int finger1 = 2;
+  constexpr int finger2 = 3;
+  constexpr int finger3 = 4;
+  constexpr int palm = 5;
+  constexpr int gripper_body = 6;
+  constexpr int object = 7;
+
+  if (oh_.is_ground_geom(seg_int)) {
+    return background;
+  }
+
+  int objectnum = oh_.is_object_geom(seg_int);
+  if (objectnum) {
+    return object + objectnum - 1;
+  }
+
+  for (int i : j_.geom_idx.finger1) {
+    if (seg_int == i) {
+      return finger1;
+    }
+  }
+
+  for (int i : j_.geom_idx.finger2) {
+    if (seg_int == i) {
+      return finger2;
+    }
+  }
+
+  for (int i : j_.geom_idx.finger3) {
+    if (seg_int == i) {
+      return finger3;
+    }
+  }
+
+  for (int i : j_.geom_idx.palm) {
+    if (seg_int == i) {
+      return palm;
+    }
+  }
+
+  for (int i : j_.geom_idx.main_body) {
+    if (seg_int == i) {
+      return gripper_body;
+    }
+  }
+
+  std::cout << "Warning seg_int = " << seg_int << " not found\n";
+
+  return error;
 }
 
 /* ----- misc ----- */

@@ -454,6 +454,38 @@ Vec3 ObjectHandler::get_object_xyz(int obj_idx)
   return xyz_values[obj_idx];
 }
 
+std::vector<Vec3> ObjectHandler::get_live_bounding_boxes()
+{
+  /* get the names of the live objects */
+
+  if (live_objects.size() == 0)
+    throw std::runtime_error("ObjectHandler::get_live_qpos() failed as there is no live object\n");
+
+  std::vector<Vec3> out(live_objects.size());
+
+  for (int i = 0; i < live_objects.size(); i++) {
+    out[i] = get_object_xyz(live_objects[i]);
+  }
+
+  return out;
+}
+
+std::vector<std::string> ObjectHandler::get_live_names()
+{
+  /* get the names of the live objects */
+
+  if (live_objects.size() == 0)
+    throw std::runtime_error("ObjectHandler::get_live_qpos() failed as there is no live object\n");
+
+  std::vector<std::string> out(live_objects.size());
+
+  for (int i = 0; i < live_objects.size(); i++) {
+    out[i] = names[live_objects[i]];
+  }
+
+  return out;
+}
+
 // print functions
 void ObjectHandler::print()
 {
@@ -695,92 +727,6 @@ double ObjectHandler::get_palm_force(const mjModel* model, mjData* data)
   return palm_local[0];
 }
 
-// Forces ObjectHandler::extract_forces(const mjModel* model, mjData* data)
-// {
-//   /* extract the forces on the live object */
-
-//   if (live_object == -1) {
-//     Forces empty;
-//     return empty;
-//   }
-
-//   Forces out;
-//   out.obj.net = get_object_net_force(model, data);
-//   std::vector<Contact> contacts = get_all_contacts(model, data);
-
-//   // sum the contact forces in global frame
-//   for (int i = 0; i < contacts.size(); i++) {
-
-//     // if the contact involves the object
-//     if (contacts[i].with.object) {
-//       out.obj.sum += contacts[i].global_force_vec;
-//       if (contacts[i].with.finger1) 
-//         out.obj.finger1 += contacts[i].global_force_vec;
-//       if (contacts[i].with.finger2) 
-//         out.obj.finger2 += contacts[i].global_force_vec;
-//       if (contacts[i].with.finger3) 
-//         out.obj.finger3 += contacts[i].global_force_vec;
-//       if (contacts[i].with.palm) 
-//         out.obj.palm += contacts[i].global_force_vec;
-//       if (contacts[i].with.ground) 
-//         out.obj.ground += contacts[i].global_force_vec;
-//     }
-
-//     // if the contact involves the gripper
-//     if (contacts[i].with.finger1) {
-//       out.all.finger1 += contacts[i].global_force_vec;
-//       // testing! seperate out contacts with the ground
-//       if (contacts[i].with.ground) {
-//         out.gnd.finger1 += contacts[i].global_force_vec;
-//       }
-//     }
-//     if (contacts[i].with.finger2) {
-//       out.all.finger2 += contacts[i].global_force_vec;
-//       if (contacts[i].with.ground) {
-//         out.gnd.finger2 += contacts[i].global_force_vec;
-//       }
-//     }
-//     if (contacts[i].with.finger3) {
-//       out.all.finger3 += contacts[i].global_force_vec;
-//       if (contacts[i].with.ground) {
-//         out.gnd.finger3 += contacts[i].global_force_vec;
-//       }
-//     }
-//     if (contacts[i].with.palm) {
-//       out.all.palm += contacts[i].global_force_vec;
-//     }
-
-//   }
-
-//   // get the rotation matrices for each finger body
-//   myNum r1(&data->xmat[f1_idx * 9], 3, 3);
-//   myNum r2(&data->xmat[f2_idx * 9], 3, 3);
-//   myNum r3(&data->xmat[f3_idx * 9], 3, 3);
-//   myNum r4(&data->xmat[pm_idx * 9], 3, 3);
-
-//   // rotate the finger vectors from the world frame to the finger body frame
-//   // x = axial force, y = tangential force (ie strain gauge force)
-//   // these forces are observed to all be +ve under object contact (outwards bend)
-//   out.obj.finger1_local = out.obj.finger1.rotate3_by(r1.transpose());
-//   out.obj.finger2_local = out.obj.finger2.rotate3_by(r2.transpose());
-//   out.obj.finger3_local = out.obj.finger3.rotate3_by(r3.transpose());
-//   out.all.finger1_local = out.all.finger1.rotate3_by(r1.transpose());
-//   out.all.finger2_local = out.all.finger2.rotate3_by(r2.transpose());
-//   out.all.finger3_local = out.all.finger3.rotate3_by(r3.transpose());
-//   out.gnd.finger1_local = out.gnd.finger1.rotate3_by(r1.transpose());
-//   out.gnd.finger2_local = out.gnd.finger2.rotate3_by(r2.transpose());
-//   out.gnd.finger3_local = out.gnd.finger3.rotate3_by(r3.transpose());
-
-
-//   // rotate the palm global force vector into the local frame
-//   // x = axial force, y/z unimportant
-//   // x force observed to be -ve under object contact (compression)
-//   out.obj.palm_local = out.obj.palm.rotate3_by(r4.transpose());
-//   out.all.palm_local = out.all.palm.rotate3_by(r4.transpose());
-
-//   return out;
-// }
-
 Forces_faster ObjectHandler::extract_forces_faster(const mjModel* model, mjData* data)
 {
   /* a new version of extract_forces() which intends to be faster in the following:
@@ -912,53 +858,45 @@ Forces_faster ObjectHandler::extract_forces_faster(const mjModel* model, mjData*
     // if the contact involves the object
     for (int i = 0; i < live_objects.size(); i++) {
       if (contact.with.live_object[i]) {
-        // out.obj.sum += contact.global_force_vec;
         mju_addTo(objfrc[i].obj_glob_sum, global_force_vec, 6);
-        if (contact.with.finger1) 
-          // out.obj.finger1 += contact.global_force_vec;
+        if (contact.with.finger1) {
           mju_addTo(objfrc[i].obj_glob_f1, global_force_vec, 6);
-        if (contact.with.finger2) 
-          // out.obj.finger2 += contact.global_force_vec;
+        }
+        if (contact.with.finger2) {
           mju_addTo(objfrc[i].obj_glob_f2, global_force_vec, 6);
-        if (contact.with.finger3) 
-          // out.obj.finger3 += contact.global_force_vec;
+        }
+        if (contact.with.finger3) {
           mju_addTo(objfrc[i].obj_glob_f3, global_force_vec, 6);
-        if (contact.with.palm) 
-          // out.obj.palm += contact.global_force_vec;
+        }
+        if (contact.with.palm) {
           mju_addTo(objfrc[i].obj_glob_palm, global_force_vec, 6);
-        if (contact.with.ground) 
-          // out.obj.ground += contact.global_force_vec;
+        }
+        if (contact.with.ground) {
           mju_addTo(objfrc[i].obj_glob_gnd, global_force_vec, 6);
+        }
       }
     }
 
     // if the contact involves the gripper
     if (contact.with.finger1) {
-      // out.all.finger1 += contact.global_force_vec;
       mju_addTo(all_glob_f1, global_force_vec, 6);
       if (contact.with.ground) {
-        // out.gnd.finger1 += contact.global_force_vec;
         mju_addTo(gnd_glob_f1, global_force_vec, 6);
       }
     }
     if (contact.with.finger2) {
-      // out.all.finger2 += contact.global_force_vec;
       mju_addTo(all_glob_f2, global_force_vec, 6);
       if (contact.with.ground) {
-        // out.gnd.finger2 += contact.global_force_vec;
         mju_addTo(gnd_glob_f2, global_force_vec, 6);
       }
     }
     if (contact.with.finger3) {
-      // out.all.finger3 += contact.global_force_vec;
       mju_addTo(all_glob_f3, global_force_vec, 6);
       if (contact.with.ground) {
-        // out.gnd.finger3 += contact.global_force_vec;
         mju_addTo(gnd_glob_f3, global_force_vec, 6);
       }
     }
     if (contact.with.palm) {
-      // out.all.palm += contact.global_force_vec;
       mju_addTo(all_glob_palm, global_force_vec, 6);
     }
 
@@ -1084,6 +1022,33 @@ bool ObjectHandler::check_contact_forces(const mjModel* model, mjData* data)
   }
 
   return good;
+}
+
+bool ObjectHandler::apply_antiroll(mjData* data)
+{
+  /* smooth out any very low velocities to prevent rolling without any external
+  contact. Checking for contacts has been removed as the threshold to stop rolling
+  is so low */
+
+  constexpr mjtNum threshold = 1e-6; // 1um per second
+
+  for (int i = 0; i < live_objects.size(); i++) {
+
+      int idx = live_objects[i];
+
+      rawNum vel(&data->qvel[qveladr[idx]], 6, 1);
+
+      if (vel.magnitude3() < threshold) {
+        data->qvel[qveladr[idx]] = 0;
+        data->qvel[qveladr[idx] + 1] = 0;
+        data->qvel[qveladr[idx] + 2] = 0;
+        data->qvel[qveladr[idx] + 3] = 0; 
+        data->qvel[qveladr[idx] + 4] = 0;
+        data->qvel[qveladr[idx] + 5] = 0;
+      }
+  }
+
+  return true;
 }
 
 // change object parameters
@@ -1279,6 +1244,28 @@ void ObjectHandler::default_colours(mjModel* model)
   model->geom_rgba[gnd_geom_id * 4 + 1] = 0.5;
   model->geom_rgba[gnd_geom_id * 4 + 2] = 0.5;
   model->geom_rgba[gnd_geom_id * 4 + 3] = 0.5;
+}
+
+int ObjectHandler::is_object_geom(int id)
+{
+  /* determine if a geom id is an object */
+
+  for (int i = 0; i < live_objects.size(); i++) {
+    if (id == geom_id[live_objects[i]]) return i + 1;
+  }
+
+  return 0;
+}
+
+bool ObjectHandler::is_ground_geom(int id)
+{
+  /* determine if a geom id is the ground */
+
+  if (id == gnd_geom_id) {
+    return true;
+  }
+
+  return false;
 }
 
 } // namespace luke

@@ -17,6 +17,12 @@ mjvOption opt_rgbd;
 mjvScene scn_rgbd;
 mjrContext con_rgbd;
 
+// for segmentation masks
+mjvCamera cam_mask;
+mjvOption opt_mask;
+mjvScene scn_mask;
+mjrContext con_mask;
+
 // mjclass for plotting sensor data
 MjClass* MjPtr = NULL;
 
@@ -132,8 +138,19 @@ void init_camera(MjClass& myMjClass)
     mjv_defaultScene(&scn_rgbd);
     mjr_defaultContext(&con_rgbd);
 
+    // create scene for getting segmentation masks
+    mjv_defaultCamera(&cam_mask);
+    mjv_defaultOption(&opt_mask);
+    mjr_defaultContext(&con_mask);
+    mjv_defaultScene(&scn_mask);
+
+    // use the fixed camera from the xml file for rgbd images
     cam_rgbd.type = mjCAMERA_FIXED;
     cam_rgbd.fixedcamid = 0;
+
+    // mask should use the same camera as regular rgbd
+    cam_mask.type = mjCAMERA_FIXED;
+    cam_mask.fixedcamid = 0;
 
     // create a new invisible window for the camera
     create_camera_window(camera_width, camera_height);
@@ -401,6 +418,37 @@ bool render_camera()
     return false;
 }
 
+// render the camera but with segmentation mask
+bool render_camera_with_seg_mask()
+{
+    if (not m or not d or not camera_initialised) {
+        mju_error_s("Error: %s", "render_camera() has been called without first running init");
+    }
+
+    // apply settings to use a segmentation mask (only bottom 2 matter)
+    // scn_mask.flags[mjRND_SHADOW] = 0;       // disable shadows
+    // scn_mask.flags[mjRND_REFLECTION] = 0;   // disable reflections
+    // scn_mask.flags[mjRND_SKYBOX] = 0;       // disable skybox
+    // scn_mask.flags[mjRND_HAZE] = 0;         // disable haze
+    scn_mask.flags[mjRND_SEGMENT] = 1;      // segment with random colour
+    scn_mask.flags[mjRND_IDCOLOR] = 1;      // segment with segid colour
+
+    if (!glfwWindowShouldClose(camera_window)) {
+
+        // get framebuffer viewport
+        mjrRect viewport = {0, 0, camera_width, camera_height};
+        // glfwGetFramebufferSize(camera_window, &viewport.width, &viewport.height);
+
+        // update scene and render
+        mjv_updateScene(m, d, &opt_mask, NULL, &cam_mask, mjCAT_ALL, &scn_mask);
+        mjr_render(viewport, &scn_mask, &con_mask);
+
+        return true;
+    }
+
+    return false;
+}
+
 // before closing
 void finish_window()
 {
@@ -414,6 +462,10 @@ void finish_camera()
     // free visualization storage
     mjv_freeScene(&scn_rgbd);
     mjr_freeContext(&con_rgbd);
+
+    // free mask storage
+    mjv_freeScene(&scn_mask);
+    mjr_freeContext(&con_mask);
 }
 
 void lukesensorfigsinit(void)
@@ -473,10 +525,22 @@ void lukesensorfigsinit(void)
     strcpy(figwrist.linename[0], "X");
     strcpy(figwrist.linename[1], "Y");
     strcpy(figwrist.linename[2], "Z");
-    strcpy(figmotors.linename[0], "X");
-    strcpy(figmotors.linename[1], "Y");
-    strcpy(figmotors.linename[2], "Z");
-    strcpy(figmotors.linename[3], "H");
+    strcpy(figmotors.linename[0], "mX");
+    strcpy(figmotors.linename[1], "mY");
+    strcpy(figmotors.linename[2], "mZ");
+
+    bool base_xyz = luke::use_base_xyz();
+
+    if (base_xyz) {
+        strcpy(figmotors.linename[3], "bX");
+        strcpy(figmotors.linename[4], "bY");
+        strcpy(figmotors.linename[5], "bZ");
+    }
+    else {
+        strcpy(figmotors.linename[3], "bZ");
+    }
+
+    
 }
 
 void lukesensorfigsupdate()
@@ -485,13 +549,15 @@ void lukesensorfigsupdate()
         throw std::runtime_error("lukesensorfigsupdate called with MjPtr=NULL");
 
     // amount of data we extract for each sensor
-    int gnum = MjPtr->gauge_buffer_size;
+    int gnum = 50;
 
     // check we can plot this amount of data
     if (gnum > mjMAXLINEPNT) {
         std::cout << "gnum exceeds mjMAXLINEPNT in gaugefigupdate()\n";
         gnum = mjMAXLINEPNT;
     }
+
+    bool base_xyz = luke::use_base_xyz();
 
     // read the data    
     std::vector<luke::gfloat> b1data = MjPtr->sim_sensors_.finger1_gauge.read(gnum);
@@ -507,7 +573,9 @@ void lukesensorfigsupdate()
     std::vector<luke::gfloat> mXdata = MjPtr->sim_sensors_.x_motor_position.read(gnum);
     std::vector<luke::gfloat> mYdata = MjPtr->sim_sensors_.y_motor_position.read(gnum);
     std::vector<luke::gfloat> mZdata = MjPtr->sim_sensors_.z_motor_position.read(gnum);
-    std::vector<luke::gfloat> mHdata = MjPtr->sim_sensors_.z_base_position.read(gnum);
+    std::vector<luke::gfloat> bXdata = MjPtr->sim_sensors_.x_base_position.read(gnum);
+    std::vector<luke::gfloat> bYdata = MjPtr->sim_sensors_.y_base_position.read(gnum);
+    std::vector<luke::gfloat> bZdata = MjPtr->sim_sensors_.z_base_position.read(gnum);
 
     // get the corresponding timestamps
     std::vector<float> btdata = MjPtr->gauge_timestamps.read(gnum);
@@ -530,8 +598,16 @@ void lukesensorfigsupdate()
         &wXdata, &wYdata, &wZdata
     };
     std::vector<std::vector<luke::gfloat>*> mdata {
-        &mXdata, &mYdata, &mZdata, &mHdata  
+            &mXdata, &mYdata, &mZdata
     };
+    if (base_xyz) {
+        mdata.push_back(&bXdata);
+        mdata.push_back(&bYdata);
+        mdata.push_back(&bZdata);
+    }
+    else {
+        mdata.push_back(&bZdata);
+    }
 
     // package figures into iterable vector
     std::vector<mjvFigure*> myfigs {
@@ -645,6 +721,10 @@ void create_camera_window(int width, int height)
     mjv_makeScene(m, &scn_rgbd, 2000);
     mjr_makeContext(m, &con_rgbd, mjFONTSCALE_150);
 
+    // create scene for segmentation masks
+    mjv_makeScene(m, &scn_mask, 2000);
+    mjr_makeContext(m, &con_mask, mjFONTSCALE_150);
+
     // // set rendering to offscreen buffer
     // mjr_setBuffer(mjFB_OFFSCREEN, &con_rgbd);
     // if (con_rgbd.currentBuffer!=mjFB_OFFSCREEN) {
@@ -674,6 +754,35 @@ luke::RGBD read_rgbd()
 
     // read depth camera directly into std::vector by passing pointer
     mjr_readPixels(&rgbd_data.rgb[0], &rgbd_data.depth[0], rect, &con_rgbd);
+
+    return rgbd_data;
+}
+
+luke::RGBD read_mask()
+{
+    /* get an rgbd image out of the simulation */
+    
+    if (not camera_initialised) {
+        throw std::runtime_error("render::read_mask() called but camera not initialised");
+    }
+
+    int W = camera_width;
+    int H = camera_height;
+
+    mjrRect rect = {0, 0, W, H};
+
+    // read depth camera directly into std::vector by passing pointer
+    mjr_readPixels(&rgbd_data.rgb[0], &rgbd_data.depth[0], rect, &con_mask);
+
+    // loop over red values (as segmentation with ids only sets these values)
+    for (int i = 0; i < 3 * W * H; i += 3) {
+
+        // convert from segid (ordering of geoms in mjv_Scene with -1 offset) to geom id
+        rgbd_data.rgb[i] = scn_mask.geoms[rgbd_data.rgb[i] - 1].objid;
+
+        // look up these geom_ids and convert to model object (fingers/palm/objects etc..)
+        rgbd_data.rgb[i] = luke::convert_segmentation_integer(rgbd_data.rgb[i]);
+    }
 
     return rgbd_data;
 }

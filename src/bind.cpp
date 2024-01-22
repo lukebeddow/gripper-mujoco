@@ -60,12 +60,18 @@ PYBIND11_MODULE(bind, m) {
     .def("close_render", &MjClass::close_render)
     .def("init_rgbd", &MjClass::init_rgbd)
     .def("render_RGBD", &MjClass::render_RGBD)
+    .def("render_mask", &MjClass::render_mask)
     .def("read_existing_RGBD", &MjClass::read_existing_RGBD)
     .def("set_RGBD_size", &MjClass::set_RGBD_size)
     .def("get_RGBD", &MjClass::get_RGBD)
+    .def("get_mask", &MjClass::get_mask)
     .def("get_RGBD_numpy",
       [](MjClass &mj) {
         return RGBD_struct_to_tuple(mj.get_RGBD());
+      })
+    .def("get_mask_numpy",
+      [](MjClass &mj) {
+        return RGBD_struct_to_tuple(mj.get_mask());
       })
 
     // sensing
@@ -78,10 +84,13 @@ PYBIND11_MODULE(bind, m) {
     .def("move_motor_target", &MjClass::move_motor_target)
     .def("move_joint_target", &MjClass::move_joint_target)
     .def("move_step_target", &MjClass::move_step_target)
+    .def("set_new_base_XY", &MjClass::set_new_base_XY)
 
     // learning functions
     .def("action_step", &MjClass::action_step)
     .def("set_action", &MjClass::set_action)
+    .def("set_continous_action", &MjClass::set_continous_action)
+    .def("set_discrete_action", &MjClass::set_discrete_action)
     .def("reset_object", &MjClass::reset_object)
     .def("spawn_object", static_cast<void (MjClass::*)(int)>(&MjClass::spawn_object)) /* see bottom */
     .def("spawn_object", static_cast<void (MjClass::*)(int, double, double, double)>(&MjClass::spawn_object))
@@ -90,14 +99,20 @@ PYBIND11_MODULE(bind, m) {
     .def("spawn_into_scene", static_cast<bool (MjClass::*)(int, double, double, double)>(&MjClass::spawn_into_scene))
     .def("spawn_into_scene", static_cast<bool (MjClass::*)(int, double, double, double, double, double, double)>(&MjClass::spawn_into_scene))
     .def("spawn_scene", &MjClass::spawn_scene)
+    .def("set_scene_grasp_target", &MjClass::set_scene_grasp_target)
     .def("randomise_every_colour", &MjClass::randomise_every_colour)
     .def("randomise_object_colour", &MjClass::randomise_object_colour)
     .def("randomise_ground_colour", &MjClass::randomise_ground_colour)
     .def("randomise_finger_colours", &MjClass::randomise_finger_colours)
+    .def("convert_segmentation_array", &MjClass::convert_segmentation_array)
+    .def("create_object_mask", &MjClass::create_object_mask)
+    .def("create_gripper_mask", &MjClass::create_gripper_mask)
+    .def("create_finger_mask", &MjClass::create_finger_mask)
+    .def("create_ground_mask", &MjClass::create_ground_mask)
     .def("is_done", &MjClass::is_done)
     .def("get_observation", static_cast<std::vector<luke::gfloat> (MjClass::*)()>(&MjClass::get_observation))
     .def("get_observation", static_cast<std::vector<luke::gfloat> (MjClass::*)(MjType::SensorData)>(&MjClass::get_observation))
-    .def("debug_observation", &MjClass::debug_observation)
+    .def("debug_observation", &MjClass::debug_observation, py::arg("observation") = std::vector<luke::gfloat> {}, py::arg("printout") = false)
     .def("get_observation_numpy",
       [](MjClass &mj) {
         std::vector<luke::gfloat> obs = mj.get_observation();
@@ -128,7 +143,11 @@ PYBIND11_MODULE(bind, m) {
     .def("tock", &MjClass::tock)
     .def("forward", &MjClass::forward)
     .def("get_number_of_objects", &MjClass::get_number_of_objects)
+    .def("get_object_name", &MjClass::get_object_name)
     .def("get_current_object_name", &MjClass::get_current_object_name)
+    .def("get_live_object_names", &MjClass::get_live_object_names)
+    .def("get_object_XY_relative_to_gripper", &MjClass::get_object_XY_relative_to_gripper)
+    .def("get_object_bounding_boxes", &MjClass::get_object_bounding_boxes)
     .def("get_test_report", &MjClass::get_test_report)
     .def("get_n_actions", &MjClass::get_n_actions)
     .def("get_n_obs", &MjClass::get_n_obs)
@@ -136,6 +155,7 @@ PYBIND11_MODULE(bind, m) {
     .def("set_finger_thickness", &MjClass::set_finger_thickness)
     .def("set_finger_width", &MjClass::set_finger_width)
     .def("set_finger_modulus", &MjClass::set_finger_modulus)
+    .def("set_base_XYZ_limits", &MjClass::set_base_XYZ_limits)
     .def("get_finger_thickness", &MjClass::get_finger_thickness)
     .def("get_finger_stiffnesses", &MjClass::get_finger_stiffnesses)
     .def("get_finger_width", &MjClass::get_finger_width)
@@ -144,6 +164,7 @@ PYBIND11_MODULE(bind, m) {
     .def("get_finger_length", &MjClass::get_finger_length)
     .def("get_finger_hook_length", &MjClass::get_finger_hook_length)
     .def("get_finger_hook_angle_degrees", &MjClass::get_finger_hook_angle_degrees)
+    .def("get_object_xyz_bounding_box", &MjClass::get_object_xyz_bounding_box)
     .def("is_finger_hook_fixed", &MjClass::is_finger_hook_fixed)
     .def("get_fingertip_clearance", &MjClass::get_fingertip_clearance)
     .def("using_xyz_base_actions", &MjClass::using_xyz_base_actions)
@@ -235,7 +256,7 @@ PYBIND11_MODULE(bind, m) {
     // use a macro to create code snippets for all of the settings
     #define XX(name, type, value) .def_readwrite(#name, &MjType::Settings::name)
     #define SS(name, in_use, norm, readrate) .def_readwrite(#name, &MjType::Settings::name)
-    #define AA(name, in_use, continous, value, sign) .def_readwrite(#name, &MjType::Settings::name)
+    #define AA(name, in_use, value, sign) .def_readwrite(#name, &MjType::Settings::name)
     #define BR(name, reward, done, trigger) .def_readwrite(#name, &MjType::Settings::name)
     #define LR(name, reward, done, trigger, min, max, overshoot) \
               .def_readwrite(#name, &MjType::Settings::name)
@@ -266,7 +287,7 @@ PYBIND11_MODULE(bind, m) {
           // expand settings into list of variable names for tuple
           #define XX(name, type, value) s.name,
           #define SS(name, in_use, norm, readrate) s.name,
-          #define AA(name, in_use, continous, value, sign) s.name,
+          #define AA(name, in_use, value, sign) s.name,
           #define BR(name, reward, done, trigger) s.name,
           #define LR(name, reward, done, trigger, min, max, overshoot) s.name,
             // run the macro to create the code
@@ -305,7 +326,7 @@ PYBIND11_MODULE(bind, m) {
         #define XX(name, type, value) out.name = t[i].cast<type>(); ++i;
         #define SS(name, in_use, norm, readrate) \
                   out.name = t[i].cast<MjType::Sensor>(); ++i;
-        #define AA(name, used, continous, value, sign) \
+        #define AA(name, used, value, sign) \
                   out.name = t[i].cast<MjType::ActionSetting>(); ++i;
         #define BR(name, reward, done, trigger) \
                   out.name = t[i].cast<MjType::BinaryReward>(); ++i;
@@ -342,6 +363,7 @@ PYBIND11_MODULE(bind, m) {
 
     .def_readonly("value", &MjType::EventTrack::BinaryEvent::value)
     .def_readonly("last_value", &MjType::EventTrack::BinaryEvent::last_value)
+    .def_readonly("active_sum", &MjType::EventTrack::BinaryEvent::active_sum)
     .def_readonly("row", &MjType::EventTrack::BinaryEvent::row)
     .def_readonly("abs", &MjType::EventTrack::BinaryEvent::abs)
     .def_readonly("percent", &MjType::EventTrack::BinaryEvent::percent)
@@ -453,6 +475,7 @@ PYBIND11_MODULE(bind, m) {
 
     .def_readonly("value", &MjType::EventTrack::LinearEvent::value)
     .def_readonly("last_value", &MjType::EventTrack::LinearEvent::last_value)
+    .def_readonly("active_sum", &MjType::EventTrack::LinearEvent::active_sum)
     .def_readonly("row", &MjType::EventTrack::LinearEvent::row)
     .def_readonly("abs", &MjType::EventTrack::LinearEvent::abs)
     .def_readonly("percent", &MjType::EventTrack::LinearEvent::percent)
@@ -481,6 +504,8 @@ PYBIND11_MODULE(bind, m) {
         out.row = t[2].cast<int>();
         out.abs = t[3].cast<int>();
         out.percent = t[4].cast<float>();
+
+        // out.active_sum = bool(out.row);
 
         if (debug_bind)
           std::cout << "unpickling MjType::EventTrack::LinearEvent finished\n";
@@ -629,10 +654,10 @@ PYBIND11_MODULE(bind, m) {
   // set up action setting type so python can interact and change them
   {py::class_<MjType::ActionSetting>(m, "ActionSetting")
 
-    .def(py::init<std::string, bool, bool, double, int>())
+    .def(py::init<std::string, bool, double, int>())
+    .def("set", &MjType::ActionSetting::set)
     .def_readwrite("name", &MjType::ActionSetting::name)
     .def_readwrite("in_use", &MjType::ActionSetting::in_use)
-    .def_readwrite("continous", &MjType::ActionSetting::continous)
     .def_readwrite("value", &MjType::ActionSetting::value)
     .def_readwrite("sign", &MjType::ActionSetting::sign)
 
@@ -643,7 +668,6 @@ PYBIND11_MODULE(bind, m) {
         return py::make_tuple(
           r.name,
           r.in_use,
-          r.continous,
           r.value,
           r.sign
         );
@@ -654,13 +678,12 @@ PYBIND11_MODULE(bind, m) {
         //   std::cout << "unpickling MjType::ActionSetting ...";
         // }
 
-        // size == 3 is old and can be later deleted
-        if (t.size() != 5)
+        if (t.size() != 4)
           throw std::runtime_error("MjType::ActionSetting py::pickle got invalid state");
 
         // create new c++ instance with old data
         MjType::ActionSetting out(t[0].cast<std::string>(), t[1].cast<bool>(), 
-          t[2].cast<bool>(), t[3].cast<double>(), t[4].cast<int>());
+          t[2].cast<double>(), t[3].cast<int>());
 
         // if (debug_bind) {
         //   std::cout << " finished\n";

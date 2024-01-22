@@ -47,7 +47,7 @@ namespace MjType
       #define NEGATIVE_TOKEN _negative
       #define CONTINOUS_TOKEN _continous
 
-      #define AA(NAME, USED, CONTINOUS, VALUE, SIGN) \
+      #define AA(NAME, USED, VALUE, SIGN) \
         TOKEN_CONCAT(NAME, POSITIVE_TOKEN),\
         TOKEN_CONCAT(NAME, NEGATIVE_TOKEN),\
         TOKEN_CONCAT(NAME, CONTINOUS_TOKEN),
@@ -57,7 +57,8 @@ namespace MjType
 
       #undef AA
 
-      count // last entry, how many possible actions
+      termination_signal, // action to indicate grasping should end
+      count               // last entry, how many possible actions
     };
   };
 
@@ -68,7 +69,8 @@ namespace MjType
       change,     // add the change between values ie (a, b-a, b)
       average,    // add the average between values ie (a, (a+b)/2, b)
       median,     // add the median between values ie (a, med(a...b), b)
-      sign        // add the sign of the change ie (a, sign(b-a), b) where sign() outputs -1,0,+1
+      sign,       // add the sign of the change ie (a, sign(b-a), b) where sign() outputs -1,0,+1
+      scaled_change // change but scale it as a ratio of some maximum amount (eg max state change)
     };
   };
 
@@ -99,6 +101,9 @@ namespace MjType
     float rand_mu_1 = 0;
     float rand_mu_2 = 0;
     float rand_mu_3 = 0;
+
+    // hardcoded variable for 'scaled_change_sample' testing
+    float max_change_amount = 0.07;
 
     Sensor(bool in_use, float normalise, float read_rate)
       : in_use(in_use), normalise(normalise), read_rate(read_rate)
@@ -148,25 +153,19 @@ namespace MjType
 
       if (not use_normalisation) return value;
 
-      if (in_use) {
-        // bumper sensor only
-        if (normalise <= 0) {
-          if (value < 0) return -1;
-          else return 1;
-        }
-        // regular normalisation
-        else if (value > normalise) {
-        return 1.0;
-        }
-        if (value < -normalise) {
-          return -1.0;
-        }
-        return value / normalise;
+      // bumper sensor only
+      if (normalise <= 0) {
+        if (value < 0) return -1;
+        else return 1;
       }
-      // not in use
-      else {
-        return 0.0;
+      // regular normalisation
+      else if (value > normalise) {
+      return 1.0;
       }
+      if (value < -normalise) {
+        return -1.0;
+      }
+      return value / normalise;
     }
 
     float apply_noise(float value, std::uniform_real_distribution<float>& uniform_dist, int i = 1)
@@ -223,7 +222,8 @@ namespace MjType
       /* return true if the sensor is ready to read, also saves last read time
          as the current time */
 
-      if (not in_use) return false;
+      // still take readings from sensors not in use for rewards/dangerous states
+      // if (not in_use) return false;
 
       double time_between_reads = 1 / read_rate;
 
@@ -402,6 +402,28 @@ namespace MjType
       return result;
     }
 
+    std::vector<luke::gfloat> scaled_change_sample(luke::SlidingWindow<luke::gfloat> data)
+    {
+      /* sample the first and last reading as well as the change, but scale
+      the change by the maximum possible change [x0, dx, x1] */
+
+      // make the return vector, first element is furthest back reading
+      std::vector<luke::gfloat> result(2 * prev_steps + 1);
+      result[0] = data.read_element(total_readings - 1); // read_element is 0 indexed
+
+      // loop through steps to add in elements
+      for (int i = 0; i < prev_steps; i++) {
+        int first_sample = total_readings - 1 - i * readings_per_step;
+        result[i * 2 + 2] = data.read_element(first_sample - readings_per_step);
+        float scaled_change = (result[i * 2 + 2] - result[i * 2]) / (max_change_amount);
+        if (scaled_change > 1.0) scaled_change = 1.0;
+        else if (scaled_change < -1.0) scaled_change = -1.0;
+        result[i * 2 + 1] = scaled_change;
+      }
+
+      return result;
+    }
+
   };
 
   // action type for defining action settings
@@ -419,13 +441,20 @@ namespace MjType
       int arg_num = 0; // when calling action_function(arg0, arg1, arg2), which arg should we set?
 
       // constructor - users should hardcode the action function required for any new actions
-      ActionSetting(std::string name, bool in_use, bool continous, double value, int sign)
-        : name(name), in_use(in_use), continous(continous), value(value), sign(sign)
+      ActionSetting(std::string name, bool in_use, double value, int sign)
+        : name(name), in_use(in_use), value(value), sign(sign)
       {
         update_action_function();
         if (sign != -1 and sign != 1) {
           throw std::runtime_error("ActionSetting given sign not equal to +1 or -1\n");
         }
+      }
+
+      void set(bool in_use_, double value_, int sign_)
+      {
+        in_use = in_use_;
+        value = value_;
+        sign = sign_;
       }
 
       void update_action_function()
@@ -519,22 +548,24 @@ namespace MjType
 
     struct BinaryEvent {
       bool value { false };
-      int last_value { false }; // can represent sum of booleans (eg 2 = true twice)
+      int last_value { false };
+      int active_sum { 0 };     // was this activated last step, can be summed
       int row { 0 };
       int abs { 0 };
       float percent { 0.0 };
 
-      void reset() { value = 0; last_value = 0; row = 0; abs = 0; percent = 0; }
+      void reset() { value = 0; last_value = 0; row = 0; abs = 0; percent = 0; active_sum = 0; }
     };
 
     struct LinearEvent {
       float value { 0.0 };
-      float last_value { 0.0 };
+      float last_value { 0.0 }; // can be summed
+      int active_sum { 0 };     // was this activated last step, can be summed
       int row { 0 };
       int abs { 0 };
       float percent { 0.0 };
 
-      void reset() { value = 0; last_value = 0; row = 0; abs = 0; percent = 0; }
+      void reset() { value = 0; last_value = 0; row = 0; abs = 0; percent = 0; active_sum = 0;}
     };
 
     // create an event for each reward, binary->binary, linear->linear
@@ -681,8 +712,8 @@ namespace MjType
     // define the assignment code we want to initialise settings variables/classes
     #define XX(name, type, value) type name { value };
     #define SS(name, in_use, norm, readrate) Sensor name { in_use, norm, readrate };
-    #define AA(name, in_use, continous, value, sign) \
-              ActionSetting name { #name, in_use, continous, value, sign };
+    #define AA(name, in_use, value, sign) \
+              ActionSetting name { #name, in_use, value, sign };
     #define BR(name, reward, done, trigger) BinaryReward name { reward, done, trigger };
     #define LR(name, reward, done, trigger, min, max, overshoot) \
               LinearReward name { reward, done, trigger, min, max, overshoot };
@@ -759,28 +790,32 @@ namespace MjType
       luke::rawNum finger3_force;
       luke::rawNum palm_force;
       luke::rawNum ground_force;
-      float palm_axial_force;
-      float avg_finger_force;
-      float peak_finger_axial_force;
-      float peak_finger_lateral_force;
-      float ground_force_mag;
-      float finger1_force_mag;
-      float finger2_force_mag;
-      float finger3_force_mag;
-      float palm_force_mag;
-      float lift_height;
-      bool lifted;
-      bool oob;
-      bool target_height;
-      bool contact;
-      bool stable;
-      bool stable_height;
+      float palm_axial_force {};
+      float avg_finger_force {};
+      float peak_finger_axial_force {};
+      float peak_finger_lateral_force {};
+      float ground_force_mag {};
+      float finger1_force_mag {};
+      float finger2_force_mag {};
+      float finger3_force_mag {};
+      float palm_force_mag {};
+      float lift_height {};
+      bool lifted {};
+      bool oob {};
+      bool lifted_to_height {};
+      bool target_height {};
+      bool contact {};
+      bool stable {};
+      bool stable_height {};
+      bool stable_termination {};
+      bool successfully_grasped {};
 
       void print() {
         std::cout << "Obj name = " << name
           << "; lft(" << lifted
           << "); oob(" << oob
           << "); con(" << contact
+          << "); l2h(" << lifted_to_height
           << "); t.h(" << target_height
           << "); stb(" << stable
           << "); s.h(" << stable_height
@@ -1040,7 +1075,7 @@ namespace MjType
         }
 
         void print_table() {
-          float to_deg = (180.0 / 3.1415926535897);
+          double to_deg = (180.0 / 3.1415926535897);
           std::cout << "n \t x \t x_p \t E_x \t y_t \t y \t y_p \t E_y \t j \t j_p \t E_j (units mm/deg)\n";
           for (uint i = 0; i < x.size(); i++) {
             std::printf("%i \t %.1f \t %.1f \t %.1f \t %.1f \t %.1f \t %.1f \t %.1f \t %.1f \t %.1f \t %.1f\n",
@@ -1132,25 +1167,10 @@ namespace MjType
     }
   };
 
-  // // calibration constants for gauge data
-  // struct RealGaugeCalibrations {
-
-  //   /* applied as follows: g_out = (g_raw + offset) * scale */
-  //   struct RealSensors { float g1 {}, g2 {}, g3 {}, palm {}, wrist_Z {}; };
-
-  //   RealSensors offset;
-  //   RealSensors scale;
-  //   RealSensors norm;
-
-  //   // when true, automatically detect the offset
-  //   bool recalibrate_offset_flag = false;
-
-  // };
-
   // data containers for all of the possible sensors
   struct SensorData {
 
-    static constexpr int buffer_size = 50;
+    static constexpr int buffer_size = 250;
 
     // storage containers for state data
     luke::SlidingWindow<luke::gfloat> x_motor_position { buffer_size };
@@ -1229,8 +1249,9 @@ namespace MjType
       double norm = 0;
 
       Calibration() {}
-      Calibration(double scale, double offset)
-        : scale(scale), offset(offset), norm(0) {}
+      Calibration(double scale) : scale(scale) {}
+      // Calibration(double scale, double offset)
+      //   : scale(scale), offset(offset), norm(0) {}
 
       double apply_calibration(double value) {
         return (value - offset) * scale;
@@ -1243,18 +1264,34 @@ namespace MjType
     };
 
     // gauge calibrations  scale        offset (note ALL offsets are wiped at runtime for zero-ing)
-    Calibration g1_0p9_28 {2.7996e-6,   260576};
-    Calibration g2_0p9_28 {2.7440e-6,   911830};
-    Calibration g3_0p9_28 {2.7303e-6,   1000000};
-    Calibration g1_1p0_24 {2.6866e-6,   196784};
-    Calibration g2_1p0_24 {2.7391e-6,   615652};
-    Calibration g3_1p0_24 {2.7146e-6,   869492};
-    Calibration g1_1p0_28 {3.1321e-6,   96596};
-    Calibration g2_1p0_28 {3.1306e-6,   7583};
-    Calibration g3_1p0_28 {3.1390e-6,   66733};
-    Calibration palm      {7.4626e-5,   0};  // calibration used for pb4, TRO paper, etc
-    // Calibration palm      {2.831e-6,   0};  // new calibration 24 Aug 2023
-    Calibration wrist_Z   {-1,          0};
+    // Calibration g1_0p9_28 {2.7996e-6,   260576};
+    // Calibration g2_0p9_28 {2.7440e-6,   911830};
+    // Calibration g3_0p9_28 {2.7303e-6,   1000000};
+    // Calibration g1_1p0_24 {2.6866e-6,   196784};
+    // Calibration g2_1p0_24 {2.7391e-6,   615652};
+    // Calibration g3_1p0_24 {2.7146e-6,   869492};
+    // Calibration g1_1p0_28 {3.1321e-6,   96596};
+    // Calibration g2_1p0_28 {3.1306e-6,   7583};
+    // Calibration g3_1p0_28 {3.1390e-6,   66733};
+    // Calibration palm      {7.4626e-5,   0};  // calibration used for pb4, TRO paper, etc
+    // Calibration palm      {2.793e-5,   0};  // new calibration 24 Aug 2023
+    Calibration palm      {-4.6199e-5};  // new calibration gripper_v3 palm 9 Dec 2023
+    Calibration wrist_Z   {-1};
+
+    Calibration g1_0p9_28 {2.7996e-6};
+    Calibration g2_0p9_28 {2.7440e-6};
+    Calibration g3_0p9_28 {2.7303e-6};
+    Calibration g1_1p0_24 {2.6866e-6};
+    Calibration g2_1p0_24 {2.7391e-6};
+    Calibration g3_1p0_24 {2.7146e-6};
+    Calibration g1_1p0_28 {3.1321e-6};
+    Calibration g2_1p0_28 {3.1306e-6};
+    Calibration g3_1p0_28 {3.1390e-6};
+
+    // TESTING: all gauges given this currently
+    // Calibration new_gauges {1.30e-6}; // for 75deg fingers, 28x0.9, 12/12/23
+    // Calibration new_gauges {1.53e-6}; // for cut fingers, 28x1.0, 14/12/23
+    Calibration new_gauges {1.28e-6}; // for cut fingers, 24x1.0, 14/12/23
 
     // get the correct calibration for the fingers
     Calibration get_gauge_calibration(int gauge_num, double thickness, double width)
@@ -1269,6 +1306,9 @@ namespace MjType
       }
 
       double tol = 1e-5;
+
+      // TESTING:
+      return new_gauges;
 
       if (abs(thickness - 0.9e-3) < tol) {
 
@@ -1374,7 +1414,6 @@ public:
 
   // parameters set at compile time
   static constexpr double ftol = 1e-5;             // floating point tolerance
-  static constexpr int gauge_buffer_size = 50;     // buffer to store gauge data 
 
   /* ----- parameters that are unchanged with reset() ----- */
 
@@ -1439,8 +1478,11 @@ public:
   /* ----- variables that are reset ----- */
 
   // standard class variables
-  int n_actions;                      // number of possible actions
-  std::vector<int> action_options;    // possible action codes
+  int n_actions;                          // number of possible actions
+  std::vector<int> action_options;        // possible action codes
+  bool termination_signal_sent = false;   // has termination action been triggered
+  int scene_grasp_target = 0;             // number of target grasps to achieve in a scene
+  int current_grasp_num = 0;              // number of grasps achieved
 
   // track the timestamps of sensor updates, this is for plotting in mysimlulate.cpp
   luke::SlidingWindow<float> step_timestamps { MjType::SensorData::buffer_size };
@@ -1491,7 +1533,9 @@ public:
   void close_render();
   bool init_rgbd();
   luke::RGBD get_RGBD();
+  luke::RGBD get_mask();
   void render_RGBD();
+  void render_mask();
   luke::RGBD read_existing_RGBD();
   void set_RGBD_size(int width, int height);
 
@@ -1507,10 +1551,14 @@ public:
   bool move_motor_target(double x, double y, double z);
   bool move_joint_target(double x, double th, double z);
   bool move_step_target(int x, int y, int z);
+  bool set_new_base_XY(double x, double y);
+  double random_base_Z_movement(double size);
 
   // learning functions
   void action_step();
-  std::vector<float> set_action(int action);
+  std::vector<float> set_discrete_action(int action);
+  std::vector<float> set_continous_action(int action, float magnitude_fraction);
+  std::vector<float> set_action(int action, float continous_fraction);
   void reset_object();
   void spawn_object(int index);
   void spawn_object(int index, double xpos, double ypos, double zrot);
@@ -1522,15 +1570,21 @@ public:
     double xrange, double yrange, double rotrange);
   bool spawn_into_scene(MjType::SpawnParams params);
   int spawn_scene(int num_objects, double xrange, double yrange, double smallest_gap);
+  void set_scene_grasp_target(int num_objects);
   void randomise_every_colour();
   void randomise_object_colour(bool all_objects=false);
   void randomise_ground_colour();
   void randomise_finger_colours(bool all_same=true);
+  std::vector<int> convert_segmentation_array(std::vector<int>& array);
   void set_neat_colours();
+  void create_object_mask();
+  void create_gripper_mask();
+  void create_finger_mask(int num);
+  void create_ground_mask();
   bool is_done();
   std::vector<luke::gfloat> get_observation();
   std::vector<luke::gfloat> get_observation(MjType::SensorData sensors);
-  std::string debug_observation(std::vector<luke::gfloat> state_vector);
+  std::string debug_observation(std::vector<luke::gfloat> state_vector, bool printout);
   std::vector<float> get_event_state();
   std::vector<float> get_goal();
   std::vector<float> assess_goal();
@@ -1564,12 +1618,17 @@ public:
   bool last_action_panda();
   std::string print_actions();
   int get_number_of_objects() { return env_.object_names.size(); }
+  std::string get_object_name(int idx) { return env_.object_names[idx]; }
   std::string get_current_object_name() { return env_.obj[0].name; }
+  std::vector<std::string> get_live_object_names() { return luke::get_live_object_names(); }
+  std::vector<std::vector<double>> get_object_bounding_boxes();
   float get_fingertip_z_height();
+  std::vector<std::vector<double>> get_object_XY_relative_to_gripper();
   MjType::TestReport get_test_report();
   void set_finger_thickness(double thickness);
   void set_finger_width(double width);
   void set_finger_modulus(double E);
+  void set_base_XYZ_limits(double x, double y, double z);
   int get_n_actions();
   int get_n_obs();
   int get_N();
@@ -1584,6 +1643,7 @@ public:
   double get_fingertip_clearance();
   bool using_xyz_base_actions();
   std::vector<luke::gfloat> get_finger_stiffnesses();
+  std::vector<double> get_object_xyz_bounding_box();
   MjType::CurveFitData::PoseData validate_curve(int force_style = 0);
   MjType::CurveFitData::PoseData validate_curve_under_force(float force, int force_style = 0);
   MjType::CurveFitData curve_validation_regime(bool print = false, int force_style = 0);

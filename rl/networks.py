@@ -4,6 +4,40 @@ from math import floor, ceil
 
 # --- variable architecture --- #
 
+class VariableNetwork(nn.Module):
+
+  name = "VariableNetwork_"
+
+  def __init__(self, layers, device):
+
+    super(VariableNetwork, self).__init__()
+    self.device = device
+    self.n_input = layers[0]
+    self.n_output = layers[-1]
+
+    self.linear = []
+    for i in range(len(layers) - 1):
+      self.linear.append(nn.Linear(layers[i], layers[i + 1]))
+      if i == 1: self.name += f"{layers[i]}"
+      if i > 1: self.name += f"x{layers[i]}"
+
+    self.linear = nn.ModuleList(self.linear)
+    self.activation = nn.ReLU()
+    self.softmax = nn.Softmax(dim=1)
+
+  def forward(self, x):
+
+    x = x.to(self.device)
+
+    for i in range(len(self.linear) - 1):
+      x = self.linear[i](x)
+      x = self.activation(x)
+
+    x = self.linear[len(self.linear) - 1](x)
+    x = self.softmax(x)
+
+    return x
+
 class DQN_variable(nn.Module):
 
   name = "DQN_"

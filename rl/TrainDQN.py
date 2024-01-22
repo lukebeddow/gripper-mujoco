@@ -749,7 +749,7 @@ class TrainDQN():
     self.test_performance_txt_file_name = "test_performance"
 
     # prepare environment, but don't load a model xml file yet
-    self.env = MjEnv(noload=True, num_segments=num_segments, depth_camera=depth_camera,
+    self.env = MjEnv(num_segments=num_segments, depth_camera=depth_camera,
                      finger_thickness=finger_thickness, finger_width=finger_width,
                      finger_modulus=finger_modulus, log_level=log_level)
 
@@ -1680,7 +1680,7 @@ class TrainDQN():
       step_data = self.env.step(action.item())
 
       step_data_torch = []
-      for i in range(len(step_data)):
+      for i in range(len(step_data) - 1):
         step_data_torch.append(self.to_torch(step_data[i]))
 
       # step with this action and receive sample data for this transition
@@ -1694,7 +1694,11 @@ class TrainDQN():
         new_depth = self.to_torch(new_depth)
         transition_sample = (obs, img, action, new_obs, new_img, reward)
       else:
-        (new_obs, reward, done) = step_data_torch
+        (new_obs, reward, terminated, truncated) = step_data_torch
+        done = False
+        # bools are cast to float, can only be 0.0 or 1.0
+        if terminated.item() > 0.5 or truncated.item() > 0.5:
+          done = True
         transition_sample = (obs, action, new_obs, reward)
 
       # render the new environment
@@ -2381,6 +2385,9 @@ class TrainDQN():
     hardcoding
     """
 
+    # hardcoded date string
+    datestr = "%d-%m-%y_%H-%M"
+
     readroot = self.savedir + self.group_name + "/"
 
     if heuristic: 
@@ -2404,8 +2411,6 @@ class TrainDQN():
 
           if not silence: print(f"Multiple '{fulltest_str}.txt' files found in read_best_performance_from_text(...)")
 
-          # hardcoded date string
-          datestr = "%d-%m-%y-%H:%M"
           ex_date = datetime.now().strftime(datestr)
 
           # remove the '.txt' extension
@@ -2422,7 +2427,7 @@ class TrainDQN():
             if not silence: print("read_best_performance_from_text() datetime error:", e)
             if not silence: print("Trying again with another datestring") # OLD CODE compatible
             # try again with alternative datestring
-            datestr = "%d-%m-%Y-%H:%M"
+            datestr = "%d-%m-%y-%H:%M"
             ex_date = datetime.now().strftime(datestr)
             date_strings = [x[-len(ex_date):] for x in no_txt[:]]
             dates = [datetime.strptime(x, datestr) for x in date_strings[:]]
@@ -2573,7 +2578,7 @@ if __name__ == "__main__":
   # model.env.max_episode_steps = 20
   # model.params.wandb_freq_s = 5
   # model.env.mj.set.action_motor_steps = 350
-  # model.env.disable_rendering = False
+  # model.env.render_window = True
   # model.params.test_freq = 10
   # model.env.params.test_trials_per_object = 1
   # model.env.test_obj_limit = 10
@@ -2606,7 +2611,7 @@ if __name__ == "__main__":
   # model.init(network=net)
   # model.log_level = 2
   # model.env.mj.set.debug = False
-  # model.env.disable_rendering = False
+  # model.env.render_window = True
   # # model.env.params.test_trials_per_object = 1
   # model.env.params.test_objects = 20
   # model.env.params.max_episode_steps = 250
@@ -2644,7 +2649,7 @@ if __name__ == "__main__":
   # train
   net = [5000,5000,5000]
   model.set_device("cpu")
-  model.env.disable_rendering = True
+  model.env.render_window = False
   model.env.mj.set.debug = False
   model.num_segments = 8
   model.finger_thickness = 0.9e-3
@@ -2675,7 +2680,7 @@ if __name__ == "__main__":
   # in order to read profile results, run: $ python3 -m pstats /path/to/results.xyz
   # do: $ sort cumtime OR $ sort tottime AND THEN $ stats
 
-  model.env.disable_rendering = True
+  model.env.render_window = False
   model.params.object_set = "set7_fullset_1500_50i_updated"
 
   net = "CNN_50_50"
@@ -2708,7 +2713,7 @@ if __name__ == "__main__":
   # test
   # model.log_level = 2
   # model.env.mj.set.debug = False
-  # model.env.disable_rendering = True
+  # model.env.render_window = False
   # model.env.params.test_trials_per_object = 5
   # model.env.params.test_objects = 20
   # model.env.params.test_obj_per_file = 5
