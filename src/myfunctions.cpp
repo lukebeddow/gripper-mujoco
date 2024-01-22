@@ -241,10 +241,10 @@ struct JointSettings {
   // base operating limits
   struct BaseLims {
 
-    double x_min { -50e-3 };
-    double x_max { 50e-3 };
-    double y_min { -50e-3 };
-    double y_max { 50e-3 };
+    double x_min { -500e-3 };
+    double x_max { 500e-3 };
+    double y_min { -500e-3 };
+    double y_max { 500e-3 };
     double z_min { -30e-3 };
     double z_max { 30e-3 };
     

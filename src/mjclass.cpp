@@ -947,6 +947,7 @@ void MjClass::update_env()
   // get information about the object from the simluation
   // env_.obj.qpos 
   std::vector<luke::QPos> qpos_vec = luke::get_object_qpos(model, data);
+  std::vector<std::vector<double>> rel_xy = luke::get_object_XY_relative_to_gripper(model, data);
 
   // how many live objects are in the simulation
   if (env_.obj.size() != qpos_vec.size()) {
@@ -967,6 +968,7 @@ void MjClass::update_env()
   for (int i = 0; i < num_obj; i++) {
 
     env_.obj[i].qpos = qpos_vec[i];
+    env_.obj[i].distance_from_gripper = std::sqrt(std::pow(rel_xy[i][0], 2) + std::pow(rel_xy[i][1], 2));
 
     env_.obj[i].finger1_force = forces.obj[i].finger1_local;
     env_.obj[i].finger2_force = forces.obj[i].finger2_local;
@@ -1078,6 +1080,9 @@ void MjClass::update_env()
   // another step has been made
   env_.cnt.step_num.value = true;
 
+  // initially guess the first object is closest to the gripper
+  double closest_object_distance = env_.obj[0].distance_from_gripper;
+
   for (int i = 0; i < num_obj; i++) {
 
     env_.obj[i].lifted = false;
@@ -1153,6 +1158,17 @@ void MjClass::update_env()
     else if (termination_signal_sent) {
       env_.cnt.failed_termination.value = true;
     }
+
+    // are we within a certain threshold distance from an object
+    if (env_.obj[i].distance_from_gripper < s_.XY_distance_threshold) {
+      env_.cnt.within_XY_distance.value = true;
+      env_.obj[i].within_XY_distance = true;
+    }
+
+    // determine the closest object to the gripper
+    if (env_.obj[i].distance_from_gripper < closest_object_distance) {
+      closest_object_distance = env_.obj[i].distance_from_gripper;
+    }
   }
 
   // check if the object has been dropped (env_.cnt.lifted must already be set)
@@ -1198,6 +1214,9 @@ void MjClass::update_env()
   // scale the action penalty based on the number of actions (not counting termination action)
   env_.cnt.action_penalty_lin.value /= float(n_actions - s_.use_termination_action);
   env_.cnt.action_penalty_sq.value /= float(n_actions - s_.use_termination_action);
+
+  // input closest object (use negative values so decreasing distance increases reward)
+  env_.cnt.object_XY_distance.value = -closest_object_distance;
 
   /* ----- determine the reported success rate (as a proxy, should not have associated reward) ----- */
 

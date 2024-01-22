@@ -160,6 +160,7 @@ class TrainingManager():
       "stable_palm_force" : 1.0,
       "stable_finger_force_lim" : 4.0,
       "stable_palm_force_lim" : 4.0,
+      "XY_distance_threshold" : 10e-3,
       "cap_reward" : False,
       "fingertip_min_mm" : -12.5, # below (from start position) sets within_limits=false;
       "continous_actions" : True,
@@ -451,7 +452,7 @@ class TrainingManager():
       found = self.trainer.load_best_id(self.run_name, stage=stage)
       if not found:
         if self.log_level > 0:
-          print(f"TrainingManager.run_test() not run, as training did not statisfy stage = {stage}")
+          print(f"TrainingManager.run_test() not run, as no best id was found, likely as all success rates were zero or training did not statisfy stage = {stage}")
         return
       elif self.log_level > 0:
         print("TrainingMananger.run_test() has loaded best_id =", self.trainer.last_loaded_agent_id)
@@ -889,6 +890,7 @@ class TrainingManager():
     env.mj.set.stable_palm_force = set["cpp"]["stable_palm_force"]
     env.mj.set.stable_finger_force_lim = set["cpp"]["stable_finger_force_lim"]
     env.mj.set.stable_palm_force_lim = set["cpp"]["stable_palm_force_lim"]
+    env.mj.set.XY_distance_threshold = set["cpp"]["XY_distance_threshold"]
     env.mj.set.fingertip_min_mm = set["cpp"]["fingertip_min_mm"]
     env.mj.set.continous_actions = set["cpp"]["continous_actions"]
     env.mj.set.use_termination_action = set["cpp"]["use_termination_action"]

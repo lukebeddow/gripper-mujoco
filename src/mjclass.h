@@ -790,6 +790,7 @@ namespace MjType
       luke::rawNum finger3_force;
       luke::rawNum palm_force;
       luke::rawNum ground_force;
+      float distance_from_gripper {};
       float palm_axial_force {};
       float avg_finger_force {};
       float peak_finger_axial_force {};
@@ -802,6 +803,7 @@ namespace MjType
       float lift_height {};
       bool lifted {};
       bool oob {};
+      bool within_XY_distance {};
       bool lifted_to_height {};
       bool target_height {};
       bool contact {};

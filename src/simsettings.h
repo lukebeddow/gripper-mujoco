@@ -70,6 +70,7 @@
   XX(  stable_palm_force,       double,   -1.0)      /* palm force (N) on object to consider stable */\
   XX(  stable_finger_force_lim, double,   100.0)    /* finger force (N) limit on the object to stop considering stable */\
   XX(  stable_palm_force_lim,   double,   100.0)    /* palm force (N) limit on the object to stop considering stable*/\
+  XX(  XY_distance_threshold,  double,   10e-3)    /* specified as close to an object if distance is below this */\
   /* 
   is_done() settings */\
   XX(  cap_reward,              bool,     true)    /* prevent reward from moving outside specified bounds */\
@@ -143,7 +144,8 @@
   BR(  stable_height,           1.0,      1,        1)      /* object stable and at height target */\
   BR(  stable_termination,      1.0,      1,        1)      /* object stable and termination signal sent */\
   BR(  failed_termination,      -1.0,     1,        1)      /* termination signal sent but object not stable */\
-  BR(  successful_grasp,        0.01,     1,        1)      /* metric to indicate a grasp is stable, shouldn't have associated reward */
+  BR(  successful_grasp,        0.01,     1,        1)      /* metric to indicate a grasp is stable, shouldn't have associated reward */\
+  BR(  within_XY_distance,      0.1,      false,    1)      /* are we close enough to the target object */\
   
   
 #define LUKE_MJSETTINGS_LINEAR_REWARD \
@@ -173,6 +175,8 @@
   LR(  finger3_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 3 force */\
   LR(  ground_force,            0.0,      false,    1,    0.0,  2.0,  -1)     /* ground force on object */\
   LR(  grasp_metric,            0.0,      false,    1,    0.0,  10.0, -1)     /* grasping metric score */\
+  /* new rewards for multi-object scenes and XY base movement */\
+  LR(  object_XY_distance,      0.05,     false,    1,    -0.2, -5e-3, -1)    /* how far from closest object (take -ve values to converge towards 0) */
 
 // end of user defined simulation settings
 
