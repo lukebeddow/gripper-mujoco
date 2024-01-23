@@ -376,7 +376,10 @@ class Trainer:
       self.modelsaver = ModelSaver(self.savedir + "/" + self.group_name)
   
   def to_torch(self, data, dtype=torch.float32):
-    return torch.tensor(data, device=self.device, dtype=dtype).unsqueeze(0)
+    if torch.is_tensor(data):
+      return data.unsqueeze(0)
+    else:
+      return torch.tensor(data, device=self.device, dtype=dtype).unsqueeze(0)
 
   def seed(self, rngseed=None, strict=None):
     """

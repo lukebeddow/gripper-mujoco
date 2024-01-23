@@ -810,7 +810,8 @@ class TrainingManager():
     Create an MjEnv environment
     """
 
-    env = MjEnv(log_level=self.log_level, render=self.settings["render"])
+    env = MjEnv(log_level=self.log_level, render=self.settings["render"],
+                device=self.device)
     env = self.configure_env(env)
     if load: env.load()
 

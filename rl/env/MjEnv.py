@@ -8,6 +8,7 @@ from copy import deepcopy
 import numpy as np
 from dataclasses import dataclass, asdict
 import time
+import torch
 
 # get the path to this file and insert it to python path (for mjpy.bind)
 pathhere = os.path.dirname(os.path.abspath(__file__))
@@ -123,7 +124,8 @@ class MjEnv():
 
   def __init__(self, object_set=None, seed=None, num_segments=None, finger_width=None, 
                depth_camera=None, finger_thickness=None, finger_modulus=None,
-               log_level=0, render=False, continous_actions=False, torch=True):
+               log_level=0, render=False, continous_actions=False, use_torch=True,
+               device="cpu"):
     """
     A mujoco environment, optionally set the random seed or prevent loading a
     model, in which case the user should call load() before using the class
@@ -142,6 +144,8 @@ class MjEnv():
     self.render_window = render
     self.prevent_reload = False
     self.use_yaml_hashing = False
+    self.torch = use_torch # do we return and expect torch tensors
+    self.torch_device = torch.device(device)
 
     # initialise class variables
     self.test_in_progress = False
@@ -661,29 +665,8 @@ class MjEnv():
         rgb = (img_torch.clamp(-1.0, 1.0).cpu().float().numpy() + 1) / 2.0 * 255.0
         rgb = np.transpose(rgb, (2, 1, 0)).astype(np.uint8)
 
-      # print("rgb shape is", rgb.shape)
-      # rgb = np.transpose(rgb, (2, 1, 0))
-      # print("rgb shape after is", rgb.shape)
-      # # from PIL import Image
-      # # image = Image.fromarray(rgb)
-      # # img_torch = self.img_transform(image)
-      # img_torch = torch.tensor(rgb, dtype=torch.float32)
-      # # img_torch = (img_torch - (255.0 / 2.0)) / 255.0
-
-      # img_pil = to_pil_image(img_torch)
-      # img_torch = self.img_transform(img_pil)
-
-      # img_torch = self.img_transform(img_torch)
-
-      # rgb = (img_torch.clamp(-1.0, 1.0).cpu().float().numpy() + 1) / 2.0 * 255.0
-      # # rgb = np.array(np.einsum("ijk->kji", rgb), dtype=np.uint8)
-      # rgb = np.transpose(rgb, (2, 1, 0)).astype(np.uint8)
-
     # numpy likes image arrays like this: width x height x channels
     # torch likes image arrays like this: channels x width x height
-    # rgb = np.einsum("ijk->kji", rgb)
-    # depth = np.einsum("ijk->kji", depth)
-
     rgb = np.transpose(rgb, (2, 1, 0))
     depth = np.transpose(depth, (2, 1, 0))
 
@@ -769,6 +752,9 @@ class MjEnv():
       print("Error is:", e)
       obs = self.mj.get_observation()
 
+    if self.torch:
+      obs = torch.tensor(obs, device=self.torch_device)
+
     # if we are using a depth camera, combine this into the observation
     if self.params.depth_camera:
 
@@ -787,110 +773,103 @@ class MjEnv():
       if image_observation or do_image_collection:
 
         # get the rgb and depth from the scene
-        t0 = time.time()
         rgb, depth = self._get_rgbd_image()
-        t1 = time.time()
-        print(f"Time for _get_rgbd_image(): {(t1 - t0) * 1000:.2f} milliseconds")
 
         if self.params.use_rgb_in_observation:
-          # img_obs = np.divide(rgb, 255, dtype=np.float32) # normalise to range 0-1
-          img_obs = rgb
+
+          # cpu initially because our transforms are on the cpu
+          img_obs = torch.tensor(rgb, device="cpu")
+
+          if not self.params.use_rgb_rendering:
+
+            # normalise to range 0-1 (worth normalising? Changing range [-1, +1]?)
+            if self.torch:
+              img_obs = torch.divide(img_obs, 255, dtype=torch.float32)
+            else:
+              img_obs = np.divide(img_obs, 255, dtype=np.float32)
+
           if self.params.use_depth_in_observation:
-            img_obs = np.concatenate((img_obs, depth), axis=0)
+            if self.torch:
+              img_obs = torch.concat((img_obs, depth), axis=0)
+            else:
+              img_obs = np.concatenate((img_obs, depth), axis=0)
+            
           elif self.params.use_rgb_rendering:
 
-            if self.log_level >= 1:
+            if self.log_level >= 2:
               print("Preparing to use rgb rendering model on image observation")
-
-            self.mj.tick()
 
             if self.use_PIL:
 
-              # we need to convert our image to a torch tensor
-              img_obs = np.transpose(img_obs, (0, 2, 1)) # PIL wants channels x height x width
-              img_torch = torch.tensor(img_obs)
+              # we need to transpose and end up with a torch tensor
+              if self.torch:
+                img_obs = torch.transpose(img_obs, 1, 2)
+              else:
+                img_obs = np.transpose(img_obs, (0, 2, 1))
+                img_obs = torch.tensor(img_obs)
 
               # then convert to PIL image and run the transforms
-              img_pil = to_pil_image(img_torch)
+              img_pil = to_pil_image(img_obs)
               img_torch = self.img_transform_PIL(img_pil)
 
             else:
 
-              t2 = time.time()
+              # we need to transpose and end up with a torch tensor
+              if self.torch:
+                img_obs = torch.transpose(img_obs, 1, 2)
+              else:
+                img_obs = np.transpose(img_obs, (0, 2, 1))
+                img_obs = torch.tensor(img_obs)
 
-              # we need to convert our image to a torch tensor
-              img_obs = np.transpose(img_obs, (0, 2, 1)) # PIL wants channels x height x width
-              img_torch = torch.tensor(img_obs)
-
-              img_torch = self.img_transform(img_torch)
-
-              t3 = time.time()
-              print(f"Time for image transform: {(t3 - t2) * 1000:.2f} milliseconds")
-
-            # # Convert the NumPy array to a PIL Image
-            # from PIL import Image
-            # image = Image.fromarray(np.einsum("ijk->kji", img_obs))
-            # # Save the image as a JPEG file
-            # image.save("test.jpeg", 'JPEG')
-            # loaded_image = Image.open("test.jpeg")
-            # img_torch = self.img_transform(loaded_image)
-
-            # test_img = Image.open("/home/luke/repo/CUT/checkpoints/all_noise_200x100_2/web/images/epoch095_real_A.png")
-            # img_torch = self.img_transform(test_img)
-
-            # # we need to convert our image to a torch tensor
-            # img_obs = np.transpose(img_obs, (0, 2, 1)) # PIL wants channels x height x width
-            # img_torch = torch.tensor(img_obs)
-
-            # # convert to PIL image
-            # img_pil = to_pil_image(img_torch)
-            # img_torch = self.img_transform(img_pil)
-
-            # self.img_transform(img_torch)
+              # now transform the image into the networks expected format
+              img_torch = self.img_transform(img_obs)
 
             # unsqueeze to simulate batch
             img_torch = img_torch.unsqueeze(0)
 
             t4 = time.time()
 
-            # now run it through the rendering model on the GPU
+            # now run it through the rendering model (preferably on GPU)
+            img_obs.to(self.torch_device)
             with torch.no_grad():
-              img_rendered = self.render_net(img_torch.to(torch.device("cuda")))
+              img_obs = self.render_net(img_torch.to(self.torch_device))
 
-            t5 = time.time()
-            print(f"Time for network evaluation: {(t5 - t4) * 1000:.2f} milliseconds")
+            img_obs = img_obs.squeeze(0)
 
-            t6 = time.time()
-
-            # TEMPORARY change back to numpy for compatibility
-            img_obs = img_rendered[0].clamp(-1.0, 1.0).cpu().float().numpy()
-            img_obs = np.transpose(img_obs, (0, 2, 1))
-            # img_obs = np.array(((img_rendered.squeeze(0)).detach()).cpu())
-
-            # print(f"Time for img rendering: {self.mj.tock() * 1000:.2f} milliseconds")
-            t7 = time.time()
-            print(f"Time for conversion back to numpy {(t7 - t6) * 1000:.2f} milliseconds")
-            print(f"Time for everything {(t7 - t0) * 1000:.2f} milliseconds")
-
-            # original_img = (img_torch[0].cpu().detach().numpy() + 1) / 2.0 * 255.0
-            # original_img = np.array(original_img, dtype=np.uint8)
-            # original_img = np.einsum("ijk->kji", original_img)
-            # image = Image.fromarray(original_img)
-            # image.save("test.png", 'PNG')
+            if self.torch:
+              img_obs = torch.transpose(img_obs, 1, 2)
+            else:
+              # change back to numpy
+              img_obs = img_obs.clamp(-1.0, 1.0).cpu().float().numpy()
+              img_obs = np.transpose(img_obs, (0, 2, 1))
 
         elif self.params.use_depth_in_observation:
+
+          if self.torch:
+            depth = torch.tensor(depth, device=self.torch_device)
+
           img_obs = depth
 
         # add the regular observation, reshaped and padded with zeros, to the image observation
         if image_observation:
-          # new_size = self.params.image_height * self.params.image_width
-          new_size = 256 * 256
+
+          if self.params.use_rgb_rendering:
+            new_size = 256 * 256
+            new_obs = torch.zeros(new_size, device=self.torch_device)
+            new_obs[:len(obs)] = obs
+            obs = new_obs.reshape((1, 256, 256))
+          else:
+            new_size = self.params.image_height * self.params.image_width
+            obs.resize(new_size)
+            obs = obs.reshape((1, self.params.image_width, self.params.image_height))
+
           if len(obs) > new_size:
             raise RuntimeError(f"MjEnv()._next_observation() failed as observation length {len(obs)} exceeds image number of pixels {new_size}")
-          obs.resize(new_size)
-          # obs = obs.reshape((1, self.params.image_width, self.params.image_height))
-          obs = obs.reshape((1, 256, 256))
-          obs = np.concatenate((img_obs, obs), axis=0, dtype=np.float32)
+
+          if self.torch:
+            obs = torch.concatenate((img_obs, obs), axis=0)
+          else:
+            obs = np.concatenate((img_obs, obs), axis=0, dtype=np.float32)
 
         if do_image_collection:
 
@@ -1247,22 +1226,21 @@ class MjEnv():
       # "palm_first" : True,
     }
 
-  def _load_image_rendering_model(self):
+  def _load_image_rendering_model(self, device="cuda"):
     """
     Load a model to perform image rendering on images extracted from the
     simulator
     """
 
-    global torch, to_pil_image
-    import torch
+    self.set_device(device)
+
+    global to_pil_image
     from torchvision.transforms.functional import to_pil_image
 
     # CUT repo path
     cut_path = "/home/luke/repo/CUT"
     sys.path.insert(0, f"{cut_path}")
-    from models.networks import define_G
-    from models.cut_model import CUTModel
-    from options.base_options import BaseOptions
+
     from options.test_options import TestOptions
     from models import create_model
 
@@ -1299,18 +1277,11 @@ class MjEnv():
       self.img_transform_PIL = cutimg.get_transform(opt)
       self.img_transform = image_transform.get_transform_2(opt)
 
-      # input_nc = 3
-      # output_nc = 3
-      # ngf = 64
-      # netG = "resnet_9blocks"
-      # # self.render_net = define_G(input_nc, output_nc, ngf, netG)
-      # self.netG = define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.normG, not opt.no_dropout, opt.init_type, opt.init_gain, opt.no_antialias, opt.no_antialias_up, self.gpu_ids, opt)
-
       self.render_net.load_state_dict(torch.load(full_path))
-      self.render_net.to(torch.device("cuda"))
+      self.render_net.to(self.torch_device)
 
       if self.log_level >= 1:
-        print(f"CUT model now loaded and moved onto GPU")
+        print(f"CUT model now loaded and moved onto device = {self.torch_device}")
 
     else:
       raise RuntimeError(f"MjEnv._load_image_rendering_model() error: unrecognised rgb_rendering_method = {self.params.rgb_rendering_method}")
@@ -1319,6 +1290,20 @@ class MjEnv():
     self.params.use_rgb_rendering = True
 
   # ----- public functions ----- #
+
+  def set_device(self, device):
+    """
+    Set the torch device to use with this class. Also sets torch=True, so all
+    input and output tensors will be torch.tensors rather than numpy.array
+    """
+
+    if device == "cuda" and not torch.cuda.is_available():
+      if self.log_level >= 1:
+        print("MjEnv.set_device() received request for 'cuda', but torch.cuda.is_available() == False, hence using cpu")
+      device = "cpu"
+
+    self.torch_device = torch.device(device)
+    self.torch = True
 
   def yield_load(self):
     """
@@ -1788,7 +1773,7 @@ class MjEnv():
     # reset any lingering goal defaults
     self.mj.reset_goal()
 
-  def step(self, action, torch=True):
+  def step(self, action):
     """
     Perform an action and step the simulation until it is resolved
     """
@@ -1800,7 +1785,7 @@ class MjEnv():
     self.track.current_step += 1
 
     # have we been given a torch tensor, in which case move to cpu and convert
-    if torch:
+    if self.torch:
       if self.mj.set.continous_actions:
         action = (action.cpu()).numpy()
       else:
@@ -1928,12 +1913,15 @@ if __name__ == "__main__":
     mj._set_rgbd_size(200, 100)
 
     # try to load the CUT
-    mj._load_image_rendering_model()
-
+    mj._load_image_rendering_model(device="cuda")
     mj.use_PIL = False
 
+    # num = 100
+    # for i in range(num):
+    #   mj.step(torch.tensor(random_train.integers(0, mj.n_actions)))
+
     # # TEMP TESTING
-    # mj._plot_rgbd_image(transform=True)
+    mj._plot_rgbd_image(transform=True)
     # exit()
 
     # now try to render an rgb image
@@ -1952,6 +1940,7 @@ if __name__ == "__main__":
       mj.reset()
 
       new_obs = mj._next_observation()
+      new_obs = (new_obs.cpu()).detach().numpy()
 
       # now extract and plot the rendered image
       rgb, depth = mj._get_rgbd_image()
