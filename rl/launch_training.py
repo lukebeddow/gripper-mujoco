@@ -159,7 +159,8 @@ def update_training_summaries(timestamp, jobstr=None, job_numbers=None, run_name
     tm.save_training_summary(force=True)
 
 def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefix=None,
-                        min_ep=None, max_ep=None, silent=True, min_stage=None, max_stage=None):
+                        min_ep=None, max_ep=None, silent=True, min_stage=None, max_stage=None,
+                        print_test=None):
   """
   Print a table of results for a training
   """
@@ -269,6 +270,7 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
   if found_train_best_ep: headings.append("Train best episode")
   if found_train_best_sr: headings.append("Train best SR")
   if found_full_test_sr: headings.append("Final test SR")
+  if print_test is not None: headings.append(print_test)
 
   for j in job_numbers:
 
@@ -348,6 +350,12 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
     if found_full_test_sr:
       if tm.full_test_sr is not None:
         new_elem.append(tm.full_test_sr)
+      else: new_elem.append("nodata")
+    if print_test is not None:
+      sr, ep = tm.trainer.read_best_performance_from_text(silence=True, fulltest=True,
+                                                          fulltestname=print_test)
+      if sr is not None:
+        new_elem.append(sr)
       else: new_elem.append("nodata")
 
     table.append(new_elem[:])
@@ -531,6 +539,7 @@ if __name__ == "__main__":
   parser.add_argument("--print-stage",        default=None, type=int) # print best SR during a specific stage
   parser.add_argument("--print-from-stage",   default=None, type=int) # print best SR from a specific curriculum stage
   parser.add_argument("--print-up-to-stage",  default=None, type=int) # print best SR up until a specific curriculum stage
+  parser.add_argument("--print-test",         default=None)           # print full_test results on a given test set (if available)
   parser.add_argument("--rngseed",            default=None)           # turns on reproducible training with given seed (slower)
   parser.add_argument("--log-level",          type=int, default=1)    # set script log level
   parser.add_argument("--no-delay",           action="store_true")    # prevent a sleep(...) to seperate processes
@@ -596,7 +605,8 @@ if __name__ == "__main__":
                               silent=silent)
     print_results_table(args.timestamp, jobstr=args.job_string, run_name_prefix=args.name_prefix,
                         min_ep=args.print_from_ep, max_ep=args.print_up_to_ep, silent=silent,
-                        min_stage=args.print_from_stage, max_stage=args.print_up_to_stage)
+                        min_stage=args.print_from_stage, max_stage=args.print_up_to_stage,
+                        print_test=args.print_test)
     exit()
 
   if args.job is None:
