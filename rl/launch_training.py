@@ -2793,6 +2793,7 @@ if __name__ == "__main__":
     tm.settings["env"]["finger_hook_angle_degrees"] = 75
     tm.settings["env"]["finger_thickness"] = 0.9e-3
     tm.settings["env"]["depth_camera"] = True
+    tm.settings["env"]["use_rgb_in_observation"] = True
 
     # create the environment
     env = tm.make_env()
