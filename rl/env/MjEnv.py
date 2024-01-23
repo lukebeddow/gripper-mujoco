@@ -80,6 +80,8 @@ class MjEnv():
     base_lim_Z_mm: int = 30
     use_rgb_in_observation: bool = False
     use_depth_in_observation: bool = False
+    use_rgb_rendering: bool = False
+    rgb_rendering_method: str = "CUT"
     image_height: int = 50
     image_width: int = 50
 
@@ -121,7 +123,7 @@ class MjEnv():
 
   def __init__(self, object_set=None, seed=None, num_segments=None, finger_width=None, 
                depth_camera=None, finger_thickness=None, finger_modulus=None,
-               log_level=0, render=False, continous_actions=False):
+               log_level=0, render=False, continous_actions=False, torch=True):
     """
     A mujoco environment, optionally set the random seed or prevent loading a
     model, in which case the user should call load() before using the class
@@ -594,7 +596,7 @@ class MjEnv():
         print("MjClass rendering is disabled in compilation settings, no RGBD images possible")
       self.rgbd_enabled = False
 
-  def _get_rgbd_image(self, mask=False):
+  def _get_rgbd_image(self, mask=False, transform=False):
     """
     Return rgbd data from the current state of the simulation, rescaled to match
     the size of the rgbd data from real life.
@@ -630,14 +632,64 @@ class MjEnv():
     rgb = rgb.reshape(self.params.image_height, self.params.image_width, 3)
     depth = depth.reshape(self.params.image_height, self.params.image_width, 1)
 
+    # if we are applying the transforms used for image rendering models
+    if transform:
+
+      if self.use_PIL:
+
+        print("rgb shape is", rgb.shape)
+        rgb = np.transpose(rgb, (2, 0, 1))
+        print("rgb shape after is", rgb.shape)
+        # from PIL import Image
+        # image = Image.fromarray(rgb)
+        # img_torch = self.img_transform(image)
+        img_torch = torch.tensor(rgb)
+        img_pil = to_pil_image(img_torch)
+        # img_pil.show()
+        img_torch = self.img_transform_PIL(img_pil)
+        rgb = (img_torch.clamp(-1.0, 1.0).cpu().float().numpy() + 1) / 2.0 * 255.0
+        rgb = np.transpose(rgb, (2, 1, 0)).astype(np.uint8)
+
+      else:
+
+        print("rgb shape is", rgb.shape)
+        rgb = np.transpose(rgb, (2, 0, 1))
+        print("rgb shape after is", rgb.shape)
+
+        img_torch = torch.tensor(rgb, dtype=torch.float)
+        img_torch = self.img_transform(img_torch)
+        rgb = (img_torch.clamp(-1.0, 1.0).cpu().float().numpy() + 1) / 2.0 * 255.0
+        rgb = np.transpose(rgb, (2, 1, 0)).astype(np.uint8)
+
+      # print("rgb shape is", rgb.shape)
+      # rgb = np.transpose(rgb, (2, 1, 0))
+      # print("rgb shape after is", rgb.shape)
+      # # from PIL import Image
+      # # image = Image.fromarray(rgb)
+      # # img_torch = self.img_transform(image)
+      # img_torch = torch.tensor(rgb, dtype=torch.float32)
+      # # img_torch = (img_torch - (255.0 / 2.0)) / 255.0
+
+      # img_pil = to_pil_image(img_torch)
+      # img_torch = self.img_transform(img_pil)
+
+      # img_torch = self.img_transform(img_torch)
+
+      # rgb = (img_torch.clamp(-1.0, 1.0).cpu().float().numpy() + 1) / 2.0 * 255.0
+      # # rgb = np.array(np.einsum("ijk->kji", rgb), dtype=np.uint8)
+      # rgb = np.transpose(rgb, (2, 1, 0)).astype(np.uint8)
+
     # numpy likes image arrays like this: width x height x channels
     # torch likes image arrays like this: channels x width x height
-    rgb = np.einsum("ijk->kji", rgb)
-    depth = np.einsum("ijk->kji", depth)
+    # rgb = np.einsum("ijk->kji", rgb)
+    # depth = np.einsum("ijk->kji", depth)
+
+    rgb = np.transpose(rgb, (2, 1, 0))
+    depth = np.transpose(depth, (2, 1, 0))
 
     return rgb, depth # ready for conversion to torch tensors
   
-  def _plot_rgbd_image(self):
+  def _plot_rgbd_image(self, mask=False, transform=False):
     """
     Get and then plot an rgbd image from the simulation. Use this for debugging only
     """
@@ -645,12 +697,13 @@ class MjEnv():
     import matplotlib.pyplot as plt
     fig, axs = plt.subplots(2, 1)
     
-    rgb, depth = self._get_rgbd_image()
+    rgb, depth = self._get_rgbd_image(mask=mask, transform=transform)
 
     # numpy likes image arrays like this: height x width x channels (ie rows x columns x dim)
     # torch likes image arrays like this: channels x width x height
     # hence convert from torch style back to numpy style for plotting
-    axs[0].imshow(np.einsum("ijk->kji", rgb)) # swap to numpy style rows/cols (eg 3x640x480 -> 480x640x3)
+    # axs[0].imshow(np.einsum("ijk->kji", rgb)) # swap to numpy style rows/cols (eg 3x640x480 -> 480x640x3)
+    axs[0].imshow(np.transpose(rgb, (2, 1, 0)))
     axs[1].imshow(np.transpose(depth[0])) # remove the depth 'channel' then swap (eg 1x640x480 -> 480x640)
 
     plt.show()
@@ -734,22 +787,109 @@ class MjEnv():
       if image_observation or do_image_collection:
 
         # get the rgb and depth from the scene
+        t0 = time.time()
         rgb, depth = self._get_rgbd_image()
+        t1 = time.time()
+        print(f"Time for _get_rgbd_image(): {(t1 - t0) * 1000:.2f} milliseconds")
 
         if self.params.use_rgb_in_observation:
-          img_obs = np.divide(rgb, 255, dtype=np.float32) # normalise to range 0-1
+          # img_obs = np.divide(rgb, 255, dtype=np.float32) # normalise to range 0-1
+          img_obs = rgb
           if self.params.use_depth_in_observation:
             img_obs = np.concatenate((img_obs, depth), axis=0)
+          elif self.params.use_rgb_rendering:
+
+            if self.log_level >= 1:
+              print("Preparing to use rgb rendering model on image observation")
+
+            self.mj.tick()
+
+            if self.use_PIL:
+
+              # we need to convert our image to a torch tensor
+              img_obs = np.transpose(img_obs, (0, 2, 1)) # PIL wants channels x height x width
+              img_torch = torch.tensor(img_obs)
+
+              # then convert to PIL image and run the transforms
+              img_pil = to_pil_image(img_torch)
+              img_torch = self.img_transform_PIL(img_pil)
+
+            else:
+
+              t2 = time.time()
+
+              # we need to convert our image to a torch tensor
+              img_obs = np.transpose(img_obs, (0, 2, 1)) # PIL wants channels x height x width
+              img_torch = torch.tensor(img_obs)
+
+              img_torch = self.img_transform(img_torch)
+
+              t3 = time.time()
+              print(f"Time for image transform: {(t3 - t2) * 1000:.2f} milliseconds")
+
+            # # Convert the NumPy array to a PIL Image
+            # from PIL import Image
+            # image = Image.fromarray(np.einsum("ijk->kji", img_obs))
+            # # Save the image as a JPEG file
+            # image.save("test.jpeg", 'JPEG')
+            # loaded_image = Image.open("test.jpeg")
+            # img_torch = self.img_transform(loaded_image)
+
+            # test_img = Image.open("/home/luke/repo/CUT/checkpoints/all_noise_200x100_2/web/images/epoch095_real_A.png")
+            # img_torch = self.img_transform(test_img)
+
+            # # we need to convert our image to a torch tensor
+            # img_obs = np.transpose(img_obs, (0, 2, 1)) # PIL wants channels x height x width
+            # img_torch = torch.tensor(img_obs)
+
+            # # convert to PIL image
+            # img_pil = to_pil_image(img_torch)
+            # img_torch = self.img_transform(img_pil)
+
+            # self.img_transform(img_torch)
+
+            # unsqueeze to simulate batch
+            img_torch = img_torch.unsqueeze(0)
+
+            t4 = time.time()
+
+            # now run it through the rendering model on the GPU
+            with torch.no_grad():
+              img_rendered = self.render_net(img_torch.to(torch.device("cuda")))
+
+            t5 = time.time()
+            print(f"Time for network evaluation: {(t5 - t4) * 1000:.2f} milliseconds")
+
+            t6 = time.time()
+
+            # TEMPORARY change back to numpy for compatibility
+            img_obs = img_rendered[0].clamp(-1.0, 1.0).cpu().float().numpy()
+            img_obs = np.transpose(img_obs, (0, 2, 1))
+            # img_obs = np.array(((img_rendered.squeeze(0)).detach()).cpu())
+
+            # print(f"Time for img rendering: {self.mj.tock() * 1000:.2f} milliseconds")
+            t7 = time.time()
+            print(f"Time for conversion back to numpy {(t7 - t6) * 1000:.2f} milliseconds")
+            print(f"Time for everything {(t7 - t0) * 1000:.2f} milliseconds")
+
+            # original_img = (img_torch[0].cpu().detach().numpy() + 1) / 2.0 * 255.0
+            # original_img = np.array(original_img, dtype=np.uint8)
+            # original_img = np.einsum("ijk->kji", original_img)
+            # image = Image.fromarray(original_img)
+            # image.save("test.png", 'PNG')
+
         elif self.params.use_depth_in_observation:
           img_obs = depth
 
         # add the regular observation, reshaped and padded with zeros, to the image observation
         if image_observation:
-          new_size = self.params.image_height * self.params.image_width
+          # new_size = self.params.image_height * self.params.image_width
+          new_size = 256 * 256
           if len(obs) > new_size:
             raise RuntimeError(f"MjEnv()._next_observation() failed as observation length {len(obs)} exceeds image number of pixels {new_size}")
           obs.resize(new_size)
-          obs = obs.reshape((1, self.params.image_width, self.params.image_height))
+          # obs = obs.reshape((1, self.params.image_width, self.params.image_height))
+          obs = obs.reshape((1, 256, 256))
           obs = np.concatenate((img_obs, obs), axis=0, dtype=np.float32)
 
         if do_image_collection:
@@ -1106,6 +1246,77 @@ class MjEnv():
       "fixed_angle" : True,
       # "palm_first" : True,
     }
+
+  def _load_image_rendering_model(self):
+    """
+    Load a model to perform image rendering on images extracted from the
+    simulator
+    """
+
+    global torch, to_pil_image
+    import torch
+    from torchvision.transforms.functional import to_pil_image
+
+    # CUT repo path
+    cut_path = "/home/luke/repo/CUT"
+    sys.path.insert(0, f"{cut_path}")
+    from models.networks import define_G
+    from models.cut_model import CUTModel
+    from options.base_options import BaseOptions
+    from options.test_options import TestOptions
+    from models import create_model
+
+    global cutimg
+    import data.base_dataset as cutimg
+
+    import image_transform
+
+    if self.params.rgb_rendering_method == "CUT":
+
+      # load a CUT model
+      epoch = 90
+      path_to_load = "image_render_models/CUT/"
+      file_to_load = f"{epoch}_net_G.pth"
+      full_path = f"{path_to_load}/{file_to_load}"
+
+      if self.log_level >= 1:
+        print(f"Preparing to load a CUT model at: {full_path}")
+
+      opt = TestOptions().parse()
+      opt.num_threads = 0   # test code only supports num_threads = 1
+      opt.batch_size = 1    # test code only supports batch_size = 1
+      opt.serial_batches = True  # disable data shuffling; comment this line if results on randomly chosen images are needed.
+      opt.no_flip = True    # no flip; comment this line if results on flipped images are needed.
+      opt.display_id = -1   # no visdom display; the test code saves the results to a HTML file.
+      # opt.isTrain = False
+      # opt.gather_options() # to initialise with defaults
+      model = create_model(opt)
+      # model.load_networks(85)
+
+      self.render_net = model.netG
+
+      self.use_PIL = False
+      self.img_transform_PIL = cutimg.get_transform(opt)
+      self.img_transform = image_transform.get_transform_2(opt)
+
+      # input_nc = 3
+      # output_nc = 3
+      # ngf = 64
+      # netG = "resnet_9blocks"
+      # # self.render_net = define_G(input_nc, output_nc, ngf, netG)
+      # self.netG = define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.normG, not opt.no_dropout, opt.init_type, opt.init_gain, opt.no_antialias, opt.no_antialias_up, self.gpu_ids, opt)
+
+      self.render_net.load_state_dict(torch.load(full_path))
+      self.render_net.to(torch.device("cuda"))
+
+      if self.log_level >= 1:
+        print(f"CUT model now loaded and moved onto GPU")
+
+    else:
+      raise RuntimeError(f"MjEnv._load_image_rendering_model() error: unrecognised rgb_rendering_method = {self.params.rgb_rendering_method}")
+
+    # we can now use rgb rendering
+    self.params.use_rgb_rendering = True
 
   # ----- public functions ----- #
 
@@ -1694,13 +1905,68 @@ if __name__ == "__main__":
 
   # import pickle
 
-  mj = MjEnv(depth_camera=True, log_level=2, seed=123)
+  mj = MjEnv(depth_camera=True, log_level=2, seed=None)
   mj.render_window = False
   mj.mj.set.mujoco_timestep = 3.187e-3
   mj.mj.set.auto_set_timestep = False
 
   mj.load("set8_fullset_1500", num_segments=8, finger_width=28e-3, finger_thickness=0.9e-3)
   
+  # ----- try out rgb rendering with CUT models ----- #
+
+  test_CUT_model = True
+  if test_CUT_model:
+
+    import torch
+
+    mj.params.use_rgb_in_observation = True
+    mj.params.use_depth_in_observation = False
+    mj.params.use_rgb_rendering = True
+    mj.params.rgb_rendering_method = "CUT"
+
+    mj._spawn_object()
+    mj._set_rgbd_size(200, 100)
+
+    # try to load the CUT
+    mj._load_image_rendering_model()
+
+    mj.use_PIL = False
+
+    # # TEMP TESTING
+    # mj._plot_rgbd_image(transform=True)
+    # exit()
+
+    # now try to render an rgb image
+    new_obs = mj._next_observation()
+
+    num = 3
+    originals = []
+    conversions = []
+
+    import matplotlib.pyplot as plt
+    fig, axs = plt.subplots(num, 2)
+    if num == 1: axs = [axs]
+
+    for i in range(num):
+
+      mj.reset()
+
+      new_obs = mj._next_observation()
+
+      # now extract and plot the rendered image
+      rgb, depth = mj._get_rgbd_image()
+
+      # print(new_obs[:,100:110, 200:210])
+
+      # numpy likes image arrays like this: height x width x channels (ie rows x columns x dim)
+      # torch likes image arrays like this: channels x width x height
+      # hence convert from torch style back to numpy style for plotting
+      axs[i][0].imshow(np.einsum("ijk->kji", rgb)) # swap to numpy style rows/cols (eg 3x640x480 -> 480x640x3)
+      axs[i][1].imshow(np.einsum("ijk->kji", np.array((new_obs[:3] + 1) / 2.0 * 255.0, dtype=np.uint8)))
+
+    fig.tight_layout()
+    plt.show()
+
   # ----- visualise segmentation masks ----- #
 
   examine_scene_mask = False
