@@ -1548,7 +1548,7 @@ class MujocoTrainer(Trainer):
     return matrix
 
   def read_best_performance_from_text(self, silence=False, fulltest=False, heuristic=False,
-                                      stage=None):
+                                      stage=None, fulltestname=None):
     """
     Read a text file to get the best model performance. This function contains
     hardcoding. Stage can be None, or a number, or "max" to choose the highest
@@ -1561,6 +1561,8 @@ class MujocoTrainer(Trainer):
       fulltest_str = "heuristic_test"
     else:
       fulltest_str = "full_test"
+      if fulltestname is not None:
+        fulltest_str = f"{fulltestname}_{fulltest_str}"
 
     readpath = readroot + self.run_name + "/"
 
