@@ -80,8 +80,8 @@ class MjEnv():
     base_lim_Z_mm: int = 30
     use_rgb_in_observation: bool = False
     use_depth_in_observation: bool = False
-    image_height: int = 50
-    image_width: int = 50
+    image_height: int = 100
+    image_width: int = 200
 
     # grasping scene parameters
     use_scene_settings: bool = False
@@ -140,6 +140,7 @@ class MjEnv():
     self.render_window = render
     self.prevent_reload = False
     self.use_yaml_hashing = False
+    self.randomise_colours_every_step = False
 
     # initialise class variables
     self.test_in_progress = False
@@ -730,6 +731,9 @@ class MjEnv():
       image_observation = False
       if self.params.use_rgb_in_observation or self.params.use_depth_in_observation:
         image_observation = True
+
+      # do we render every step for image collection (to try and solve bad render issue?)
+      # are can we only render on steps where we actually want to collect images
 
       if image_observation or do_image_collection:
 
@@ -1620,6 +1624,9 @@ class MjEnv():
     self.track.is_done = done
     self.track.cumulative_reward += reward
 
+    if self.randomise_colours_every_step:
+      self.mj.randomise_every_colour()
+
     # track testing if this result has finished
     if done and self.test_in_progress:
       self._monitor_test()
@@ -1672,6 +1679,8 @@ class MjEnv():
     """
 
     if self.render_window:
+      # if self.params.depth_camera and not self.params.use_rgb_in_observation:
+      #   self.mj.get_RGBD_numpy()
       self.mj.render()
 
     if self.log_level >= 3:
