@@ -79,12 +79,14 @@ class MjEnv():
     base_lim_X_mm: int = 300
     base_lim_Y_mm: int = 200
     base_lim_Z_mm: int = 30
+
+    # camera grasping settings
     use_rgb_in_observation: bool = False
     use_depth_in_observation: bool = False
     use_rgb_rendering: bool = False
     rgb_rendering_method: str = "CUT"
-    image_height: int = 50
     image_width: int = 50
+    image_height: int = 50
 
     # grasping scene parameters
     use_scene_settings: bool = False
@@ -146,6 +148,7 @@ class MjEnv():
     self.use_yaml_hashing = False
     self.torch = use_torch # do we return and expect torch tensors
     self.torch_device = torch.device(device)
+    self.randomise_colours_every_step = False
 
     # initialise class variables
     self.test_in_progress = False
@@ -1823,6 +1826,9 @@ class MjEnv():
     self.track.is_done = done
     self.track.cumulative_reward += reward
 
+    if self.randomise_colours_every_step:
+      self.mj.randomise_every_colour()
+
     # track testing if this result has finished
     if done and self.test_in_progress:
       self._monitor_test()
@@ -1906,7 +1912,7 @@ if __name__ == "__main__":
   
   # ----- try out rgb rendering with CUT models ----- #
 
-  test_CUT_model = True
+  test_CUT_model = False
   if test_CUT_model:
 
     import torch

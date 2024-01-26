@@ -561,7 +561,8 @@ if __name__ == "__main__":
   # default device
   if args.device is None:
     args.device = "cpu"
-  if args.device == "cpu": torch.set_num_threads(1)
+  if args.device == "cpu": 
+    torch.set_num_threads(1)
 
   if args.print: 
     args.log_level = 0
@@ -583,7 +584,8 @@ if __name__ == "__main__":
       or args.resume is not None)):
     sleep_for = args.job - args.smallest_job_num
     if sleep_for < 0: sleep_for = args.job # in case of jobstr "4 5 6 1"
-    print(f"Sleeping for {sleep_for} seconds to seperate process for safety")
+    if args.log_level > 0:
+      print(f"Sleeping for {sleep_for} seconds to seperate process for safety")
     sleep(sleep_for)
     sleep(0.25 * random()) # extra safety
 
@@ -2817,11 +2819,11 @@ if __name__ == "__main__":
   elif args.program == "test_scene_grasping":
 
     # define what to vary this training, dependent on job number
-    vary_1 = None
+    vary_1 = [False, True]
     vary_2 = None
     vary_3 = None
     repeats = None
-    tm.param_1_name = None
+    tm.param_1_name = "use termination"
     tm.param_2_name = None
     tm.param_3_name = None
     tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
@@ -2848,13 +2850,13 @@ if __name__ == "__main__":
     tm.settings["env"]["scene_Y_dimension_mm"] = 200
 
     # update the actions and sensors of the gripper
-    tm.settings["cpp"]["oob_distance"] = 100
+    tm.settings["cpp"]["oob_distance"] = 100 # never trigger
     tm.settings["cpp"]["action"]["base_X"]["in_use"] = True
     tm.settings["cpp"]["action"]["base_Y"]["in_use"] = True
     tm.settings["cpp"]["sensor"]["base_state_sensor_XY"]["in_use"] = True
 
     # make grasping easier - no penalty termination for dangerous forces
-    tm.settings["reward"]["penalty_termination"] = False
+    tm.settings["reward"]["penalty_termination"] = tm.param_1
 
     # initial testing parameters for PPO   
     rgb_size = (50, 50)
@@ -3008,6 +3010,56 @@ if __name__ == "__main__":
     tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
     tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1
     tm.settings["Agent_PPO"]["steps_per_epoch"] = 6000
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "ppo_cnn_single_object":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-6, 1e-5, 1e-4]
+    vary_2 = [(50, 50)]
+    vary_3 = None
+    repeats = None
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "image size"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # add in the camera
+    tm.settings["env"]["depth_camera"] = True
+    tm.settings["env"]["use_rgb_in_observation"] = True
+    tm.settings["env"]["image_width"] = tm.param_2[0]
+    tm.settings["env"]["image_height"] = tm.param_2[1]
+
+    # turn up noise and add in XY base actions
+    tm.settings["env"]["object_position_noise_mm"] = 30
+    tm.settings["env"]["XY_base_actions"] = True
+    tm.settings["env"]["base_lim_X_mm"] = 50
+    tm.settings["env"]["base_lim_Y_mm"] = 50
+
+    # update oob, actions, and sensors of the gripper
+    tm.settings["cpp"]["oob_distance"] = 60e-3
+    tm.settings["cpp"]["action"]["base_X"]["in_use"] = True
+    tm.settings["cpp"]["action"]["base_Y"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["base_state_sensor_XY"]["in_use"] = True
+
+    # create the environment
+    env = tm.make_env()
+
+    # apply the agent settings
+    network = CNNActorCriticPG((3, env.params.image_width, env.params.image_height), 
+                               env.n_obs, env.n_actions, continous_actions=True, 
+                               device=args.device)
+    
+    # make the agent
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1
     agent = Agent_PPO(device=args.device)
     agent.init(network)
 

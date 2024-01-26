@@ -22,7 +22,7 @@ class TrainingManager():
 
     # trainer settings
     "trainer" : {
-      "num_episodes" : 60_000,
+      "num_episodes" : 120_000,
       "test_freq" : 5000,
       "save_freq" : 5000,
       "use_curriculum" : False,
@@ -105,14 +105,24 @@ class TrainingManager():
 
     # environment hyperparameters
     "env" : {
+
+      # training parameters
       "max_episode_steps" : 250,
       "object_position_noise_mm" : 10,
       "object_rotation_noise_deg" : 5,
       "base_lim_X_mm" : 300,
       "base_lim_Y_mm" : 200,
       "base_lim_Z_mm" : 30,
+
+      # camera grasping settings
       "use_rgb_in_observation" : False,
       "use_depth_in_observation" : False,
+      "use_rgb_rendering" : False,
+      "rgb_rendering_method" : "CUT",
+      "image_width" : 50,
+      "image_height" : 50,
+
+      # grasping sene parameters
       "use_scene_settings" : False,
       "num_objects_in_scene" : 1,
       "scene_grasp_target" : 1,
@@ -120,11 +130,15 @@ class TrainingManager():
       "origin_noise_Y_mm" : 50,
       "scene_X_dimension_mm" : 300,
       "scene_Y_dimension_mm" : 200, 
+
+      # file and testing parameters
       "test_obj_per_file" : 20,
       "task_reload_chance" : 0.05,
       "test_trials_per_object" : 3,
       "test_objects" : 100,
-      "object_set_name" : "set9_fullset",
+
+      # model parameters (for loading xml files)
+      "object_set_name" : "set9_nosharp_smallspheres",
       "num_segments" : 8,
       "finger_thickness" : 0.9e-3,
       "finger_length" : 235e-3,
@@ -133,10 +147,11 @@ class TrainingManager():
       "depth_camera" : False,
       "XY_base_actions" : False,
       "fixed_finger_hook" : True,
-      "finger_hook_angle_degrees" : 90.0,
+      "finger_hook_angle_degrees" : 75.0,
       "finger_hook_length" : 35e-3,
       "segment_inertia_scaling" : 50.0,
       "fingertip_clearance" : 0.01,
+
     },
 
     # cpp simulation settings
@@ -492,7 +507,7 @@ class TrainingManager():
     Continue a training (already loaded), either to a new endpoint, or simply adding a
     given number of episodes. A trainer must be loaded before this function is called.
     If neither new_endpoint or extra_episodes are set, the training will continue to the
-    original endpoint
+    original endpoint. set 'with_test=False' to prevent from rerunning
     """
 
     if not hasattr(self, "trainer") or self.trainer is None:
