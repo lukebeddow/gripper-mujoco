@@ -134,12 +134,11 @@ class MixedNetwork(nn.Module):
 
     # combine the image and MLP features
     self.combined_features_ = nn.Sequential(
-      nn.Linear(128 + 128, 128),
+      nn.Linear(128 + 128, 256),
       nn.ReLU(),
-      nn.Linear(128, 64),
+      nn.Linear(256, 128),
       nn.ReLU(),
-      nn.Linear(64, outputs),
-      # nn.Softmax(dim=1), # WHY DID I ADD THIS???
+      nn.Linear(128, outputs),
     )
 
   def split_obs(self, obs):
@@ -180,6 +179,96 @@ class MixedNetwork(nn.Module):
     # x = x.view(-1, 64*64)
     y = self.numeric_features_(sensors)
     z = torch.cat((x, y), 1)
+    z = self.combined_features_(z)
+    return z
+  
+class MixedNetworkFromEncoder(nn.Module):
+
+  name = "MixedNetworkFromEncoder"
+
+  def __init__(self, numeric_inputs, image_size, outputs, device):
+
+    super(MixedNetworkFromEncoder, self).__init__()
+    self.device = device
+    self.image_size = image_size
+    self.numeric_inputs = numeric_inputs
+    self.num_outputs = outputs
+
+    (channel, width, height) = image_size
+    self.name += f"_{width}x{height}"
+
+    # calculate the size of the first fully connected layer (ensure settings match image_features_ below)
+    w, h, c = calc_conv_layer_size(width, height, channel, kernel_num=16, kernel_size=5, stride=2, padding=2, print=False)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, print=False)
+    w, h, c = calc_conv_layer_size(w, h, c, kernel_num=64, kernel_size=5, stride=2, padding=2, print=False)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, print=False)
+    w, h, c = calc_FC_layer_size(w, h, c, print=False)
+    fc_layer_num = c
+
+    # define the CNN to handle the images
+    self.image_features_ = nn.Sequential(
+
+      nn.Conv2d(channel, 196, kernel_size=3, stride=1, padding=1),
+      nn.ReLU(inplace=True),
+      nn.Conv2d(196, 128, kernel_size=3, stride=1, padding=1),
+      nn.ReLU(inplace=True),
+      nn.AdaptiveAvgPool2d((1, 1)),
+
+    )
+
+    # define the MLP to handle the sensor data
+    self.numeric_features_ = nn.Sequential(
+      nn.Linear(numeric_inputs, 128),
+      nn.ReLU(inplace=True),
+    )
+
+    # combine the image and MLP features
+    self.combined_features_ = nn.Sequential(
+      nn.Linear(128 + 128, 128 + 128),
+      nn.ReLU(inplace=True),
+      nn.Linear(256, 128),
+      nn.ReLU(inplace=True),
+      nn.Linear(128, outputs),
+    )
+
+  def split_obs(self, obs):
+    """
+    Split the incoming observation into a tuple:
+      (image_size, sensor_obs)
+    """
+
+    # print("obs size is", obs.shape)
+    # print("img size is", self.img_size)
+  
+    # split up the observation vector from the image
+    (img, sensors) = torch.split(obs, [self.image_size[0], 1], dim=1)
+    sensors = torch.flatten(sensors, start_dim=2)
+
+    # remove padded zeros and redundant channel dimension
+    sensors = sensors[:, :, :self.numeric_inputs]
+    sensors = torch.squeeze(sensors, dim=1)
+
+    # print("img shape after split", img.shape)
+    # print("sensor shape after split", sensors.shape)
+
+    return (img, sensors)
+
+  def forward(self, img_and_sensor_matrix):
+    """
+    Receives input matrix which contains both the image and the sensor value
+    vector together. So for rgb images size (3x25x25) and a sensor vector of
+    length 100, we would get an input (with batch_size=B):
+      input.shape = (B, 4, 25, 25)
+      The first 3 channels are rgb
+      The last channel is the reshaped sensor vector, padded with zeros
+    """
+    tuple_img_sensors = self.split_obs(img_and_sensor_matrix)
+    image = tuple_img_sensors[0].to(self.device)
+    sensors = tuple_img_sensors[1].to(self.device)
+    x = self.image_features_(image)
+    x = x.view(1, 128) # from shape [1, 128, 1, 1] -> [1, 128]
+    y = self.numeric_features_(sensors)
+    z = torch.cat((x[:2], y), 1)
     z = self.combined_features_(z)
     return z
 
@@ -560,6 +649,138 @@ class CNNActorCriticPG(nn.Module):
     self.mode = "test"
     self.pi.eval()
     self.vf.eval()
+
+class NetCategoricalActor(Actor):
+    
+  def __init__(self, network, img_dim, sensor_dim, act_dim, device):
+    super().__init__()
+    self.logits_net = network(sensor_dim, img_dim, act_dim, device=device)
+    self.name = self.logits_net.name
+    self.device = device
+
+  def _distribution(self, obs):
+    logits = self.logits_net(obs)
+    return Categorical(logits=logits)
+
+  def _log_prob_from_distribution(self, pi, act):
+    return pi.log_prob(act)
+  
+  def to_device(self, device=None):
+    if device is None:
+      device = self.device
+    self.logits_net.to(device)
+    self.device = device
+
+class NetGaussianActor(Actor):
+
+  def __init__(self, network, img_dim, sensor_dim, act_dim, device):
+    super().__init__()
+    log_std = -0.5 * np.ones(act_dim, dtype=np.float32)
+    self.log_std = torch.nn.Parameter(torch.as_tensor(log_std))
+    self.mu_net = network(sensor_dim, img_dim, act_dim, device=device)
+    self.name = self.mu_net.name
+    self.device = device
+
+  def _distribution(self, obs):
+    mu = self.mu_net(obs)
+    # log_std stays on cpu so we need to move this to our device
+    std = torch.exp(self.log_std).to(self.device)
+    return Normal(mu, std)
+
+  def _log_prob_from_distribution(self, pi, act):
+    return pi.log_prob(act).sum(axis=-1)    # Last axis sum needed for Torch Normal distribution
+
+  def to_device(self, device=None):
+    if device is None:
+      device = self.device
+    self.mu_net.to(device)
+    self.device = device
+
+class NetCritic(nn.Module):
+
+  def __init__(self, network, img_dim, sensor_dim, device):
+    super().__init__()
+    self.v_net = network(sensor_dim, img_dim, 1, device=device) # act dim = 1
+    self.device = device
+
+  def forward(self, obs):
+    return torch.squeeze(self.v_net(obs), -1) # Critical to ensure v has right shape.
+
+  def to_device(self, device=None):
+    if device is None:
+      device = self.device
+    self.v_net.to(device)
+    self.device = device
+
+class NetActorCriticPG(nn.Module):
+
+  name = "NetActorCriticPG"
+
+  def __init__(self, network, img_size, sensor_dim, action_dim, continous_actions=True,
+               mode="train", device="cuda"):
+    super().__init__()
+
+    self.img_size = img_size
+    self.sensor_dim = sensor_dim
+    self.n_actions = action_dim
+    self.mode = mode
+    self.device = device
+
+    self.n_obs = [img_size[0] + 1, img_size[1], img_size[2]]
+
+    # policy builder depends on action space
+    if continous_actions:
+      self.action_dim = action_dim
+      self.pi = NetGaussianActor(network, img_size, sensor_dim, action_dim, device=device)
+    else:
+      self.action_dim = 1 # discrete so only one action
+      self.pi = NetCategoricalActor(network, img_size, sensor_dim, action_dim, device=device)
+
+    # build value function
+    self.vf  = NetCritic(network, img_size, sensor_dim, device=device)
+
+    if self.mode not in ["test", "train"]:
+      raise RuntimeError(f"NetActorCriticPG given mode={mode}, should be 'test' or 'train'")
+
+    # # add hidden layer size into the name
+    # for i in range(len(hidden_sizes)):
+    #   if i == 0: self.name += f"{hidden_sizes[i]}"
+    #   if i > 0: self.name += f"x{hidden_sizes[i]}"
+
+    self.name += self.pi.name
+
+  def step(self, obs):
+    with torch.no_grad():
+      pi = self.pi._distribution(obs)
+      a = pi.sample()
+      logp_a = self.pi._log_prob_from_distribution(pi, a)
+      val = self.vf(obs)
+    return a, val, logp_a
+
+  def act(self, obs):
+    return self.step(obs)[0]
+
+  def set_device(self, device):
+    self.pi.to_device(device)
+    self.vf.to_device(device)
+    self.device = device
+
+  def training_mode(self):
+    """
+    Put the agent into training mode
+    """
+    self.mode = "train"
+    self.pi.train()
+    self.vf.train()
+
+  def testing_mode(self):
+    """
+    Put the agent in testing mode
+    """
+    self.mode = "test"
+    self.pi.eval()
+    self.vf.eval()
+
 
 # ----- proper agents ----- #
 

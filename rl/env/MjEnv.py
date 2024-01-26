@@ -12,9 +12,7 @@ import torch
 
 # get the path to this file and insert it to python path (for mjpy.bind)
 pathhere = os.path.dirname(os.path.abspath(__file__))
-# sys.path.insert(0, pathhere)
-
-sys.path.insert(0, "/home/luke/luke-gripper-mujoco/rl/env")
+sys.path.insert(0, pathhere)
 
 # with env in path, we can now import the shared cpp library
 from mjpy.bind import MjClass, EventTrack
@@ -794,7 +792,7 @@ class MjEnv():
           # we are using rgb observation rendering
           else:
 
-            if self.log_level >= 2:
+            if self.log_level >= 3:
               print("Preparing to use rgb rendering model on image observation")
 
             # convert to cpu tensor initially as transform operations are on cpu
@@ -861,10 +859,10 @@ class MjEnv():
         if image_observation:
 
           if self.params.use_rgb_rendering:
-            new_size = self.render_net_output_size[0] * self.render_net_output_size[1]
+            new_size = img_obs.shape[-2] * img_obs.shape[-1]
             new_obs = torch.zeros(new_size, device=self.torch_device)
             new_obs[:len(obs)] = obs
-            obs = new_obs.reshape((1, *self.render_net_output_size))
+            obs = new_obs.reshape((1, img_obs.shape[-2], img_obs.shape[-1]))
           else:
             new_size = self.params.image_height * self.params.image_width
             if self.torch:
@@ -1254,9 +1252,9 @@ class MjEnv():
 
     # initially load test options
     if test:
-      opt = TestOptions().parse()
+      opt = TestOptions(cmd_line="").parse()
     else:
-      opt = TrainOptions().parse()
+      opt = TrainOptions(cmd_line="").parse()
 
     # now open the file
     with open(f"{filepath}/{filename}", "r") as f:
@@ -1380,6 +1378,42 @@ class MjEnv():
       # load the model weights and move to the desired device
       self.render_net.load_state_dict(torch.load(full_path))
       self.render_net.to(self.torch_device)
+
+    elif self.params.rgb_rendering_method.lower() == "cyclegan_encoder":
+
+      # load a specific, hardcoded cycleGAN model
+      load_GA = True # else load GB
+      epoch = 115
+      experiment = "single_object_128_CG"
+      path_to_load = f"/home/luke/mujoco-devel/rl/env/image_render_models/cycleGAN/{experiment}"
+      file_to_load_GA = f"{epoch}_net_G_A.pth"
+      file_to_load_GB = f"{epoch}_net_G_B.pth"
+      if load_GA:
+        full_path = f"{path_to_load}/{file_to_load_GA}"
+      else:
+        full_path = f"{path_to_load}/{file_to_load_GB}"
+
+      # load the model options and then create the model
+      opt = self._load_image_rendering_options(path_to_load)
+      model = create_model(opt)
+      model.opt.isTrain = False # put into test mode (ie evaluation mode)
+
+      # extract the generator network, alongside the image size, and image transform
+      self.render_net = model.netG_A
+      self.render_net_output_size = (model.opt.crop_size, model.opt.crop_size)
+      self.img_transform = image_transform.get_transform_2(opt)
+
+      # temporary options used during test, should be False and eventually deleted
+      self.use_PIL = False
+      self.img_transform_PIL = cutimg.get_transform(opt)
+
+      # load the model weights and move to the desired device
+      self.render_net.load_state_dict(torch.load(full_path))
+      self.render_net.to(self.torch_device)
+
+      # trim the generator network to use as an encoder
+      num_resnet_blocks = 5
+      self.render_net.model = self.render_net.model[:12 + num_resnet_blocks]
 
     else:
       raise RuntimeError(f"MjEnv._load_image_rendering_model() error: unrecognised rgb_rendering_method = {self.params.rgb_rendering_method}")
@@ -1871,6 +1905,12 @@ class MjEnv():
       self.params.depth_camera = False
       self.rgbd_enabled = False
 
+    # determine if we are loading a rendering network
+    if self.params.use_rgb_rendering:
+      self._load_image_rendering_model(device=self.torch_device)
+    else:
+      self.render_net = None
+
     # reset any lingering goal defaults
     self.mj.reset_goal()
 
@@ -2003,7 +2043,7 @@ if __name__ == "__main__":
   
   # ----- try out rgb rendering with CUT models ----- #
 
-  test_CUT_model = False
+  test_CUT_model = True
   if test_CUT_model:
 
     import torch
@@ -2011,7 +2051,7 @@ if __name__ == "__main__":
     mj.params.use_rgb_in_observation = True
     mj.params.use_depth_in_observation = False
     mj.params.use_rgb_rendering = True
-    mj.params.rgb_rendering_method = "cycleGAN"
+    mj.params.rgb_rendering_method = "cycleGAN_encoder"
 
     mj._spawn_object()
     mj._set_rgbd_size(200, 100)
@@ -2025,7 +2065,7 @@ if __name__ == "__main__":
     #   mj.step(torch.tensor(random_train.integers(0, mj.n_actions)))
 
     # # TEMP TESTING
-    mj._plot_rgbd_image(transform=True)
+    # mj._plot_rgbd_image(transform=True)
     # exit()
 
     # now try to render an rgb image
