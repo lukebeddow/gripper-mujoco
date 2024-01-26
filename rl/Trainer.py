@@ -1830,6 +1830,78 @@ class MujocoTrainer(Trainer):
         self.image_list = []
         self.images_collected = 0
         
+  def print_observation_table(self, observation_list):
+    """
+    Print a table breaking down the features of an observation
+    """
+
+    if not isinstance(observation_list[0], list):
+      observation_list = [observation_list]
+
+    # get observation info
+    info = self.env.mj.debug_observation(observation_list[0], False)
+    if info.startswith("INVALID"): print(info)
+
+    # parse info to get sensor names and n samples (last element is observation length)
+    sensor_names = [x.split(" = ")[0] for x in info.split(" | ")][:-1]
+    sensor_nums = [int(x.split(" = ")[1]) for x in info.split(" | ")][:-1]
+
+    # create the row master for the table
+    sepbig = " || " # seperate sensors
+    sep = " "     # seperate individual values
+
+    # input the sensor value format
+    sub_head = "{{{0}:{1}}}"
+    sf = ".3f"
+    sub_val = sub_head.format(0, sf)
+
+    # now create the rows for the table
+    sub_heading_fields = []
+    main_headings = sepbig
+    sub_headings = sepbig
+    row_string = sepbig
+    main_idx = 0
+    sub_idx = 0
+    for n in sensor_nums:
+      sub_width = len(sub_val.format(-1.0) + sep)
+      width = n * sub_width - len(sep)
+      this_sub = ""
+      for i in range(n):
+        if i != n - 1:
+          this_sub += sub_head.format(sub_idx + i, f"^{sub_width - len(sep)}") + sep
+          row_string += sub_head.format(sub_idx + i, f">{sub_width - len(sep)}{sf}") + sep
+        else:
+          this_sub += sub_head.format(sub_idx + i, f"^{sub_width - len(sep)}") + sepbig
+          row_string += sub_head.format(sub_idx + i, f">{sub_width - len(sep)}{sf}") + sepbig
+        x = n // 2
+        xi = i // 2
+        if i % 2 == 0: # even
+          sub_heading_fields.append(f"X{x-xi}")
+        else: sub_heading_fields.append(f"Y{x-xi}-{x-xi-1}")
+      main_idx += 1
+      sub_idx += n
+      main_headings += f"{{{main_idx}:^{width}}}" + sepbig
+      sub_headings += this_sub
+
+    # print(main_headings)
+    # print(sub_headings)
+    # print(row_string)
+
+    row_prefix = sepbig + "{0:>4}"
+
+    # now input the data
+    sensor_names.insert(0, "dummy") # not sure why I need this
+    main_heading_row = main_headings.format(*sensor_names)
+    print(row_prefix.format("Step") + main_heading_row)
+
+    sub_heading_row = sub_headings.format(*sub_heading_fields)
+    print(row_prefix.format("") + sub_heading_row)
+
+    # now print the table
+    for i, obs in enumerate(observation_list):
+      this_row = row_string.format(*obs)
+      print(row_prefix.format(i) + this_row)
+
 if __name__ == "__main__":
 
   # master seed, torch seed must be set before network creation (random initialisation)

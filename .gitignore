@@ -1,6 +1,7 @@
 build/
 rl/models/
 rl/image_datasets
+rl/env/image_render_models
 sample/
 MUJOCO_LOG.TXT
 .vscode/

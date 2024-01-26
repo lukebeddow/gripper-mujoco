@@ -12,7 +12,9 @@ import torch
 
 # get the path to this file and insert it to python path (for mjpy.bind)
 pathhere = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, pathhere)
+# sys.path.insert(0, pathhere)
+
+sys.path.insert(0, "/home/luke/luke-gripper-mujoco/rl/env")
 
 # with env in path, we can now import the shared cpp library
 from mjpy.bind import MjClass, EventTrack
@@ -859,10 +861,10 @@ class MjEnv():
         if image_observation:
 
           if self.params.use_rgb_rendering:
-            new_size = 256 * 256
+            new_size = self.render_net_output_size[0] * self.render_net_output_size[1]
             new_obs = torch.zeros(new_size, device=self.torch_device)
             new_obs[:len(obs)] = obs
-            obs = new_obs.reshape((1, 256, 256))
+            obs = new_obs.reshape((1, *self.render_net_output_size))
           else:
             new_size = self.params.image_height * self.params.image_width
             if self.torch:
@@ -1236,6 +1238,65 @@ class MjEnv():
       # "palm_first" : True,
     }
 
+  # ----- utilities for loading CUT/cycleGAN models ----- #
+
+  def _load_image_rendering_options(self, filepath, filename="train_opt.txt", test=True):
+    """
+    Loads the model options from a given options filename (should include full path)
+    """
+
+    log_num = 2
+    if self.log_level >= log_num:
+      print(f"MjEnv._load_image_rendering_options() loading from: {filename}")
+
+    from options.test_options import TestOptions
+    from options.train_options import TrainOptions
+
+    # initially load test options
+    if test:
+      opt = TestOptions().parse()
+    else:
+      opt = TrainOptions().parse()
+
+    # now open the file
+    with open(f"{filepath}/{filename}", "r") as f:
+      lines = f.readlines()
+
+    # now we check for any options which are not set to default
+    for l in lines:
+      if "[default:" in l:
+        # replace key tokens so we can split our line easily
+        l = l.replace("[default:", ":")
+        splits = l.split(":")
+        option_name = "".join(splits[0].split()) # remove whitespace
+        option_val = "".join(splits[1].split())  # remove whitespace
+        option_default = "".join((splits[2].split("]")[0]).split())
+
+        if self.log_level >= log_num:
+          print(f" -> Found option={option_name} with new value={option_val}, whereas default={option_default}")
+
+        # if we don't have a number, add in string quotes
+        if not option_val.isnumeric():
+          option_val = "'" + option_val + "'"
+
+        # now apply this option change to opt
+        to_exec = f"opt.{option_name} = {option_val}"
+        exec(to_exec)
+
+    opt.checkpoints_dir = f"{filepath}/checkpoints"
+
+    if test:
+      opt.num_threads = 0   # test code only supports num_threads = 1
+      opt.batch_size = 1    # test code only supports batch_size = 1
+      opt.serial_batches = True  # disable data shuffling; comment this line if results on randomly chosen images are needed.
+      opt.no_flip = True    # no flip; comment this line if results on flipped images are needed.
+      opt.display_id = -1   # no visdom display; the test code saves the results to a HTML file.
+
+    # loading doesn't work correctly without reseting this back to None
+    opt.isTrain = None
+
+    return opt
+
   def _load_image_rendering_model(self, device="cuda"):
     """
     Load a model to perform image rendering on images extracted from the
@@ -1251,7 +1312,6 @@ class MjEnv():
     cut_path = "/home/luke/repo/CUT"
     sys.path.insert(0, f"{cut_path}")
 
-    from options.test_options import TestOptions
     from models import create_model
 
     global cutimg
@@ -1259,42 +1319,73 @@ class MjEnv():
 
     import image_transform
 
-    if self.params.rgb_rendering_method == "CUT":
+    if self.log_level >= 1:
+        print(f"MjEnv._load_image_rendering_model() is preparing to load a {self.params.rgb_rendering_method}")
 
-      # load a CUT model
-      epoch = 90
-      path_to_load = "image_render_models/CUT/"
+    if self.params.rgb_rendering_method.lower() == "cut":
+
+      # load a specific, hardcoded CUT model
+      epoch = 245
+      experiment = "single_object_128_1"
+      path_to_load = f"image_render_models/CUT/{experiment}"
       file_to_load = f"{epoch}_net_G.pth"
       full_path = f"{path_to_load}/{file_to_load}"
 
-      if self.log_level >= 1:
-        print(f"Preparing to load a CUT model at: {full_path}")
-
-      opt = TestOptions().parse()
-      opt.num_threads = 0   # test code only supports num_threads = 1
-      opt.batch_size = 1    # test code only supports batch_size = 1
-      opt.serial_batches = True  # disable data shuffling; comment this line if results on randomly chosen images are needed.
-      opt.no_flip = True    # no flip; comment this line if results on flipped images are needed.
-      opt.display_id = -1   # no visdom display; the test code saves the results to a HTML file.
-      # opt.isTrain = False
-      # opt.gather_options() # to initialise with defaults
+      # load the model options and then create the model
+      opt = self._load_image_rendering_options(path_to_load)
       model = create_model(opt)
-      # model.load_networks(85)
+      model.opt.isTrain = False # put into test mode (ie evaluation mode)
 
+      # extract the generator network, alongside the image size, and image transform
       self.render_net = model.netG
-
-      self.use_PIL = False
-      self.img_transform_PIL = cutimg.get_transform(opt)
+      self.render_net_output_size = (model.opt.crop_size, model.opt.crop_size)
       self.img_transform = image_transform.get_transform_2(opt)
 
+      # temporary options used during test, should be False and eventually deleted
+      self.use_PIL = False
+      self.img_transform_PIL = cutimg.get_transform(opt)
+
+      # load the model weights and move to the desired device
       self.render_net.load_state_dict(torch.load(full_path))
       self.render_net.to(self.torch_device)
 
-      if self.log_level >= 1:
-        print(f"CUT model now loaded and moved onto device = {self.torch_device}")
+    elif self.params.rgb_rendering_method.lower() == "cyclegan":
+
+      # load a specific, hardcoded cycleGAN model
+      load_GA = True # else load GB
+      epoch = 115
+      experiment = "single_object_128_CG"
+      path_to_load = f"image_render_models/cycleGAN/{experiment}"
+      file_to_load_GA = f"{epoch}_net_G_A.pth"
+      file_to_load_GB = f"{epoch}_net_G_B.pth"
+      if load_GA:
+        full_path = f"{path_to_load}/{file_to_load_GA}"
+      else:
+        full_path = f"{path_to_load}/{file_to_load_GB}"
+
+      # load the model options and then create the model
+      opt = self._load_image_rendering_options(path_to_load)
+      model = create_model(opt)
+      model.opt.isTrain = False # put into test mode (ie evaluation mode)
+
+      # extract the generator network, alongside the image size, and image transform
+      self.render_net = model.netG_A
+      self.render_net_output_size = (model.opt.crop_size, model.opt.crop_size)
+      self.img_transform = image_transform.get_transform_2(opt)
+
+      # temporary options used during test, should be False and eventually deleted
+      self.use_PIL = False
+      self.img_transform_PIL = cutimg.get_transform(opt)
+
+      # load the model weights and move to the desired device
+      self.render_net.load_state_dict(torch.load(full_path))
+      self.render_net.to(self.torch_device)
 
     else:
       raise RuntimeError(f"MjEnv._load_image_rendering_model() error: unrecognised rgb_rendering_method = {self.params.rgb_rendering_method}")
+
+    if self.log_level >= 1:
+        print(f"{self.params.rgb_rendering_method} model now loaded and moved onto device = {self.torch_device}")
 
     # we can now use rgb rendering
     self.params.use_rgb_rendering = True
@@ -1920,7 +2011,7 @@ if __name__ == "__main__":
     mj.params.use_rgb_in_observation = True
     mj.params.use_depth_in_observation = False
     mj.params.use_rgb_rendering = True
-    mj.params.rgb_rendering_method = "CUT"
+    mj.params.rgb_rendering_method = "cycleGAN"
 
     mj._spawn_object()
     mj._set_rgbd_size(200, 100)
