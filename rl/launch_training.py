@@ -3083,10 +3083,10 @@ if __name__ == "__main__":
     tm.param_3 = param_3
 
     # shorten episodes as grasping is already learned
-    tm.trainer.env.params.max_episode_steps = 100
+    tm.trainer.env.params.max_episode_steps = 70 #100
 
     # increase object noise
-    tm.trainer.env.params.object_position_noise_mm = 20
+    tm.trainer.env.params.object_position_noise_mm = 200 #20
     tm.trainer.env.mj.set.oob.done = False
 
     import functools
@@ -3094,8 +3094,6 @@ if __name__ == "__main__":
     # enable env image collection with relatively high chance
     tm.trainer.env.randomise_colours_every_step = True
     tm.trainer.env.collect_images = True
-    tm.trainer.env.image_height = 480
-    tm.trainer.env.image_width = 848
     tm.trainer.env.image_collection_chance = 1.0 / 100.0
     tm.trainer.images_collected = 0
     tm.trainer.image_batches_collected = 0
@@ -3105,7 +3103,9 @@ if __name__ == "__main__":
     tm.trainer.episode_fcn = functools.partial(tm.trainer.image_collection_fcn)
 
     # load in the depth camera
-    tm.trainer.env.load(depth_camera=True)
+    tm.trainer.env.params.image_height = 480
+    tm.trainer.env.params.image_width = 848
+    tm.trainer.env.load(object_set_name="set9_fullset", depth_camera=True)
 
     # essentially disable learning so behaviour is constant
     tm.trainer.agent.params.learning_rate_pi = 1e-10

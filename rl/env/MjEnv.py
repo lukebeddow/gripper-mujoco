@@ -1774,14 +1774,14 @@ if __name__ == "__main__":
     mj.params.test_objects = 20
     mj.load_next.finger_hook_angle_degrees = 75
     mj.load_next.finger_width = 28e-3
-    mj.load_next.fingertip_clearance = 0.1
+    mj.load_next.fingertip_clearance = 0.01
     mj.load_next.XY_base_actions = True
     # mj.load_next.finger_length = 200e-3
     # mj.load_next.finger_thickness = 1.9e-3
 
     gen_obj_set = "set9_fullset"
     name = mj._auto_generate_xml_file("set9_fullset", use_hashes=True)
-    runstr = f"bin/mysimulate -p /home/luke/mujoco-devel/mjcf -o {gen_obj_set} -g {name}"
+    runstr = f"bin/mysimulate -p /home/luke/mymujoco/mjcf -o {gen_obj_set} -g {name}"
     print(runstr)
 
   # ----- evaluate speed of rgbd function ----- #

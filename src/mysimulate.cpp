@@ -1565,6 +1565,11 @@ void makeSettingsUI(int oldstate)
         {mjITEM_SLIDERINT,"state_mode",        2, &myMjClass.s_.state_sample_mode,   "0 5"},
         {mjITEM_SLIDERINT,"sensor_mode",       2, &myMjClass.s_.sensor_sample_mode,  "0 5"},
         {mjITEM_SLIDERNUM,"time4action",       2, &myMjClass.s_.time_for_action,     "0.1 1.0"},
+        {mjITEM_SLIDERNUM,"solimp_d0",         2, &myMjClass.model->opt.o_solimp[0],  "0 1.0"},
+        {mjITEM_SLIDERNUM,"solimp_dw",         2, &myMjClass.model->opt.o_solimp[1],  "0 1.0"},
+        {mjITEM_SLIDERNUM,"solimp_wdth",       2, &myMjClass.model->opt.o_solimp[2],  "0 0.01"},
+        {mjITEM_SLIDERNUM,"solimp_mpt",        2, &myMjClass.model->opt.o_solimp[3],  "0 1.0"},
+        {mjITEM_SLIDERNUM,"solimp_pow",        2, &myMjClass.model->opt.o_solimp[4],  "0 6.0"},
         {mjITEM_END}
     };
 
