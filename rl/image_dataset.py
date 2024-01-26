@@ -208,8 +208,9 @@ def replace_green_region_with_noise_hsv(image):
 generate_sim = False
 generate_real = True
 
+# beware: exact numbers will not result out of this script
 num_sim_images = 4000
-num_real_images = 3000
+num_real_images = 4000
 
 add_green_noise = True
 noise_method = "hsv"
@@ -217,12 +218,24 @@ noise_method = "hsv"
 width = 200
 height = 100
 
-save_sim_folder = "image_datasets/green_noise_200x100/trainA"
-save_real_folder = "image_datasets/green_noise_200x100/trainB"
+save_sim_folder = "image_datasets/single_object_200x100/trainA"
+save_real_folder = "image_datasets/single_object_200x100/trainB"
 
-simruns = ["run_16-54_A41", "run_16-54_A51", "run_16-54_A61", "run_16-54_A71"]
+load_sim_folder = "models/sim_images_3"
+load_real_folder = "models/pb1_test_data"
+
+simruns = [
+  "run_12-53_A1",
+  "run_12-53_A2",
+  "run_12-53_A3",
+  "run_12-53_A4",
+  "run_13-47_A1",
+  # "run_13-47_A2",
+  # "run_13-47_A3",
+  # "run_13-47_A4",
+]
 real_tests = [
-  "pb1_E1_S0", 
+  # "pb1_E1_S0", 
   # "pb1_E1_S1", # multi-object
   # "pb1_E1_S2", # multi-object   
   "pb1_E1_S3", 
@@ -232,6 +245,7 @@ real_tests = [
   "pb1_E2_S3_real",
   # "YCB_heuristic", # multi-object
   # "real_heuristic", 
+  "high_noise_single_object",
 ]
 
 # ----- begin generation code ----- #
@@ -241,8 +255,8 @@ t0 = time.time()
 num_sim = 0
 num_real = 0
 
-sim_names = np.random.permutation(np.array(list(range(num_sim_images + 1))))
-real_names = np.random.permutation(np.array(list(range(num_real_images + 1))))
+sim_names = np.random.permutation(np.array(list(range(num_sim_images))))
+real_names = np.random.permutation(np.array(list(range(num_real_images))))
 
 # create directories if they don't already exist
 if not os.path.exists(save_sim_folder):
@@ -253,8 +267,12 @@ if not os.path.exists(save_real_folder):
 if generate_sim:
   for simrun in simruns:
 
-    simloader = ModelSaver(f"models/sim_images/{simrun}")
+    simloader = ModelSaver(f"{load_sim_folder}/{simrun}")
     num_files = simloader.get_recent_file(name="image_collection", return_int=True)
+
+    rand_files = np.random.permutation(np.array(list(range(1, num_files + 1))))
+
+    num_files = len(rand_files)
 
     run_target = int(num_sim_images / len(simruns))
     file_target = int((num_sim_images / len(simruns)) / num_files)
@@ -262,9 +280,10 @@ if generate_sim:
     target_num = int((num_sim_images / len(simruns)) / num_files)
     num_done = 0
 
-    rand_files = np.random.permutation(np.array(list(range(num_files))))
-
     if target_num < 1: target_num = 1
+    else:
+      if np.random.random() > 0.5:
+        target_num += 1
 
     for i in rand_files:
 
@@ -303,8 +322,11 @@ if generate_real:
     else:
       noise_changed = False
 
-    realloader = ModelSaver(f"models/pb1_test_data/{real_test}")
+    realloader = ModelSaver(f"{load_real_folder}/{real_test}")
     num_files = realloader.get_recent_file(name="trial_image_batch", return_int=True)
+    
+    if num_files is None:
+      raise RuntimeError(f"no files found for test: {real_test}")
 
     run_target = int(num_real_images / len(real_tests))
     file_target = int((num_real_images / len(real_tests)) / num_files)
@@ -312,9 +334,12 @@ if generate_real:
     target_num = int((num_real_images / len(real_tests)) / num_files)
     num_done = 0
 
-    rand_files = np.random.permutation(np.array(list(range(num_files))))
+    rand_files = np.random.permutation(np.array(list(range(1, num_files + 1))))
 
     if target_num < 1: target_num = 1
+    else:
+      if np.random.random() > 0.5:
+        target_num += 1
 
     for i in rand_files:
 
