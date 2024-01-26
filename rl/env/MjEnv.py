@@ -779,27 +779,23 @@ class MjEnv():
 
         if self.params.use_rgb_in_observation:
 
-          # cpu initially because our transforms are on the cpu
-          img_obs = torch.tensor(rgb, device="cpu")
-
           if not self.params.use_rgb_rendering:
 
             # normalise to range 0-1 (worth normalising? Changing range [-1, +1]?)
             if self.torch:
-              img_obs = torch.divide(img_obs, 255, dtype=torch.float32)
+              img_obs = torch.tensor(rgb, device=self.torch_device, dtype=torch.float32)
+              img_obs = torch.divide(img_obs, 255)
             else:
               img_obs = np.divide(img_obs, 255, dtype=np.float32)
-
-          if self.params.use_depth_in_observation:
-            if self.torch:
-              img_obs = torch.concat((img_obs, depth), axis=0)
-            else:
-              img_obs = np.concatenate((img_obs, depth), axis=0)
             
-          elif self.params.use_rgb_rendering:
+          # we are using rgb observation rendering
+          else:
 
             if self.log_level >= 2:
               print("Preparing to use rgb rendering model on image observation")
+
+            # convert to cpu tensor initially as transform operations are on cpu
+            img_obs = torch.tensor(rgb, device="cpu")
 
             if self.use_PIL:
 
@@ -845,12 +841,18 @@ class MjEnv():
               img_obs = img_obs.clamp(-1.0, 1.0).cpu().float().numpy()
               img_obs = np.transpose(img_obs, (0, 2, 1))
 
-        elif self.params.use_depth_in_observation:
+        if self.params.use_depth_in_observation:
 
           if self.torch:
             depth = torch.tensor(depth, device=self.torch_device)
 
-          img_obs = depth
+          if self.params.use_rgb_in_observation:
+            if self.torch:
+              img_obs = torch.concat((img_obs, depth), axis=0)
+            else:
+              img_obs = np.concatenate((img_obs, depth), axis=0)
+          else:
+            img_obs = depth
 
         # add the regular observation, reshaped and padded with zeros, to the image observation
         if image_observation:
@@ -862,8 +864,13 @@ class MjEnv():
             obs = new_obs.reshape((1, *self.render_net_output_size))
           else:
             new_size = self.params.image_height * self.params.image_width
-            obs.resize(new_size)
-            obs = obs.reshape((1, self.params.image_width, self.params.image_height))
+            if self.torch:
+              new_obs = torch.zeros(new_size, device=self.torch_device)
+              new_obs[:len(obs)] = obs
+              obs = new_obs.reshape((1, self.params.image_width, self.params.image_height))
+            else:
+              obs.resize(new_size)
+              obs = obs.reshape((1, self.params.image_width, self.params.image_height))
 
           if len(obs) > new_size:
             raise RuntimeError(f"MjEnv()._next_observation() failed as observation length {len(obs)} exceeds image number of pixels {new_size}")
