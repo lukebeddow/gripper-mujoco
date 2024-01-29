@@ -122,6 +122,11 @@ class TrainingManager():
       "image_width" : 50,
       "image_height" : 50,
 
+      # image preprocessing settings
+      "use_standard_transform": False,
+      "transform_resize_square": 144,
+      "transform_crop_size": 128,
+
       # grasping sene parameters
       "use_scene_settings" : False,
       "num_objects_in_scene" : 1,

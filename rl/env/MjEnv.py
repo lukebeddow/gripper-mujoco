@@ -17,6 +17,8 @@ sys.path.insert(0, pathhere)
 # with env in path, we can now import the shared cpp library
 from mjpy.bind import MjClass, EventTrack
 
+import image_transform
+
 # random generators for training time and test time
 random_train = np.random.default_rng()
 random_test = np.random.default_rng() 
@@ -87,6 +89,11 @@ class MjEnv():
     rgb_rendering_method: str = "CUT"
     image_width: int = 50
     image_height: int = 50
+
+    # image preprocessing settings
+    use_standard_transform: bool = False
+    transform_resize_square: int = 144
+    transform_crop_size: int = 128
 
     # grasping scene parameters
     use_scene_settings: bool = False
@@ -579,6 +586,13 @@ class MjEnv():
         print("MjEnv() failed to initialise an RGBD camera, not enabled in compilation")
       self.params.depth_camera = False
 
+    # load the standard image transform
+    if self.params.use_standard_transform:
+      self.std_img_transform = image_transform.standard_transform(self.params.transform_resize_square,
+                                                                  self.params.transform_crop_size)
+    else:
+      self.std_img_transform = None
+
     # return if the camera is running or not
     return self.params.depth_camera
 
@@ -640,34 +654,26 @@ class MjEnv():
     rgb = rgb.reshape(self.params.image_height, self.params.image_width, 3)
     depth = depth.reshape(self.params.image_height, self.params.image_width, 1)
 
-    # if we are applying the transforms used for image rendering models
+    # if we are applying the transforms used for image rendering models (for visualisation)
     if transform:
 
-      if self.use_PIL:
+      # convert to torch image
+      rgb = np.transpose(rgb, (2, 0, 1))
+      img_torch = torch.tensor(rgb, dtype=torch.float)
 
-        print("rgb shape is", rgb.shape)
-        rgb = np.transpose(rgb, (2, 0, 1))
-        print("rgb shape after is", rgb.shape)
-        # from PIL import Image
-        # image = Image.fromarray(rgb)
-        # img_torch = self.img_transform(image)
-        img_torch = torch.tensor(rgb)
-        img_pil = to_pil_image(img_torch)
-        # img_pil.show()
-        img_torch = self.img_transform_PIL(img_pil)
-        rgb = (img_torch.clamp(-1.0, 1.0).cpu().float().numpy() + 1) / 2.0 * 255.0
-        rgb = np.transpose(rgb, (2, 1, 0)).astype(np.uint8)
-
+      if self.params.use_standard_transform:
+        img_torch = self.std_img_transform(img_torch)
       else:
-
-        print("rgb shape is", rgb.shape)
-        rgb = np.transpose(rgb, (2, 0, 1))
-        print("rgb shape after is", rgb.shape)
-
-        img_torch = torch.tensor(rgb, dtype=torch.float)
-        img_torch = self.img_transform(img_torch)
-        rgb = (img_torch.clamp(-1.0, 1.0).cpu().float().numpy() + 1) / 2.0 * 255.0
-        rgb = np.transpose(rgb, (2, 1, 0)).astype(np.uint8)
+        if self.log_level >= 0:
+          print("MjEnv._get_rgbd_image() warning: transform=True but self.params.use_standard_transform=False")
+        std_transform = image_transform.standard_transform(self.params.transform_resize_square,
+                                                              self.params.transform_crop_size)
+        img_torch = std_transform(img_torch)
+      
+      # now revert the image to numpy unit8 from float [0, 1], since we want to visualise the transform
+      img_torch = torch.transpose(img_torch, 1, 2) # rotate the image so it comes out properly
+      rgb = (img_torch.clamp(-1.0, 1.0).cpu().float().numpy() + 1) / 2.0 * 255.0
+      rgb = np.transpose(rgb, (2, 1, 0)).astype(np.uint8)
 
     # numpy likes image arrays like this: width x height x channels
     # torch likes image arrays like this: channels x width x height
@@ -786,7 +792,10 @@ class MjEnv():
             # normalise to range 0-1 (worth normalising? Changing range [-1, +1]?)
             if self.torch:
               img_obs = torch.tensor(rgb, device=self.torch_device, dtype=torch.float32)
-              img_obs = torch.divide(img_obs, 255)
+              if self.params.use_standard_transform:
+                img_obs = self.std_img_transform(img_obs)
+              else:
+                img_obs = torch.divide(img_obs, 255)
             else:
               img_obs = np.divide(img_obs, 255, dtype=np.float32)
             
@@ -799,29 +808,18 @@ class MjEnv():
             # convert to cpu tensor initially as transform operations are on cpu
             img_obs = torch.tensor(rgb, device="cpu")
 
-            if self.use_PIL:
-
-              # we need to transpose and end up with a torch tensor
-              if self.torch:
-                img_obs = torch.transpose(img_obs, 1, 2)
-              else:
-                img_obs = np.transpose(img_obs, (0, 2, 1))
-                img_obs = torch.tensor(img_obs)
-
-              # then convert to PIL image and run the transforms
-              img_pil = to_pil_image(img_obs)
-              img_torch = self.img_transform_PIL(img_pil)
-
+            # we need to transpose and end up with a torch tensor
+            if self.torch:
+              img_obs = torch.transpose(img_obs, 1, 2)
             else:
+              img_obs = np.transpose(img_obs, (0, 2, 1))
+              img_obs = torch.tensor(img_obs)
 
-              # we need to transpose and end up with a torch tensor
-              if self.torch:
-                img_obs = torch.transpose(img_obs, 1, 2)
-              else:
-                img_obs = np.transpose(img_obs, (0, 2, 1))
-                img_obs = torch.tensor(img_obs)
-
-              # now transform the image into the networks expected format
+            # now transform the image into the networks expected format
+            if self.params.use_standard_transform:
+              img_torch = self.std_img_transform(img_obs)
+            else:
+              # use the loaded transform
               img_torch = self.img_transform(img_obs)
 
             # unsqueeze to simulate batch
@@ -833,6 +831,7 @@ class MjEnv():
             img_obs.to(self.torch_device)
             with torch.no_grad():
               img_obs = self.render_net(img_torch.to(self.torch_device))
+              # img_obs = torch.nn.AdaptiveAvgPool2d((1, 1))
 
             img_obs = img_obs.squeeze(0)
 
@@ -859,23 +858,52 @@ class MjEnv():
         # add the regular observation, reshaped and padded with zeros, to the image observation
         if image_observation:
 
-          if self.params.use_rgb_rendering:
-            new_size = img_obs.shape[-2] * img_obs.shape[-1]
-            new_obs = torch.zeros(new_size, device=self.torch_device)
-            new_obs[:len(obs)] = obs
-            obs = new_obs.reshape((1, img_obs.shape[-2], img_obs.shape[-1]))
-          else:
-            new_size = self.params.image_height * self.params.image_width
-            if self.torch:
-              new_obs = torch.zeros(new_size, device=self.torch_device)
-              new_obs[:len(obs)] = obs
-              obs = new_obs.reshape((1, self.params.image_width, self.params.image_height))
-            else:
-              obs.resize(new_size)
-              obs = obs.reshape((1, self.params.image_width, self.params.image_height))
+          channels, width, height = img_obs.shape
 
-          if len(obs) > new_size:
-            raise RuntimeError(f"MjEnv()._next_observation() failed as observation length {len(obs)} exceeds image number of pixels {new_size}")
+          if self.torch:
+
+            new_obs = torch.zeros(width * height, device=self.torch_device)
+            new_obs[:len(obs)] = obs
+            obs = new_obs.reshape((1, width, height))
+          else:
+            obs.resize(width * height)
+            obs = obs.reshape((1, width, height))
+
+          # if self.params.use_rgb_rendering:
+          #   if self.params.use_standard_transform:
+          #     new_size = self.params.transform_crop_size ** 2
+          #     new_obs = torch.zeros(new_size, device=self.torch_device)
+          #     new_obs[:len(obs)] = obs
+          #     obs = new_obs.reshape((1, self.params.transform_crop_size, self.params.transform_crop_size))
+          #   else:
+          #     new_size = img_obs.shape[-2] * img_obs.shape[-1]
+          #     new_obs = torch.zeros(new_size, device=self.torch_device)
+          #     new_obs[:len(obs)] = obs
+          #     obs = new_obs.reshape((1, img_obs.shape[-2], img_obs.shape[-1]))
+          # else:
+          #   if self.torch:
+          #     if self.params.use_standard_transform:
+          #       new_size = self.params.transform_crop_size ** 2
+          #       new_obs = torch.zeros(new_size, device=self.torch_device)
+          #       new_obs[:len(obs)] = obs
+          #       obs = new_obs.reshape((1, self.params.transform_crop_size, self.params.transform_crop_size))
+          #     else:
+          #       new_size = self.params.image_height * self.params.image_width
+          #       new_obs = torch.zeros(new_size, device=self.torch_device)
+          #       new_obs[:len(obs)] = obs
+          #       obs = new_obs.reshape((1, self.params.image_width, self.params.image_height))
+          #   else:
+          #     new_size = self.params.image_height * self.params.image_width
+          #     obs.resize(new_size)
+          #     obs = obs.reshape((1, self.params.image_width, self.params.image_height))
+
+          check = False
+          if check:
+            print("img_obs.shape", img_obs.shape)
+            print("obs.shape", obs.shape)
+
+          if len(obs) > width * height:
+            raise RuntimeError(f"MjEnv()._next_observation() failed as observation length {len(obs)} exceeds image number of pixels {width * height}")
 
           if self.torch:
             obs = torch.concatenate((img_obs, obs), axis=0)
@@ -1314,11 +1342,6 @@ class MjEnv():
 
     from models import create_model
 
-    global cutimg
-    import data.base_dataset as cutimg
-
-    import image_transform
-
     if self.log_level >= 1:
         print(f"MjEnv._load_image_rendering_model() is preparing to load a {self.params.rgb_rendering_method}")
 
@@ -1341,10 +1364,6 @@ class MjEnv():
       self.render_net = model.netG
       self.render_net_output_size = (model.opt.crop_size, model.opt.crop_size)
       self.img_transform = image_transform.get_transform_2(opt)
-
-      # temporary options used during test, should be False and eventually deleted
-      self.use_PIL = False
-      self.img_transform_PIL = cutimg.get_transform(opt)
 
       # load the model weights and move to the desired device
       weights = torch.load(full_path, map_location="cpu" if initial_load_cpu else None)
@@ -1376,10 +1395,6 @@ class MjEnv():
       self.render_net_output_size = (model.opt.crop_size, model.opt.crop_size)
       self.img_transform = image_transform.get_transform_2(opt)
 
-      # temporary options used during test, should be False and eventually deleted
-      self.use_PIL = False
-      self.img_transform_PIL = cutimg.get_transform(opt)
-
       # load the model weights and move to the desired device
       weights = torch.load(full_path, map_location="cpu" if initial_load_cpu else None)
       self.render_net.load_state_dict(weights)
@@ -1389,8 +1404,8 @@ class MjEnv():
 
       # load a specific, hardcoded cycleGAN model
       load_GA = True # else load GB
-      epoch = 115
-      experiment = "single_object_128_CG"
+      epoch = 400
+      experiment = "gan_52"
       path_to_load = f"/home/luke/mujoco-devel/rl/env/image_render_models/cycleGAN/{experiment}"
       file_to_load_GA = f"{epoch}_net_G_A.pth"
       file_to_load_GB = f"{epoch}_net_G_B.pth"
@@ -1413,17 +1428,13 @@ class MjEnv():
       self.render_net_output_size = (model.opt.crop_size, model.opt.crop_size)
       self.img_transform = image_transform.get_transform_2(opt)
 
-      # temporary options used during test, should be False and eventually deleted
-      self.use_PIL = False
-      self.img_transform_PIL = cutimg.get_transform(opt)
-
       # load the model weights and move to the desired device
       weights = torch.load(full_path, map_location="cpu" if initial_load_cpu else None)
       self.render_net.load_state_dict(weights)
       self.render_net.to(self.torch_device)
 
       # trim the generator network to use as an encoder
-      num_resnet_blocks = 5
+      num_resnet_blocks = 9
       self.render_net.model = self.render_net.model[:12 + num_resnet_blocks]
 
     else:
@@ -2061,30 +2072,19 @@ if __name__ == "__main__":
   test_CUT_model = True
   if test_CUT_model:
 
-    import torch
-
     mj.params.use_rgb_in_observation = True
     mj.params.use_depth_in_observation = False
     mj.params.use_rgb_rendering = True
     mj.params.rgb_rendering_method = "cycleGAN_encoder"
+    mj.params.use_standard_transform = True
+    mj.params.transform_resize_square = 144
+    mj.params.transform_crop_size = 128
 
     mj._spawn_object()
     mj._set_rgbd_size(200, 100)
 
     # try to load the CUT
     mj._load_image_rendering_model(device="cuda")
-    mj.use_PIL = False
-
-    # num = 100
-    # for i in range(num):
-    #   mj.step(torch.tensor(random_train.integers(0, mj.n_actions)))
-
-    # # TEMP TESTING
-    # mj._plot_rgbd_image(transform=True)
-    # exit()
-
-    # now try to render an rgb image
-    new_obs = mj._next_observation()
 
     num = 3
     originals = []
@@ -2097,6 +2097,12 @@ if __name__ == "__main__":
     for i in range(num):
 
       mj.reset()
+
+      # num_rand_steps = 20
+      # for i in range(num_rand_steps):
+      #   new_obs, reward, terminated, truncated, info = mj.step(torch.tensor(random_train.integers(0, mj.n_actions)))
+      #   if terminated or truncated:
+      #     break
 
       new_obs = mj._next_observation()
       new_obs = (new_obs.cpu()).detach().numpy()
@@ -2113,7 +2119,11 @@ if __name__ == "__main__":
       axs[i][1].imshow(np.einsum("ijk->kji", np.array((new_obs[:3] + 1) / 2.0 * 255.0, dtype=np.uint8)))
 
     fig.tight_layout()
-    plt.show()
+
+    # visualise how simulated images are transformed
+    mj._plot_rgbd_image(transform=True)
+
+    # plt.show()
 
   # ----- visualise segmentation masks ----- #
 
@@ -2193,6 +2203,9 @@ if __name__ == "__main__":
 
   test_rgbd_speed = False
   if test_rgbd_speed:
+      
+      # mj._spawn_object()
+      mj._set_rgbd_size(50, 50)
 
       num = 1000
       mj.mj.tick()

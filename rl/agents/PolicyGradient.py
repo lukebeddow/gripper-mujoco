@@ -49,36 +49,73 @@ def mlp(sizes, activation, output_activation=nn.Identity):
     layers += [nn.Linear(sizes[j], sizes[j+1]), act()]
   return nn.Sequential(*layers)
 
-def calc_conv_layer_size(W, H, C, kernel_num, kernel_size, stride, padding, print=True):
+def calc_conv_layer_size(W, H, C, kernel_num, kernel_size, stride, padding, prnt=False):
 
   new_W = floor(((W - kernel_size + 2*padding) / (stride)) + 1)
   new_H = floor(((H - kernel_size + 2*padding) / (stride)) + 1)
 
-  if print:
+  if prnt:
     print(f"Convolution transforms ({C}x{W}x{H}) to ({kernel_num}x{new_W}x{new_H})")
 
   return new_W, new_H, kernel_num
 
-def calc_max_pool_size(W, H, C, pool_size, stride, print=True):
+def calc_max_pool_size(W, H, C, pool_size, stride, prnt=False):
 
   new_W = floor(((W - pool_size) / stride) + 1)
   new_H = floor(((H - pool_size) / stride) + 1)
 
-  if print:
+  if prnt:
     print(f"Max pool transforms ({C}x{W}x{H}) to ({C}x{new_W}x{new_H})")
 
   return new_W, new_H, C
 
-def calc_FC_layer_size(W, H, C, print=True):
+def calc_adaptive_avg_size(W, H, C, output_size, prnt=False):
+
+  if prnt:
+    print(f"Adaptive pool transforms ({C}x{W}x{H}) to ({C}x{output_size[0]}x{output_size[1]})")
+
+  return output_size[0], output_size[1], C
+
+def calc_FC_layer_size(W, H, C, prnt=False):
 
   new_W = 1
   new_H = 1
   new_C = W * H * C
 
-  if print:
+  if prnt:
     print(f"The first FC layer should take size ({C}x{W}x{H}) as ({new_C}x{new_W}x{new_H})")
 
   return new_W, new_H, new_C
+
+# # calculate the size of the first fully connected layer (ensure settings match image_features_ below)
+#     prnt = True
+#     w, h, c = calc_conv_layer_size(width, height, channel, kernel_num=16, kernel_size=3, stride=1, padding=1, prnt=prnt)
+#     w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, prnt=prnt)
+#     w, h, c = calc_conv_layer_size(w, h, c, kernel_num=64, kernel_size=3, stride=1, padding=1, prnt=prnt)
+#     w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, prnt=prnt)
+#     w, h, c = calc_conv_layer_size(w, h, c, kernel_num=128, kernel_size=5, stride=2, padding=2, prnt=prnt)
+#     w, h, c = calc_adaptive_avg_size(w, h, c, (1, 1), prnt=prnt)
+#     w, h, c = calc_FC_layer_size(w, h, c, prnt=prnt)
+#     fc_layer_num = c
+
+#     # define the CNN to handle the images
+#     self.image_features_ = nn.Sequential(
+
+#       # input CxWxH, output 16xWxH
+#       nn.Conv2d(channel, 16, kernel_size=5, stride=2, padding=2),
+#       nn.ReLU(),
+#       nn.MaxPool2d(kernel_size=3, stride=2),
+#       # nn.Dropout(),
+#       nn.Conv2d(16, 64, kernel_size=5, stride=2, padding=2),
+#       nn.ReLU(),
+#       nn.MaxPool2d(kernel_size=3, stride=2),
+#       # nn.Dropout(),
+#       nn.Flatten(),
+#       nn.Linear(fc_layer_num, 128),
+#       nn.ReLU(),
+#       # nn.Linear(64*16, 64),
+#       # nn.ReLU(),
+#     )
 
 class MixedNetwork(nn.Module):
 
@@ -96,11 +133,12 @@ class MixedNetwork(nn.Module):
     self.name += f"_{width}x{height}"
 
     # calculate the size of the first fully connected layer (ensure settings match image_features_ below)
-    w, h, c = calc_conv_layer_size(width, height, channel, kernel_num=16, kernel_size=5, stride=2, padding=2, print=False)
-    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, print=False)
-    w, h, c = calc_conv_layer_size(w, h, c, kernel_num=64, kernel_size=5, stride=2, padding=2, print=False)
-    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, print=False)
-    w, h, c = calc_FC_layer_size(w, h, c, print=False)
+    prnt = False
+    w, h, c = calc_conv_layer_size(width, height, channel, kernel_num=16, kernel_size=5, stride=2, padding=2, prnt=prnt)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, prnt=prnt)
+    w, h, c = calc_conv_layer_size(w, h, c, kernel_num=64, kernel_size=5, stride=2, padding=2, prnt=prnt)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, prnt=prnt)
+    w, h, c = calc_FC_layer_size(w, h, c, prnt=prnt)
     fc_layer_num = c
 
     # define the CNN to handle the images
@@ -136,9 +174,7 @@ class MixedNetwork(nn.Module):
     self.combined_features_ = nn.Sequential(
       nn.Linear(128 + 128, 256),
       nn.ReLU(),
-      nn.Linear(256, 128),
-      nn.ReLU(),
-      nn.Linear(128, outputs),
+      nn.Linear(256, outputs),
     )
 
   def split_obs(self, obs):
@@ -197,12 +233,13 @@ class MixedNetworkFromEncoder(nn.Module):
     (channel, width, height) = image_size
     self.name += f"_{width}x{height}"
 
-    # calculate the size of the first fully connected layer (ensure settings match image_features_ below)
-    w, h, c = calc_conv_layer_size(width, height, channel, kernel_num=16, kernel_size=5, stride=2, padding=2, print=False)
-    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, print=False)
-    w, h, c = calc_conv_layer_size(w, h, c, kernel_num=64, kernel_size=5, stride=2, padding=2, print=False)
-    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, print=False)
-    w, h, c = calc_FC_layer_size(w, h, c, print=False)
+    # calculate the size of the first fully connected layer (ensure settings match image_features_ below
+    prnt = False
+    w, h, c = calc_conv_layer_size(width, height, channel, kernel_num=16, kernel_size=5, stride=2, padding=2, prnt=prnt)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, prnt=prnt)
+    w, h, c = calc_conv_layer_size(w, h, c, kernel_num=64, kernel_size=5, stride=2, padding=2, prnt=prnt)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, prnt=prnt)
+    w, h, c = calc_FC_layer_size(w, h, c, prnt=prnt)
     fc_layer_num = c
 
     # define the CNN to handle the images
@@ -262,14 +299,20 @@ class MixedNetworkFromEncoder(nn.Module):
       The first 3 channels are rgb
       The last channel is the reshaped sensor vector, padded with zeros
     """
+    # split the observation into image and sensor parts
     tuple_img_sensors = self.split_obs(img_and_sensor_matrix)
     image = tuple_img_sensors[0].to(self.device)
     sensors = tuple_img_sensors[1].to(self.device)
+
+    # feed each part through a seperate head
     x = self.image_features_(image)
-    x = x.view(1, 128) # from shape [1, 128, 1, 1] -> [1, 128]
     y = self.numeric_features_(sensors)
-    z = torch.cat((x[:2], y), 1)
+
+    # concatenate the parts and feed into the last head of the network
+    x = x.view(x.shape[0], 128) # from shape [B, 128, 1, 1] -> [B, 128]
+    z = torch.cat((x, y), 1)
     z = self.combined_features_(z)
+
     return z
 
 class PPOBuffer:
@@ -821,7 +864,7 @@ class Agent_PPO:
   Transition = namedtuple('Transition',
                           ('state', 'action', 'reward', 'advantage', 'log_prob', 'terminal'))
 
-  def __init__(self, device="cpu", rngseed=None, mode="train"):
+  def __init__(self, device="cpu", rngseed=None, mode="train", steps=None):
     """
     Soft actor-critic agent for a given environment
     """
@@ -832,6 +875,8 @@ class Agent_PPO:
     self.rng = np.random.default_rng(rngseed)
     self.mode = mode
     self.steps_done = 0
+    if steps is not None:
+      self.params.steps_per_epoch = steps
 
   def init(self, network, obs_dim=None, action_dim=None):
     """
@@ -1392,3 +1437,8 @@ class Agent_PPO_Discriminator:
     self.ppo.testing_mode()
     self.discrim.eval()
 
+if __name__ == "__main__":
+
+  network = CNNActorCriticPG((3, 40, 40), 
+                               64, 6, continous_actions=True, 
+                               device="cpu")

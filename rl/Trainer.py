@@ -1740,9 +1740,8 @@ class MujocoTrainer(Trainer):
     defined and overriden! Otherwise a NotImplementedError will be raised
     """
 
-    # this function does NOT allow stages going backwards or changing stage by more than one
-    # allow_backwards = False
-    # allow_multistep = False
+    # allow_backwards = False # not implemented
+    allow_multistep = False # only possible for metric=success_rate
 
     if self.curriculum_dict["finished"]: return
 
@@ -1765,9 +1764,14 @@ class MujocoTrainer(Trainer):
       else: success_rate = 0.0
 
       # determine if we have passed the required threshold
-      for t in self.curriculum_dict["metric_thresholds"][stage:]:
-        if success_rate >= t:
-          stage += 1
+      if allow_multistep:
+        for t in self.curriculum_dict["metric_thresholds"][stage:]:
+          if success_rate >= t:
+            stage += 1
+      else:
+        if stage < len(self.curriculum_dict["metric_thresholds"]):
+          if success_rate >= self.curriculum_dict["metric_thresholds"][stage]:
+            stage += 1
 
     # if the metric is not recognised
     else: raise RuntimeError(f"TrainingManager.curriculum_fcn() metric of {self.curriculum_dict['metric_name']} not recognised")

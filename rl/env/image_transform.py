@@ -30,6 +30,36 @@ def get_params(opt, size):
 
     return {'crop_pos': (x, y), 'flip': flip}
 
+def standard_transform(resize_size=142, final_size=128, method=Image.BICUBIC, convert=True):
+    """
+    Produce standard transform for images before inputting into a neural network.
+    Expects torch tensors
+    """
+
+    transform_list = []
+
+    # resize the image to the initial size
+    osize = [resize_size, resize_size]
+    transform_list.append(transforms.Resize(osize, interpolation=method, antialias=True))
+
+    # now crop to the final size using centre crop
+    fsize = [final_size, final_size]
+    transform_list.append(transforms.CenterCrop(fsize))
+
+    # ensure the size of the image is divisible by 4, resize if needed
+    transform_list.append(transforms.Lambda(lambda img: __make_power_2(img, base=4, method=method)))
+
+    if convert:
+
+        # change from uint8 to float with range [0, 1]
+        transform_list += [transforms.Lambda(lambda x: x.float() / 255.0)]
+        # transform_list += [transforms.Lambda(lambda x: ((x.float() / 255.0) + 1) / 2.0)]
+
+        # normalise
+        transform_list += [transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
+        # transform_list += [transforms.Normalize((0.0, 0.0, 0.0), (0.5, 0.5, 0.5))]
+
+    return transforms.Compose(transform_list)
 
 def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, convert=True):
     transform_list = []
