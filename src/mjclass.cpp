@@ -1220,17 +1220,32 @@ void MjClass::update_env()
 
   /* ----- determine the reported success rate (as a proxy, should not have associated reward) ----- */
 
-  // determine successful grasp, for metric only, no associated reward
-  if (s_.use_termination_action) {
-    if (env_.cnt.stable_termination.value) {
-      env_.cnt.successful_grasp.value = true;
-    }
-  }
-  else {
-    if (env_.cnt.stable_height.value) {
-      env_.cnt.successful_grasp.value = true;
-    }
-  }
+  /* check for a 'successful' trial, used as a metric only, should have NO associated
+  reward. The criteria to determine if a trial was successful is:
+    1) an event value is True which
+    2) is a binary reward and
+    2) gives a reward of +1
+    3) and sets done = True
+    4) and which is now triggered (ie cnt.row + 1 >= trigger)
+  */
+  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)                                     \
+            if (env_.cnt.NAME.value) {                                               \
+              if (s_.NAME.reward >= (1.0 - 1e-5)) {                                  \
+                if (s_.NAME.done) {                                                  \
+                  if (env_.cnt.NAME.row + 1 >= s_.NAME.trigger) {                    \
+                    env_.cnt.successful_grasp.value = true;                          \
+                    if (s_.debug)                                                    \
+                      std::printf("successful_grasp=true because %s is triggered\n", \
+                        #NAME);                                                      \
+                  }                                                                  \
+                }                                                                    \
+              }                                                                      \
+            }
+          
+    // run the macro to create the code
+    LUKE_MJSETTINGS_BINARY_REWARD
+
+  #undef BR
 
   /* ----- resolve linear events and update counts of all events (no editing needed) ----- */
 

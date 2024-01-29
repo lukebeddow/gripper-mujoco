@@ -1740,6 +1740,7 @@ class MujocoTrainer(Trainer):
     defined and overriden! Otherwise a NotImplementedError will be raised
     """
 
+    # this function does NOT allow stages going backwards or changing stage by more than one
     # allow_backwards = False
     # allow_multistep = False
 

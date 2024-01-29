@@ -142,7 +142,7 @@
   BR(  object_contact,          0.005,    false,    1)      /* fingers or palm touches object */\
   BR(  object_stable,           0.01,     false,    1)      /* fingers and palm apply min force */\
   BR(  stable_height,           1.0,      1,        1)      /* object stable and at height target */\
-  BR(  stable_termination,      1.0,      1,        1)      /* object stable and termination signal sent */\
+  BR(  stable_termination,      1.0,      1,        1000)   /* object stable and termination signal sent */\
   BR(  failed_termination,      -1.0,     1,        1)      /* termination signal sent but object not stable */\
   BR(  successful_grasp,        0.01,     1,        1)      /* metric to indicate a grasp is stable, shouldn't have associated reward */\
   BR(  within_XY_distance,      0.1,      false,    1)      /* are we close enough to the target object */\
