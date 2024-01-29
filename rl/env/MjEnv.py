@@ -149,6 +149,7 @@ class MjEnv():
     self.torch = use_torch # do we return and expect torch tensors
     self.torch_device = torch.device(device)
     self.randomise_colours_every_step = False
+    self.render_net = None
 
     # initialise class variables
     self.test_in_progress = False
@@ -1295,10 +1296,11 @@ class MjEnv():
 
     return opt
 
-  def _load_image_rendering_model(self, device="cuda"):
+  def _load_image_rendering_model(self, device="cuda", initial_load_cpu=True):
     """
     Load a model to perform image rendering on images extracted from the
-    simulator
+    simulator. Can initially load on the cpu which is slower but reduces the
+    surge of GPU RAM usage
     """
 
     self.set_device(device)
@@ -1333,6 +1335,7 @@ class MjEnv():
       opt = self._load_image_rendering_options(path_to_load)
       model = create_model(opt)
       model.opt.isTrain = False # put into test mode (ie evaluation mode)
+      if initial_load_cpu: model.opt.gpu_ids = [] # force model to be created on cpu
 
       # extract the generator network, alongside the image size, and image transform
       self.render_net = model.netG
@@ -1344,7 +1347,8 @@ class MjEnv():
       self.img_transform_PIL = cutimg.get_transform(opt)
 
       # load the model weights and move to the desired device
-      self.render_net.load_state_dict(torch.load(full_path))
+      weights = torch.load(full_path, map_location="cpu" if initial_load_cpu else None)
+      self.render_net.load_state_dict(weights)
       self.render_net.to(self.torch_device)
 
     elif self.params.rgb_rendering_method.lower() == "cyclegan":
@@ -1365,6 +1369,7 @@ class MjEnv():
       opt = self._load_image_rendering_options(path_to_load)
       model = create_model(opt)
       model.opt.isTrain = False # put into test mode (ie evaluation mode)
+      if initial_load_cpu: model.opt.gpu_ids = [] # force model to be created on cpu
 
       # extract the generator network, alongside the image size, and image transform
       self.render_net = model.netG_A
@@ -1376,7 +1381,8 @@ class MjEnv():
       self.img_transform_PIL = cutimg.get_transform(opt)
 
       # load the model weights and move to the desired device
-      self.render_net.load_state_dict(torch.load(full_path))
+      weights = torch.load(full_path, map_location="cpu" if initial_load_cpu else None)
+      self.render_net.load_state_dict(weights)
       self.render_net.to(self.torch_device)
 
     elif self.params.rgb_rendering_method.lower() == "cyclegan_encoder":
@@ -1397,6 +1403,10 @@ class MjEnv():
       opt = self._load_image_rendering_options(path_to_load)
       model = create_model(opt)
       model.opt.isTrain = False # put into test mode (ie evaluation mode)
+      if initial_load_cpu: model.opt.gpu_ids = [] # force model to be created on cpu
+
+      # special added feature: only load GA
+      opt.GA_only = True
 
       # extract the generator network, alongside the image size, and image transform
       self.render_net = model.netG_A
@@ -1408,7 +1418,8 @@ class MjEnv():
       self.img_transform_PIL = cutimg.get_transform(opt)
 
       # load the model weights and move to the desired device
-      self.render_net.load_state_dict(torch.load(full_path))
+      weights = torch.load(full_path, map_location="cpu" if initial_load_cpu else None)
+      self.render_net.load_state_dict(weights)
       self.render_net.to(self.torch_device)
 
       # trim the generator network to use as an encoder
@@ -1906,8 +1917,12 @@ class MjEnv():
       self.rgbd_enabled = False
 
     # determine if we are loading a rendering network
-    if self.params.use_rgb_rendering:
+    if self.params.use_rgb_rendering and self.render_net is None:
       self._load_image_rendering_model(device=self.torch_device)
+      # try to clear away large memory required to load the model
+      import gc
+      torch.cuda.empty_cache()
+      gc.collect()
     else:
       self.render_net = None
 

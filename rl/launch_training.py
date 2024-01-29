@@ -3021,7 +3021,7 @@ if __name__ == "__main__":
 
     # define what to vary this training, dependent on job number
     vary_1 = [1e-6, 1e-5, 1e-4]
-    vary_2 = [(50, 50)]
+    vary_2 = [(25, 25), (50, 50)]
     vary_3 = None
     repeats = None
     tm.param_1_name = "learning rate"
@@ -3115,6 +3115,7 @@ if __name__ == "__main__":
     # make the agent
     tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
     tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1
+    tm.settings["Agent_PPO"]["steps_per_epoch"] = 4000
     agent = Agent_PPO(device=args.device)
     agent.init(network)
 
