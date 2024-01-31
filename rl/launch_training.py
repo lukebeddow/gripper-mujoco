@@ -530,6 +530,14 @@ def curriculum_change_navigation_grasp(self, stage):
     self.env.mj.set.object_stable.set       (rew,    False,  1)
     self.env.mj.set.stable_height.set       (1.0,    True,   1)
 
+def curriculum_change_object_noise(self, stage):
+  """
+  Change the curriculum to increase the object noise so they spawn further from
+  the gripper and are harder to grasp
+  """
+
+  self.env.params.object_position_noise_mm = self.curriculum_dict["param_values"][stage]
+
 if __name__ == "__main__":
 
   """
@@ -590,6 +598,7 @@ if __name__ == "__main__":
   parser.add_argument("--new-endpoint",       default=None, type=int) # new episode target for continuing training
   parser.add_argument("--extra-episodes",     default=None, type=int) # extra episodes to run for continuing training
   parser.add_argument("--smallest-job-num",   default=1, type=int)    # only used to reduce sleep time to seperate processes
+  parser.add_argument("--torch-threads",      default=1, type=int)    # maximum number of allowed pytorch threads, set 0 for no limit
   # parser.add_argument("--override-lib",       action="store_true")    # override bind.so library with loaded data
 
   args = parser.parse_args()
@@ -599,8 +608,9 @@ if __name__ == "__main__":
   # default device
   if args.device is None:
     args.device = "cpu"
-  if args.device == "cpu": 
-    torch.set_num_threads(1)
+
+  if args.torch_threads > 0:
+    torch.set_num_threads(args.torch_threads)
 
   if args.print: 
     args.log_level = 0
@@ -3203,6 +3213,81 @@ if __name__ == "__main__":
     tm.settings["curriculum"]["metric_name"] = "success_rate"
     tm.settings["curriculum"]["metric_thresholds"] = [0.5 for i in range(3)]
     tm.settings["curriculum"]["change_fcn"] = curriculum_change_navigation_grasp
+
+    # add in image rendering with the encoder
+    if tm.param_2:
+      tm.settings["env"]["use_rgb_rendering"] = True
+      tm.settings["env"]["rgb_rendering_method"] = "cycleGAN_encoder"
+
+    # create the environment
+    env = tm.make_env()
+
+    # create the agent network
+    if tm.param_2:
+      obs_size = (256, 13, 13)
+      network = NetActorCriticPG(MixedNetworkFromEncoder, obs_size,
+                                 env.n_obs, env.n_actions, continous_actions=True, 
+                                 device=args.device)
+    else:
+      obs_size = (3, env.params.transform_crop_size, 
+                  env.params.transform_crop_size)
+      network = CNNActorCriticPG(obs_size, env.n_obs, env.n_actions, 
+                                continous_actions=True, device=args.device)
+    
+    # make the agent
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1
+    tm.settings["Agent_PPO"]["steps_per_epoch"] = 2800
+    agent = Agent_PPO(device=args.device, steps=tm.settings["Agent_PPO"]["steps_per_epoch"])
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "ppo_cnn_single_object_curriculum_2":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [5e-6, 1e-5, 5e-5]
+    vary_2 = [False, True]
+    vary_3 = None
+    repeats = None
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "use encoder"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # add in the camera
+    tm.settings["env"]["depth_camera"] = True
+    tm.settings["env"]["use_rgb_in_observation"] = True
+    tm.settings["env"]["image_width"] = 200
+    tm.settings["env"]["image_height"] = 100
+
+    # enable image transforms and set network image sizes
+    tm.settings["env"]["use_standard_transform"] = True
+    tm.settings["env"]["transform_resize_square"] = 58
+    tm.settings["env"]["transform_crop_size"] = 52
+
+    # turn up noise and add in XY base actions
+    tm.settings["env"]["object_position_noise_mm"] = 30
+    tm.settings["env"]["XY_base_actions"] = True
+    tm.settings["env"]["base_lim_X_mm"] = 50
+    tm.settings["env"]["base_lim_Y_mm"] = 50
+
+    # update oob, actions, and sensors of the gripper
+    tm.settings["cpp"]["oob_distance"] = 60e-3
+    tm.settings["cpp"]["action"]["base_X"]["in_use"] = True
+    tm.settings["cpp"]["action"]["base_Y"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["base_state_sensor_XY"]["in_use"] = True
+
+    # add in curriculum where grasping gets harder
+    tm.settings["trainer"]["use_curriculum"] = True
+    tm.settings["curriculum"]["metric_name"] = "success_rate"
+    tm.settings["curriculum"]["metric_thresholds"] = [0.6 for i in range(4)]
+    tm.settings["curriculum"]["param_values"] = [10, 20, 30, 40, 50]
+    tm.settings["curriculum"]["change_fcn"] = curriculum_change_object_noise
 
     # add in image rendering with the encoder
     if tm.param_2:

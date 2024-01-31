@@ -1758,6 +1758,12 @@ class MujocoTrainer(Trainer):
 
     elif self.curriculum_dict["metric_name"] == "success_rate":
 
+      if not hasattr(self, "curriculum_num_tests"):
+        self.curriculum_num_tests = 0
+
+      if self.curriculum_num_tests == len(self.track.avg_successful_grasp):
+        return
+
       # get the most recent success rate
       if len(self.track.avg_successful_grasp) > 0:
         success_rate = self.track.avg_successful_grasp[-1]
@@ -1772,6 +1778,8 @@ class MujocoTrainer(Trainer):
         if stage < len(self.curriculum_dict["metric_thresholds"]):
           if success_rate >= self.curriculum_dict["metric_thresholds"][stage]:
             stage += 1
+
+      self.curriculum_num_tests = len(self.track.avg_successful_grasp)
 
     # if the metric is not recognised
     else: raise RuntimeError(f"TrainingManager.curriculum_fcn() metric of {self.curriculum_dict['metric_name']} not recognised")
