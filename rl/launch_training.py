@@ -3251,7 +3251,7 @@ if __name__ == "__main__":
     vary_1 = [5e-6, 1e-5, 5e-5]
     vary_2 = [False, True]
     vary_3 = None
-    repeats = None
+    repeats = 2
     tm.param_1_name = "learning rate"
     tm.param_2_name = "use encoder"
     tm.param_3_name = None
@@ -3276,8 +3276,13 @@ if __name__ == "__main__":
     tm.settings["env"]["base_lim_X_mm"] = 50
     tm.settings["env"]["base_lim_Y_mm"] = 50
 
+    # enable base yaw
+    tm.settings["env"]["Z_base_rotation"] = True
+    tm.settings["cpp"]["action"]["base_yaw"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["base_state_sensor_yaw"]["in_use"] = True
+
     # update oob, actions, and sensors of the gripper
-    tm.settings["cpp"]["oob_distance"] = 60e-3
+    tm.settings["cpp"]["oob_distance"] = 70e-3
     tm.settings["cpp"]["action"]["base_X"]["in_use"] = True
     tm.settings["cpp"]["action"]["base_Y"]["in_use"] = True
     tm.settings["cpp"]["sensor"]["base_state_sensor_XY"]["in_use"] = True
@@ -3288,6 +3293,9 @@ if __name__ == "__main__":
     tm.settings["curriculum"]["metric_thresholds"] = [0.6 for i in range(4)]
     tm.settings["curriculum"]["param_values"] = [10, 20, 30, 40, 50]
     tm.settings["curriculum"]["change_fcn"] = curriculum_change_object_noise
+
+    # enable reward for getting close to objects
+    tm.settings["reward"]["object_XY_distance"]["used"] = True
 
     # add in image rendering with the encoder
     if tm.param_2:

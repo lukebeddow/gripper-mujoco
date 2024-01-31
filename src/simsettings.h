@@ -100,6 +100,7 @@
   SS(  motor_state_sensor,      true,     0,        -1)  /* xyz motor states, normalise is ignored */\
   SS(  base_state_sensor_Z,     true,     0,        -1)  /* base position state, normalise is ignored)*/\
   SS(  base_state_sensor_XY,    true,     0,        -1)  /* base position state, normalise is ignored)*/\
+  SS(  base_state_sensor_yaw,   true,     0,        -1)  /* base rotation state, normalise is ignored */\
   SS(  bending_gauge,           true,     20,       10)  /* strain gauge to measure finger bending */\
   SS(  axial_gauge,             false,    3.0,      10)  /* strain gauge to measure axial finger strain */\
   SS(  palm_sensor,             true,     10.0,     10)  /* palm force sensor */\
@@ -122,8 +123,8 @@
   AA(  base_Y,                  true,     2.0e-3,   1)        /* move gripper base Y by m */\
   AA(  base_Z,                  true,     2.0e-3,   1)        /* move gripper base Z by m */\
   AA(  base_roll,               false,    0.01,     1)        /* rotate gripper base about X in radians */\
-  AA(  base_pitch,              false,    0.01,     1)        /* rotate gripper base about Y in radians */\
-  AA(  base_yaw,                false,    0.01,     1)        /* rotate gripper base about Z in radians */\
+  AA(  base_pitch,              false,    0.02,     1)        /* rotate gripper base about Y in radians */\
+  AA(  base_yaw,                true,     0.05,     1)        /* rotate gripper base about Z in radians */\
   
   
   

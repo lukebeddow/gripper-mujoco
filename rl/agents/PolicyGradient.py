@@ -174,7 +174,9 @@ class MixedNetwork(nn.Module):
     self.combined_features_ = nn.Sequential(
       nn.Linear(128 + 128, 256),
       nn.ReLU(),
-      nn.Linear(256, outputs),
+      nn.Linear(256, 128),
+      nn.ReLU(),
+      nn.Linear(128, outputs),
     )
 
   def split_obs(self, obs):

@@ -427,6 +427,13 @@ QPos ObjectHandler::spawn_object(mjModel* model, mjData* data, int new_idx, QPos
   return new_qpos;
 }
 
+int ObjectHandler::get_num_live_objects()
+{
+  /* return the number of live objects */
+
+  return live_objects.size();
+}
+
 std::vector<QPos> ObjectHandler::get_live_qpos(mjModel* model, mjData* data)
 {
   /* get the qpos of the live objects */

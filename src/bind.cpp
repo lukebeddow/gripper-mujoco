@@ -85,6 +85,8 @@ PYBIND11_MODULE(bind, m) {
     .def("move_joint_target", &MjClass::move_joint_target)
     .def("move_step_target", &MjClass::move_step_target)
     .def("set_new_base_XY", &MjClass::set_new_base_XY)
+    .def("set_new_base_yaw", &MjClass::set_new_base_yaw)
+    .def("random_base_yaw", &MjClass::random_base_yaw)
 
     // learning functions
     .def("action_step", &MjClass::action_step)
@@ -156,6 +158,7 @@ PYBIND11_MODULE(bind, m) {
     .def("set_finger_width", &MjClass::set_finger_width)
     .def("set_finger_modulus", &MjClass::set_finger_modulus)
     .def("set_base_XYZ_limits", &MjClass::set_base_XYZ_limits)
+    .def("set_base_yaw_limit", &MjClass::set_base_yaw_limit)
     .def("get_finger_thickness", &MjClass::get_finger_thickness)
     .def("get_finger_stiffnesses", &MjClass::get_finger_stiffnesses)
     .def("get_finger_width", &MjClass::get_finger_width)

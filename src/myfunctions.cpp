@@ -189,6 +189,9 @@ struct JointSettings {
     std::vector<std::string> base_xyz = {
       "base_X_joint", "base_Y_joint", "base_Z_joint"
     };
+    std::vector<std::string> base_z_rot = {
+      "base_Z_rotation_joint"
+    };
     std::vector<std::string> finger;                  // runtime depends
     std::vector<std::string> hook;                    // runtime depends
   } names;
@@ -275,6 +278,8 @@ struct JointSettings {
     Gain gripper_kd {1, 1, 1};                  // derivative gains for gripper xyz motors {x, y, z}
     Gain base_xyz_kp {500, 500, 2000};          // proportional gains for base xyz motions {x, y, z}
     Gain base_xyz_kd {80, 80, 100};             // derivative gains for base xyz motions {x, y, z}
+    Gain base_rot_kp {500, 500, 100};
+    Gain base_rot_kd {80, 80, 6};
 
     double time_per_step = 0.0;                 // runtime depends
   } ctrl;
@@ -288,6 +293,7 @@ struct JointSettings {
     bool finger = false;
     bool base_z = false;
     bool base_xyz = false;
+    bool base_z_rot = false;
   } in_use;
 
   // how many joints for each part
@@ -390,6 +396,7 @@ struct JointSettings {
       << ", segmented fingers = " << (in_use.finger ? "true" : "false")
       << ", base z = " << (in_use.base_z ? "true" : "false")
       << ", base xyz = " << (in_use.base_xyz ? "true" : "false")
+      << ", base z rot = " << (in_use.base_z_rot ? "true" : "false")
       << '\n';
   }
   void print_num() {
@@ -582,6 +589,11 @@ void get_joint_indexes(mjModel* model)
     if (idx == -1) continue; // skip in case this joint does not exist
     j_.idx.base.push_back(idx);
   }
+  for (std::string name : j_.names.base_z_rot) {
+    int idx = mj_name2id(model, mjOBJ_JOINT, name.c_str());
+    if (idx == -1) continue; // skip in case this joint does not exist
+    j_.idx.base.push_back(idx);
+  }
 
   if (j_.idx.panda[0] != -1) j_.in_use.panda = true;
   else j_.in_use.panda = false;
@@ -598,13 +610,18 @@ void get_joint_indexes(mjModel* model)
     else if (j_.num.base == 3) {
       j_.in_use.base_xyz = true;
     }
+    else if (j_.num.base == 4) {
+      j_.in_use.base_xyz = true;
+      j_.in_use.base_z_rot = true;
+    }
     else {
-      throw std::runtime_error("base joints number does not equal 1 or 3");
+      throw std::runtime_error("base joints number does not equal 1, 3, or 4");
     }
   }
   else {
     j_.in_use.base_z = false;
     j_.in_use.base_xyz = false;
+    j_.in_use.base_z_rot = false;
   }
 
   // determine how many joints are being used for the other parts
@@ -1414,11 +1431,6 @@ void calibrate_reset(mjModel* model, mjData* data)
     std::cout << "calibrate_reset() warning: found changed number of joints in model, did you reload an xml with more/less gripper joints? Attempting to recalibrate\n";
     // throw std::runtime_error("calibrate_reset() found changed number of joints in the model");
 
-    // attempt to reset this function and recalibrate
-    j_.reset_qpos.panda.clear();
-    j_.reset_qpos.base.clear();
-    j_.reset_qpos.gripper.clear();
-
     first_call = true;
 
     num_panda = j_.num.panda;
@@ -1436,6 +1448,10 @@ void calibrate_reset(mjModel* model, mjData* data)
       step(model, data);
       after_step(model, data);
     }
+
+    j_.reset_qpos.panda.clear();
+    j_.reset_qpos.base.clear();
+    j_.reset_qpos.gripper.clear();
 
     // see where the joints have settled to equilibrium
     for (int i = 0; i < j_.num.panda; i++) {
@@ -1933,8 +1949,8 @@ void control_base(const mjModel* model, mjData* data)
   if (j_.in_use.base_z and j_.num.base != 1) {
     throw std::runtime_error("base dof does not equal 1 but in_use.base_z is true");
   }
-  if (j_.in_use.base_xyz and j_.num.base != 3) {
-    throw std::runtime_error("base dof does not equal 3 but in_use.base_xyz is true");
+  if (j_.in_use.base_xyz and (j_.num.base != 3 and j_.num.base != 4)) {
+    throw std::runtime_error("base dof does not equal 3 or 4 but in_use.base_xyz is true");
   }
 
   if (j_.in_use.base_z) {
@@ -1961,6 +1977,13 @@ void control_base(const mjModel* model, mjData* data)
     u = ((*j_.to_qpos.base[2]) - target_.base.z) * j_.ctrl.base_xyz_kp.z
       + (*j_.to_qvel.base[2]) * j_.ctrl.base_xyz_kd.z;
     data->ctrl[n + 2] = -u;
+
+    if (j_.in_use.base_z_rot) {
+      // z rotation
+      u = ((*j_.to_qpos.base[3]) - target_.base.yaw) * j_.ctrl.base_rot_kp.z
+        + (*j_.to_qvel.base[3]) * j_.ctrl.base_rot_kd.z;
+      data->ctrl[n + 3] = -u;
+    }
   }
   
 }
@@ -2060,6 +2083,9 @@ void update_stepper(mjModel* model, mjData* data)
       if (j_.in_use.base_xyz) {
         target_.target_basex.add(target_.base.x * 1e6);
         target_.target_basey.add(target_.base.y * 1e6);
+        if (j_.in_use.base_z_rot) {
+          target_.target_baseyaw.add(target_.base.yaw * 1e6);
+        }
       }
 
       // now save actual position data direct from mujoco
@@ -2075,6 +2101,9 @@ void update_stepper(mjModel* model, mjData* data)
         target_.actual_basex.add(*j_.to_qpos.base[0] * 1e6);
         target_.actual_basey.add(*j_.to_qpos.base[1] * 1e6);
         target_.actual_basez.add(*j_.to_qpos.base[2] * 1e6);
+        if (j_.in_use.base_z_rot) {
+          target_.actual_baseyaw.add(*j_.to_qpos.base[3] * 1e6);
+        }
       }
       
     }
@@ -2218,6 +2247,17 @@ void set_base_XYZ_limits(double x, double y, double z)
   j_.baseLims.y_max = y;
   j_.baseLims.z_min = -z;
   j_.baseLims.z_max = z;
+
+  update_base_limits();
+}
+
+void set_base_yaw_limit(double yaw)
+{
+  /* set a symettrical yaw limit (base rotation about z). These do not persist
+  through a hard reset */
+
+  j_.baseLims.yaw_min = -yaw;
+  j_.baseLims.yaw_max = yaw;
 
   update_base_limits();
 }
@@ -2379,7 +2419,26 @@ bool move_base_target_rad(double roll, double pitch, double yaw)
 {
   /* move the gripper base by an angle, not yet implemented */
 
-  throw std::runtime_error("move_base_target_rad(...) is not yet implemented - do not use!");
+  target_.last_robot = Target::Robot::panda;
+
+  // add the incoming position changes to our target
+  // target_.base.roll += roll; // does nothing currently
+  // target_.base.pitch += pitch; // does nothing currently
+  target_.base.yaw += yaw;
+
+  bool within_limits = true;
+
+  // z base limits
+  if (target_.base.yaw > target_.base_max.yaw) {
+    target_.base.yaw = target_.base_max.yaw;
+    within_limits = false;
+  }
+  if (target_.base.yaw < target_.base_min.yaw) {
+    target_.base.yaw = target_.base_min.yaw;
+    within_limits = false;
+  }
+
+  return within_limits;
 }
 
 bool lift_base_to_height(double z) 
@@ -2486,6 +2545,38 @@ bool set_base_to_Z_position(mjData* data, float z_pos)
   }
   else if (j_.in_use.base_z) {
     (*j_.to_qpos.base[0]) = target_.base.z + j_.reset_qpos.base[0]; 
+  }
+
+  return within_limits;
+}
+
+bool set_base_to_yaw(mjData* data, float yaw)
+{
+  /* set the gripper base to a give yaw immediately */
+
+  // set the base target (ie keep track of this movement and maintain it)
+  target_.base.yaw = yaw;
+
+  bool within_limits = true;
+
+  // z base limits
+  if (target_.base.yaw > target_.base_max.yaw) {
+    target_.base.yaw = target_.base_max.yaw;
+    within_limits = false;
+  }
+  if (target_.base.yaw < target_.base_min.yaw) {
+    target_.base.yaw = target_.base_min.yaw;
+    within_limits = false;
+  }
+
+  // override qpos for the base to snap model to maximum (include equilibrium offset)
+  if (j_.in_use.base_xyz and j_.in_use.base_z_rot) {
+      (*j_.to_qpos.base[3]) = target_.base.yaw + j_.reset_qpos.base[3]; 
+  }
+  else {
+    std::cout << "set_base_to_yaw() warning: j_.in_use.base_xyz = "
+      << j_.in_use.base_xyz << ", j_.in_use.base_z_rot = "
+      << j_.in_use.base_z_rot << ". Yaw was NOT applied as both should be true\n";
   }
 
   return within_limits;
@@ -3089,6 +3180,9 @@ std::vector<gfloat> get_target_state_vector()
   if (j_.in_use.base_xyz) {
     state_vec.push_back(state.base_x);
     state_vec.push_back(state.base_y);
+    if (j_.in_use.base_z_rot) {
+      state_vec.push_back(state.base_yaw);
+    }
   }
   state_vec.push_back(state.base_z);
 
@@ -3118,6 +3212,13 @@ bool use_base_xyz()
   /* are we using full base xyz movement */
 
   return j_.in_use.base_xyz;
+}
+
+bool use_base_z_rot()
+{
+  /* are we using base z rotation */
+
+  return j_.in_use.base_z_rot;
 }
 
 int get_N() 
@@ -3420,6 +3521,13 @@ Gripper get_gripper_target()
   /* get the target state of the gripper */
 
   return target_.end;
+}
+
+int get_num_live_objects()
+{
+  /* get the number of live objects in the scene */
+
+  return oh_.get_num_live_objects();
 }
 
 std::vector<std::string> get_objects()

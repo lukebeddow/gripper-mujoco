@@ -452,6 +452,7 @@ void MjClass::reset()
   s_.motor_state_sensor.reset();
   s_.base_state_sensor_XY.reset();
   s_.base_state_sensor_Z.reset();
+  s_.base_state_sensor_yaw.reset();
 
   // refetch the gripper base limits in case they have changed
   base_min_ = luke::get_base_min();
@@ -902,6 +903,7 @@ void MjClass::sense_gripper_state()
   states.base_x = normalise_between(states.base_x, base_min_[0], base_max_[0]);
   states.base_y = normalise_between(states.base_y, base_min_[1], base_max_[1]);
   states.base_z = normalise_between(states.base_z, base_min_[2], base_max_[2]);
+  states.base_yaw = normalise_between(states.base_yaw, base_min_[5], base_max_[5]);
 
   // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
   states.gripper_x = s_.motor_state_sensor.apply_noise(states.gripper_x, uniform_dist, 1);
@@ -910,6 +912,7 @@ void MjClass::sense_gripper_state()
   states.base_x = s_.base_state_sensor_XY.apply_noise(states.base_x, uniform_dist, 1);
   states.base_y = s_.base_state_sensor_XY.apply_noise(states.base_y, uniform_dist, 2);
   states.base_z = s_.base_state_sensor_Z.apply_noise(states.base_z, uniform_dist);
+  states.base_yaw = s_.base_state_sensor_yaw.apply_noise(states.base_yaw, uniform_dist);
 
   // save reading
   sim_sensors_.x_motor_position.add(states.gripper_x);
@@ -918,6 +921,7 @@ void MjClass::sense_gripper_state()
   sim_sensors_.x_base_position.add(states.base_x);
   sim_sensors_.y_base_position.add(states.base_y);
   sim_sensors_.z_base_position.add(states.base_z);
+  sim_sensors_.yaw_base_rotation.add(states.base_yaw);
 
   // save the time the reading was made
   step_timestamps.add(data->time);
@@ -1327,6 +1331,25 @@ bool MjClass::set_new_base_XY(double x, double y)
   return within_limits;
 }
 
+bool MjClass::set_new_base_yaw(double yaw)
+{
+  /* set a randomised base yaw based off the limits */
+
+  return luke::set_base_to_yaw(data, yaw);
+}
+
+double MjClass::random_base_yaw(double size)
+{
+  /* set a randomised base yaw based off the limits */
+
+  std::uniform_real_distribution<double> distribution(-size, size);
+  double new_yaw = distribution(*MjType::generator);
+
+  luke::set_base_to_yaw(data, new_yaw);
+
+  return new_yaw;
+}
+
 double MjClass::random_base_Z_movement(double size)
 {
   /* Perform a random movement of the base taken from a uniform distribution of
@@ -1724,6 +1747,21 @@ std::vector<luke::gfloat> MjClass::get_observation(MjType::SensorData sensors)
     }
   }
 
+  // get base Z yaw
+  if (s_.base_state_sensor_yaw.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> byaw = 
+      (s_.base_state_sensor_yaw.*stateFcnPtr)(sensors.yaw_base_rotation);
+
+    // insert data into observation output
+    observation.insert(observation.end(), byaw.begin(), byaw.end());
+
+    if (debug_obs) {
+      luke::print_vec(byaw, "Base yaw rotation");
+    }
+  }
+
   if (debug_obs) {
     std::cout << "End of observation (n_obs = " << observation.size() << ")\n";
   }
@@ -1735,11 +1773,13 @@ std::vector<luke::gfloat> MjClass::get_observation(MjType::SensorData sensors)
       std::cout << "Y Motor: "; sensors.y_motor_position.print(data_num);
       std::cout << "Z Motor: "; sensors.z_motor_position.print(data_num);
       std::cout << "Z Base: "; sensors.z_base_position.print(data_num);
+      std::cout << "Z Yaw: "; sensors.yaw_base_rotation.print(data_num);
       std::cout << "SI real data values:\n";
       std::cout << "X Motor: "; real_sensors_.SI.x_motor_position.print(data_num);
       std::cout << "Y Motor: "; real_sensors_.SI.y_motor_position.print(data_num);
       std::cout << "Z Motor: "; real_sensors_.SI.z_motor_position.print(data_num);
       std::cout << "Z Base: "; real_sensors_.SI.z_base_position.print(data_num);
+      std::cout << "Z Yaw: "; real_sensors_.SI.yaw_base_rotation.print(data_num);
     }
   
   return observation;
@@ -1954,6 +1994,24 @@ std::string MjClass::debug_observation(std::vector<luke::gfloat> observation, bo
 
     std::string n = std::to_string(bZ.size());
     info += "Base state Z = " + n + " | ";
+  }
+
+  // get base Z yaw
+  if (s_.base_state_sensor_yaw.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> byaw = 
+      (s_.base_state_sensor_yaw.*stateFcnPtr)(sensors.yaw_base_rotation);
+
+    // copy our observation into these vectors instead
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + byaw.size(), byaw.begin()); sidx += byaw.size();
+
+    if (debug_obs) {
+      luke::print_vec(byaw, "Base Z yaw");
+    }
+
+    std::string n = std::to_string(byaw.size());
+    info += "Base state yaw = " + n + " | ";
   }
 
   if (debug_obs) {
@@ -3014,6 +3072,18 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
 
   }
 
+  if (save_all or s_.base_state_sensor_yaw.in_use) {
+
+    real_sensors_.raw.yaw_base_rotation.add(state_data[i]);
+    real_sensors_.SI.yaw_base_rotation.add(state_data[i]);
+    state_data[i] = normalise_between(state_data[i], base_min_[5], base_max_[5]);
+    state_data[i] = s_.base_state_sensor_yaw.apply_noise(state_data[i], uniform_dist);
+    real_sensors_.normalised.yaw_base_rotation.add(state_data[i]);
+    output.push_back(state_data[i]);
+    ++i; 
+
+  }
+
   // add sensor data - pay attention to order! Input vector must be the same
   int j = 0;
 
@@ -3161,6 +3231,7 @@ std::vector<float> MjClass::get_real_observation()
   s_.motor_state_sensor.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
   s_.base_state_sensor_XY.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
   s_.base_state_sensor_Z.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
+  s_.base_state_sensor_yaw.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
   s_.bending_gauge.update_n_readings(samples_since_last_obs, s_.sensor_n_prev_steps);
   s_.palm_sensor.update_n_readings(samples_since_last_obs, s_.sensor_n_prev_steps);
   s_.wrist_sensor_Z.update_n_readings(samples_since_last_obs, s_.sensor_n_prev_steps);
@@ -3238,6 +3309,12 @@ std::vector<float> MjClass::get_simple_state_vector(MjType::SensorData sensor)
   if (return_all or s_.base_state_sensor_Z.in_use) {
 
     simple_state.push_back(sensor.read_z_base_position());
+  }
+
+  // get base Z yaw
+  if (return_all or s_.base_state_sensor_yaw.in_use) {
+
+    simple_state.push_back(sensor.read_yaw_base_rotation());
   }
   
   return simple_state;
@@ -3402,6 +3479,13 @@ void MjClass::set_base_XYZ_limits(double x, double y, double z)
   /* set the base XYZ limits */
 
   luke::set_base_XYZ_limits(x, y, z);
+}
+
+void MjClass::set_base_yaw_limit(double yaw)
+{
+  /* set the base yaw rotation limit (rotation about z axis) */
+
+  luke::set_base_yaw_limit(yaw);
 }
 
 int MjClass::get_n_actions()
@@ -4755,12 +4839,14 @@ void MjType::Settings::update_sensor_settings(double time_since_last_sample)
   motor_state_sensor.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
   base_state_sensor_XY.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
   base_state_sensor_Z.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
+  base_state_sensor_yaw.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
   
   // update n_readings for all except state sensors
   #define SS(NAME, IN_USE, NORM, READRATE)                       \
             if (#NAME != "motor_state_sensor" and                \
                 #NAME != "base_state_sensor_XY" and              \
-                #NAME != "base_state_sensor_Z")                  \
+                #NAME != "base_state_sensor_Z" and               \
+                #NAME != "base_state_sensor_yaw")                \
               NAME.update_n_readings(time_since_last_sample);
   
     // run the macro and update all the sensors
@@ -4831,11 +4917,17 @@ void MjType::Settings::apply_noise_params(std::uniform_real_distribution<float>&
     base_state_sensor_Z.noise_mu = state_noise_mu;
     base_state_sensor_Z.noise_std = state_noise_std;
   }
+  if (not base_state_sensor_yaw.noise_overriden) {
+    base_state_sensor_yaw.noise_mag = state_noise_mag;
+    base_state_sensor_yaw.noise_mu = state_noise_mu;
+    base_state_sensor_yaw.noise_std = state_noise_std;
+  }
 
   // randomise seed for state
   motor_state_sensor.randomise_mu(uniform_dist);
   base_state_sensor_XY.randomise_mu(uniform_dist);
   base_state_sensor_Z.randomise_mu(uniform_dist);
+  base_state_sensor_yaw.randomise_mu(uniform_dist);
 }
 
 void MjType::Settings::scale_rewards(float scale)

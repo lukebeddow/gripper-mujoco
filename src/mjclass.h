@@ -1554,6 +1554,8 @@ public:
   bool move_joint_target(double x, double th, double z);
   bool move_step_target(int x, int y, int z);
   bool set_new_base_XY(double x, double y);
+  bool set_new_base_yaw(double yaw);
+  double random_base_yaw(double size);
   double random_base_Z_movement(double size);
 
   // learning functions
@@ -1631,6 +1633,7 @@ public:
   void set_finger_width(double width);
   void set_finger_modulus(double E);
   void set_base_XYZ_limits(double x, double y, double z);
+  void set_base_yaw_limit(double yaw);
   int get_n_actions();
   int get_n_obs();
   int get_N();

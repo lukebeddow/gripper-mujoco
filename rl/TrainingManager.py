@@ -113,6 +113,7 @@ class TrainingManager():
       "base_lim_X_mm" : 300,
       "base_lim_Y_mm" : 200,
       "base_lim_Z_mm" : 30,
+      "base_lim_yaw_rad" : np.pi / 4,
 
       # camera grasping settings
       "use_rgb_in_observation" : False,
@@ -151,6 +152,7 @@ class TrainingManager():
       "finger_modulus" : 193e9,
       "depth_camera" : False,
       "XY_base_actions" : False,
+      "Z_base_rotation" : False,
       "fixed_finger_hook" : True,
       "finger_hook_angle_degrees" : 75.0,
       "finger_hook_length" : 35e-3,
@@ -217,6 +219,11 @@ class TrainingManager():
           "value" : 2e-3,
           "sign" : 1
         },
+        "base_yaw" : { 
+          "in_use" : True, 
+          "value" : 5e-3,
+          "sign" : 1
+        },
       },
       "sensor" : {
         # to override noise, use list [mu, std] instead of None
@@ -236,7 +243,13 @@ class TrainingManager():
           "in_use" : False,
           "normalise" : 0.0,
           "read_rate" : -1,
-          "noise_override" : [0.1, 0.0]
+          "noise_override" : None
+        },
+        "base_state_sensor_yaw" : {
+          "in_use" : True,
+          "normalise" : 0.0,
+          "read_rate" : -1,
+          "noise_override" : None
         },
         "bending_gauge" : {
           "in_use" : True,
@@ -301,6 +314,11 @@ class TrainingManager():
         "scaling" : 2,
         "min" : 0.1,
         "max" : 3.0,
+      },
+      "object_XY_distance" : {
+        "used" : False,
+        "min" : -50e-3,
+        "max" : -10e-3,
       },
     },
 
@@ -924,6 +942,7 @@ class TrainingManager():
     env.mj.set.base_X.in_use = set["cpp"]["action"]["base_X"]["in_use"]
     env.mj.set.base_Y.in_use = set["cpp"]["action"]["base_Y"]["in_use"]
     env.mj.set.base_Z.in_use = set["cpp"]["action"]["base_Z"]["in_use"]
+    env.mj.set.base_yaw.in_use = set["cpp"]["action"]["base_yaw"]["in_use"]
 
     env.mj.set.gripper_prismatic_X.value = set["cpp"]["action"]["gripper_prismatic_X"]["value"]
     env.mj.set.gripper_revolute_Y.value = set["cpp"]["action"]["gripper_revolute_Y"]["value"]
@@ -931,6 +950,7 @@ class TrainingManager():
     env.mj.set.base_X.value = set["cpp"]["action"]["base_X"]["value"]
     env.mj.set.base_Y.value = set["cpp"]["action"]["base_Y"]["value"]
     env.mj.set.base_Z.value = set["cpp"]["action"]["base_Z"]["value"]
+    env.mj.set.base_yaw.value = set["cpp"]["action"]["base_yaw"]["value"]
 
     env.mj.set.gripper_prismatic_X.sign = set["cpp"]["action"]["gripper_prismatic_X"]["sign"]
     env.mj.set.gripper_revolute_Y.sign = set["cpp"]["action"]["gripper_revolute_Y"]["sign"]
@@ -938,11 +958,13 @@ class TrainingManager():
     env.mj.set.base_X.sign = set["cpp"]["action"]["base_X"]["sign"]
     env.mj.set.base_Y.sign = set["cpp"]["action"]["base_Y"]["sign"]
     env.mj.set.base_Z.sign = set["cpp"]["action"]["base_Z"]["sign"]
+    env.mj.set.base_yaw.sign = set["cpp"]["action"]["base_yaw"]["sign"]
 
     # apply cpp settings - sensors
     env.mj.set.motor_state_sensor.in_use = set["cpp"]["sensor"]["motor_state_sensor"]["in_use"]
     env.mj.set.base_state_sensor_Z.in_use = set["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"]
     env.mj.set.base_state_sensor_XY.in_use = set["cpp"]["sensor"]["base_state_sensor_XY"]["in_use"]
+    env.mj.set.base_state_sensor_yaw.in_use = set["cpp"]["sensor"]["base_state_sensor_yaw"]["in_use"]
     env.mj.set.bending_gauge.in_use = set["cpp"]["sensor"]["bending_gauge"]["in_use"]
     env.mj.set.palm_sensor.in_use = set["cpp"]["sensor"]["palm_sensor"]["in_use"]
     env.mj.set.wrist_sensor_XY.in_use = set["cpp"]["sensor"]["wrist_sensor_XY"]["in_use"]
@@ -951,6 +973,7 @@ class TrainingManager():
     env.mj.set.motor_state_sensor.normalise = set["cpp"]["sensor"]["motor_state_sensor"]["normalise"]
     env.mj.set.base_state_sensor_Z.normalise = set["cpp"]["sensor"]["base_state_sensor_Z"]["normalise"]
     env.mj.set.base_state_sensor_XY.normalise = set["cpp"]["sensor"]["base_state_sensor_XY"]["normalise"]
+    env.mj.set.base_state_sensor_yaw.normalise = set["cpp"]["sensor"]["base_state_sensor_yaw"]["normalise"]
     env.mj.set.bending_gauge.normalise = set["cpp"]["sensor"]["bending_gauge"]["normalise"]
     env.mj.set.palm_sensor.normalise = set["cpp"]["sensor"]["palm_sensor"]["normalise"]
     env.mj.set.wrist_sensor_XY.normalise = set["cpp"]["sensor"]["wrist_sensor_XY"]["normalise"]
@@ -959,6 +982,7 @@ class TrainingManager():
     env.mj.set.motor_state_sensor.read_rate = set["cpp"]["sensor"]["motor_state_sensor"]["read_rate"]
     env.mj.set.base_state_sensor_Z.read_rate = set["cpp"]["sensor"]["base_state_sensor_Z"]["read_rate"]
     env.mj.set.base_state_sensor_XY.read_rate = set["cpp"]["sensor"]["base_state_sensor_XY"]["read_rate"]
+    env.mj.set.base_state_sensor_yaw.read_rate = set["cpp"]["sensor"]["base_state_sensor_yaw"]["read_rate"]
     env.mj.set.bending_gauge.read_rate = set["cpp"]["sensor"]["bending_gauge"]["read_rate"]
     env.mj.set.palm_sensor.read_rate = set["cpp"]["sensor"]["palm_sensor"]["read_rate"]
     env.mj.set.wrist_sensor_XY.read_rate = set["cpp"]["sensor"]["wrist_sensor_XY"]["read_rate"]
@@ -970,6 +994,8 @@ class TrainingManager():
       env.mj.set.base_state_sensor_Z.set_gaussian_noise(*set["cpp"]["sensor"]["base_state_sensor_Z"]["noise_override"])
     if set["cpp"]["sensor"]["base_state_sensor_XY"]["noise_override"] is not None:
       env.mj.set.base_state_sensor_XY.set_gaussian_noise(*set["cpp"]["sensor"]["base_state_sensor_XY"]["noise_override"])
+    if set["cpp"]["sensor"]["base_state_sensor_yaw"]["noise_override"] is not None:
+      env.mj.set.base_state_sensor_yaw.set_gaussian_noise(*set["cpp"]["sensor"]["base_state_sensor_yaw"]["noise_override"])
     if set["cpp"]["sensor"]["bending_gauge"]["noise_override"] is not None:
       env.mj.set.bending_gauge.set_gaussian_noise(*set["cpp"]["sensor"]["bending_gauge"]["noise_override"])
     if set["cpp"]["sensor"]["palm_sensor"]["noise_override"] is not None:
@@ -1076,6 +1102,11 @@ class TrainingManager():
     env.mj.set.object_stable.set    (value,  False,   1)
     env.mj.set.good_bend_sensor.set (value,  False,   1,     self.RT.mBend, self.RT.gBend,  -1)
     env.mj.set.good_palm_sensor.set (value,  False,   1,     self.RT.mPalm, self.RT.gPalm,  -1)
+
+    if self.settings["reward"]["object_XY_distance"]["used"]:
+      d1 = self.settings["reward"]["object_XY_distance"]["min"]
+      d2 = self.settings["reward"]["object_XY_distance"]["max"]
+      env.mj.set.object_XY_distance.set (value,  False,   1,     d1, d2,  -1)
 
     return env
 
