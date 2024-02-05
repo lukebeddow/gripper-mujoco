@@ -546,7 +546,7 @@ class Trainer:
     self.params = load_train["parameters"]
     self.run_name = load_train["run_name"]
     self.group_name = load_train["group_name"]
-    self.env.load_save_state(load_train["env_data"])
+    self.env.load_save_state(load_train["env_data"], device=self.device)
     self.track = load_track
 
     try:
@@ -569,8 +569,9 @@ class Trainer:
     if self.agent is None:
       to_exec = f"""self.agent = {load_train["agent_name"]}()"""
       exec(to_exec)
-    self.agent.load_save_state(load_agent)
-    self.agent.set_device(self.device)
+    self.agent.load_save_state(load_agent, device=self.device)
+    if self.log_level >= 2 and hasattr(self.agent, "debug"): 
+      self.agent.debug = True
 
     # reseed - be aware this will not be contingous
     self.rngseed = load_train["rngseed"]
@@ -821,6 +822,11 @@ class MujocoTrainer(Trainer):
 
     # override the parameters of the base class
     self.params = MujocoTrainer.Parameters()
+
+    # set agent debug level
+    if self.agent is not None:
+      if hasattr(self.agent, "debug"):
+        self.agent.debug = True if self.log_level >= 2 else False
 
     # class variables
     self.last_test_data = None

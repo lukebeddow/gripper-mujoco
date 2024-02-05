@@ -7,6 +7,7 @@ from copy import deepcopy
 import random
 import itertools
 from math import floor, ceil
+import time
 
 import torch
 import torch.nn as nn
@@ -211,8 +212,8 @@ class MixedNetwork(nn.Module):
       The last channel is the reshaped sensor vector, padded with zeros
     """
     tuple_img_sensors = self.split_obs(img_and_sensor_matrix)
-    image = tuple_img_sensors[0].to(self.device)
-    sensors = tuple_img_sensors[1].to(self.device)
+    image = tuple_img_sensors[0]#.to(self.device)
+    sensors = tuple_img_sensors[1]#.to(self.device)
     x = self.image_features_(image)
     # x = x.view(-1, 64*64)
     y = self.numeric_features_(sensors)
@@ -220,6 +221,16 @@ class MixedNetwork(nn.Module):
     z = self.combined_features_(z)
     return z
   
+  def to_device(self, device=None):
+    """
+    Set a pytorch device for the network
+    """
+    if device is not None:
+      self.device = torch.device(device)
+    self.image_features_.to(self.device)
+    self.numeric_features_.to(self.device)
+    self.combined_features_.to(self.device)
+
 class MixedNetworkFromEncoder(nn.Module):
 
   name = "MixedNetworkFromEncoder"
@@ -363,13 +374,13 @@ class PPOBuffer:
     Move entire buffer to a device
     """
     self.device = device
-    self.states.to(device)
-    self.actions.to(device)
-    self.advantages.to(device)
-    self.rewards.to(device)
-    self.returns.to(device)
-    self.values.to(device)
-    self.logprobs.to(device)
+    self.states = self.states.to(torch.device(device))
+    self.actions = self.actions.to(torch.device(device))
+    self.advantages = self.advantages.to(torch.device(device))
+    self.rewards = self.rewards.to(torch.device(device))
+    self.returns = self.returns.to(torch.device(device))
+    self.values = self.values.to(torch.device(device))
+    self.logprobs = self.logprobs.to(torch.device(device))
 
   def finish_trajectory(self, last_val=0):
     """
@@ -411,6 +422,12 @@ class PPOBuffer:
     # reset before the next trajectory
     self.index = 0
     self.path_start_idx = 0
+
+    # print("Buffer devices")
+    # print("obs.device", self.states[0].device, self.states[-1].device)
+    # print("act.device", self.actions[0].device, self.actions[-1].device)
+    # print("ret.device", self.returns[0].device, self.returns[-1].device)
+    # print("adv.device", self.advantages[0].device, self.advantages[-1].device)
 
     # the next two lines implement the advantage normalization trick
     adv_std, adv_mean = torch.std_mean(self.advantages)
@@ -607,6 +624,7 @@ class CNNGaussianActor(Actor):
   def to_device(self, device=None):
     if device is None:
       device = self.device
+    self.mu_net.to_device(device)
     self.mu_net.to(device)
     self.device = device
 
@@ -623,6 +641,7 @@ class CNNCritic(nn.Module):
   def to_device(self, device=None):
     if device is None:
       device = self.device
+    self.v_net.to_device(device)
     self.v_net.to(device)
     self.device = device
 
@@ -866,7 +885,7 @@ class Agent_PPO:
   Transition = namedtuple('Transition',
                           ('state', 'action', 'reward', 'advantage', 'log_prob', 'terminal'))
 
-  def __init__(self, device="cpu", rngseed=None, mode="train", steps=None):
+  def __init__(self, device="cpu", rngseed=None, mode="train", steps=None, debug=False):
     """
     Soft actor-critic agent for a given environment
     """
@@ -877,10 +896,11 @@ class Agent_PPO:
     self.rng = np.random.default_rng(rngseed)
     self.mode = mode
     self.steps_done = 0
+    self.debug = debug
     if steps is not None:
       self.params.steps_per_epoch = steps
 
-  def init(self, network, obs_dim=None, action_dim=None):
+  def init(self, network, obs_dim=None, action_dim=None, device=None):
     """
     Main initialisation of the agent, applies settings and creates network. This
     function can be called with network='loaded' to initialise settings but not
@@ -897,9 +917,12 @@ class Agent_PPO:
       self.n_actions = network.n_actions
       self.n_obs = obs_dim
 
+    # create a fresh buffer for storing trajectories, rewards, actions etc
     self.buffer = PPOBuffer(self.params.steps_per_epoch, self.n_obs, self.action_dim, 
                             self.device, self.params.gamma, self.params.lam)
 
+    # set the network to the given device
+    if device is not None: self.device = device
     self.set_device(self.device)
 
     if self.params.optimiser.lower() == "rmsprop":
@@ -954,8 +977,19 @@ class Agent_PPO:
 
     self.device = torch.device(device)
 
-    self.buffer.all_to(device)
-    self.mlp_ac.set_device(device)
+    self.buffer.all_to(self.device)
+    self.mlp_ac.set_device(self.device)
+
+    # if hasattr(self, "pi_optimiser"):
+    #   # extra safety: https://github.com/pytorch/pytorch/issues/2830#issuecomment-336194949
+    #   for state in self.vf_optimiser.state.values():
+    #     for k, v in state.items():
+    #       if isinstance(v, torch.Tensor):
+    #         state[k] = v.to(self.device)
+    #   for state in self.pi_optimiser.state.values():
+    #     for k, v in state.items():
+    #       if isinstance(v, torch.Tensor):
+    #         state[k] = v.to(self.device)
 
   def seed(self, rngseed=None):
     """
@@ -1027,7 +1061,7 @@ class Agent_PPO:
 
     return to_save
   
-  def load_save_state(self, saved_dict):
+  def load_save_state(self, saved_dict, device="cpu"):
     """
     Load the agent with a given saved state
     """
@@ -1038,14 +1072,13 @@ class Agent_PPO:
     
     # input the saved data
     self.params = saved_dict["parameters"]
-    self.init(saved_dict["network"])
+    self.init(saved_dict["network"], device=device)
     self.buffer = saved_dict["buffer"]
     self.vf_optimiser.load_state_dict(saved_dict["optimiser_state_dict"]["vf_optimiser"])
     self.pi_optimiser.load_state_dict(saved_dict["optimiser_state_dict"]["pi_optimiser"])
 
-    # move to specified device
-    self.buffer.all_to(self.device)
-    self.mlp_ac.set_device(self.device)
+    # move to the correct device
+    self.set_device(device)
 
     # prepare class variables
     self.steps_done = self.buffer.index
@@ -1094,6 +1127,10 @@ class Agent_PPO:
 
   def optimise_model(self):
 
+    if self.debug:
+      t1 = time.perf_counter()
+      print("Agent.optimise_model() now running ...", end="", flush=True)
+
     data = self.buffer.get()
 
     pi_l_old, pi_info_old = self.compute_loss_pi(data)
@@ -1130,6 +1167,10 @@ class Agent_PPO:
     #               KL=kl, Entropy=ent, ClipFrac=cf,
     #               DeltaLossPi=(loss_pi.item() - pi_l_old),
     #               DeltaLossV=(loss_v.item() - v_l_old))
+      
+    if self.debug:
+      t2 = time.perf_counter()
+      print(f"finished after {(t2 - t1):.3f} seconds")
 
   def update_step(self, state, action, next_state, reward, terminal, truncated):
     """

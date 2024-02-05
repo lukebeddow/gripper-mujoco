@@ -1857,13 +1857,14 @@ class MjEnv():
     }
     return save_dict
   
-  def load_save_state(self, state_dict):
+  def load_save_state(self, state_dict, device="cpu"):
     """
     Load the environment from a saved state
     """
     self.params = state_dict["parameters"]
     self.load_next = deepcopy(state_dict["parameters"])
     self.mj = state_dict["mjcpp"]
+    self.set_device(device)
     self.load()
 
   def load(self, object_set_name=None, object_set_path=None, index=None, 

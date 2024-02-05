@@ -3400,6 +3400,38 @@ if __name__ == "__main__":
     tm.run_training(agent, env)
     print_time_taken()
 
+  elif args.program == "continue_good_curriculum":
+
+    # from program: ppo_cnn_single_object_curriculum_2
+    timestamp = "31-01-24_18-23"
+    job_num = 5
+
+    torch.set_default_device("cuda")
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [False, True]
+    vary_2 = None
+    vary_3 = None
+    repeats = 3
+    tm.param_1_name = "best_id"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    param_1, param_2, param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    tm.load(job_num=job_num, timestamp=timestamp, best_id=param_1,
+            load_into_new_training=True)
+    tm.param_1 = param_1
+    tm.param_2 = param_2
+    tm.param_3 = param_3
+
+    # tm.trainer.agent.params.steps_per_epoch = 100
+
+    # now continue training
+    tm.continue_training(new_endpoint=150_000)
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number
