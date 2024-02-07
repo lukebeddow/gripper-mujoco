@@ -220,7 +220,7 @@ class TrainingManager():
           "sign" : 1
         },
         "base_yaw" : { 
-          "in_use" : True, 
+          "in_use" : False, 
           "value" : 5e-3,
           "sign" : 1
         },

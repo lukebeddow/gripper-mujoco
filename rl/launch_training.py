@@ -3471,6 +3471,74 @@ if __name__ == "__main__":
     tm.run_training(agent, env)
     print_time_taken()
 
+  elif args.program == "learning_check":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1, 3, 4]
+    vary_2 = [False, True]
+    vary_3 = None
+    repeats = 2
+    tm.param_1_name = "num base actions"
+    tm.param_2_name = "use vision"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # set very little object position noise and the old default oob distance
+    tm.settings["env"]["object_position_noise_mm"] = 10
+    tm.settings["cpp"]["oob_distance"] = 75e-3
+
+    if tm.param_1 >= 3:
+      # enable base XY movements
+      tm.settings["env"]["XY_base_actions"] = True
+      tm.settings["env"]["base_lim_X_mm"] = 50
+      tm.settings["env"]["base_lim_Y_mm"] = 50
+      tm.settings["cpp"]["action"]["base_X"]["in_use"] = True
+      tm.settings["cpp"]["action"]["base_Y"]["in_use"] = True
+      tm.settings["cpp"]["sensor"]["base_state_sensor_XY"]["in_use"] = True
+
+    if tm.param_1 >= 4:
+      # enable base yaw
+      tm.settings["env"]["Z_base_rotation"] = True
+      tm.settings["cpp"]["action"]["base_yaw"]["in_use"] = True
+      tm.settings["cpp"]["sensor"]["base_state_sensor_yaw"]["in_use"] = True
+
+    if tm.param_2:
+      # add in the camera
+      tm.settings["env"]["depth_camera"] = True
+      tm.settings["env"]["use_rgb_in_observation"] = True
+      tm.settings["env"]["image_width"] = 200
+      tm.settings["env"]["image_height"] = 100
+      tm.settings["env"]["use_standard_transform"] = True
+      tm.settings["env"]["transform_resize_square"] = 58
+      tm.settings["env"]["transform_crop_size"] = 52
+
+    # create the environment
+    env = tm.make_env()
+
+    if tm.param_2:
+      # create the agent CNN network
+      obs_size = (3, env.params.transform_crop_size, env.params.transform_crop_size)
+      network = CNNActorCriticPG(obs_size, env.n_obs, env.n_actions, 
+                                continous_actions=True, device=args.device)
+    else:
+      # regular linear network
+      layers = [128 for i in range(4)]
+      network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                  continous_actions=True)
+    
+    # make the agent
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = 5e-5
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = 5e-5
+    tm.settings["Agent_PPO"]["steps_per_epoch"] = 4000
+    agent = Agent_PPO(device=args.device, steps=tm.settings["Agent_PPO"]["steps_per_epoch"])
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number
