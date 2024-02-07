@@ -103,14 +103,14 @@ def resize_and_save_sim_image(datapoint, saveas="test_img.jpg", width=100, heigh
   # print(datapoint["depth"].shape)
   # print(np.expand_dims(datapoint["rgb_mask"], axis=0).shape)
 
-  new_img_array = np.concatenate((datapoint["rgb"], 
-                                  datapoint["depth"], 
-                                  np.expand_dims(datapoint["rgb_mask"], axis=0)), 
-                                  axis=0, dtype=np.float64)
-  
-  # print(new_img_array.shape)
-
-  img_resized = resize(new_img_array, (5, width, height))
+  if datapoint["rgb_mask"] is not None:
+    new_img_array = np.concatenate((datapoint["rgb"], 
+                                    datapoint["depth"], 
+                                    np.expand_dims(datapoint["rgb_mask"], axis=0)), 
+                                    axis=0, dtype=np.float64)
+    img_resized = resize(new_img_array, (5, width, height))
+  else:
+    img_resized = resize(np.array(datapoint["rgb"], dtype=np.float64), (3, width, height))
 
   # Convert the NumPy array to a PIL Image
   image = Image.fromarray(np.einsum("ijk->kji", img_resized[:3]).astype(np.uint8))
@@ -205,8 +205,8 @@ def replace_green_region_with_noise_hsv(image):
 
 # ----- setup variables ----- #
   
-generate_sim = False
-generate_real = True
+generate_sim = True
+generate_real = False
 
 # beware: exact numbers will not result out of this script
 num_sim_images = 4000
@@ -218,34 +218,41 @@ noise_method = "hsv"
 width = 200
 height = 100
 
-save_sim_folder = "image_datasets/single_object_200x100/trainA"
-save_real_folder = "image_datasets/single_object_200x100/trainB"
+save_sim_folder = "image_datasets/multi_object_200x100/trainA"
+save_real_folder = "image_datasets/multi_object_200x100/trainB"
 
-load_sim_folder = "models/sim_images_3"
+# load_sim_folder = "models/sim_images_3"
+load_sim_folder = "models/sim_images_clutter/05-02-24"
 load_real_folder = "models/pb1_test_data"
 
+# simruns = [
+#   "run_12-53_A1",
+#   "run_12-53_A2",
+#   "run_12-53_A3",
+#   "run_12-53_A4",
+#   "run_13-47_A1",
+#   # "run_13-47_A2",
+#   # "run_13-47_A3",
+#   # "run_13-47_A4",
+# ]
 simruns = [
-  "run_12-53_A1",
-  "run_12-53_A2",
-  "run_12-53_A3",
-  "run_12-53_A4",
-  "run_13-47_A1",
-  # "run_13-47_A2",
-  # "run_13-47_A3",
-  # "run_13-47_A4",
+  "run_12-16_A1",
+  "run_12-16_A2",
+  "run_12-16_A3",
+  "run_12-16_A4",
 ]
 real_tests = [
   # "pb1_E1_S0", 
-  # "pb1_E1_S1", # multi-object
-  # "pb1_E1_S2", # multi-object   
-  "pb1_E1_S3", 
-  "pb1_E2_S3",
-  "pb1_E3_S3", 
-  "pb1_E2_S3_YCB",
-  "pb1_E2_S3_real",
-  # "YCB_heuristic", # multi-object
+  "pb1_E1_S1", # multi-object
+  "pb1_E1_S2", # multi-object   
+  # "pb1_E1_S3", 
+  # "pb1_E2_S3",
+  # "pb1_E3_S3", 
+  # "pb1_E2_S3_YCB",
+  # "pb1_E2_S3_real",
+  "YCB_heuristic", # multi-object
   # "real_heuristic", 
-  "high_noise_single_object",
+  # "high_noise_single_object",
 ]
 
 # ----- begin generation code ----- #
@@ -255,8 +262,8 @@ t0 = time.time()
 num_sim = 0
 num_real = 0
 
-sim_names = np.random.permutation(np.array(list(range(num_sim_images))))
-real_names = np.random.permutation(np.array(list(range(num_real_images))))
+sim_names = np.random.permutation(np.array(list(range(num_sim_images + 1))))
+real_names = np.random.permutation(np.array(list(range(num_real_images + 1))))
 
 # create directories if they don't already exist
 if not os.path.exists(save_sim_folder):
@@ -271,6 +278,11 @@ if generate_sim:
     num_files = simloader.get_recent_file(name="image_collection", return_int=True)
 
     rand_files = np.random.permutation(np.array(list(range(1, num_files + 1))))
+
+    # # can clip loaded files to be in a particular range
+    # min_sim = 1
+    # max_sim = num_files + 1
+    # rand_files = np.random.permutation(np.array(list(range(min_sim, max_sim))))
 
     num_files = len(rand_files)
 
@@ -326,7 +338,7 @@ if generate_real:
     num_files = realloader.get_recent_file(name="trial_image_batch", return_int=True)
     
     if num_files is None:
-      raise RuntimeError(f"no files found for test: {real_test}")
+      raise RuntimeError(f"no files found for test: {load_real_folder}/{real_test}, check you are running from the right location")
 
     run_target = int(num_real_images / len(real_tests))
     file_target = int((num_real_images / len(real_tests)) / num_files)
