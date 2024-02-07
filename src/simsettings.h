@@ -114,10 +114,10 @@
 
   3. Actions
       name                      used      value   sign */\
-  AA(  gripper_X,               true,    2.0e-3,  -1)        /* move gripper X motor by m */\
-  AA(  gripper_prismatic_X,     false,     1.0e-3,  -1)        /* move gripper X and Y motors to move prismatically by m */\
-  AA(  gripper_Y,               true,    2.0e-3,  -1)        /* move gripper Y motor by m */\
-  AA(  gripper_revolute_Y,      false,     0.01,    -1)        /* move gripper Y motor with angular motions/targets in radians */\
+  AA(  gripper_X,               false,    2.0e-3,  -1)        /* move gripper X motor by m */\
+  AA(  gripper_prismatic_X,     true,     1.0e-3,  -1)        /* move gripper X and Y motors to move prismatically by m */\
+  AA(  gripper_Y,               false,    2.0e-3,  -1)        /* move gripper Y motor by m */\
+  AA(  gripper_revolute_Y,      true,     0.01,    -1)        /* move gripper Y motor with angular motions/targets in radians */\
   AA(  gripper_Z,               true,     2.0e-3,   1)        /* move gripper Z motor by m */\
   AA(  base_X,                  true,     2.0e-3,   1)        /* move gripper base X by m */\
   AA(  base_Y,                  true,     2.0e-3,   1)        /* move gripper base Y by m */\

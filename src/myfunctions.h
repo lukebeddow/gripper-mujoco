@@ -189,6 +189,7 @@ bool is_sim_unstable(mjModel* model, mjData* data);
 int get_N();
 bool use_base_xyz();
 bool use_base_z_rot();
+bool use_segments();
 std::vector<double> get_base_min();
 std::vector<double> get_base_max();
 double get_finger_thickness();

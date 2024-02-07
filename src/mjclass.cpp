@@ -4349,7 +4349,7 @@ float MjClass::find_highest_stable_timestep()
   float fine_increment = 50e-6;             // 0.05 milliseconds
   float start_value = 1.0e-3;               // 1 millseconds
   float test_time = 1.0;                    // 1.0 seconds
-  float max_allowable_timestep = 50.0e-3;   // 50 milliseconds
+  float max_allowable_timestep = 20.0e-3;   // 50 milliseconds
 
   float tune_param = 1.0;           // should be 1.0, reduce to make timestep shorter
 
@@ -4422,14 +4422,18 @@ float MjClass::find_highest_stable_timestep()
   if (next_timestep <= 3.0e-3) {
     factor = tune_param * 0.8;
   }
-  else if (next_timestep > 3.0e-3) {
+  else if (next_timestep < 5.0e-3) {
     factor = tune_param * 0.75;
   }
-  else if (next_timestep > 5.0e-3) {
+  else if (next_timestep < 10.0e-3) {
+    factor = tune_param * 0.65;
+  }
+  else {
     factor = tune_param * 0.65;
   }
 
   // for safety, reduce timestep by 10 percent
+  std::cout << "factor is " << factor << "\n";
   float final_timestep = next_timestep * factor;
 
   // round the timestep to a whole number of microseconds

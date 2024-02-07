@@ -8,6 +8,7 @@ from itertools import count
 import time
 import random
 from datetime import datetime
+import functools
 
 from ModelSaver import ModelSaver
 from agents.DQN import Agent_DQN
@@ -425,6 +426,7 @@ class Trainer:
         "agent_name" : self.agent.name,
         "env_data" : self.env.get_save_state(),
         "curriculum_dict" : self.curriculum_dict,
+        "curriculum_change_fcn" : self.curriculum_change,
         "extra_data" : extra_data
       }
 
@@ -549,21 +551,22 @@ class Trainer:
     self.env.load_save_state(load_train["env_data"], device=self.device)
     self.track = load_track
 
-    try:
-      self.curriculum_dict = load_train["curriculum_dict"]
-      if len(self.track.train_curriculum_stages) > 0:
-        self.curriculum_dict["stage"] = self.track.train_curriculum_stages[-1]
-      else: self.curriculum_dict["stage"] = 0
-    except KeyError as e:
-      print("curriculum_dict not found in loaded trainer_params, old code. Error:", e)
-      self.curriculum_dict = {
-        "stage" : 0,
-        "metric_name" : "",
-        "metric_thresholds" : [],
-        "param_values" : [],
-        "finished" : False,
-        "info" : "",
-      }
+    # unpack curriculum information
+    self.curriculum_dict = load_train["curriculum_dict"]
+    if len(self.track.train_curriculum_stages) > 0:
+      self.curriculum_dict["stage"] = self.track.train_curriculum_stages[-1]
+    else: self.curriculum_dict["stage"] = 0
+    if "curriculum_fcn" in load_train["curriculum_dict"].keys():
+      self.curriculum_change = functools.partial(load_train["curriculum_dict"]["curriculum_change_fcn"], self)
+      if self.params.use_curriculum:
+        self.curriculum_change(self.curriculum_dict["stage"]) # apply initial stage settings
+    elif self.params.use_curriculum:
+      # TEMPORARY FIX for program: continue_good_curriculum, delete later
+      print("TEMPORARY CURRICULUM FIX: set curriculum function as curriculum_change_object_noise")
+      from launch_training import curriculum_change_object_noise
+      self.curriculum_change = functools.partial(curriculum_change_object_noise, self)
+      print("CURRICULUM ACTIVE: Calling curriculum_change_object_noise now")
+      self.curriculum_change(self.curriculum_dict["stage"]) # apply initial stage settings
 
     # do we have the agent already, if not, create it
     if self.agent is None:

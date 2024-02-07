@@ -3412,7 +3412,7 @@ if __name__ == "__main__":
     vary_1 = [False, True]
     vary_2 = None
     vary_3 = None
-    repeats = 3
+    repeats = 2
     tm.param_1_name = "best_id"
     tm.param_2_name = None
     tm.param_3_name = None
