@@ -4264,9 +4264,15 @@ void MjClass::calibrate_simulated_sensors(float bend_gauge_normalise)
   s_.wrist_sensor_Z.use_noise = original_noise;
 
   // now calibrate the finger bending gauges
-  validate_curve_under_force(bend_gauge_normalise);
-  luke::gfloat max_gauge_reading = luke::read_armadillo_gauge(data, 0);
-  s_.bending_gauge.normalise = max_gauge_reading;
+  if (luke::use_segments()) {
+    validate_curve_under_force(bend_gauge_normalise);
+    luke::gfloat max_gauge_reading = luke::read_armadillo_gauge(data, 0);
+    s_.bending_gauge.normalise = max_gauge_reading;
+  }
+  else {
+    std::cout << "MjClass::calibrate_simulated_sensors() warning: segments not in use, using SI force values for finger bending with identity normalisation\n";
+    s_.bending_gauge.normalise = bend_gauge_normalise;
+  }
 
   // turn off curve validation mode
   s_.curve_validation = false;

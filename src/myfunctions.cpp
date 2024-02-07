@@ -1505,8 +1505,12 @@ void get_segment_matrices(mjModel* model, mjData* data)
   /* find the matrix orientation for each of the segments of the fingers */
 
   if (not j_.in_use.finger) {
+    static bool first_call = true;
+    if (first_call) {
+      std::cout << "get_segment_matrices() warning: j_.in_use.finger = false, no segments detected, returning\n";
+      first_call = false;
+    }
     j_.segmentMatrices.idx_size = 0;
-    std::cout << "get_segment_matrices() warning: j_.in_use.finger = false, no segments detected, returning\n";
     return;
   }
 
