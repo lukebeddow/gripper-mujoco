@@ -250,6 +250,18 @@ class MjEnv():
     gripper_details[p]["finger_length"] = self.load_next.finger_length
     gripper_details[p]["hook_length"] = self.load_next.finger_hook_length
 
+    # check for special case with no segments
+    if self.load_next.num_segments == 0:
+      gripper_details[c]["is_segmented"] = False
+    elif self.load_next.num_segments == 1:
+      gripper_details[c]["is_segmented"] = True
+      gripper_details[c]["fixed_first_segment"] = True
+    elif self.load_next.num_segments == 2:
+      raise RuntimeError("MjEnv._auto_generate_xml_file() error: num_segments=2 does not work")
+    else:
+      gripper_details[c]["is_segmented"] = True
+      gripper_details[c]["fixed_first_segment"] = False
+
     # now override the existing file with our new changes
     with open(yaml_path, "w") as outfile:
       yaml.dump(gripper_details, outfile, default_flow_style=False)
@@ -2172,8 +2184,10 @@ if __name__ == "__main__":
     mj.load_next.finger_hook_angle_degrees = 75
     mj.load_next.finger_width = 28e-3
     mj.load_next.fingertip_clearance = 0.01
-    mj.load_next.XY_base_actions = True
-    mj.load_next.Z_base_rotation = True
+    mj.load_next.XY_base_actions = False
+    mj.load_next.Z_base_rotation = False
+    mj.load_next.num_segments = 3
+    mj.load_next.segment_inertia_scaling = 1.0
     # mj.load_next.finger_length = 200e-3
     # mj.load_next.finger_thickness = 1.9e-3
 

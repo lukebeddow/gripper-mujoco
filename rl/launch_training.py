@@ -3412,7 +3412,7 @@ if __name__ == "__main__":
     vary_1 = [False, True]
     vary_2 = None
     vary_3 = None
-    repeats = 3
+    repeats = 2
     tm.param_1_name = "best_id"
     tm.param_2_name = None
     tm.param_3_name = None
@@ -3430,6 +3430,45 @@ if __name__ == "__main__":
 
     # now continue training
     tm.continue_training(new_endpoint=150_000)
+    print_time_taken()
+
+  elif args.program == "paper_baseline_1_rigid_fingers":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [True]
+    vary_2 = None
+    vary_3 = None
+    repeats = 15
+    tm.param_1_name = "rigid fingers"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply training specific settings
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["object_set_name"] = "set9_nosharp_smallspheres"
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["finger_thickness"] = 0.9e-3
+
+    # make fingers rigid
+    tm.settings["env"]["num_segments"] = 1
+
+    # create the environment
+    env = tm.make_env()
+
+    # apply the agent settings
+    layers = [128 for i in range(4)]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+    
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
     print_time_taken()
 
   elif args.program == "example_template":
