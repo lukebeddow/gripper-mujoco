@@ -246,7 +246,7 @@ class TrainingManager():
           "noise_override" : None
         },
         "base_state_sensor_yaw" : {
-          "in_use" : True,
+          "in_use" : False,
           "normalise" : 0.0,
           "read_rate" : -1,
           "noise_override" : None
