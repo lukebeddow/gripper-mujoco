@@ -72,115 +72,65 @@ class DQN_variable(nn.Module):
 
 # --- CNN and sensor data --- #
 
-def calc_conv_layer_size(W, H, C, kernel_num, kernel_size, stride, padding, print=True):
+def calc_conv_layer_size(W, H, C, kernel_num, kernel_size, stride, padding, prnt=False):
 
   new_W = floor(((W - kernel_size + 2*padding) / (stride)) + 1)
   new_H = floor(((H - kernel_size + 2*padding) / (stride)) + 1)
 
-  if print:
+  if prnt:
     print(f"Convolution transforms ({C}x{W}x{H}) to ({kernel_num}x{new_W}x{new_H})")
 
   return new_W, new_H, kernel_num
 
-def calc_max_pool_size(W, H, C, pool_size, stride, print=True):
+def calc_max_pool_size(W, H, C, pool_size, stride, prnt=False):
 
   new_W = floor(((W - pool_size) / stride) + 1)
   new_H = floor(((H - pool_size) / stride) + 1)
 
-  if print:
+  if prnt:
     print(f"Max pool transforms ({C}x{W}x{H}) to ({C}x{new_W}x{new_H})")
 
   return new_W, new_H, C
 
-def calc_FC_layer_size(W, H, C, print=True):
+def calc_adaptive_avg_size(W, H, C, output_size, prnt=False):
+
+  if prnt:
+    print(f"Adaptive pool transforms ({C}x{W}x{H}) to ({C}x{output_size[0]}x{output_size[1]})")
+
+  return output_size[0], output_size[1], C
+
+def calc_FC_layer_size(W, H, C, prnt=False):
 
   new_W = 1
   new_H = 1
   new_C = W * H * C
 
-  if print:
+  if prnt:
     print(f"The first FC layer should take size ({C}x{W}x{H}) as ({new_C}x{new_W}x{new_H})")
 
   return new_W, new_H, new_C
-
 
 class MixedNetwork(nn.Module):
 
   name = "MixedNetwork"
 
-  def __init__(self, numeric_inputs, image_channels, outputs, device, fcn_size):
+  def __init__(self, numeric_inputs, image_size, outputs):
 
     super(MixedNetwork, self).__init__()
-    self.device = device
-
-    # define the CNN to handle the images
-    self.image_features_ = nn.Sequential(
-
-      # input CxWxH, output 16xWxH
-      nn.Conv2d(image_channels, 16, kernel_size=5, stride=2, padding=2),
-      nn.ReLU(),
-      nn.MaxPool2d(kernel_size=3, stride=2),
-      # nn.Dropout(),
-      nn.Conv2d(16, 64, kernel_size=5, stride=1, padding=2),
-      nn.ReLU(),
-      # output 64*64
-      nn.MaxPool2d(kernel_size=3, stride=2),
-      # nn.Dropout(),
-      nn.Flatten(),
-      nn.Linear(fcn_size, 150),
-      nn.ReLU(),
-      # nn.Linear(64*16, 64),
-      # nn.ReLU(),
-    )
-
-    # define the MLP to handle the sensor data
-    self.numeric_features_ = nn.Sequential(
-      nn.Linear(numeric_inputs, 150),
-      nn.ReLU(),
-      # nn.Linear(150, 100),
-      # nn.ReLU(),
-      # nn.Linear(100, 50),
-      # nn.ReLU(),
-    )
-
-    # combine the image and MLP features
-    self.combined_features_ = nn.Sequential(
-      nn.Linear(150 + 150, 300),
-      nn.ReLU(),
-      nn.Linear(300, 100),
-      nn.ReLU(),
-      nn.Linear(100, outputs),
-      nn.Softmax(dim=1),
-    )
-
-  def forward(self, tuple_img_sensors):
-    image = tuple_img_sensors[0].to(self.device)
-    sensors = tuple_img_sensors[1].to(self.device)
-    x = self.image_features_(image)
-    # x = x.view(-1, 64*64)
-    y = self.numeric_features_(sensors)
-    z = torch.cat((x, y), 1)
-    z = self.combined_features_(z)
-    return z
-
-class MixedNetwork2(nn.Module):
-
-  name = "MixedNetwork2"
-
-  def __init__(self, numeric_inputs, image_size, outputs, device):
-
-    super(MixedNetwork2, self).__init__()
-    self.device = device
+    self.image_size = image_size
+    self.numeric_inputs = numeric_inputs
+    self.num_outputs = outputs
 
     (channel, width, height) = image_size
     self.name += f"_{width}x{height}"
 
     # calculate the size of the first fully connected layer (ensure settings match image_features_ below)
-    w, h, c = calc_conv_layer_size(width, height, channel, kernel_num=16, kernel_size=5, stride=2, padding=2, print=False)
-    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, print=False)
-    w, h, c = calc_conv_layer_size(w, h, c, kernel_num=64, kernel_size=5, stride=2, padding=2, print=False)
-    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, print=False)
-    w, h, c = calc_FC_layer_size(w, h, c, print=False)
+    prnt = False
+    w, h, c = calc_conv_layer_size(width, height, channel, kernel_num=16, kernel_size=5, stride=2, padding=2, prnt=prnt)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, prnt=prnt)
+    w, h, c = calc_conv_layer_size(w, h, c, kernel_num=64, kernel_size=5, stride=2, padding=2, prnt=prnt)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, prnt=prnt)
+    w, h, c = calc_FC_layer_size(w, h, c, prnt=prnt)
     fc_layer_num = c
 
     # define the CNN to handle the images
@@ -214,17 +164,47 @@ class MixedNetwork2(nn.Module):
 
     # combine the image and MLP features
     self.combined_features_ = nn.Sequential(
-      nn.Linear(128 + 128, 128),
+      nn.Linear(128 + 128, 256),
       nn.ReLU(),
-      nn.Linear(128, 64),
+      nn.Linear(256, 128),
       nn.ReLU(),
-      nn.Linear(64, outputs),
-      nn.Softmax(dim=1),
+      nn.Linear(128, outputs),
     )
 
-  def forward(self, tuple_img_sensors):
-    image = tuple_img_sensors[0].to(self.device)
-    sensors = tuple_img_sensors[1].to(self.device)
+  def split_obs(self, obs):
+    """
+    Split the incoming observation into a tuple:
+      (image_size, sensor_obs)
+    """
+
+    # print("obs size is", obs.shape)
+    # print("img size is", self.img_size)
+  
+    # split up the observation vector from the image
+    (img, sensors) = torch.split(obs, [self.image_size[0], 1], dim=1)
+    sensors = torch.flatten(sensors, start_dim=2)
+
+    # remove padded zeros and redundant channel dimension
+    sensors = sensors[:, :, :self.numeric_inputs]
+    sensors = torch.squeeze(sensors, dim=1)
+
+    # print("img shape after split", img.shape)
+    # print("sensor shape after split", sensors.shape)
+
+    return (img, sensors)
+
+  def forward(self, img_and_sensor_matrix):
+    """
+    Receives input matrix which contains both the image and the sensor value
+    vector together. So for rgb images size (3x25x25) and a sensor vector of
+    length 100, we would get an input (with batch_size=B):
+      input.shape = (B, 4, 25, 25)
+      The first 3 channels are rgb
+      The last channel is the reshaped sensor vector, padded with zeros
+    """
+    tuple_img_sensors = self.split_obs(img_and_sensor_matrix)
+    image = tuple_img_sensors[0]#.to(self.device)
+    sensors = tuple_img_sensors[1]#.to(self.device)
     x = self.image_features_(image)
     # x = x.view(-1, 64*64)
     y = self.numeric_features_(sensors)
@@ -232,6 +212,236 @@ class MixedNetwork2(nn.Module):
     z = self.combined_features_(z)
     return z
   
+  def to_device(self, device=None):
+    """
+    Set a pytorch device for the network
+    """
+    if device is not None:
+      device = torch.device(device)
+    self.image_features_.to(device)
+    self.numeric_features_.to(device)
+    self.combined_features_.to(device)
+
+class MixedNetworkFromEncoder(nn.Module):
+
+  name = "MixedNetworkFromEncoder"
+
+  def __init__(self, numeric_inputs, image_size, outputs):
+
+    super(MixedNetworkFromEncoder, self).__init__()
+    self.image_size = image_size
+    self.numeric_inputs = numeric_inputs
+    self.num_outputs = outputs
+
+    (channel, width, height) = image_size
+    self.name += f"_{width}x{height}"
+
+    # calculate the size of the first fully connected layer (ensure settings match image_features_ below
+    prnt = False
+    w, h, c = calc_conv_layer_size(width, height, channel, kernel_num=16, kernel_size=5, stride=2, padding=2, prnt=prnt)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, prnt=prnt)
+    w, h, c = calc_conv_layer_size(w, h, c, kernel_num=64, kernel_size=5, stride=2, padding=2, prnt=prnt)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, prnt=prnt)
+    w, h, c = calc_FC_layer_size(w, h, c, prnt=prnt)
+    fc_layer_num = c
+
+    # define the CNN to handle the images
+    self.image_features_ = nn.Sequential(
+
+      nn.Conv2d(channel, 196, kernel_size=3, stride=1, padding=1),
+      nn.ReLU(inplace=True),
+      nn.Conv2d(196, 128, kernel_size=3, stride=1, padding=1),
+      nn.ReLU(inplace=True),
+      nn.AdaptiveAvgPool2d((1, 1)),
+
+    )
+
+    # define the MLP to handle the sensor data
+    self.numeric_features_ = nn.Sequential(
+      nn.Linear(numeric_inputs, 128),
+      nn.ReLU(inplace=True),
+    )
+
+    # combine the image and MLP features
+    self.combined_features_ = nn.Sequential(
+      nn.Linear(128 + 128, 128 + 128),
+      nn.ReLU(inplace=True),
+      nn.Linear(256, 128),
+      nn.ReLU(inplace=True),
+      nn.Linear(128, outputs),
+    )
+
+  def split_obs(self, obs):
+    """
+    Split the incoming observation into a tuple:
+      (image_size, sensor_obs)
+    """
+
+    # print("obs size is", obs.shape)
+    # print("img size is", self.img_size)
+  
+    # split up the observation vector from the image
+    (img, sensors) = torch.split(obs, [self.image_size[0], 1], dim=1)
+    sensors = torch.flatten(sensors, start_dim=2)
+
+    # remove padded zeros and redundant channel dimension
+    sensors = sensors[:, :, :self.numeric_inputs]
+    sensors = torch.squeeze(sensors, dim=1)
+
+    # print("img shape after split", img.shape)
+    # print("sensor shape after split", sensors.shape)
+
+    return (img, sensors)
+
+  def forward(self, img_and_sensor_matrix):
+    """
+    Receives input matrix which contains both the image and the sensor value
+    vector together. So for rgb images size (3x25x25) and a sensor vector of
+    length 100, we would get an input (with batch_size=B):
+      input.shape = (B, 4, 25, 25)
+      The first 3 channels are rgb
+      The last channel is the reshaped sensor vector, padded with zeros
+    """
+    # split the observation into image and sensor parts
+    tuple_img_sensors = self.split_obs(img_and_sensor_matrix)
+    image = tuple_img_sensors[0]#.to(self.device)
+    sensors = tuple_img_sensors[1]#.to(self.device)
+
+    # feed each part through a seperate head
+    x = self.image_features_(image)
+    y = self.numeric_features_(sensors)
+
+    # concatenate the parts and feed into the last head of the network
+    x = x.view(x.shape[0], 128) # from shape [B, 128, 1, 1] -> [B, 128]
+    z = torch.cat((x, y), 1)
+    z = self.combined_features_(z)
+
+    return z
+
+  def to_device(self, device=None):
+    """
+    Set a pytorch device for the network
+    """
+    if device is not None:
+      device = torch.device(device)
+    self.image_features_.to(device)
+    self.numeric_features_.to(device)
+    self.combined_features_.to(device)
+
+class MixedNetworkFromEncoder2(nn.Module):
+
+  name = "MixedNetworkFromEncoder2"
+
+  def __init__(self, numeric_inputs, image_size, outputs):
+
+    super(MixedNetworkFromEncoder2, self).__init__()
+
+    self.image_size = image_size
+    self.numeric_inputs = numeric_inputs
+    self.num_outputs = outputs
+
+    (channel, width, height) = image_size
+    self.name += f"_{width}x{height}"
+
+    # calculate the size of the first fully connected layer (ensure settings match image_features_ below
+    prnt = False
+    w, h, c = calc_conv_layer_size(width, height, channel, kernel_num=16, kernel_size=5, stride=2, padding=2, prnt=prnt)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, prnt=prnt)
+    w, h, c = calc_conv_layer_size(w, h, c, kernel_num=64, kernel_size=5, stride=2, padding=2, prnt=prnt)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, prnt=prnt)
+    w, h, c = calc_FC_layer_size(w, h, c, prnt=prnt)
+    fc_layer_num = c
+
+    # define the CNN to handle the images
+    self.image_features_ = nn.Sequential(
+
+      # nn.Conv2d(channel, channel * 0.5, kernel_size=3, stride=1, padding=1),
+      # nn.ReLU(inplace=True),
+      # nn.MaxPool2d(kernel_size=3, stride=1),
+      # nn.Conv2d(channel * 0.5, channel * 0.25, kernel_size=3, stride=1, padding=1),
+      # nn.ReLU(inplace=True),
+      # nn.MaxPool2d(kernel_size=3, stride=1),
+      nn.Flatten(),
+      nn.LazyLinear(256),
+      nn.ReLU(True),
+      nn.Linear(256, 128),
+      nn.ReLU(True),
+    )
+
+    # define the MLP to handle the sensor data
+    self.numeric_features_ = nn.Sequential(
+      nn.Linear(numeric_inputs, 128),
+      nn.ReLU(inplace=True),
+    )
+
+    # combine the image and MLP features
+    self.combined_features_ = nn.Sequential(
+      nn.Linear(128 + 128, 128 + 128),
+      nn.ReLU(inplace=True),
+      nn.Linear(256, 256),
+      nn.ReLU(inplace=True),
+      nn.Linear(256, outputs),
+    )
+
+  def split_obs(self, obs):
+    """
+    Split the incoming observation into a tuple:
+      (image_size, sensor_obs)
+    """
+
+    # print("obs size is", obs.shape)
+    # print("img size is", self.image_size)
+  
+    # split up the observation vector from the image
+    (img, sensors) = torch.split(obs, [self.image_size[0], 1], dim=1)
+    sensors = torch.flatten(sensors, start_dim=2)
+
+    # remove padded zeros and redundant channel dimension
+    sensors = sensors[:, :, :self.numeric_inputs]
+    sensors = torch.squeeze(sensors, dim=1)
+
+    # print("img shape after split", img.shape)
+    # print("sensor shape after split", sensors.shape)
+
+    return (img, sensors)
+
+  def forward(self, img_and_sensor_matrix):
+    """
+    Receives input matrix which contains both the image and the sensor value
+    vector together. So for rgb images size (3x25x25) and a sensor vector of
+    length 100, we would get an input (with batch_size=B):
+      input.shape = (B, 4, 25, 25)
+      The first 3 channels are rgb
+      The last channel is the reshaped sensor vector, padded with zeros
+    """
+    # split the observation into image and sensor parts
+    tuple_img_sensors = self.split_obs(img_and_sensor_matrix)
+    image = tuple_img_sensors[0]
+    sensors = tuple_img_sensors[1]
+
+    # feed each part through a seperate head
+    x = self.image_features_(image)
+    y = self.numeric_features_(sensors)
+
+    # concatenate the parts and feed into the last head of the network
+    x = x.view(x.shape[0], 128) # from shape [B, 128, 1, 1] -> [B, 128]
+    z = torch.cat((x, y), 1)
+    z = self.combined_features_(z)
+
+    return z
+
+  def to_device(self, device=None):
+    """
+    Set a pytorch device for the network
+    """
+    if device is not None:
+      device = torch.device(device)
+    self.image_features_.to(device)
+    self.numeric_features_.to(device)
+    self.combined_features_.to(device)
+
+# --- old --- #
+
 class CNN_only(nn.Module):
 
   name = "CNN_only"

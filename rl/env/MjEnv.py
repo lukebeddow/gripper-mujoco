@@ -1364,10 +1364,11 @@ class MjEnv():
 
     elif self.params.rgb_rendering_method.lower() == "cyclegan":
 
-      # load a specific, hardcoded cycleGAN model
-      load_GA = True # else load GB
       epoch = 115
       experiment = "single_object_128_CG"
+
+      # load a specific, hardcoded cycleGAN model
+      load_GA = True # else load GB
       path_to_load = f"image_render_models/cycleGAN/{experiment}"
       file_to_load_GA = f"{epoch}_net_G_A.pth"
       file_to_load_GB = f"{epoch}_net_G_B.pth"
@@ -1394,10 +1395,14 @@ class MjEnv():
 
     elif self.params.rgb_rendering_method.lower() == "cyclegan_encoder":
 
+      # epoch = 400
+      # experiment = "gan_52"
+
+      epoch = 400
+      experiment = "gan_52_luke_encoder_8"
+
       # load a specific, hardcoded cycleGAN model
       load_GA = True # else load GB
-      epoch = 400
-      experiment = "gan_52"
       path_to_load = f"/home/luke/mujoco-devel/rl/env/image_render_models/cycleGAN/{experiment}"
       file_to_load_GA = f"{epoch}_net_G_A.pth"
       file_to_load_GB = f"{epoch}_net_G_B.pth"
@@ -1423,11 +1428,19 @@ class MjEnv():
       # load the model weights and move to the desired device
       weights = torch.load(full_path, map_location="cpu" if initial_load_cpu else None)
       self.render_net.load_state_dict(weights)
+
+      # determine how much of the network we will use
+      self.render_net = torch.nn.Sequential(
+        self.render_net.encoder, 
+        self.render_net.bottleneck_in,
+      )
+
+      # now allocate space on the device
       self.render_net.to(self.torch_device)
 
       # trim the generator network to use as an encoder
-      num_resnet_blocks = 9
-      self.render_net.model = self.render_net.model[:12 + num_resnet_blocks]
+      # num_resnet_blocks = 9
+      # self.render_net.model = self.render_net.model[:12 + num_resnet_blocks]
 
     else:
       raise RuntimeError(f"MjEnv._load_image_rendering_model() error: unrecognised rgb_rendering_method = {self.params.rgb_rendering_method}")

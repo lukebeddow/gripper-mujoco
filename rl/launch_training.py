@@ -537,7 +537,9 @@ def curriculum_change_object_noise(self, stage):
   """
 
   self.env.params.object_position_noise_mm = self.curriculum_dict["param_values"][stage]
-  self.env.mj.set.oob_distance = (15 + self.curriculum_dict["param_values"][stage]) * 1e-3
+  
+  # don't use this, it causes trainings to avoid using fingers
+  # self.env.mj.set.oob_distance = (15 + self.curriculum_dict["param_values"][stage]) * 1e-3
 
 if __name__ == "__main__":
 
@@ -3249,10 +3251,10 @@ if __name__ == "__main__":
   elif args.program == "ppo_cnn_single_object_curriculum_2":
 
     # define what to vary this training, dependent on job number
-    vary_1 = [5e-6, 1e-5, 5e-5]
+    vary_1 = [2e-5, 5e-5]
     vary_2 = [False, True]
     vary_3 = None
-    repeats = 2
+    repeats = 1
     tm.param_1_name = "learning rate"
     tm.param_2_name = "use encoder"
     tm.param_3_name = None
@@ -3269,7 +3271,7 @@ if __name__ == "__main__":
     # enable image transforms and set network image sizes
     tm.settings["env"]["use_standard_transform"] = True
     tm.settings["env"]["transform_resize_square"] = 58
-    tm.settings["env"]["transform_crop_size"] = 52
+    tm.settings["env"]["transform_crop_size"] = 52 # must be a multiple of 4 (mult in the network)
 
     # turn up noise and add in XY base actions
     tm.settings["env"]["object_position_noise_mm"] = 30
@@ -3296,7 +3298,10 @@ if __name__ == "__main__":
     tm.settings["curriculum"]["change_fcn"] = curriculum_change_object_noise
 
     # enable reward for getting close to objects
-    tm.settings["reward"]["object_XY_distance"]["used"] = True
+    tm.settings["reward"]["object_XY_distance"]["used"] = False # TEST NOT USING THIS
+
+    # TESTING: try using faster simulation
+    tm.settings["env"]["num_segments"] = 6
 
     # add in image rendering with the encoder
     if tm.param_2:
@@ -3308,15 +3313,23 @@ if __name__ == "__main__":
 
     # create the agent network
     if tm.param_2:
-      obs_size = (256, 13, 13)
-      network = NetActorCriticPG(MixedNetworkFromEncoder, obs_size,
+      ngf = 8 # set in the GAN training options
+      mult = 4 # set in the GAN network itself
+      bottleneck = 4
+      channels = int((ngf * mult) / float(bottleneck))
+      img_x = int(tm.settings["env"]["transform_crop_size"] / float(mult))
+      obs_size = (channels, img_x, img_x)
+      # network = NetActorCriticPG(MixedNetworkFromEncoder, obs_size,
+      #                            env.n_obs, env.n_actions, continous_actions=True, 
+      #                            device=args.device)
+      network = NetActorCriticPG(networks.MixedNetworkFromEncoder2, obs_size,
                                  env.n_obs, env.n_actions, continous_actions=True, 
                                  device=args.device)
     else:
       obs_size = (3, env.params.transform_crop_size, 
                   env.params.transform_crop_size)
       network = CNNActorCriticPG(obs_size, env.n_obs, env.n_actions, 
-                                continous_actions=True, device=args.device)
+                                 continous_actions=True, device=args.device)
     
     # make the agent
     tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
@@ -3335,7 +3348,7 @@ if __name__ == "__main__":
     vary_1 = [5e-5, 8e-5]
     vary_2 = [1500, 3000, 6000]
     vary_3 = None
-    repeats = 2
+    repeats = 1
     tm.param_1_name = "learning rate"
     tm.param_2_name = "steps per epoch"
     tm.param_3_name = None
@@ -3380,6 +3393,9 @@ if __name__ == "__main__":
 
     # enable reward for getting close to objects
     tm.settings["reward"]["object_XY_distance"]["used"] = True
+
+    # # try using faster simulation
+    # tm.settings["env"]["num_segments"] = 5
 
     # create the environment
     env = tm.make_env()

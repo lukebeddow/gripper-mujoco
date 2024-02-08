@@ -88,44 +88,13 @@ def calc_FC_layer_size(W, H, C, prnt=False):
 
   return new_W, new_H, new_C
 
-# # calculate the size of the first fully connected layer (ensure settings match image_features_ below)
-#     prnt = True
-#     w, h, c = calc_conv_layer_size(width, height, channel, kernel_num=16, kernel_size=3, stride=1, padding=1, prnt=prnt)
-#     w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, prnt=prnt)
-#     w, h, c = calc_conv_layer_size(w, h, c, kernel_num=64, kernel_size=3, stride=1, padding=1, prnt=prnt)
-#     w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, prnt=prnt)
-#     w, h, c = calc_conv_layer_size(w, h, c, kernel_num=128, kernel_size=5, stride=2, padding=2, prnt=prnt)
-#     w, h, c = calc_adaptive_avg_size(w, h, c, (1, 1), prnt=prnt)
-#     w, h, c = calc_FC_layer_size(w, h, c, prnt=prnt)
-#     fc_layer_num = c
-
-#     # define the CNN to handle the images
-#     self.image_features_ = nn.Sequential(
-
-#       # input CxWxH, output 16xWxH
-#       nn.Conv2d(channel, 16, kernel_size=5, stride=2, padding=2),
-#       nn.ReLU(),
-#       nn.MaxPool2d(kernel_size=3, stride=2),
-#       # nn.Dropout(),
-#       nn.Conv2d(16, 64, kernel_size=5, stride=2, padding=2),
-#       nn.ReLU(),
-#       nn.MaxPool2d(kernel_size=3, stride=2),
-#       # nn.Dropout(),
-#       nn.Flatten(),
-#       nn.Linear(fc_layer_num, 128),
-#       nn.ReLU(),
-#       # nn.Linear(64*16, 64),
-#       # nn.ReLU(),
-#     )
-
 class MixedNetwork(nn.Module):
 
   name = "MixedNetwork"
 
-  def __init__(self, numeric_inputs, image_size, outputs, device):
+  def __init__(self, numeric_inputs, image_size, outputs):
 
     super(MixedNetwork, self).__init__()
-    self.device = device
     self.image_size = image_size
     self.numeric_inputs = numeric_inputs
     self.num_outputs = outputs
@@ -226,11 +195,11 @@ class MixedNetwork(nn.Module):
     Set a pytorch device for the network
     """
     if device is not None:
-      self.device = torch.device(device)
-    self.image_features_.to(self.device)
-    self.numeric_features_.to(self.device)
-    self.combined_features_.to(self.device)
-
+      device = torch.device(device)
+    self.image_features_.to(device)
+    self.numeric_features_.to(device)
+    self.combined_features_.to(device)
+    
 class MixedNetworkFromEncoder(nn.Module):
 
   name = "MixedNetworkFromEncoder"
@@ -585,9 +554,10 @@ class CNNCategoricalActor(Actor):
     
   def __init__(self, img_dim, sensor_dim, act_dim, device):
     super().__init__()
-    self.logits_net = MixedNetwork(sensor_dim, img_dim, act_dim, device=device)
+    self.logits_net = MixedNetwork(sensor_dim, img_dim, act_dim)
     self.name = self.logits_net.name
     self.device = device
+    self.logits_net.to_device(device)
 
   def _distribution(self, obs):
     logits = self.logits_net(obs)
@@ -608,9 +578,10 @@ class CNNGaussianActor(Actor):
     super().__init__()
     log_std = -0.5 * np.ones(act_dim, dtype=np.float32)
     self.log_std = torch.nn.Parameter(torch.as_tensor(log_std))
-    self.mu_net = MixedNetwork(sensor_dim, img_dim, act_dim, device=device)
+    self.mu_net = MixedNetwork(sensor_dim, img_dim, act_dim)
     self.name = self.mu_net.name
     self.device = device
+    self.mu_net.to_device(device)
 
   def _distribution(self, obs):
     mu = self.mu_net(obs)
@@ -632,8 +603,9 @@ class CNNCritic(nn.Module):
 
   def __init__(self, img_dim, sensor_dim, device):
     super().__init__()
-    self.v_net = MixedNetwork(sensor_dim, img_dim, 1, device=device) # act dim = 1
+    self.v_net = MixedNetwork(sensor_dim, img_dim, 1) # act dim = 1
     self.device = device
+    self.v_net.to_device(device)
 
   def forward(self, obs):
     return torch.squeeze(self.v_net(obs), -1) # Critical to ensure v has right shape.
@@ -718,9 +690,10 @@ class NetCategoricalActor(Actor):
     
   def __init__(self, network, img_dim, sensor_dim, act_dim, device):
     super().__init__()
-    self.logits_net = network(sensor_dim, img_dim, act_dim, device=device)
+    self.logits_net = network(sensor_dim, img_dim, act_dim)
     self.name = self.logits_net.name
     self.device = device
+    self.logits_net.to_device(device)
 
   def _distribution(self, obs):
     logits = self.logits_net(obs)
@@ -741,9 +714,10 @@ class NetGaussianActor(Actor):
     super().__init__()
     log_std = -0.5 * np.ones(act_dim, dtype=np.float32)
     self.log_std = torch.nn.Parameter(torch.as_tensor(log_std))
-    self.mu_net = network(sensor_dim, img_dim, act_dim, device=device)
+    self.mu_net = network(sensor_dim, img_dim, act_dim)
     self.name = self.mu_net.name
     self.device = device
+    self.mu_net.to_device(device)
 
   def _distribution(self, obs):
     mu = self.mu_net(obs)
@@ -764,8 +738,9 @@ class NetCritic(nn.Module):
 
   def __init__(self, network, img_dim, sensor_dim, device):
     super().__init__()
-    self.v_net = network(sensor_dim, img_dim, 1, device=device) # act dim = 1
+    self.v_net = network(sensor_dim, img_dim, 1) # act dim = 1
     self.device = device
+    self.v_net.to_device(device)
 
   def forward(self, obs):
     return torch.squeeze(self.v_net(obs), -1) # Critical to ensure v has right shape.
@@ -844,7 +819,6 @@ class NetActorCriticPG(nn.Module):
     self.mode = "test"
     self.pi.eval()
     self.vf.eval()
-
 
 # ----- proper agents ----- #
 
