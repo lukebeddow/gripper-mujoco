@@ -503,7 +503,7 @@ class Trainer:
     if self.enable_saving:
       self.modelsaver.save(filename, txtstr=hyper_str, txtonly=True)
 
-  def load(self, run_name, id=None, group_name=None, path_to_run_folder=None):
+  def load(self, run_name, id=None, group_name=None, path_to_run_folder=None, agentonly=False):
     """
     Load a model given a path to it
     """
@@ -531,55 +531,76 @@ class Trainer:
     load_agent = self.modelsaver.load(id=id, folderpath=path_to_run_folder,
                                       filenamestarts="Agent")
     self.last_loaded_agent_id = self.modelsaver.last_loaded_id
-    load_train = self.modelsaver.load(folderpath=path_to_run_folder,
-                                      filenamestarts=self.train_param_savename)
-    try:
-      load_track = self.modelsaver.load(id=id, folderpath=path_to_run_folder, 
-                                      filenamestarts=self.track_savename,
-                                      suffix_numbering=self.trackinfo_numbering)
-    except FileNotFoundError as e:
-      if self.log_level > 0:
-        print("failed\nLoading track failed, trying again with alternative numbering. Error:", e)
-      load_track = self.modelsaver.load(id=id, folderpath=path_to_run_folder, 
-                                    filenamestarts=self.track_savename,
-                                    suffix_numbering=not self.trackinfo_numbering)
-    
-    # extract loaded data
-    self.params = load_train["parameters"]
-    self.run_name = load_train["run_name"]
-    self.group_name = load_train["group_name"]
-    self.env.load_save_state(load_train["env_data"], device=self.device)
-    self.track = load_track
 
-    # unpack curriculum information
-    self.curriculum_dict = load_train["curriculum_dict"]
-    if len(self.track.train_curriculum_stages) > 0:
-      self.curriculum_dict["stage"] = self.track.train_curriculum_stages[-1]
-    else: self.curriculum_dict["stage"] = 0
-    if "curriculum_fcn" in load_train["curriculum_dict"].keys():
-      self.curriculum_change = functools.partial(load_train["curriculum_dict"]["curriculum_change_fcn"], self)
-      if self.params.use_curriculum:
-        self.curriculum_change(self.curriculum_dict["stage"]) # apply initial stage settings
-    elif self.params.use_curriculum:
-      # TEMPORARY FIX for program: continue_good_curriculum, delete later
-      print("TEMPORARY CURRICULUM FIX: set curriculum function as curriculum_change_object_noise")
-      from launch_training import curriculum_change_object_noise
-      self.curriculum_change = functools.partial(curriculum_change_object_noise, self)
-      print("CURRICULUM ACTIVE: Calling curriculum_change_object_noise now")
-      self.curriculum_change(self.curriculum_dict["stage"]) # apply initial stage settings
+    # if we are only loading the agent
+    if agentonly:
+      print("Trainer.load() warning: AGENTONLY=TRUE, setting self.env=None for safety")
+      self.env = None
 
-    # do we have the agent already, if not, create it
-    if self.agent is None:
-      to_exec = f"""self.agent = {load_train["agent_name"]}()"""
+      # get the name of the agent from the filename saved with
+      name = self.modelsaver.get_recent_file(name="Agent")
+      name = name.split("/")[-1]
+      
+      # trim out the agent part
+      name = name[:5 + len(self.modelsaver.file_ext())]
+
+      to_exec = f"""self.agent = {name}()"""
       exec(to_exec)
-    self.agent.load_save_state(load_agent, device=self.device)
-    if self.log_level >= 2 and hasattr(self.agent, "debug"): 
-      self.agent.debug = True
+      self.agent.load_save_state(load_agent, device=self.device)
 
-    # reseed - be aware this will not be contingous
-    self.rngseed = load_train["rngseed"]
-    self.training_reproducible = False # training no longer reproducible
-    self.seed()
+      print("Trainer.load(): AGENTONLY=True load now completed")
+
+    # regular load behaviour
+    else:
+      load_train = self.modelsaver.load(folderpath=path_to_run_folder,
+                                        filenamestarts=self.train_param_savename)
+      try:
+        load_track = self.modelsaver.load(id=id, folderpath=path_to_run_folder, 
+                                        filenamestarts=self.track_savename,
+                                        suffix_numbering=self.trackinfo_numbering)
+      except FileNotFoundError as e:
+        if self.log_level > 0:
+          print("failed\nLoading track failed, trying again with alternative numbering. Error:", e)
+        load_track = self.modelsaver.load(id=id, folderpath=path_to_run_folder, 
+                                      filenamestarts=self.track_savename,
+                                      suffix_numbering=not self.trackinfo_numbering)
+      
+      # extract loaded data
+      self.params = load_train["parameters"]
+      self.run_name = load_train["run_name"]
+      self.group_name = load_train["group_name"]
+      self.env.load_save_state(load_train["env_data"], device=self.device)
+      self.track = load_track
+
+      # unpack curriculum information
+      self.curriculum_dict = load_train["curriculum_dict"]
+      if len(self.track.train_curriculum_stages) > 0:
+        self.curriculum_dict["stage"] = self.track.train_curriculum_stages[-1]
+      else: self.curriculum_dict["stage"] = 0
+      if "curriculum_fcn" in load_train["curriculum_dict"].keys():
+        self.curriculum_change = functools.partial(load_train["curriculum_dict"]["curriculum_change_fcn"], self)
+        if self.params.use_curriculum:
+          self.curriculum_change(self.curriculum_dict["stage"]) # apply initial stage settings
+      elif self.params.use_curriculum:
+        # TEMPORARY FIX for program: continue_good_curriculum, delete later
+        print("TEMPORARY CURRICULUM FIX: set curriculum function as curriculum_change_object_noise")
+        from launch_training import curriculum_change_object_noise
+        self.curriculum_change = functools.partial(curriculum_change_object_noise, self)
+        print("CURRICULUM ACTIVE: Calling curriculum_change_object_noise now")
+        self.curriculum_change(self.curriculum_dict["stage"]) # apply initial stage settings
+
+      # do we have the agent already, if not, create it
+      if self.agent is None:
+        to_exec = f"""self.agent = {load_train["agent_name"]}()"""
+        exec(to_exec)
+      self.agent.load_save_state(load_agent, device=self.device)
+      if self.log_level >= 2 and hasattr(self.agent, "debug"): 
+        self.agent.debug = True
+
+      # reseed - be aware this will not be contingous
+      self.rngseed = load_train["rngseed"]
+      self.training_reproducible = False # training no longer reproducible
+      self.seed()
 
   def run_episode(self, i_episode, test=False):
     """
@@ -1694,7 +1715,8 @@ class MujocoTrainer(Trainer):
 
     return best_sr, best_ep
 
-  def load_best_id(self, run_name, group_name=None, path_to_run_folder=None, stage=None):
+  def load_best_id(self, run_name, group_name=None, path_to_run_folder=None, stage=None,
+                   agentonly=False):
     """
     Try to find the best performing agent and load that. Stage indicates requirements
     for which curriulum stage we can load. If an int, we load that stage, or if "max"
@@ -1721,7 +1743,8 @@ class MujocoTrainer(Trainer):
       best_id_found = True
 
     # try to load, if best id not found it loads most recent (ie id=None)
-    self.load(run_name, id=id, group_name=group_name, path_to_run_folder=path_to_run_folder)
+    self.load(run_name, id=id, group_name=group_name, path_to_run_folder=path_to_run_folder,
+              agentonly=agentonly)
 
     if not best_id_found:
       if stage == "max": stage = self.track.test_curriculum_stages[-1]
@@ -1737,7 +1760,8 @@ class MujocoTrainer(Trainer):
         if self.log_level > 0: 
           print(f"BEST_ID_SUCCESS -> best_id set to {best_id} with best_ep={best_ep}, save_freq={self.params.save_freq} and best_sr={best_sr}")
         # try to load again
-        self.load(run_name, id=best_id, group_name=group_name, path_to_run_folder=path_to_run_folder)
+        self.load(run_name, id=best_id, group_name=group_name, path_to_run_folder=path_to_run_folder,
+                  agentonly=agentonly)
 
     return best_id_found
 

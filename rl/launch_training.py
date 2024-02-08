@@ -454,6 +454,33 @@ def make_training_manager_from_args(args, silent=False, save=True):
 
   return tm
 
+def save_expert_network(tm, timestamp, job):
+  """
+  Get the network out of training and save it under rl/env/expert
+  """
+
+  save_path = "env/expert/"
+  save_folder = f"T{timestamp}_J{job}/"
+  filename = "net.pth"
+
+  tm.load(job_num=job, timestamp=timestamp, best_id=True, agentonly=True)
+  
+  if tm.trainer.agent.name != "Agent_PPO":
+    raise RuntimeError("save_expert_network() only supports Agent_PPO currently")
+  
+  net = tm.trainer.agent.mlp_ac.pi.mu_net
+
+  fullpath = save_path + save_folder
+  if not os.path.exists(fullpath):
+    try:
+      os.makedirs(fullpath)
+    except FileExistsError:
+      pass
+
+  print(f"save_expert_network() saving at: {fullpath + filename} ...", end="", flush=True)
+  torch.save(net, fullpath + filename)
+  print("finished")
+
 def curriculum_change_termination(self, stage):
   """
   Toggle the termination threshold over stages. Below -1.0 or above 1.0 is
@@ -602,6 +629,7 @@ if __name__ == "__main__":
   parser.add_argument("--extra-episodes",     default=None, type=int) # extra episodes to run for continuing training
   parser.add_argument("--smallest-job-num",   default=1, type=int)    # only used to reduce sleep time to seperate processes
   parser.add_argument("--torch-threads",      default=1, type=int)    # maximum number of allowed pytorch threads, set 0 for no limit
+  parser.add_argument("--save-expert",        action="store_true")    # load a training and save the network as an expert
   # parser.add_argument("--override-lib",       action="store_true")    # override bind.so library with loaded data
 
   args = parser.parse_args()
@@ -666,7 +694,8 @@ if __name__ == "__main__":
     raise RuntimeError("launch_training.py: your options require a job number [-j, --job], either to identify an existing training for loading, or to correspond to your selected program")
 
   # create a training manager
-  tm = make_training_manager_from_args(args)
+  tm = make_training_manager_from_args(args, silent=True)
+  tm.log_level = args.log_level
 
   if args.plot:
 
@@ -721,6 +750,12 @@ if __name__ == "__main__":
     if args.savedir is not None: tm.settings["savedir"] = args.savedir
 
     tm.continue_training(new_endpoint=args.new_endpoint, extra_episodes=args.extra_episodes)
+    exit()
+
+  if args.save_expert:
+    if args.log_level > 0:
+      print(f"launch_training.py is saving an expert model for timestamp={args.timestamp} and job={args.job}")
+    save_expert_network(tm, args.timestamp, args.job)
     exit()
 
   # ----- regular training ----- #
@@ -3558,6 +3593,73 @@ if __name__ == "__main__":
       layers = [128 for i in range(4)]
       network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
                                   continous_actions=True)
+    
+    # make the agent
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = 5e-5
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = 5e-5
+    tm.settings["Agent_PPO"]["steps_per_epoch"] = 4000
+    agent = Agent_PPO(device=args.device, steps=tm.settings["Agent_PPO"]["steps_per_epoch"])
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "test_expert":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [True, False]
+    vary_2 = None
+    vary_3 = None
+    repeats = 2
+    tm.param_1_name = "use feedforward"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # set very little object position noise and the old default oob distance
+    tm.settings["env"]["object_position_noise_mm"] = 10
+    tm.settings["cpp"]["oob_distance"] = 75e-3
+
+    # enable base XY movements
+    tm.settings["env"]["XY_base_actions"] = True
+    tm.settings["env"]["base_lim_X_mm"] = 50
+    tm.settings["env"]["base_lim_Y_mm"] = 50
+    tm.settings["cpp"]["action"]["base_X"]["in_use"] = True
+    tm.settings["cpp"]["action"]["base_Y"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["base_state_sensor_XY"]["in_use"] = True
+  
+    # enable base yaw
+    tm.settings["env"]["Z_base_rotation"] = True
+    tm.settings["cpp"]["action"]["base_yaw"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["base_state_sensor_yaw"]["in_use"] = True
+
+    # add in the camera
+    tm.settings["env"]["depth_camera"] = True
+    tm.settings["env"]["use_rgb_in_observation"] = True
+    tm.settings["env"]["image_width"] = 200
+    tm.settings["env"]["image_height"] = 100
+    tm.settings["env"]["use_standard_transform"] = True
+    tm.settings["env"]["transform_resize_square"] = 58
+    tm.settings["env"]["transform_crop_size"] = 52
+
+    # create the environment
+    env = tm.make_env()
+
+    # load in the expert
+    feedsize = 4 if tm.param_1 else 0
+    env._load_expert_model(timestamp="08-12-23_19-19", job=53)
+
+    # create the agent CNN network
+    obs_size = (3, env.params.transform_crop_size, env.params.transform_crop_size)
+    # network = CNNActorCriticPG(obs_size, env.n_obs, env.n_actions, 
+    #                           continous_actions=True, device=args.device)
+    network = NetActorCriticPG(networks.MxNetFeedforward,
+                               obs_size, env.n_obs, env.n_actions, 
+                               continous_actions=True, device=args.device,
+                               netargs={ "feedforwardsize" : feedsize })
     
     # make the agent
     tm.settings["Agent_PPO"]["learning_rate_pi"] = 5e-5

@@ -1292,8 +1292,8 @@ namespace MjType
 
     // TESTING: all gauges given this currently
     // Calibration new_gauges {1.30e-6}; // for 75deg fingers, 28x0.9, 12/12/23
-    // Calibration new_gauges {1.53e-6}; // for cut fingers, 28x1.0, 14/12/23
-    Calibration new_gauges {1.28e-6}; // for cut fingers, 24x1.0, 14/12/23
+    Calibration new_gauges {1.53e-6}; // for cut fingers, 28x1.0, 14/12/23
+    // Calibration new_gauges {1.28e-6}; // for cut fingers, 24x1.0, 14/12/23
 
     // get the correct calibration for the fingers
     Calibration get_gauge_calibration(int gauge_num, double thickness, double width)

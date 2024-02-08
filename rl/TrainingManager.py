@@ -137,6 +137,9 @@ class TrainingManager():
       "scene_X_dimension_mm" : 300,
       "scene_Y_dimension_mm" : 200, 
 
+      # experimental settings
+      "use_expert_in_observation" : False,
+
       # file and testing parameters
       "test_obj_per_file" : 20,
       "task_reload_chance" : 0.05,
@@ -544,7 +547,7 @@ class TrainingManager():
 
   def load(self, job_num=None, timestamp=None, run_name=None, group_name=None, 
            best_id=False, id=None, path_to_run_folder=None, use_abs_path=False,
-           load_into_new_training=False):
+           load_into_new_training=False, agentonly=False):
     """
     Load the training currently specified. Either pass:
       1) nothing - run_name and group_name are already set in the class
@@ -591,16 +594,17 @@ class TrainingManager():
         stage = "max"
       else: stage = None
       found = self.trainer.load_best_id(self.run_name, group_name=self.group_name,
-                                        path_to_run_folder=path_to_run_folder, stage=stage)
+                                        path_to_run_folder=path_to_run_folder, stage=stage,
+                                        agentonly=agentonly)
       if not found:
         if self.log_level > 0:
           print(f"TrainingMananger.load() warning: load_best_id failed (stage = {stage}). Loading most recent id")
         self.trainer.load(self.run_name, group_name=self.group_name, id=id,
-                        path_to_run_folder=path_to_run_folder)
+                        path_to_run_folder=path_to_run_folder, agentonly=agentonly)
         # raise RuntimeError(f"TrainingMananger.load() error: load_best_id failed (stage = {stage})")
     else:
       self.trainer.load(self.run_name, group_name=self.group_name, id=id,
-                        path_to_run_folder=path_to_run_folder)
+                        path_to_run_folder=path_to_run_folder, agentonly=agentonly)
 
     if load_into_new_training:
       # apply new training details, for saving in a new folder

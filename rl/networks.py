@@ -38,38 +38,6 @@ class VariableNetwork(nn.Module):
 
     return x
 
-class DQN_variable(nn.Module):
-
-  name = "DQN_"
-
-  def __init__(self, layers, device):
-
-    super(DQN_variable, self).__init__()
-    self.device = device
-
-    self.linear = []
-    for i in range(len(layers) - 1):
-      self.linear.append(torch.nn.Linear(layers[i], layers[i + 1]))
-      if i == 1: self.name += f"{layers[i]}"
-      if i > 1: self.name += f"x{layers[i]}"
-
-    self.linear = nn.ModuleList(self.linear)
-    self.activation = torch.nn.ReLU()
-    self.softmax = torch.nn.Softmax(dim=1)
-
-  def forward(self, x):
-
-    x = x.to(self.device)
-
-    for i in range(len(self.linear) - 1):
-      x = self.linear[i](x)
-      x = self.activation(x)
-
-    x = self.linear[i + 1](x)
-    x = self.softmax(x)
-
-    return x
-
 # --- CNN and sensor data --- #
 
 def calc_conv_layer_size(W, H, C, kernel_num, kernel_size, stride, padding, prnt=False):
@@ -440,6 +408,139 @@ class MixedNetworkFromEncoder2(nn.Module):
     self.numeric_features_.to(device)
     self.combined_features_.to(device)
 
+class MxNetFeedforward(nn.Module):
+
+  name = "MxNetFeedforward"
+
+  def __init__(self, numeric_inputs, image_size, outputs, feedforwardsize=0):
+
+    super(MxNetFeedforward, self).__init__()
+    self.image_size = image_size
+    self.numeric_inputs = numeric_inputs
+    self.num_outputs = outputs
+    self.ffsize = feedforwardsize
+
+    (channel, width, height) = image_size
+    self.name += f"_{width}x{height}"
+
+    # calculate the size of the first fully connected layer (ensure settings match image_features_ below)
+    prnt = False
+    w, h, c = calc_conv_layer_size(width, height, channel, kernel_num=16, kernel_size=5, stride=2, padding=2, prnt=prnt)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, prnt=prnt)
+    w, h, c = calc_conv_layer_size(w, h, c, kernel_num=64, kernel_size=5, stride=2, padding=2, prnt=prnt)
+    w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, prnt=prnt)
+    w, h, c = calc_FC_layer_size(w, h, c, prnt=prnt)
+    fc_layer_num = c
+
+    # define the CNN to handle the images
+    self.image_features_ = nn.Sequential(
+
+      # input CxWxH, output 16xWxH
+      nn.Conv2d(channel, 16, kernel_size=5, stride=2, padding=2),
+      nn.ReLU(),
+      nn.MaxPool2d(kernel_size=3, stride=2),
+      # nn.Dropout(),
+      nn.Conv2d(16, 64, kernel_size=5, stride=2, padding=2),
+      nn.ReLU(),
+      nn.MaxPool2d(kernel_size=3, stride=2),
+      # nn.Dropout(),
+      nn.Flatten(),
+      nn.Linear(fc_layer_num, 128),
+      nn.ReLU(),
+      # nn.Linear(64*16, 64),
+      # nn.ReLU(),
+    )
+
+    # define the MLP to handle the sensor data
+    self.numeric_features_ = nn.Sequential(
+      nn.Linear(numeric_inputs, 128),
+      nn.ReLU(),
+      # nn.Linear(150, 100),
+      # nn.ReLU(),
+      # nn.Linear(100, 50),
+      # nn.ReLU(),
+    )
+
+    # combine the image and MLP features
+    self.combined_features_ = nn.Sequential(
+      nn.Linear(128 + 128, 256),
+      nn.ReLU(),
+      nn.Linear(256, 128),
+      nn.ReLU(),
+      # nn.Linear(128, outputs),
+    )
+
+    self.ff_layers_ = nn.Sequential(
+      nn.Linear(128, outputs),
+    )
+
+  def split_obs(self, obs):
+    """
+    Split the incoming observation into a tuple:
+      (image_size, sensor_obs)
+    """
+
+    # print("obs size is", obs.shape)
+    # print("img size is", self.img_size)
+  
+    # split up the observation vector from the image
+    (img, sensors) = torch.split(obs, [self.image_size[0], 1], dim=1)
+    sensors = torch.flatten(sensors, start_dim=2)
+
+    # remove padded zeros and redundant channel dimension
+    sensors = sensors[:, :, :self.numeric_inputs]
+    sensors = torch.squeeze(sensors, dim=1)
+
+    # print("img shape after split", img.shape)
+    # print("sensor shape after split", sensors.shape)
+
+    if self.ffsize > 0:
+      if self.ffsize > sensors.shape[1]:
+        raise RuntimeError(f"MxNetFeedforward.split_obs() error: self.ffsize = {self.ffsize} too large for sensor obs shape = {sensors.shape}")
+      ff = sensors[:, -self.ffsize:]
+    else:
+      ff = None
+
+    return (img, sensors, ff)
+
+  def forward(self, img_and_sensor_matrix):
+    """
+    Receives input matrix which contains both the image and the sensor value
+    vector together. So for rgb images size (3x25x25) and a sensor vector of
+    length 100, we would get an input (with batch_size=B):
+      input.shape = (B, 4, 25, 25)
+      The first 3 channels are rgb
+      The last channel is the reshaped sensor vector, padded with zeros
+    """
+    tuple_img_sensors = self.split_obs(img_and_sensor_matrix)
+    image = tuple_img_sensors[0]#.to(self.device)
+    sensors = tuple_img_sensors[1]#.to(self.device)
+    x = self.image_features_(image)
+    # x = x.view(-1, 64*64)
+    y = self.numeric_features_(sensors)
+    z = torch.cat((x, y), 1)
+    z = self.combined_features_(z)
+
+    # add the feedforward values
+    if tuple_img_sensors[2] is not None:
+      z[:,-self.ffsize:] += tuple_img_sensors[2]
+
+    z = self.ff_layers_(z)
+
+    return z
+  
+  def to_device(self, device=None):
+    """
+    Set a pytorch device for the network
+    """
+    if device is not None:
+      device = torch.device(device)
+    self.image_features_.to(device)
+    self.numeric_features_.to(device)
+    self.combined_features_.to(device)
+    self.ff_layers_.to(device)
+
+
 # --- old --- #
 
 class CNN_only(nn.Module):
@@ -593,410 +694,7 @@ class CIFAR10Model(nn.Module):
         return x
     
 # --- old --- #
-
-class DQN_2L60(nn.Module):
-
-  name = "DQN_2L60"
-
-  def __init__(self, inputs, outputs, device):
-    super(DQN_2L60, self).__init__()
-    self.device = device
-    self.linear1 = torch.nn.Linear(inputs, 60)
-    self.linear2 = torch.nn.Linear(60, 60)
-    self.linear3 = torch.nn.Linear(60, outputs)
-    self.activation = torch.nn.ReLU()
-    self.softmax = torch.nn.Softmax(dim=1)
-
-  def forward(self, x):
-    x = x.to(self.device)
-    x = self.linear1(x)
-    x = self.activation(x)
-    x = self.linear2(x)
-    x = self.activation(x)
-    x = self.linear3(x)
-    x = self.softmax(x)
-
-    return x
-
-class DQN_3L60(nn.Module):
-
-  name = "DQN_3L60"
-
-  def __init__(self, inputs, outputs, device):
-    super(DQN_3L60, self).__init__()
-    self.device = device
-    self.linear1 = torch.nn.Linear(inputs, 60)
-    self.linear2 = torch.nn.Linear(60, 60)
-    self.linear3 = torch.nn.Linear(60, 60)
-    self.linear4 = torch.nn.Linear(60, outputs)
-    self.activation = torch.nn.ReLU()
-    self.softmax = torch.nn.Softmax(dim=1)
-
-  def forward(self, x):
-    x = x.to(self.device)
-    x = self.linear1(x)
-    x = self.activation(x)
-    x = self.linear2(x)
-    x = self.activation(x)
-    x = self.linear3(x)
-    x = self.activation(x)
-    x = self.linear4(x)
-    x = self.softmax(x)
-
-    return x
-
-class DQN_3L100(nn.Module):
-
-  name = "DQN_3L100"
-
-  def __init__(self, inputs, outputs, device):
-    super(DQN_3L100, self).__init__()
-    self.device = device
-    self.linear1 = torch.nn.Linear(inputs, 100)
-    self.linear2 = torch.nn.Linear(100, 100)
-    self.linear3 = torch.nn.Linear(100, 100)
-    self.linear4 = torch.nn.Linear(100, outputs)
-    self.activation = torch.nn.ReLU()
-    self.softmax = torch.nn.Softmax(dim=1)
-
-  def forward(self, x):
-    x = x.to(self.device)
-    x = self.linear1(x)
-    x = self.activation(x)
-    x = self.linear2(x)
-    x = self.activation(x)
-    x = self.linear3(x)
-    x = self.activation(x)
-    x = self.linear4(x)
-    x = self.softmax(x)
-
-    return x
-
-class DQN_4L60(nn.Module):
-
-  name = "DQN_4L60"
-
-  def __init__(self, inputs, outputs, device):
-    super(DQN_4L60, self).__init__()
-    self.device = device
-    self.linear1 = torch.nn.Linear(inputs, 60)
-    self.linear2 = torch.nn.Linear(60, 60)
-    self.linear3 = torch.nn.Linear(60, 60)
-    self.linear4 = torch.nn.Linear(60, 60)
-    self.linear5 = torch.nn.Linear(60, outputs)
-    self.activation = torch.nn.ReLU()
-    self.softmax = torch.nn.Softmax(dim=1)
-
-  def forward(self, x):
-    x = x.to(self.device)
-    x = self.linear1(x)
-    x = self.activation(x)
-    x = self.linear2(x)
-    x = self.activation(x)
-    x = self.linear3(x)
-    x = self.activation(x)
-    x = self.linear4(x)
-    x = self.activation(x)
-    x = self.linear5(x)
-    x = self.softmax(x)
-
-    return x
-
-class DQN_4L100(nn.Module):
-
-  name = "DQN_4L100"
-
-  def __init__(self, inputs, outputs, device):
-    super(DQN_4L100, self).__init__()
-    self.device = device
-    self.linear1 = torch.nn.Linear(inputs, 100)
-    self.linear2 = torch.nn.Linear(100, 100)
-    self.linear3 = torch.nn.Linear(100, 100)
-    self.linear4 = torch.nn.Linear(100, 100)
-    self.linear5 = torch.nn.Linear(100, outputs)
-    self.activation = torch.nn.ReLU()
-    self.softmax = torch.nn.Softmax(dim=1)
-
-  def forward(self, x):
-    x = x.to(self.device)
-    x = self.linear1(x)
-    x = self.activation(x)
-    x = self.linear2(x)
-    x = self.activation(x)
-    x = self.linear3(x)
-    x = self.activation(x)
-    x = self.linear4(x)
-    x = self.activation(x)
-    x = self.linear5(x)
-    x = self.softmax(x)
-
-    return x
-
-class DQN_5L60(nn.Module):
-
-  name = "DQN_5L60"
-
-  def __init__(self, inputs, outputs, device):
-    super(DQN_5L60, self).__init__()
-    self.device = device
-    self.linear1 = torch.nn.Linear(inputs, 60)
-    self.linear2 = torch.nn.Linear(60, 60)
-    self.linear3 = torch.nn.Linear(60, 60)
-    self.linear4 = torch.nn.Linear(60, 60)
-    self.linear5 = torch.nn.Linear(60, 60)
-    self.linear6 = torch.nn.Linear(60, outputs)
-    self.activation = torch.nn.ReLU()
-    self.softmax = torch.nn.Softmax(dim=1)
-
-  def forward(self, x):
-    x = x.to(self.device)
-    x = self.linear1(x)
-    x = self.activation(x)
-    x = self.linear2(x)
-    x = self.activation(x)
-    x = self.linear3(x)
-    x = self.activation(x)
-    x = self.linear4(x)
-    x = self.activation(x)
-    x = self.linear5(x)
-    x = self.activation(x)
-    x = self.linear6(x)
-    x = self.softmax(x)
-
-    return x
-
-class DQN_5L100(nn.Module):
-
-  name = "DQN_5L100"
-
-  def __init__(self, inputs, outputs, device):
-    super(DQN_5L100, self).__init__()
-    self.device = device
-    self.linear1 = torch.nn.Linear(inputs, 100)
-    self.linear2 = torch.nn.Linear(100, 100)
-    self.linear3 = torch.nn.Linear(100, 100)
-    self.linear4 = torch.nn.Linear(100, 100)
-    self.linear5 = torch.nn.Linear(100, 100)
-    self.linear6 = torch.nn.Linear(100, outputs)
-    self.activation = torch.nn.ReLU()
-    self.softmax = torch.nn.Softmax(dim=1)
-
-  def forward(self, x):
-    x = x.to(self.device)
-    x = self.linear1(x)
-    x = self.activation(x)
-    x = self.linear2(x)
-    x = self.activation(x)
-    x = self.linear3(x)
-    x = self.activation(x)
-    x = self.linear4(x)
-    x = self.activation(x)
-    x = self.linear5(x)
-    x = self.activation(x)
-    x = self.linear6(x)
-    x = self.softmax(x)
-
-    return x
-
-class DQN_6L60(nn.Module):
-
-  name = "DQN_6L60"
-
-  def __init__(self, inputs, outputs, device):
-    super(DQN_6L60, self).__init__()
-    self.device = device
-    self.linear1 = torch.nn.Linear(inputs, 60)
-    self.linear2 = torch.nn.Linear(60, 60)
-    self.linear3 = torch.nn.Linear(60, 60)
-    self.linear4 = torch.nn.Linear(60, 60)
-    self.linear5 = torch.nn.Linear(60, 60)
-    self.linear6 = torch.nn.Linear(60, 60)
-    self.linear7 = torch.nn.Linear(60, outputs)
-    self.activation = torch.nn.ReLU()
-    self.softmax = torch.nn.Softmax(dim=1)
-
-  def forward(self, x):
-    x = x.to(self.device)
-    x = self.linear1(x)
-    x = self.activation(x)
-    x = self.linear2(x)
-    x = self.activation(x)
-    x = self.linear3(x)
-    x = self.activation(x)
-    x = self.linear4(x)
-    x = self.activation(x)
-    x = self.linear5(x)
-    x = self.activation(x)
-    x = self.linear6(x)
-    x = self.activation(x)
-    x = self.linear7(x)
-    x = self.softmax(x)
-
-    return x
-
-class DQN_7L60(nn.Module):
-
-  name = "DQN_7L60"
-
-  def __init__(self, inputs, outputs, device):
-    super(DQN_7L60, self).__init__()
-    self.device = device
-    self.linear1 = torch.nn.Linear(inputs, 60)
-    self.linear2 = torch.nn.Linear(60, 60)
-    self.linear3 = torch.nn.Linear(60, 60)
-    self.linear4 = torch.nn.Linear(60, 60)
-    self.linear5 = torch.nn.Linear(60, 60)
-    self.linear6 = torch.nn.Linear(60, 60)
-    self.linear7 = torch.nn.Linear(60, 60)
-    self.linear8 = torch.nn.Linear(60, outputs)
-    self.activation = torch.nn.ReLU()
-    self.softmax = torch.nn.Softmax(dim=1)
-
-  def forward(self, x):
-    x = x.to(self.device)
-    x = self.linear1(x)
-    x = self.activation(x)
-    x = self.linear2(x)
-    x = self.activation(x)
-    x = self.linear3(x)
-    x = self.activation(x)
-    x = self.linear4(x)
-    x = self.activation(x)
-    x = self.linear5(x)
-    x = self.activation(x)
-    x = self.linear6(x)
-    x = self.activation(x)
-    x = self.linear7(x)
-    x = self.activation(x)
-    x = self.linear8(x)
-    x = self.softmax(x)
-
-    return x
-
-class DQN_7L100(nn.Module):
-
-  name = "DQN_7L100"
-
-  def __init__(self, inputs, outputs, device):
-    super(DQN_7L100, self).__init__()
-    self.device = device
-    self.linear1 = torch.nn.Linear(inputs, 100)
-    self.linear2 = torch.nn.Linear(100, 100)
-    self.linear3 = torch.nn.Linear(100, 100)
-    self.linear4 = torch.nn.Linear(100, 100)
-    self.linear5 = torch.nn.Linear(100, 100)
-    self.linear6 = torch.nn.Linear(100, 100)
-    self.linear7 = torch.nn.Linear(100, 100)
-    self.linear8 = torch.nn.Linear(100, outputs)
-    self.activation = torch.nn.ReLU()
-    self.softmax = torch.nn.Softmax(dim=1)
-
-  def forward(self, x):
-    x = x.to(self.device)
-    x = self.linear1(x)
-    x = self.activation(x)
-    x = self.linear2(x)
-    x = self.activation(x)
-    x = self.linear3(x)
-    x = self.activation(x)
-    x = self.linear4(x)
-    x = self.activation(x)
-    x = self.linear5(x)
-    x = self.activation(x)
-    x = self.linear6(x)
-    x = self.activation(x)
-    x = self.linear7(x)
-    x = self.activation(x)
-    x = self.linear8(x)
-    x = self.softmax(x)
-
-    return x
-
-# --- ideas --- #
-
-class DQN_4L120_60(nn.Module):
-
-  name = "DQN_4L120_60"
-
-  def __init__(self, inputs, outputs, device):
-    super(DQN_4L120_60, self).__init__()
-    self.device = device
-    self.linear1 = torch.nn.Linear(inputs, 120)
-    self.linear2 = torch.nn.Linear(120, 60)
-    self.linear3 = torch.nn.Linear(60, 60)
-    self.linear4 = torch.nn.Linear(60, 60)
-    self.linear5 = torch.nn.Linear(60, outputs)
-    self.activation = torch.nn.ReLU()
-    self.softmax = torch.nn.Softmax(dim=1)
-
-  def forward(self, x):
-    x = x.to(self.device)
-    x = self.linear1(x)
-    x = self.activation(x)
-    x = self.linear2(x)
-    x = self.activation(x)
-    x = self.linear3(x)
-    x = self.activation(x)
-    x = self.linear4(x)
-    x = self.activation(x)
-    x = self.linear5(x)
-    x = self.softmax(x)
-
-    return x
-
-class DQN_2LX(nn.Module):
-
-  name = "DQN_2L"
-
-  def __init__(self, inputs, outputs, device, width):
-    super(DQN_2LX, self).__init__()
-    self.device = device
-    self.linear1 = torch.nn.Linear(inputs, width)
-    self.linear2 = torch.nn.Linear(width, width)
-    self.linear3 = torch.nn.Linear(width, outputs)
-    self.activation = torch.nn.ReLU()
-    self.softmax = torch.nn.Softmax(dim=1)
-    self.name += str(width)
-
-  def forward(self, x):
-    x = x.to(self.device)
-    x = self.linear1(x)
-    x = self.activation(x)
-    x = self.linear2(x)
-    x = self.activation(x)
-    x = self.linear3(x)
-    x = self.softmax(x)
-
-    return x
-
-class DQN_3LX(nn.Module):
-
-  name = "DQN_3L"
-
-  def __init__(self, inputs, outputs, device, width):
-    super(DQN_3LX, self).__init__()
-    self.device = device
-    self.linear1 = torch.nn.Linear(inputs, width)
-    self.linear2 = torch.nn.Linear(width, width)
-    self.linear3 = torch.nn.Linear(width, width)
-    self.linear4 = torch.nn.Linear(width, outputs)
-    self.activation = torch.nn.ReLU()
-    self.softmax = torch.nn.Softmax(dim=1)
-    self.name += str(width)
-
-  def forward(self, x):
-    x = x.to(self.device)
-    x = self.linear1(x)
-    x = self.activation(x)
-    x = self.linear2(x)
-    x = self.activation(x)
-    x = self.linear3(x)
-    x = self.activation(x)
-    x = self.linear4(x)
-    x = self.softmax(x)
-
-    return x
-  
+ 
 if __name__ == "__main__":
 
   # self.image_features_ = nn.Sequential(

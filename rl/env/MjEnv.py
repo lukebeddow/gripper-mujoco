@@ -105,6 +105,9 @@ class MjEnv():
     scene_X_dimension_mm: int = 300
     scene_Y_dimension_mm: int = 200
 
+    # experimental features
+    use_expert_in_observation: bool = False
+
     # file and testing parameters
     test_obj_per_file: int = 20
     task_reload_chance: float = 1.0 / float(test_obj_per_file)
@@ -159,6 +162,9 @@ class MjEnv():
     self.torch_device = torch.device(device)
     self.randomise_colours_every_step = False
     self.render_net = None
+    self.expert_net = None
+    self.expert_n_output = 0
+    self.expert_clamp = True
 
     # initialise class variables
     self.test_in_progress = False
@@ -494,6 +500,14 @@ class MjEnv():
     self.n_actions = self.mj.get_n_actions()
     self.n_obs = self.mj.get_n_obs()
 
+    if self.params.use_expert_in_observation:
+      if self.expert_net is None:
+        if self.log_level > 0:
+          print("MjEnv._update_n_actions_obs() warning: self.params.use_expert_in_observation is True, but no expert net is loaded, ignoring expert size in observation")
+      else:
+        print("N_OBS before", self.n_obs, "and after", self.n_obs + self.expert_n_output)
+        self.n_obs += self.expert_n_output
+
   def _make_event_track(self):
     """
     Create an EventTrack object
@@ -768,14 +782,54 @@ class MjEnv():
     """
 
     # get an observation as a numpy array
-    try:
-      obs = self.mj.get_observation_numpy()
-    except AttributeError as e:
-      print("Error is:", e)
-      obs = self.mj.get_observation()
+    obs = self.mj.get_observation_numpy()
 
     if self.torch:
       obs = torch.tensor(obs, device=self.torch_device)
+
+    # should we also get the expert actions from obs
+    if self.params.use_expert_in_observation:
+      if self.expert_net is None:
+        raise RuntimeError("MjEnv._next_observation() error: self.params.use_expert_in_observation is True but no expert network has been loaded")
+      """
+      Obs structured as:
+        - bending gauge x3
+        - palm sensor
+        - wrist Z sensor
+        - gripper motors x3
+        - base X
+        - base Y
+        - base Z
+        - base yaw
+      Lengths for sensors are sensorlen = 3 + 2(X - 1)
+      Lengths for state are statelen = 3 + 2(Y - 1)
+      """
+      # get the simplified observation without base XY and base yaw
+      sensorlen = 7
+      statelen = 7
+      p1 = (0, 5*sensorlen + 3*statelen)
+      p2 = (5*sensorlen + 5*statelen, 5*sensorlen + 6*statelen)
+      obs_for_expert = torch.concatenate((obs[p1[0]:p1[1]], obs[p2[0]:p2[1]]))
+
+      # self.mj.debug_observation(obs.cpu().numpy(), True)
+      # self.mj.set.base_state_sensor_XY.in_use = False
+      # self.mj.set.base_state_sensor_yaw.in_use = False
+      # self.mj.debug_observation(obs_for_expert.cpu().numpy(), True)
+      # self.mj.set.base_state_sensor_XY.in_use = True
+      # self.mj.set.base_state_sensor_yaw.in_use = True
+      # print("\n-------\n")
+
+      # run it through the expert network
+      obs_for_expert = obs_for_expert.unsqueeze(0).to(self.expert_device)
+      with torch.no_grad():
+        expert_actions = self.expert_net(obs_for_expert).squeeze(0).to(self.torch_device)
+
+      # clamp expert actions from [-1, +1]
+      if self.expert_clamp:
+        expert_actions = expert_actions.clamp(-1.0, 1.0)
+
+      # add the expert actions to the end of our observation
+      obs = torch.concatenate((obs, expert_actions))
 
     # if we are using a depth camera, combine this into the observation
     if self.params.depth_camera:
@@ -1503,6 +1557,33 @@ class MjEnv():
     obs = obs.unsqueeze(0) # from [C, W, H] -> [B, C, W, H] 
 
     return obs
+
+  def _load_expert_model(self, timestamp, job, device="cpu"):
+    """
+    Load a model from env/expert based on a timestamp and job name. The expert
+    should already be ready to go, this does NOT fetch from the models folder
+    """
+
+    self.params.use_expert_in_observation = True
+
+    filename = "net.pth"
+    save_path = "env/expert/"
+    save_folder = f"T{timestamp}_J{job}/"
+
+    loadpath = f"{save_path}{save_folder}{filename}"
+
+    if self.log_level > 0:
+      print(f"MjEnv._load_expert_model() loading from path: {loadpath} ...", end="", flush=True)
+
+    self.expert_net = torch.load(loadpath, map_location=device)
+    self.expert_n_output = 4
+    self.expert_device = device
+
+    if self.log_level > 0:
+      print("finished")
+
+    # update our new observation size based on the expert
+    self._update_n_actions_obs()
 
   # ----- public functions ----- #
 

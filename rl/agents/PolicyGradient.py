@@ -688,9 +688,9 @@ class CNNActorCriticPG(nn.Module):
 
 class NetCategoricalActor(Actor):
     
-  def __init__(self, network, img_dim, sensor_dim, act_dim, device):
+  def __init__(self, network, img_dim, sensor_dim, act_dim, device, netargs={}):
     super().__init__()
-    self.logits_net = network(sensor_dim, img_dim, act_dim)
+    self.logits_net = network(sensor_dim, img_dim, act_dim, **netargs)
     self.name = self.logits_net.name
     self.device = device
     self.logits_net.to_device(device)
@@ -710,11 +710,11 @@ class NetCategoricalActor(Actor):
 
 class NetGaussianActor(Actor):
 
-  def __init__(self, network, img_dim, sensor_dim, act_dim, device):
+  def __init__(self, network, img_dim, sensor_dim, act_dim, device, netargs={}):
     super().__init__()
     log_std = -0.5 * np.ones(act_dim, dtype=np.float32)
     self.log_std = torch.nn.Parameter(torch.as_tensor(log_std))
-    self.mu_net = network(sensor_dim, img_dim, act_dim)
+    self.mu_net = network(sensor_dim, img_dim, act_dim, **netargs)
     self.name = self.mu_net.name
     self.device = device
     self.mu_net.to_device(device)
@@ -736,9 +736,9 @@ class NetGaussianActor(Actor):
 
 class NetCritic(nn.Module):
 
-  def __init__(self, network, img_dim, sensor_dim, device):
+  def __init__(self, network, img_dim, sensor_dim, device, netargs={}):
     super().__init__()
-    self.v_net = network(sensor_dim, img_dim, 1) # act dim = 1
+    self.v_net = network(sensor_dim, img_dim, 1, **netargs) # act dim = 1
     self.device = device
     self.v_net.to_device(device)
 
@@ -756,7 +756,7 @@ class NetActorCriticPG(nn.Module):
   name = "NetActorCriticPG"
 
   def __init__(self, network, img_size, sensor_dim, action_dim, continous_actions=True,
-               mode="train", device="cuda"):
+               mode="train", device="cuda", netargs={}):
     super().__init__()
 
     self.img_size = img_size
@@ -770,13 +770,15 @@ class NetActorCriticPG(nn.Module):
     # policy builder depends on action space
     if continous_actions:
       self.action_dim = action_dim
-      self.pi = NetGaussianActor(network, img_size, sensor_dim, action_dim, device=device)
+      self.pi = NetGaussianActor(network, img_size, sensor_dim, action_dim, device=device,
+                                 netargs=netargs)
     else:
       self.action_dim = 1 # discrete so only one action
-      self.pi = NetCategoricalActor(network, img_size, sensor_dim, action_dim, device=device)
+      self.pi = NetCategoricalActor(network, img_size, sensor_dim, action_dim, device=device,
+                                    netargs=netargs)
 
     # build value function
-    self.vf  = NetCritic(network, img_size, sensor_dim, device=device)
+    self.vf  = NetCritic(network, img_size, sensor_dim, device=device, netargs=netargs)
 
     if self.mode not in ["test", "train"]:
       raise RuntimeError(f"NetActorCriticPG given mode={mode}, should be 'test' or 'train'")
