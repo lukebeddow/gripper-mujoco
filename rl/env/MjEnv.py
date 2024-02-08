@@ -1370,12 +1370,18 @@ class MjEnv():
 
     return opt
 
-  def _load_image_rendering_model(self, device="cuda", initial_load_cpu=True, loadA=True):
+  def _load_image_rendering_model(self, device="cuda", initial_load_cpu=True, loadA=True,
+                                  force=False):
     """
     Load a model to perform image rendering on images extracted from the
     simulator. Can initially load on the cpu which is slower but reduces the
     surge of GPU RAM usage
     """
+
+    if self.render_net is not None and not force:
+      if self.log_level > 0:
+        print("MjEnv._load_image_rendering_model() warning: render net already exists, and force=False, hence returning")
+      return
 
     self.set_device(device)
 
@@ -1447,7 +1453,12 @@ class MjEnv():
       self.render_net.load_state_dict(weights)
       self.render_net.to(self.torch_device)
 
-    elif self.params.rgb_rendering_method.lower() == "cyclegan_encoder":
+    elif self.params.rgb_rendering_method.lower().startswith("cyclegan_encoder"):
+
+      splits = self.params.rgb_rendering_method.split("_")
+      if len(splits) == 3:
+        option = int(splits[-1])
+      else: option = 0
 
       # epoch = 400
       # experiment = "gan_52"
@@ -1484,10 +1495,14 @@ class MjEnv():
       self.render_net.load_state_dict(weights)
 
       # determine how much of the network we will use
-      self.render_net = torch.nn.Sequential(
-        self.render_net.encoder, 
-        self.render_net.bottleneck_in,
-      )
+      print(f"ENCODER OPTION {option}")
+      if option == 0:
+        self.render_net = torch.nn.Sequential(
+          self.render_net.encoder, 
+          self.render_net.bottleneck_in,
+        )
+      elif option == 1:
+        self.render_net = self.render_net.encoder
 
       # now allocate space on the device
       self.render_net.to(self.torch_device)
