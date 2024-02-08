@@ -1316,7 +1316,7 @@ class MjEnv():
 
     return opt
 
-  def _load_image_rendering_model(self, device="cuda", initial_load_cpu=True):
+  def _load_image_rendering_model(self, device="cuda", initial_load_cpu=True, loadA=True):
     """
     Load a model to perform image rendering on images extracted from the
     simulator. Can initially load on the cpu which is slower but reduces the
@@ -1395,13 +1395,12 @@ class MjEnv():
     elif self.params.rgb_rendering_method.lower() == "cyclegan_encoder":
 
       # load a specific, hardcoded cycleGAN model
-      load_GA = True # else load GB
       epoch = 400
       experiment = "gan_52"
       path_to_load = f"/home/luke/mujoco-devel/rl/env/image_render_models/cycleGAN/{experiment}"
       file_to_load_GA = f"{epoch}_net_G_A.pth"
       file_to_load_GB = f"{epoch}_net_G_B.pth"
-      if load_GA:
+      if loadA:
         full_path = f"{path_to_load}/{file_to_load_GA}"
       else:
         full_path = f"{path_to_load}/{file_to_load_GB}"
@@ -1413,7 +1412,8 @@ class MjEnv():
       if initial_load_cpu: model.opt.gpu_ids = [] # force model to be created on cpu
 
       # special added feature: only load GA
-      opt.GA_only = True
+      if loadA:
+        opt.GA_only = True
 
       # extract the generator network, alongside the image size, and image transform
       self.render_net = model.netG_A
@@ -1425,9 +1425,9 @@ class MjEnv():
       self.render_net.load_state_dict(weights)
       self.render_net.to(self.torch_device)
 
-      # trim the generator network to use as an encoder
-      num_resnet_blocks = 9
-      self.render_net.model = self.render_net.model[:12 + num_resnet_blocks]
+      # # trim the generator network to use as an encoder
+      # num_resnet_blocks = 9
+      # self.render_net.model = self.render_net.model[:12 + num_resnet_blocks]
 
     else:
       raise RuntimeError(f"MjEnv._load_image_rendering_model() error: unrecognised rgb_rendering_method = {self.params.rgb_rendering_method}")
@@ -1437,6 +1437,59 @@ class MjEnv():
 
     # we can now use rgb rendering
     self.params.use_rgb_rendering = True
+
+  def _preprocess_real_image(self, rgb):
+    """
+    Prepares a real image as an image observation, expected as a numpy array in
+    standard numpy format (height x width x channels). The output will be on
+    self.torch_device, set in the class
+    """
+
+    # convert to torch image
+    rgb = np.transpose(rgb, (2, 0, 1))
+    img_torch = torch.tensor(rgb, dtype=torch.float, device=self.torch_device)
+
+    if self.params.use_standard_transform:
+      img_torch = self.std_img_transform(img_torch)
+
+    if self.params.use_rgb_rendering and self.render_net is not None:
+      img_torch = img_torch.unsqueeze(0) # from [C, W, H] -> [B, C, W, H]
+      with torch.no_grad():
+        img_torch = self.render_net(img_torch)
+      img_torch = img_torch.squeeze(0) # back to [C, W, H]
+
+    return img_torch
+  
+  def _make_img_obs(self, rgb, obs):
+    """
+    Make an observation that combines an image and regular sensor data
+    """
+
+    # move both to the current device
+    rgb = rgb.to(self.torch_device)
+    if not torch.is_tensor(obs):
+      obs = torch.tensor(obs, device=self.torch_device)
+    else:
+      obs.to(self.torch.device)
+
+    channels, width, height = rgb.shape
+
+    new_obs = torch.zeros(width * height, device=self.torch_device)
+    new_obs[:len(obs)] = obs
+    obs = new_obs.reshape((1, width, height))
+
+    check = False
+    if check:
+      print("img_obs.shape", rgb.shape)
+      print("obs.shape", obs.shape)
+
+    if len(obs) > width * height:
+      raise RuntimeError(f"MjEnv()._next_observation() failed as observation length {len(obs)} exceeds image number of pixels {width * height}")
+
+    obs = torch.concatenate((rgb, obs), axis=0)
+    obs = obs.unsqueeze(0) # from [C, W, H] -> [B, C, W, H] 
+
+    return obs
 
   # ----- public functions ----- #
 
@@ -2015,7 +2068,9 @@ class MjEnv():
       self.mj.reset()
 
     # if real world, recalibrate the sensors
-    if realworld is True: self.mj.calibrate_real_sensors() # re-zero sensors
+    if realworld is True: 
+      self.mj.calibrate_real_sensors() # re-zero sensors
+      return None # no need to return an actual observation
     
     # spawn a new random object
     if not realworld or nospawn:

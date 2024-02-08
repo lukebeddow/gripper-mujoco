@@ -3232,11 +3232,11 @@ std::vector<gfloat> get_target_state_vector()
   if (j_.in_use.base_xyz) {
     state_vec.push_back(state.base_x);
     state_vec.push_back(state.base_y);
-    if (j_.in_use.base_z_rot) {
-      state_vec.push_back(state.base_yaw);
-    }
   }
   state_vec.push_back(state.base_z);
+  if (j_.in_use.base_z_rot) {
+    state_vec.push_back(state.base_yaw);
+  }
 
   // state_vec.push_back(state.base_roll);
   // state_vec.push_back(state.base_pitch);

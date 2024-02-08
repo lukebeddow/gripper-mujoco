@@ -2989,11 +2989,15 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
 
   // check the state vector has an expected length
   bool base_xy = s_.base_state_sensor_XY.in_use;
+  bool base_z_rot = s_.base_state_sensor_yaw.in_use;
   if (state_data.size() != 4 and not base_xy) {
     throw std::runtime_error("state_data size != 4 but base_xyz = false in MjClass::input_real_data()");
   }
-  if (state_data.size() != 6 and base_xy) {
-    throw std::runtime_error("state_data size != 6 but base_xyz = true in MjClass::input_real_data()");
+  if (state_data.size() != 6 and base_xy and not base_z_rot) {
+    throw std::runtime_error("state_data size != 6 but base_xyz = true and base_z_rot = false in MjClass::input_real_data()");
+  }
+  if (state_data.size() != 7 and base_xy and base_z_rot) {
+    throw std::runtime_error("state_data size != 7 but base_xyz = true and base_z_rot = true in MjClass::input_real_data()");
   }
 
   // vector which outputs all the freshly normalised values
@@ -3072,7 +3076,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
 
   }
 
-  if (save_all or s_.base_state_sensor_yaw.in_use) {
+  if (base_z_rot and (save_all or s_.base_state_sensor_yaw.in_use)) {
 
     real_sensors_.raw.yaw_base_rotation.add(state_data[i]);
     real_sensors_.SI.yaw_base_rotation.add(state_data[i]);

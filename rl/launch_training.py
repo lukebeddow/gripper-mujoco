@@ -2764,6 +2764,11 @@ if __name__ == "__main__":
 
     # complete the training
     tm.run_training(agent, env)
+
+    # add an extra test on the old object set
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    
     print_time_taken()
 
   elif args.program == "paper_baseline_1_extended":
@@ -2822,6 +2827,11 @@ if __name__ == "__main__":
 
     # complete the training
     tm.run_training(agent, env)
+
+    # add an extra test on the old object set
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    
     print_time_taken()
 
   elif args.program == "test_cnn_ppo":
@@ -3469,6 +3479,11 @@ if __name__ == "__main__":
 
     # complete the training
     tm.run_training(agent, env)
+
+    # add an extra test on the old object set
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    
     print_time_taken()
 
   elif args.program == "learning_check":
