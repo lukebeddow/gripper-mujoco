@@ -521,11 +521,13 @@ class MxNetFeedforward(nn.Module):
     z = torch.cat((x, y), 1)
     z = self.combined_features_(z)
 
+    z2 = z.clone()
+
     # add the feedforward values
     if tuple_img_sensors[2] is not None:
-      z[:,-self.ffsize:] += tuple_img_sensors[2]
+      z2[:,-self.ffsize:] = z[:,-self.ffsize:] + tuple_img_sensors[2]
 
-    z = self.ff_layers_(z)
+    z = self.ff_layers_(z2)
 
     return z
   
