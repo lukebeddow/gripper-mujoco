@@ -9,6 +9,7 @@ import argparse
 from time import sleep
 from random import random
 import torch
+import functools
 
 from Trainer import MujocoTrainer
 from TrainingManager import TrainingManager
@@ -3670,6 +3671,28 @@ if __name__ == "__main__":
 
     # complete the training
     tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "expert_onto_curriculum":
+
+    # from program: ppo_cnn_single_object_curriculum_2
+    timestamp = "08-02-24_18-23"
+    job_num = args.job
+
+    tm.load(job_num=job_num, timestamp=timestamp, best_id=False,
+            load_into_new_training=False)
+    
+    # load the expert, this is not handled automatically in load
+    tm.trainer.env._load_expert_model(timestamp="08-12-23_19-19", job=53)
+
+    tm.trainer.params.use_curriculum = True
+    tm.trainer.curriculum_dict["metric_name"] = "success_rate"
+    tm.trainer.curriculum_dict["metric_thresholds"] = [0.6 for i in range(4)]
+    tm.trainer.curriculum_dict["param_values"] = [10, 20, 30, 40, 50]
+    tm.trainer.curriculum_change = functools.partial(curriculum_change_object_noise, tm.trainer)
+
+    # now continue training
+    tm.continue_training(new_endpoint=150_000)
     print_time_taken()
 
   elif args.program == "bottleneck_encoder":
