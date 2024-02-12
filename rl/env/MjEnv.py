@@ -165,6 +165,7 @@ class MjEnv():
     self.expert_net = None
     self.expert_n_output = 0
     self.expert_clamp = True
+    self.expert_loadpath = None
 
     # initialise class variables
     self.test_in_progress = False
@@ -1573,7 +1574,7 @@ class MjEnv():
 
     return obs
 
-  def _load_expert_model(self, timestamp, job, device="cpu"):
+  def _load_expert_model(self, timestamp=None, job=None, loadpath=None, device="cpu"):
     """
     Load a model from env/expert based on a timestamp and job name. The expert
     should already be ready to go, this does NOT fetch from the models folder
@@ -1581,11 +1582,15 @@ class MjEnv():
 
     self.params.use_expert_in_observation = True
 
-    filename = "net.pth"
-    save_path = "env/expert/"
-    save_folder = f"T{timestamp}_J{job}/"
+    if loadpath is None:
+      if timestamp is None or job is None:
+        raise RuntimeError(f"MjEnv_.load_expert_model() error: timestamp={timestamp} and job={job}, invalid inputs when loadpath=None")
 
-    loadpath = f"{save_path}{save_folder}{filename}"
+      filename = "net.pth"
+      save_path = "env/expert/"
+      save_folder = f"T{timestamp}_J{job}/"
+
+      loadpath = f"{save_path}{save_folder}{filename}"
 
     if self.log_level > 0:
       print(f"MjEnv._load_expert_model() loading from path: {loadpath} ...", end="", flush=True)
@@ -1593,6 +1598,7 @@ class MjEnv():
     self.expert_net = torch.load(loadpath, map_location=device)
     self.expert_n_output = 4
     self.expert_device = device
+    self.expert_loadpath = loadpath
 
     if self.log_level > 0:
       print("finished")
@@ -2028,6 +2034,7 @@ class MjEnv():
     save_dict = {
       "parameters" : self.params,
       "mjcpp" : self.mj,
+      "expert_loadpath" : self.expert_loadpath,
     }
     return save_dict
   
@@ -2040,6 +2047,13 @@ class MjEnv():
     self.mj = state_dict["mjcpp"]
     self.set_device(device)
     self.load()
+
+    if self.params.use_expert_in_observation:
+      if "expert_loadpath" in state_dict.keys():
+        self._load_expert_model(loadpath=state_dict["expert_loadpath"]) # loads on cpu
+      else:
+        print("EXPERT MODEL WARNING: MjEnv.load_save_state() did not save expert_loadpath. Using default")
+        self._load_expert_model(loadpath="env/expert/T08-12-23_19-19_J53/net.pth")
 
   def load(self, object_set_name=None, object_set_path=None, index=None, 
            num_segments=None, finger_width=None, finger_thickness=None,
