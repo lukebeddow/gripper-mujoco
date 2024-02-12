@@ -3011,17 +3011,6 @@ if __name__ == "__main__":
       tm.settings["reward"]["palm"]["min"] = -1.1
       tm.settings["cpp"]["stable_palm_force"] = -1.0
 
-    else:
-
-      if args.job % 10 <= 3:
-
-        # enable image data collection
-        tm.settings["env"]["depth_camera"] = True
-        tm.settings["env_image_collection"] = True
-        tm.settings["env_image_collection_chance"] = 0.001
-        tm.settings["env_image_collection_batch_size"] = 1000
-        tm.settings["env_image_collection_max_batches"] = 10
-
     # create the environment
     env = tm.make_env()
 
@@ -3682,8 +3671,9 @@ if __name__ == "__main__":
     tm.load(job_num=job_num, timestamp=timestamp, best_id=False,
             load_into_new_training=False)
     
-    # load the expert, this is not handled automatically in load
-    tm.trainer.env._load_expert_model(timestamp="08-12-23_19-19", job=53)
+    # # update: now handled in load
+    # # load the expert, this is not handled automatically in load
+    # tm.trainer.env._load_expert_model(timestamp="08-12-23_19-19", job=53)
 
     tm.trainer.params.use_curriculum = True
     tm.trainer.curriculum_dict["metric_name"] = "success_rate"
