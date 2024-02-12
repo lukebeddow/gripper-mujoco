@@ -3774,6 +3774,89 @@ if __name__ == "__main__":
     tm.run_training(agent, env)
     print_time_taken()
 
+  elif args.program == "expert_with_encoder":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [0, 1]
+    vary_2 = [False, True]
+    vary_3 = None
+    repeats = 2
+    tm.param_1_name = "encoder option"
+    tm.param_2_name = "use feedforward"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # set very little object position noise and the old default oob distance
+    tm.settings["env"]["object_position_noise_mm"] = 10
+    tm.settings["cpp"]["oob_distance"] = 75e-3
+
+    # enable base XY movements
+    tm.settings["env"]["XY_base_actions"] = True
+    tm.settings["env"]["base_lim_X_mm"] = 50
+    tm.settings["env"]["base_lim_Y_mm"] = 50
+    tm.settings["cpp"]["action"]["base_X"]["in_use"] = True
+    tm.settings["cpp"]["action"]["base_Y"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["base_state_sensor_XY"]["in_use"] = True
+  
+    # enable base yaw
+    tm.settings["env"]["Z_base_rotation"] = True
+    tm.settings["cpp"]["action"]["base_yaw"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["base_state_sensor_yaw"]["in_use"] = True
+
+    # add in the camera
+    tm.settings["env"]["depth_camera"] = True
+    tm.settings["env"]["use_rgb_in_observation"] = True
+    tm.settings["env"]["image_width"] = 200
+    tm.settings["env"]["image_height"] = 100
+    tm.settings["env"]["use_standard_transform"] = True
+    tm.settings["env"]["transform_resize_square"] = 58
+    tm.settings["env"]["transform_crop_size"] = 52
+
+    # add in curriculum where grasping gets harder
+    tm.settings["trainer"]["use_curriculum"] = True
+    tm.settings["curriculum"]["metric_name"] = "success_rate"
+    tm.settings["curriculum"]["metric_thresholds"] = [0.6 for i in range(4)]
+    tm.settings["curriculum"]["param_values"] = [10, 20, 30, 40, 50]
+    tm.settings["curriculum"]["change_fcn"] = curriculum_change_object_noise
+
+    # add in image rendering with the encoder
+    tm.settings["env"]["use_rgb_rendering"] = True
+    tm.settings["env"]["rgb_rendering_method"] = "cycleGAN_encoder_" + str(tm.param_1)
+
+    # create the environment
+    env = tm.make_env()
+
+    # create the agent network
+    ngf = 8 # set in the GAN training options
+    mult = 4 # set in the GAN network itself
+    if tm.param_1 == 0:
+      bottleneck = 4
+    elif tm.param_1 == 1:
+      bottleneck = 1
+    channels = int((ngf * mult) / float(bottleneck))
+    img_x = int(tm.settings["env"]["transform_crop_size"] / float(mult))
+    obs_size = (channels, img_x, img_x)
+    network = NetActorCriticPG(networks.MixedNetworkFromEncoder2, obs_size,
+                                 env.n_obs, env.n_actions, continous_actions=True, 
+                                 device=args.device)
+
+    # load in the expert
+    feedsize = 4 if tm.param_2 else 0
+    env._load_expert_model(timestamp="08-12-23_19-19", job=53)
+    
+    # make the agent
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = 5e-5
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = 5e-5
+    tm.settings["Agent_PPO"]["steps_per_epoch"] = 4000
+    agent = Agent_PPO(device=args.device, steps=tm.settings["Agent_PPO"]["steps_per_epoch"])
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number
