@@ -1292,7 +1292,7 @@ namespace MjType
 
     // TESTING: all gauges given this currently
     // Calibration new_gauges {1.30e-6}; // for 75deg fingers, 28x0.9, 12/12/23
-    Calibration new_gauges {1.53e-6}; // for cut fingers, 28x1.0, 14/12/23
+    // Calibration new_gauges {1.53e-6}; // for cut fingers, 28x1.0, 14/12/23
     // Calibration new_gauges {1.28e-6}; // for cut fingers, 24x1.0, 14/12/23
 
     // get the correct calibration for the fingers
@@ -1309,17 +1309,16 @@ namespace MjType
 
       double tol = 1e-5;
 
-      // TESTING:
-      return new_gauges;
-
       if (abs(thickness - 0.9e-3) < tol) {
 
         if (abs(width - 28e-3) < tol) {
-          switch (gauge_num) {
-            case 1: return g1_0p9_28;
-            case 2: return g2_0p9_28;
-            case 3: return g3_0p9_28;
-          }
+          Calibration new_gauges {1.30e-6}; // for 75deg fingers, 28x0.9, 12/12/23
+          return new_gauges;
+          // switch (gauge_num) {
+          //   case 1: return g1_0p9_28;
+          //   case 2: return g2_0p9_28;
+          //   case 3: return g3_0p9_28;
+          // }
         }
         else {
           throw std::runtime_error("get_gauge_calibration(...) does not have a calibration for 0.9mm finger with this finger width");
@@ -1329,18 +1328,22 @@ namespace MjType
       else if (abs(thickness - 1.0e-3) < tol) {
 
         if (abs(width - 24e-3) < tol) {
-          switch (gauge_num) {
-            case 1: return g1_1p0_24;
-            case 2: return g2_1p0_24;
-            case 3: return g3_1p0_24;
-          }
+          Calibration new_gauges {1.28e-6}; // for cut fingers, 24x1.0, 14/12/23
+          return new_gauges;
+          // switch (gauge_num) {
+          //   case 1: return g1_1p0_24;
+          //   case 2: return g2_1p0_24;
+          //   case 3: return g3_1p0_24;
+          // }
         }
         else if (abs(width - 28e-3) < tol) {
-          switch (gauge_num) {
-            case 1: return g1_1p0_28;
-            case 2: return g2_1p0_28;
-            case 3: return g3_1p0_28;
-          }
+          Calibration new_gauges {1.53e-6}; // for cut fingers, 28x1.0, 14/12/23
+          return new_gauges;
+          // switch (gauge_num) {
+          //   case 1: return g1_1p0_28;
+          //   case 2: return g2_1p0_28;
+          //   case 3: return g3_1p0_28;
+          // }
         }
         else {
           throw std::runtime_error("get_gauge_calibration(...) does not have a calibration for 1.0mm finger with this finger width");
