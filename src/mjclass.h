@@ -1300,6 +1300,8 @@ namespace MjType
     {
       /* return the correct calibration given finger dimensions */
 
+      bool debug_fcn = true;
+
       if (thickness > 2e-3) {
         throw std::runtime_error("get_gauge_calibration(...) got finger thickness over 2mm, check SI units!");
       }
@@ -1312,13 +1314,30 @@ namespace MjType
       if (abs(thickness - 0.9e-3) < tol) {
 
         if (abs(width - 28e-3) < tol) {
-          Calibration new_gauges {1.30e-6}; // for 75deg fingers, 28x0.9, 12/12/23
-          return new_gauges;
-          // switch (gauge_num) {
-          //   case 1: return g1_0p9_28;
-          //   case 2: return g2_0p9_28;
-          //   case 3: return g3_0p9_28;
-          // }
+
+          // Calibration new_gauges {1.30e-6}; // for 75deg fingers, 28x0.9, 12/12/23
+          // Calibration new_gauges {1.23e-6}; // for cut fingers, 28x0.9, 17/02/24
+
+          double calibration_gradient;
+          switch (gauge_num) {
+            case 1: 
+              calibration_gradient = 1.2015e-6;
+              break;
+            case 2:
+              calibration_gradient = 1.2369e-6;
+              break;
+            case 3:
+              calibration_gradient = 1.2540e-6;
+              break;
+            default:
+              throw std::runtime_error("get_gauge_calibration(...) error, given gauge_num not [1,2,3]");
+          }
+          if (debug_fcn) {
+            std::cout << "Finger (0.9 x 28) number " << gauge_num << " calibrated to "
+              << calibration_gradient << "\n";
+          }
+          Calibration cut_finger {calibration_gradient};
+          return cut_finger;
         }
         else {
           throw std::runtime_error("get_gauge_calibration(...) does not have a calibration for 0.9mm finger with this finger width");
@@ -1328,22 +1347,54 @@ namespace MjType
       else if (abs(thickness - 1.0e-3) < tol) {
 
         if (abs(width - 24e-3) < tol) {
-          Calibration new_gauges {1.28e-6}; // for cut fingers, 24x1.0, 14/12/23
-          return new_gauges;
-          // switch (gauge_num) {
-          //   case 1: return g1_1p0_24;
-          //   case 2: return g2_1p0_24;
-          //   case 3: return g3_1p0_24;
-          // }
+          
+          // Calibration new_gauges {1.28e-6}; // for cut fingers, 24x1.0, 14/12/23
+          
+          double calibration_gradient;
+          switch (gauge_num) {
+            case 1: 
+              calibration_gradient = 1.2794e-6;
+              break;
+            case 2:
+              calibration_gradient = 1.2687e-6;
+              break;
+            case 3:
+              calibration_gradient = 1.2896e-6;
+              break;
+            default:
+              throw std::runtime_error("get_gauge_calibration(...) error, given gauge_num not [1,2,3]");
+          }
+          if (debug_fcn) {
+            std::cout << "Finger (1.0 x 24) number " << gauge_num << " calibrated to "
+              << calibration_gradient << "\n";
+          }
+          Calibration cut_finger {calibration_gradient};
+          return cut_finger;
         }
         else if (abs(width - 28e-3) < tol) {
-          Calibration new_gauges {1.53e-6}; // for cut fingers, 28x1.0, 14/12/23
-          return new_gauges;
-          // switch (gauge_num) {
-          //   case 1: return g1_1p0_28;
-          //   case 2: return g2_1p0_28;
-          //   case 3: return g3_1p0_28;
-          // }
+
+          // Calibration new_gauges {1.53e-6}; // for cut fingers, 28x1.0, 14/12/23
+          
+          double calibration_gradient;
+          switch (gauge_num) {
+            case 1: 
+              calibration_gradient = 1.5461e-6;
+              break;
+            case 2:
+              calibration_gradient = 1.5327e-6;
+              break;
+            case 3:
+              calibration_gradient = 1.5232e-6;
+              break;
+            default:
+              throw std::runtime_error("get_gauge_calibration(...) error, given gauge_num not [1,2,3]");
+          }
+          if (debug_fcn) {
+            std::cout << "Finger (1.0 x 28) number " << gauge_num << " calibrated to "
+              << calibration_gradient << "\n";
+          }
+          Calibration cut_finger {calibration_gradient};
+          return cut_finger;
         }
         else {
           throw std::runtime_error("get_gauge_calibration(...) does not have a calibration for 1.0mm finger with this finger width");
