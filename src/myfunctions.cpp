@@ -3744,6 +3744,46 @@ void set_everything_colour(mjModel* model, std::vector<float> rgba)
   // set_main_body_colour(model, rgba);
 }
 
+void toggle_gripper_visibility(mjModel* model)
+{
+  /* turn on and off gripper visibility. Uses colours from MjClass::set_neat_colours */
+
+  static bool visible = true;
+
+  visible = not visible;
+
+  float x = 1.0 / 255.0;
+
+  if (visible) {
+
+    std::vector<float> object_colour  {50*x,  205*x, 50*x};
+    std::vector<float> gripper_colour {220*x, 220*x, 220*x};
+    std::vector<float> finger_colour  {255*x, 140*x, 0*x};
+    std::vector<float> ground_colour  {100*x, 100*x, 100*x};
+
+    luke::set_ground_colour(model, ground_colour);
+    luke::set_all_objects_colour(model, object_colour);
+    luke::set_main_body_colour(model, gripper_colour);
+
+    for (int i = 1; i < 5; i++) // 4 means palm
+      luke::set_finger_colour(model, finger_colour, i);
+      
+    }
+  else {
+    std::vector<float> object_colour  {50*x,  205*x, 50*x};
+    std::vector<float> gripper_colour {0, 0, 0, 0};
+    std::vector<float> finger_colour  {0, 0, 0, 0};
+    std::vector<float> ground_colour  {250*x, 250*x, 250*x};
+
+    luke::set_ground_colour(model, ground_colour);
+    luke::set_all_objects_colour(model, object_colour);
+    luke::set_main_body_colour(model, gripper_colour);
+
+    for (int i = 1; i < 5; i++) // 4 means palm
+      luke::set_finger_colour(model, finger_colour, i);
+    }
+}
+
 void set_object_colour(mjModel* model, std::vector<float> rgba)
 {
   /* set the colour of the main object */

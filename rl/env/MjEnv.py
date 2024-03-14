@@ -2369,8 +2369,8 @@ if __name__ == "__main__":
     # mj.load_next.finger_length = 200e-3
     # mj.load_next.finger_thickness = 1.9e-3
 
-    gen_obj_set = "set9_fullset"
-    name = mj._auto_generate_xml_file("set9_fullset", use_hashes=True)
+    gen_obj_set = "set8_demo"
+    name = mj._auto_generate_xml_file(gen_obj_set, use_hashes=True, force=True)
     runstr = f"bin/mysimulate -p /home/luke/mujoco-devel/mjcf -o {gen_obj_set} -g {name}"
     print(runstr)
 

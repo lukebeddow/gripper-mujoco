@@ -1679,6 +1679,7 @@ void makeObjectUI(int oldstate)
         {mjITEM_BUTTON,   "random base",    2, NULL,                 " #317"},
         {mjITEM_BUTTON,   "set base XY",    2, NULL,                 " #317"},
         {mjITEM_BUTTON,   "random_yaw",     2, NULL,                 " #317"},
+        {mjITEM_BUTTON,   "gripper visible",     2, NULL,                 " #317"},
         {mjITEM_END}
     };
 
@@ -2642,6 +2643,10 @@ void uiEvent(mjuiState* state)
                 std::cout << "Setting base to random yaw = ";
                 double z = myMjClass.random_base_yaw(myMjClass.base_max_[5]);
                 std::cout << z << "\n";
+            }
+            case 40: {         // toggle gripper visible
+                std::cout << "Toggle gripper visibility\n";
+                luke::toggle_gripper_visibility(myMjClass.model);
             }
             }
         }
