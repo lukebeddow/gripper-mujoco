@@ -452,6 +452,7 @@ void MjClass::reset()
   s_.motor_state_sensor.reset();
   s_.base_state_sensor_XY.reset();
   s_.base_state_sensor_Z.reset();
+  s_.base_state_sensor_yaw.reset();
 
   // refetch the gripper base limits in case they have changed
   base_min_ = luke::get_base_min();
@@ -902,6 +903,7 @@ void MjClass::sense_gripper_state()
   states.base_x = normalise_between(states.base_x, base_min_[0], base_max_[0]);
   states.base_y = normalise_between(states.base_y, base_min_[1], base_max_[1]);
   states.base_z = normalise_between(states.base_z, base_min_[2], base_max_[2]);
+  states.base_yaw = normalise_between(states.base_yaw, base_min_[5], base_max_[5]);
 
   // apply noise (can be gaussian based on sensor settings, if std_dev > 0)
   states.gripper_x = s_.motor_state_sensor.apply_noise(states.gripper_x, uniform_dist, 1);
@@ -910,6 +912,7 @@ void MjClass::sense_gripper_state()
   states.base_x = s_.base_state_sensor_XY.apply_noise(states.base_x, uniform_dist, 1);
   states.base_y = s_.base_state_sensor_XY.apply_noise(states.base_y, uniform_dist, 2);
   states.base_z = s_.base_state_sensor_Z.apply_noise(states.base_z, uniform_dist);
+  states.base_yaw = s_.base_state_sensor_yaw.apply_noise(states.base_yaw, uniform_dist);
 
   // save reading
   sim_sensors_.x_motor_position.add(states.gripper_x);
@@ -918,6 +921,7 @@ void MjClass::sense_gripper_state()
   sim_sensors_.x_base_position.add(states.base_x);
   sim_sensors_.y_base_position.add(states.base_y);
   sim_sensors_.z_base_position.add(states.base_z);
+  sim_sensors_.yaw_base_rotation.add(states.base_yaw);
 
   // save the time the reading was made
   step_timestamps.add(data->time);
@@ -947,6 +951,7 @@ void MjClass::update_env()
   // get information about the object from the simluation
   // env_.obj.qpos 
   std::vector<luke::QPos> qpos_vec = luke::get_object_qpos(model, data);
+  std::vector<std::vector<double>> rel_xy = luke::get_object_XY_relative_to_gripper(model, data);
 
   // how many live objects are in the simulation
   if (env_.obj.size() != qpos_vec.size()) {
@@ -967,6 +972,7 @@ void MjClass::update_env()
   for (int i = 0; i < num_obj; i++) {
 
     env_.obj[i].qpos = qpos_vec[i];
+    env_.obj[i].distance_from_gripper = std::sqrt(std::pow(rel_xy[i][0], 2) + std::pow(rel_xy[i][1], 2));
 
     env_.obj[i].finger1_force = forces.obj[i].finger1_local;
     env_.obj[i].finger2_force = forces.obj[i].finger2_local;
@@ -1078,6 +1084,9 @@ void MjClass::update_env()
   // another step has been made
   env_.cnt.step_num.value = true;
 
+  // initially guess the first object is closest to the gripper
+  double closest_object_distance = env_.obj[0].distance_from_gripper;
+
   for (int i = 0; i < num_obj; i++) {
 
     env_.obj[i].lifted = false;
@@ -1153,6 +1162,17 @@ void MjClass::update_env()
     else if (termination_signal_sent) {
       env_.cnt.failed_termination.value = true;
     }
+
+    // are we within a certain threshold distance from an object
+    if (env_.obj[i].distance_from_gripper < s_.XY_distance_threshold) {
+      env_.cnt.within_XY_distance.value = true;
+      env_.obj[i].within_XY_distance = true;
+    }
+
+    // determine the closest object to the gripper
+    if (env_.obj[i].distance_from_gripper < closest_object_distance) {
+      closest_object_distance = env_.obj[i].distance_from_gripper;
+    }
   }
 
   // check if the object has been dropped (env_.cnt.lifted must already be set)
@@ -1199,19 +1219,37 @@ void MjClass::update_env()
   env_.cnt.action_penalty_lin.value /= float(n_actions - s_.use_termination_action);
   env_.cnt.action_penalty_sq.value /= float(n_actions - s_.use_termination_action);
 
+  // input closest object (use negative values so decreasing distance increases reward)
+  env_.cnt.object_XY_distance.value = -closest_object_distance;
+
   /* ----- determine the reported success rate (as a proxy, should not have associated reward) ----- */
 
-  // determine successful grasp, for metric only, no associated reward
-  if (s_.use_termination_action) {
-    if (env_.cnt.stable_termination.value) {
-      env_.cnt.successful_grasp.value = true;
-    }
-  }
-  else {
-    if (env_.cnt.stable_height.value) {
-      env_.cnt.successful_grasp.value = true;
-    }
-  }
+  /* check for a 'successful' trial, used as a metric only, should have NO associated
+  reward. The criteria to determine if a trial was successful is:
+    1) an event value is True which
+    2) is a binary reward and
+    2) gives a reward of +1
+    3) and sets done = True
+    4) and which is now triggered (ie cnt.row + 1 >= trigger)
+  */
+  #define BR(NAME, DONTUSE1, DONTUSE2, DONTUSE3)                                     \
+            if (env_.cnt.NAME.value) {                                               \
+              if (s_.NAME.reward >= (1.0 - 1e-5)) {                                  \
+                if (s_.NAME.done) {                                                  \
+                  if (env_.cnt.NAME.row + 1 >= s_.NAME.trigger) {                    \
+                    env_.cnt.successful_grasp.value = true;                          \
+                    if (s_.debug)                                                    \
+                      std::printf("successful_grasp=true because %s is triggered\n", \
+                        #NAME);                                                      \
+                  }                                                                  \
+                }                                                                    \
+              }                                                                      \
+            }
+          
+    // run the macro to create the code
+    LUKE_MJSETTINGS_BINARY_REWARD
+
+  #undef BR
 
   /* ----- resolve linear events and update counts of all events (no editing needed) ----- */
 
@@ -1291,6 +1329,25 @@ bool MjClass::set_new_base_XY(double x, double y)
   bool within_limits = luke::set_base_to_XY_position(data, x, y);
 
   return within_limits;
+}
+
+bool MjClass::set_new_base_yaw(double yaw)
+{
+  /* set a randomised base yaw based off the limits */
+
+  return luke::set_base_to_yaw(data, yaw);
+}
+
+double MjClass::random_base_yaw(double size)
+{
+  /* set a randomised base yaw based off the limits */
+
+  std::uniform_real_distribution<double> distribution(-size, size);
+  double new_yaw = distribution(*MjType::generator);
+
+  luke::set_base_to_yaw(data, new_yaw);
+
+  return new_yaw;
 }
 
 double MjClass::random_base_Z_movement(double size)
@@ -1690,6 +1747,21 @@ std::vector<luke::gfloat> MjClass::get_observation(MjType::SensorData sensors)
     }
   }
 
+  // get base Z yaw
+  if (s_.base_state_sensor_yaw.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> byaw = 
+      (s_.base_state_sensor_yaw.*stateFcnPtr)(sensors.yaw_base_rotation);
+
+    // insert data into observation output
+    observation.insert(observation.end(), byaw.begin(), byaw.end());
+
+    if (debug_obs) {
+      luke::print_vec(byaw, "Base yaw rotation");
+    }
+  }
+
   if (debug_obs) {
     std::cout << "End of observation (n_obs = " << observation.size() << ")\n";
   }
@@ -1701,11 +1773,13 @@ std::vector<luke::gfloat> MjClass::get_observation(MjType::SensorData sensors)
       std::cout << "Y Motor: "; sensors.y_motor_position.print(data_num);
       std::cout << "Z Motor: "; sensors.z_motor_position.print(data_num);
       std::cout << "Z Base: "; sensors.z_base_position.print(data_num);
+      std::cout << "Z Yaw: "; sensors.yaw_base_rotation.print(data_num);
       std::cout << "SI real data values:\n";
       std::cout << "X Motor: "; real_sensors_.SI.x_motor_position.print(data_num);
       std::cout << "Y Motor: "; real_sensors_.SI.y_motor_position.print(data_num);
       std::cout << "Z Motor: "; real_sensors_.SI.z_motor_position.print(data_num);
       std::cout << "Z Base: "; real_sensors_.SI.z_base_position.print(data_num);
+      std::cout << "Z Yaw: "; real_sensors_.SI.yaw_base_rotation.print(data_num);
     }
   
   return observation;
@@ -1920,6 +1994,24 @@ std::string MjClass::debug_observation(std::vector<luke::gfloat> observation, bo
 
     std::string n = std::to_string(bZ.size());
     info += "Base state Z = " + n + " | ";
+  }
+
+  // get base Z yaw
+  if (s_.base_state_sensor_yaw.in_use) {
+
+    // sample data
+    std::vector<luke::gfloat> byaw = 
+      (s_.base_state_sensor_yaw.*stateFcnPtr)(sensors.yaw_base_rotation);
+
+    // copy our observation into these vectors instead
+    std::copy(observation.begin() + sidx, observation.begin() + sidx + byaw.size(), byaw.begin()); sidx += byaw.size();
+
+    if (debug_obs) {
+      luke::print_vec(byaw, "Base Z yaw");
+    }
+
+    std::string n = std::to_string(byaw.size());
+    info += "Base state yaw = " + n + " | ";
   }
 
   if (debug_obs) {
@@ -2897,11 +2989,15 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
 
   // check the state vector has an expected length
   bool base_xy = s_.base_state_sensor_XY.in_use;
+  bool base_z_rot = s_.base_state_sensor_yaw.in_use;
   if (state_data.size() != 4 and not base_xy) {
     throw std::runtime_error("state_data size != 4 but base_xyz = false in MjClass::input_real_data()");
   }
-  if (state_data.size() != 6 and base_xy) {
-    throw std::runtime_error("state_data size != 6 but base_xyz = true in MjClass::input_real_data()");
+  if (state_data.size() != 6 and base_xy and not base_z_rot) {
+    throw std::runtime_error("state_data size != 6 but base_xyz = true and base_z_rot = false in MjClass::input_real_data()");
+  }
+  if (state_data.size() != 7 and base_xy and base_z_rot) {
+    throw std::runtime_error("state_data size != 7 but base_xyz = true and base_z_rot = true in MjClass::input_real_data()");
   }
 
   // vector which outputs all the freshly normalised values
@@ -2975,6 +3071,18 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     state_data[i] = normalise_between(state_data[i], base_min_[2], base_max_[2]);
     state_data[i] = s_.base_state_sensor_Z.apply_noise(state_data[i], uniform_dist);
     real_sensors_.normalised.z_base_position.add(state_data[i]);
+    output.push_back(state_data[i]);
+    ++i; 
+
+  }
+
+  if (base_z_rot and (save_all or s_.base_state_sensor_yaw.in_use)) {
+
+    real_sensors_.raw.yaw_base_rotation.add(state_data[i]);
+    real_sensors_.SI.yaw_base_rotation.add(state_data[i]);
+    state_data[i] = normalise_between(state_data[i], base_min_[5], base_max_[5]);
+    state_data[i] = s_.base_state_sensor_yaw.apply_noise(state_data[i], uniform_dist);
+    real_sensors_.normalised.yaw_base_rotation.add(state_data[i]);
     output.push_back(state_data[i]);
     ++i; 
 
@@ -3127,6 +3235,7 @@ std::vector<float> MjClass::get_real_observation()
   s_.motor_state_sensor.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
   s_.base_state_sensor_XY.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
   s_.base_state_sensor_Z.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
+  s_.base_state_sensor_yaw.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
   s_.bending_gauge.update_n_readings(samples_since_last_obs, s_.sensor_n_prev_steps);
   s_.palm_sensor.update_n_readings(samples_since_last_obs, s_.sensor_n_prev_steps);
   s_.wrist_sensor_Z.update_n_readings(samples_since_last_obs, s_.sensor_n_prev_steps);
@@ -3204,6 +3313,12 @@ std::vector<float> MjClass::get_simple_state_vector(MjType::SensorData sensor)
   if (return_all or s_.base_state_sensor_Z.in_use) {
 
     simple_state.push_back(sensor.read_z_base_position());
+  }
+
+  // get base Z yaw
+  if (return_all or s_.base_state_sensor_yaw.in_use) {
+
+    simple_state.push_back(sensor.read_yaw_base_rotation());
   }
   
   return simple_state;
@@ -3368,6 +3483,13 @@ void MjClass::set_base_XYZ_limits(double x, double y, double z)
   /* set the base XYZ limits */
 
   luke::set_base_XYZ_limits(x, y, z);
+}
+
+void MjClass::set_base_yaw_limit(double yaw)
+{
+  /* set the base yaw rotation limit (rotation about z axis) */
+
+  luke::set_base_yaw_limit(yaw);
 }
 
 int MjClass::get_n_actions()
@@ -4146,9 +4268,15 @@ void MjClass::calibrate_simulated_sensors(float bend_gauge_normalise)
   s_.wrist_sensor_Z.use_noise = original_noise;
 
   // now calibrate the finger bending gauges
-  validate_curve_under_force(bend_gauge_normalise);
-  luke::gfloat max_gauge_reading = luke::read_armadillo_gauge(data, 0);
-  s_.bending_gauge.normalise = max_gauge_reading;
+  if (luke::use_segments()) {
+    validate_curve_under_force(bend_gauge_normalise);
+    luke::gfloat max_gauge_reading = luke::read_armadillo_gauge(data, 0);
+    s_.bending_gauge.normalise = max_gauge_reading;
+  }
+  else {
+    std::cout << "MjClass::calibrate_simulated_sensors() warning: segments not in use, using SI force values for finger bending with identity normalisation\n";
+    s_.bending_gauge.normalise = bend_gauge_normalise;
+  }
 
   // turn off curve validation mode
   s_.curve_validation = false;
@@ -4231,7 +4359,7 @@ float MjClass::find_highest_stable_timestep()
   float fine_increment = 50e-6;             // 0.05 milliseconds
   float start_value = 1.0e-3;               // 1 millseconds
   float test_time = 1.0;                    // 1.0 seconds
-  float max_allowable_timestep = 50.0e-3;   // 50 milliseconds
+  float max_allowable_timestep = 20.0e-3;   // 50 milliseconds
 
   float tune_param = 1.0;           // should be 1.0, reduce to make timestep shorter
 
@@ -4304,14 +4432,18 @@ float MjClass::find_highest_stable_timestep()
   if (next_timestep <= 3.0e-3) {
     factor = tune_param * 0.8;
   }
-  else if (next_timestep > 3.0e-3) {
+  else if (next_timestep < 5.0e-3) {
     factor = tune_param * 0.75;
   }
-  else if (next_timestep > 5.0e-3) {
+  else if (next_timestep < 10.0e-3) {
+    factor = tune_param * 0.65;
+  }
+  else {
     factor = tune_param * 0.65;
   }
 
   // for safety, reduce timestep by 10 percent
+  std::cout << "factor is " << factor << "\n";
   float final_timestep = next_timestep * factor;
 
   // round the timestep to a whole number of microseconds
@@ -4721,12 +4853,14 @@ void MjType::Settings::update_sensor_settings(double time_since_last_sample)
   motor_state_sensor.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
   base_state_sensor_XY.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
   base_state_sensor_Z.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
+  base_state_sensor_yaw.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
   
   // update n_readings for all except state sensors
   #define SS(NAME, IN_USE, NORM, READRATE)                       \
             if (#NAME != "motor_state_sensor" and                \
                 #NAME != "base_state_sensor_XY" and              \
-                #NAME != "base_state_sensor_Z")                  \
+                #NAME != "base_state_sensor_Z" and               \
+                #NAME != "base_state_sensor_yaw")                \
               NAME.update_n_readings(time_since_last_sample);
   
     // run the macro and update all the sensors
@@ -4797,11 +4931,17 @@ void MjType::Settings::apply_noise_params(std::uniform_real_distribution<float>&
     base_state_sensor_Z.noise_mu = state_noise_mu;
     base_state_sensor_Z.noise_std = state_noise_std;
   }
+  if (not base_state_sensor_yaw.noise_overriden) {
+    base_state_sensor_yaw.noise_mag = state_noise_mag;
+    base_state_sensor_yaw.noise_mu = state_noise_mu;
+    base_state_sensor_yaw.noise_std = state_noise_std;
+  }
 
   // randomise seed for state
   motor_state_sensor.randomise_mu(uniform_dist);
   base_state_sensor_XY.randomise_mu(uniform_dist);
   base_state_sensor_Z.randomise_mu(uniform_dist);
+  base_state_sensor_yaw.randomise_mu(uniform_dist);
 }
 
 void MjType::Settings::scale_rewards(float scale)

@@ -114,6 +114,7 @@ void update_all(mjModel* model, mjData* data);
 void update_constraints(mjModel* model, mjData* data);
 void update_base_limits();
 void set_base_XYZ_limits(double x, double y, double z);
+void set_base_yaw_limit(double yaw);
 
 // gripper target position
 bool set_gripper_target_m(double x, double y, double z);
@@ -128,6 +129,7 @@ bool move_base_target_rad(double roll, double pitch, double yaw);
 bool lift_base_to_height(double z);
 bool set_base_to_XY_position(mjData* data, float x_pos, float y_pos);
 bool set_base_to_Z_position(mjData* data, float z_pos);
+bool set_base_to_yaw(mjData* data, float yaw);
 void set_base_to_max_height(mjData* data);
 void print_target();
 void update_target();
@@ -144,6 +146,7 @@ gfloat get_target_finger_angle();
 
 // environment
 Gripper get_gripper_target();
+int get_num_live_objects();
 std::vector<std::string> get_objects();
 std::vector<std::string> get_live_object_names();
 std::vector<std::vector<double>> get_live_object_bounding_boxes();
@@ -158,6 +161,7 @@ luke::Vec3 get_object_xyz_bounding_box(int idx);
 Forces_faster get_object_forces_faster(const mjModel* model, mjData* data);
 void set_object_visibility(mjModel* model, bool visible);
 void set_everything_colour(mjModel* model, std::vector<float> rgba);
+void toggle_gripper_visibility(mjModel* model);
 void set_object_colour(mjModel* model, std::vector<float> rgba);
 void set_all_objects_colour(mjModel* model, std::vector<float> rgba);
 void set_ground_colour(mjModel* model, std::vector<float> rgba);
@@ -185,6 +189,8 @@ int last_action_robot();
 bool is_sim_unstable(mjModel* model, mjData* data);
 int get_N();
 bool use_base_xyz();
+bool use_base_z_rot();
+bool use_segments();
 std::vector<double> get_base_min();
 std::vector<double> get_base_max();
 double get_finger_thickness();

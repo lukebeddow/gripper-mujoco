@@ -189,6 +189,9 @@ struct JointSettings {
     std::vector<std::string> base_xyz = {
       "base_X_joint", "base_Y_joint", "base_Z_joint"
     };
+    std::vector<std::string> base_z_rot = {
+      "base_Z_rotation_joint"
+    };
     std::vector<std::string> finger;                  // runtime depends
     std::vector<std::string> hook;                    // runtime depends
   } names;
@@ -241,10 +244,10 @@ struct JointSettings {
   // base operating limits
   struct BaseLims {
 
-    double x_min { -50e-3 };
-    double x_max { 50e-3 };
-    double y_min { -50e-3 };
-    double y_max { 50e-3 };
+    double x_min { -500e-3 };
+    double x_max { 500e-3 };
+    double y_min { -500e-3 };
+    double y_max { 500e-3 };
     double z_min { -30e-3 };
     double z_max { 30e-3 };
     
@@ -275,6 +278,8 @@ struct JointSettings {
     Gain gripper_kd {1, 1, 1};                  // derivative gains for gripper xyz motors {x, y, z}
     Gain base_xyz_kp {500, 500, 2000};          // proportional gains for base xyz motions {x, y, z}
     Gain base_xyz_kd {80, 80, 100};             // derivative gains for base xyz motions {x, y, z}
+    Gain base_rot_kp {500, 500, 100};
+    Gain base_rot_kd {80, 80, 6};
 
     double time_per_step = 0.0;                 // runtime depends
   } ctrl;
@@ -288,6 +293,7 @@ struct JointSettings {
     bool finger = false;
     bool base_z = false;
     bool base_xyz = false;
+    bool base_z_rot = false;
   } in_use;
 
   // how many joints for each part
@@ -390,6 +396,7 @@ struct JointSettings {
       << ", segmented fingers = " << (in_use.finger ? "true" : "false")
       << ", base z = " << (in_use.base_z ? "true" : "false")
       << ", base xyz = " << (in_use.base_xyz ? "true" : "false")
+      << ", base z rot = " << (in_use.base_z_rot ? "true" : "false")
       << '\n';
   }
   void print_num() {
@@ -582,6 +589,11 @@ void get_joint_indexes(mjModel* model)
     if (idx == -1) continue; // skip in case this joint does not exist
     j_.idx.base.push_back(idx);
   }
+  for (std::string name : j_.names.base_z_rot) {
+    int idx = mj_name2id(model, mjOBJ_JOINT, name.c_str());
+    if (idx == -1) continue; // skip in case this joint does not exist
+    j_.idx.base.push_back(idx);
+  }
 
   if (j_.idx.panda[0] != -1) j_.in_use.panda = true;
   else j_.in_use.panda = false;
@@ -598,13 +610,18 @@ void get_joint_indexes(mjModel* model)
     else if (j_.num.base == 3) {
       j_.in_use.base_xyz = true;
     }
+    else if (j_.num.base == 4) {
+      j_.in_use.base_xyz = true;
+      j_.in_use.base_z_rot = true;
+    }
     else {
-      throw std::runtime_error("base joints number does not equal 1 or 3");
+      throw std::runtime_error("base joints number does not equal 1, 3, or 4");
     }
   }
   else {
     j_.in_use.base_z = false;
     j_.in_use.base_xyz = false;
+    j_.in_use.base_z_rot = false;
   }
 
   // determine how many joints are being used for the other parts
@@ -713,43 +730,45 @@ void get_geom_indexes(mjModel* model)
     }
 
     // now search specifically for finger segment geoms
-    for (int i = 0; i < j_.num.finger; i++) {
+    if (j_.in_use.finger) {
+      for (int i = 0; i < j_.num.finger; i++) {
 
-      std::string geom_name = "finger_" + std::to_string(i / j_.num.per_finger + 1)  // finger_X, X=1,2,3
-        + "_segment_link_" + std::to_string(i % j_.num.per_finger + 1 + ffs)         // links go 2-10 for 10 segments
-        + "_geom_" + geom_tag;
+        std::string geom_name = "finger_" + std::to_string(i / j_.num.per_finger + 1)  // finger_X, X=1,2,3
+          + "_segment_link_" + std::to_string(i % j_.num.per_finger + 1 + ffs)         // links go 2-10 for 10 segments
+          + "_geom_" + geom_tag;
 
-      int x = mj_name2id(model, mjOBJ_GEOM, geom_name.c_str());
+        int x = mj_name2id(model, mjOBJ_GEOM, geom_name.c_str());
 
-      if (i < j_.num.per_finger) {
-        j_.geom_idx.finger1.push_back(x);
+        if (i < j_.num.per_finger) {
+          j_.geom_idx.finger1.push_back(x);
+        }
+        else if (i < 2 * j_.num.per_finger) {
+          j_.geom_idx.finger2.push_back(x);
+        }
+        else if (i < 3 * j_.num.per_finger) {
+          j_.geom_idx.finger3.push_back(x);
+        }
+        else {
+          throw std::runtime_error("get_geom_indexes() found inconsistent finger segment numbers");
+        }
       }
-      else if (i < 2 * j_.num.per_finger) {
-        j_.geom_idx.finger2.push_back(x);
-      }
-      else if (i < 3 * j_.num.per_finger) {
-        j_.geom_idx.finger3.push_back(x);
-      }
-      else {
-        throw std::runtime_error("get_geom_indexes() found inconsistent finger segment numbers");
-      }
+
+      // now add the hook links
+      std::string f1_hook = "finger_1_segment_link_" + std::to_string(j_.num.per_finger + ffs)
+        + "_geom_hook_" + geom_tag;
+      std::string f2_hook = "finger_2_segment_link_" + std::to_string(j_.num.per_finger + ffs)
+        + "_geom_hook_" + geom_tag;
+      std::string f3_hook = "finger_3_segment_link_" + std::to_string(j_.num.per_finger + ffs)
+        + "_geom_hook_" + geom_tag;
+
+      j_.geom_idx.finger1.push_back(mj_name2id(model, mjOBJ_GEOM, f1_hook.c_str()));
+      j_.geom_idx.finger2.push_back(mj_name2id(model, mjOBJ_GEOM, f2_hook.c_str()));
+      j_.geom_idx.finger3.push_back(mj_name2id(model, mjOBJ_GEOM, f3_hook.c_str()));
+
+      // now add the palm link
+      std::string palm_geom_name = "palm_geom_" + geom_tag;
+      j_.geom_idx.palm.push_back(mj_name2id(model, mjOBJ_GEOM, palm_geom_name.c_str()));
     }
-
-    // now add the hook links
-    std::string f1_hook = "finger_1_segment_link_" + std::to_string(j_.num.per_finger + ffs)
-      + "_geom_hook_" + geom_tag;
-    std::string f2_hook = "finger_2_segment_link_" + std::to_string(j_.num.per_finger + ffs)
-      + "_geom_hook_" + geom_tag;
-    std::string f3_hook = "finger_3_segment_link_" + std::to_string(j_.num.per_finger + ffs)
-      + "_geom_hook_" + geom_tag;
-
-    j_.geom_idx.finger1.push_back(mj_name2id(model, mjOBJ_GEOM, f1_hook.c_str()));
-    j_.geom_idx.finger2.push_back(mj_name2id(model, mjOBJ_GEOM, f2_hook.c_str()));
-    j_.geom_idx.finger3.push_back(mj_name2id(model, mjOBJ_GEOM, f3_hook.c_str()));
-
-    // now add the palm link
-    std::string palm_geom_name = "palm_geom_" + geom_tag;
-    j_.geom_idx.palm.push_back(mj_name2id(model, mjOBJ_GEOM, palm_geom_name.c_str()));
   }
 
   if (debug_) {
@@ -1141,6 +1160,15 @@ void set_constraint(mjModel* model, mjData* data, int id, bool set_as)
 {
   /* toggle a constraint, if active lock the body in place relative to another */
 
+  if (not j_.in_use.finger) {
+    static bool first_call = true;
+    if (first_call) {
+      std::cout << "set_constraint() warning: no segments in use, all constraints set to FALSE\n";
+      first_call = false;
+    }
+    set_as = false;
+  }
+
   if (set_as) {
 
     // prepare and get indexes of position/rotation data
@@ -1414,11 +1442,6 @@ void calibrate_reset(mjModel* model, mjData* data)
     std::cout << "calibrate_reset() warning: found changed number of joints in model, did you reload an xml with more/less gripper joints? Attempting to recalibrate\n";
     // throw std::runtime_error("calibrate_reset() found changed number of joints in the model");
 
-    // attempt to reset this function and recalibrate
-    j_.reset_qpos.panda.clear();
-    j_.reset_qpos.base.clear();
-    j_.reset_qpos.gripper.clear();
-
     first_call = true;
 
     num_panda = j_.num.panda;
@@ -1436,6 +1459,10 @@ void calibrate_reset(mjModel* model, mjData* data)
       step(model, data);
       after_step(model, data);
     }
+
+    j_.reset_qpos.panda.clear();
+    j_.reset_qpos.base.clear();
+    j_.reset_qpos.gripper.clear();
 
     // see where the joints have settled to equilibrium
     for (int i = 0; i < j_.num.panda; i++) {
@@ -1476,6 +1503,16 @@ void calibrate_reset(mjModel* model, mjData* data)
 void get_segment_matrices(mjModel* model, mjData* data)
 {
   /* find the matrix orientation for each of the segments of the fingers */
+
+  if (not j_.in_use.finger) {
+    static bool first_call = true;
+    if (first_call) {
+      std::cout << "get_segment_matrices() warning: j_.in_use.finger = false, no segments detected, returning\n";
+      first_call = false;
+    }
+    j_.segmentMatrices.idx_size = 0;
+    return;
+  }
 
   j_.segmentMatrices.f1_idx.clear();
   j_.segmentMatrices.f2_idx.clear();
@@ -1606,6 +1643,15 @@ void apply_segment_force(mjModel* model, mjData* data, int seg_num, double force
 {
   /* apply a horizontal force to a given segment from 1..N. Can also apply a 
   moment around the joint axis, this = 0 by default*/
+
+  if (not j_.in_use.finger) {
+    static bool first_warning = true;
+    if (first_warning) {
+      std::cout << "apply_segment_force() warning: no segments in use in model, returning\n";
+      first_warning = false;
+    }
+    return;
+  }
 
   if (seg_num < 0 or seg_num >= j_.segmentMatrices.idx_size) {
     std::cout << "ERROR: seg_num is " << seg_num << '\n';
@@ -1857,6 +1903,26 @@ void control(const mjModel* model, mjData* data)
     throw std::runtime_error("nu != nv for your model");
   }
 
+  static bool first_call = true;
+  if (first_call) {
+    if (not j_.in_use.finger) {
+      std::cout << "control() warning: no finger segments in use, overriding gains\n";
+      Gain gripper_kp {100, 80, 1000};            // proportional gains for gripper xyz motors {x, y, z}
+      Gain gripper_kd {1, 1, 1};                  // derivative gains for gripper xyz motors {x, y, z}
+      Gain base_xyz_kp {500, 500, 2000};          // proportional gains for base xyz motions {x, y, z}
+      Gain base_xyz_kd {80, 80, 100};             // derivative gains for base xyz motions {x, y, z}
+      Gain base_rot_kp {500, 500, 100};
+      Gain base_rot_kd {80, 80, 6};
+      // j_.ctrl.gripper_kp = gripper_kp;
+      // j_.ctrl.gripper_kd = gripper_kd;
+      // j_.ctrl.base_xyz_kp = base_xyz_kp;
+      // j_.ctrl.base_xyz_kd = base_xyz_kd;
+      // j_.ctrl.base_rot_kp = base_rot_kp;
+      // j_.ctrl.base_rot_kd = base_rot_kd;
+      first_call = false;
+    }
+  }
+
   if (j_.in_use.panda) {
     control_panda(model, data);
   }
@@ -1933,8 +1999,8 @@ void control_base(const mjModel* model, mjData* data)
   if (j_.in_use.base_z and j_.num.base != 1) {
     throw std::runtime_error("base dof does not equal 1 but in_use.base_z is true");
   }
-  if (j_.in_use.base_xyz and j_.num.base != 3) {
-    throw std::runtime_error("base dof does not equal 3 but in_use.base_xyz is true");
+  if (j_.in_use.base_xyz and (j_.num.base != 3 and j_.num.base != 4)) {
+    throw std::runtime_error("base dof does not equal 3 or 4 but in_use.base_xyz is true");
   }
 
   if (j_.in_use.base_z) {
@@ -1961,6 +2027,13 @@ void control_base(const mjModel* model, mjData* data)
     u = ((*j_.to_qpos.base[2]) - target_.base.z) * j_.ctrl.base_xyz_kp.z
       + (*j_.to_qvel.base[2]) * j_.ctrl.base_xyz_kd.z;
     data->ctrl[n + 2] = -u;
+
+    if (j_.in_use.base_z_rot) {
+      // z rotation
+      u = ((*j_.to_qpos.base[3]) - target_.base.yaw) * j_.ctrl.base_rot_kp.z
+        + (*j_.to_qvel.base[3]) * j_.ctrl.base_rot_kd.z;
+      data->ctrl[n + 3] = -u;
+    }
   }
   
 }
@@ -2060,6 +2133,9 @@ void update_stepper(mjModel* model, mjData* data)
       if (j_.in_use.base_xyz) {
         target_.target_basex.add(target_.base.x * 1e6);
         target_.target_basey.add(target_.base.y * 1e6);
+        if (j_.in_use.base_z_rot) {
+          target_.target_baseyaw.add(target_.base.yaw * 1e6);
+        }
       }
 
       // now save actual position data direct from mujoco
@@ -2075,6 +2151,9 @@ void update_stepper(mjModel* model, mjData* data)
         target_.actual_basex.add(*j_.to_qpos.base[0] * 1e6);
         target_.actual_basey.add(*j_.to_qpos.base[1] * 1e6);
         target_.actual_basez.add(*j_.to_qpos.base[2] * 1e6);
+        if (j_.in_use.base_z_rot) {
+          target_.actual_baseyaw.add(*j_.to_qpos.base[3] * 1e6);
+        }
       }
       
     }
@@ -2218,6 +2297,17 @@ void set_base_XYZ_limits(double x, double y, double z)
   j_.baseLims.y_max = y;
   j_.baseLims.z_min = -z;
   j_.baseLims.z_max = z;
+
+  update_base_limits();
+}
+
+void set_base_yaw_limit(double yaw)
+{
+  /* set a symettrical yaw limit (base rotation about z). These do not persist
+  through a hard reset */
+
+  j_.baseLims.yaw_min = -yaw;
+  j_.baseLims.yaw_max = yaw;
 
   update_base_limits();
 }
@@ -2379,7 +2469,26 @@ bool move_base_target_rad(double roll, double pitch, double yaw)
 {
   /* move the gripper base by an angle, not yet implemented */
 
-  throw std::runtime_error("move_base_target_rad(...) is not yet implemented - do not use!");
+  target_.last_robot = Target::Robot::panda;
+
+  // add the incoming position changes to our target
+  // target_.base.roll += roll; // does nothing currently
+  // target_.base.pitch += pitch; // does nothing currently
+  target_.base.yaw += yaw;
+
+  bool within_limits = true;
+
+  // z base limits
+  if (target_.base.yaw > target_.base_max.yaw) {
+    target_.base.yaw = target_.base_max.yaw;
+    within_limits = false;
+  }
+  if (target_.base.yaw < target_.base_min.yaw) {
+    target_.base.yaw = target_.base_min.yaw;
+    within_limits = false;
+  }
+
+  return within_limits;
 }
 
 bool lift_base_to_height(double z) 
@@ -2486,6 +2595,38 @@ bool set_base_to_Z_position(mjData* data, float z_pos)
   }
   else if (j_.in_use.base_z) {
     (*j_.to_qpos.base[0]) = target_.base.z + j_.reset_qpos.base[0]; 
+  }
+
+  return within_limits;
+}
+
+bool set_base_to_yaw(mjData* data, float yaw)
+{
+  /* set the gripper base to a give yaw immediately */
+
+  // set the base target (ie keep track of this movement and maintain it)
+  target_.base.yaw = yaw;
+
+  bool within_limits = true;
+
+  // z base limits
+  if (target_.base.yaw > target_.base_max.yaw) {
+    target_.base.yaw = target_.base_max.yaw;
+    within_limits = false;
+  }
+  if (target_.base.yaw < target_.base_min.yaw) {
+    target_.base.yaw = target_.base_min.yaw;
+    within_limits = false;
+  }
+
+  // override qpos for the base to snap model to maximum (include equilibrium offset)
+  if (j_.in_use.base_xyz and j_.in_use.base_z_rot) {
+      (*j_.to_qpos.base[3]) = target_.base.yaw + j_.reset_qpos.base[3]; 
+  }
+  else {
+    std::cout << "set_base_to_yaw() warning: j_.in_use.base_xyz = "
+      << j_.in_use.base_xyz << ", j_.in_use.base_z_rot = "
+      << j_.in_use.base_z_rot << ". Yaw was NOT applied as both should be true\n";
   }
 
   return within_limits;
@@ -3007,25 +3148,27 @@ std::vector<gfloat> get_gauge_data(const mjModel* model, mjData* data)
 {
   /* Get the position of the finger joints */
 
-  if (not j_.in_use.finger) {
-    printf("Error: gauge data has been request without using segments\n");
-    return std::vector<gfloat>{0, 0, 0};
-  }
-
   std::vector<gfloat> readings(3);
-
+  
   // use armadillo to detect finger bending
-  if (j_.gauge.use_armadillo_gauges) {
+  if (j_.gauge.use_armadillo_gauges and j_.in_use.finger) {
     for (int i = 0; i < 3; i++) {
       readings[i] = read_armadillo_gauge(data, i);
     }
   }
   // use fingertip forces
   else {
+    static bool first_warning = true;
+    if (first_warning) {
+      std::cout << "get_gauge_data() warning: using forces not bending gauges, "
+        << "j_.gauge.use_armadillo_gauges = " << j_.gauge.use_armadillo_gauges
+        << ", j_.in_use.finger = " << j_.in_use.finger << "\n";
+      first_warning = false;
+    }
     Forces_faster forces = get_object_forces_faster(model, data);
-    readings[0] = (gfloat) forces.all.finger1_local[1];
-    readings[1] = (gfloat) forces.all.finger2_local[1];
-    readings[2] = (gfloat) forces.all.finger3_local[1];
+    readings[0] = -1 * (gfloat) forces.all.finger1_local[1];
+    readings[1] = -1 * (gfloat) forces.all.finger2_local[1];
+    readings[2] = -1 * (gfloat) forces.all.finger3_local[1];
   }
 
   return readings;  
@@ -3091,6 +3234,9 @@ std::vector<gfloat> get_target_state_vector()
     state_vec.push_back(state.base_y);
   }
   state_vec.push_back(state.base_z);
+  if (j_.in_use.base_z_rot) {
+    state_vec.push_back(state.base_yaw);
+  }
 
   // state_vec.push_back(state.base_roll);
   // state_vec.push_back(state.base_pitch);
@@ -3118,6 +3264,20 @@ bool use_base_xyz()
   /* are we using full base xyz movement */
 
   return j_.in_use.base_xyz;
+}
+
+bool use_base_z_rot()
+{
+  /* are we using base z rotation */
+
+  return j_.in_use.base_z_rot;
+}
+
+bool use_segments()
+{
+  /* are we using segmented fingers */
+
+  return j_.in_use.finger;
 }
 
 int get_N() 
@@ -3422,6 +3582,13 @@ Gripper get_gripper_target()
   return target_.end;
 }
 
+int get_num_live_objects()
+{
+  /* get the number of live objects in the scene */
+
+  return oh_.get_num_live_objects();
+}
+
 std::vector<std::string> get_objects()
 {
   /* get the names of objects in the simulation scene */
@@ -3575,6 +3742,46 @@ void set_everything_colour(mjModel* model, std::vector<float> rgba)
   std::vector<float> black { 0, 0, 0, 1 };
   set_ground_colour(model, black);
   // set_main_body_colour(model, rgba);
+}
+
+void toggle_gripper_visibility(mjModel* model)
+{
+  /* turn on and off gripper visibility. Uses colours from MjClass::set_neat_colours */
+
+  static bool visible = true;
+
+  visible = not visible;
+
+  float x = 1.0 / 255.0;
+
+  if (visible) {
+
+    std::vector<float> object_colour  {50*x,  205*x, 50*x};
+    std::vector<float> gripper_colour {220*x, 220*x, 220*x};
+    std::vector<float> finger_colour  {255*x, 140*x, 0*x};
+    std::vector<float> ground_colour  {100*x, 100*x, 100*x};
+
+    luke::set_ground_colour(model, ground_colour);
+    luke::set_all_objects_colour(model, object_colour);
+    luke::set_main_body_colour(model, gripper_colour);
+
+    for (int i = 1; i < 5; i++) // 4 means palm
+      luke::set_finger_colour(model, finger_colour, i);
+      
+    }
+  else {
+    std::vector<float> object_colour  {50*x,  205*x, 50*x};
+    std::vector<float> gripper_colour {0, 0, 0, 0};
+    std::vector<float> finger_colour  {0, 0, 0, 0};
+    std::vector<float> ground_colour  {250*x, 250*x, 250*x};
+
+    luke::set_ground_colour(model, ground_colour);
+    luke::set_all_objects_colour(model, object_colour);
+    luke::set_main_body_colour(model, gripper_colour);
+
+    for (int i = 1; i < 5; i++) // 4 means palm
+      luke::set_finger_colour(model, finger_colour, i);
+    }
 }
 
 void set_object_colour(mjModel* model, std::vector<float> rgba)

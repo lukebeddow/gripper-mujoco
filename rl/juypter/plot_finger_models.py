@@ -18,6 +18,9 @@ parser.add_argument("-w", "--width", type=float, default=28e-3)
 parser.add_argument("-f", "--force-style", type=int, default=0)
 parser.add_argument("-s", "--set", default="set9_testing")
 parser.add_argument("-E", "--youngs-modulus", type=float, default=193e9)
+parser.add_argument("--inertia-scaling", default=50, type=int)
+parser.add_argument("--save-data", default=True, type=bool)
+parser.add_argument("--get-timesteps", action="store_true")
 
 args = parser.parse_args()
 
@@ -46,16 +49,18 @@ where 'luke' above is the machine name, swap out eg lab/lab-op etc
 
 Now below, we have settings which match 
 """
-mj.load_next.fixed_finger_hook = False # required as this overwrites gripper.yaml
-mj.load_next.segment_inertia_scaling = 50.0
-mj.load_next.fingertip_clearance = 0.1
-mj.load_next.finger_length = 230e-3
+if not args.get_timesteps:
+  mj.load_next.fixed_finger_hook = False # required as this overwrites gripper.yaml
+  mj.load_next.object_set_name = "set9_testing"
+  mj.load_next.fingertip_clearance = 0.1
+  mj.load_next.finger_length = 230e-3
 
 # specify finger dimensions
+mj.load_next.object_set_name = args.set
+mj.load_next.segment_inertia_scaling = args.inertia_scaling
 mj.load_next.finger_thickness = args.thickness
 mj.load_next.finger_width = args.width
 mj.load_next.finger_modulus = args.youngs_modulus
-mj.load_next.object_set_name = "set9_testing"
 
 # 0=point end load, 1=UDL, 2=point end moment
 force_style = args.force_style
@@ -64,21 +69,11 @@ if force_style == 0: force_style_str = "PL"
 elif force_style == 1: force_style_str = "UDL"
 elif force_style == 2: force_style_str = "EM"
 
-# mj.load()
-
 # global variables
 max_force = 3
-set_name = args.set
-
-# # TESTING
-# mj.mj.set_finger_modulus(193e9 * pow(1.0, 3)) # 190e9 gives <2.5% error for 0.9x28
 
 # specify which segments to test
-# segments = [5, 6, 7, 8, 9, 10, 15, 20, 25, 30]
-# segments = [5, 6, 7, 8, 9, 10]
-segments = [3, 4]
 segments = list(range(3, 31))
-# segments = list(range(3, 6))
 
 print(f"Finger thickness is {mj.load_next.finger_thickness * 1000:.2f} mm")
 print(f"Finger width is {mj.load_next.finger_width * 1000:.1f} mm")
@@ -90,7 +85,7 @@ print(f"Force style is", force_style_str)
 get_data = True
 use_converged = False
 
-def run_curve_data(mjenv, segments, object_set, auto=True, force_style=0, get_timesteps_only=False):
+def run_curve_data(mjenv, segments, auto=True, force_style=0, get_timesteps_only=False):
   """
   This function returns a data structure containing curve validation data for
   a given mjenv across a given list of segments eg [5, 10, 15, 20]
@@ -142,10 +137,20 @@ accuracy = None
 
 if get_data:
   
-  data = run_curve_data(mj, segments, set_name, auto=auto_timestep, force_style=force_style)
+  data = run_curve_data(mj, segments, auto=auto_timestep, force_style=force_style,
+                        get_timesteps_only=args.get_timesteps)
+  
+  if args.get_timesteps:
+    print("Timestep data")
+    headings = f"{'N':<5} | {'Timestep / ms':<20}"
+    rows = "{:<5} | {:<20.3f}"
+    print(headings)
+    for i, t in enumerate(data):
+      print(rows.format(i + 3, t * 1000))
+    exit()
 
   # take care with overwrites - use the .py version in the terminal for overwrites
-  overwrite = True
+  overwrite = args.save_data
 
   name_style = "sim_bending_E{0:.2f}_{1}.pickle"
   rigidity = mj.mj.get_finger_rigidity()

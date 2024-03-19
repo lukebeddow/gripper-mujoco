@@ -530,11 +530,15 @@ void lukesensorfigsinit(void)
     strcpy(figmotors.linename[2], "mZ");
 
     bool base_xyz = luke::use_base_xyz();
+    bool base_z_rot = luke::use_base_z_rot();
 
     if (base_xyz) {
         strcpy(figmotors.linename[3], "bX");
         strcpy(figmotors.linename[4], "bY");
         strcpy(figmotors.linename[5], "bZ");
+        if (base_z_rot) {
+            strcpy(figmotors.linename[6], "byaw");
+        }
     }
     else {
         strcpy(figmotors.linename[3], "bZ");
@@ -558,6 +562,7 @@ void lukesensorfigsupdate()
     }
 
     bool base_xyz = luke::use_base_xyz();
+    bool base_z_rot = luke::use_base_z_rot();
 
     // read the data    
     std::vector<luke::gfloat> b1data = MjPtr->sim_sensors_.finger1_gauge.read(gnum);
@@ -576,6 +581,7 @@ void lukesensorfigsupdate()
     std::vector<luke::gfloat> bXdata = MjPtr->sim_sensors_.x_base_position.read(gnum);
     std::vector<luke::gfloat> bYdata = MjPtr->sim_sensors_.y_base_position.read(gnum);
     std::vector<luke::gfloat> bZdata = MjPtr->sim_sensors_.z_base_position.read(gnum);
+    std::vector<luke::gfloat> byawdata = MjPtr->sim_sensors_.yaw_base_rotation.read(gnum);
 
     // get the corresponding timestamps
     std::vector<float> btdata = MjPtr->gauge_timestamps.read(gnum);
@@ -604,6 +610,9 @@ void lukesensorfigsupdate()
         mdata.push_back(&bXdata);
         mdata.push_back(&bYdata);
         mdata.push_back(&bZdata);
+        if (base_z_rot) {
+            mdata.push_back(&byawdata);
+        }
     }
     else {
         mdata.push_back(&bZdata);

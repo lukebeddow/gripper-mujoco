@@ -182,6 +182,7 @@ public:
   bool is_live(int live_idx);
   void reset_live(mjModel* model, mjData* data);
   QPos spawn_object(mjModel* model, mjData* data, int idx, QPos pose);
+  int get_num_live_objects();
   std::vector<QPos> get_live_qpos(mjModel* model, mjData* data);
   Vec3 get_object_xyz(int obj_idx);
   std::vector<Vec3> get_live_bounding_boxes();

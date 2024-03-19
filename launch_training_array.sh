@@ -41,6 +41,7 @@ timestamp="$(date +%d-%m-%y_%H-%M)"
 KEEP_TIMESTAMP='N'
 FAKETTY=faketty
 LOGGING='Y'
+DEBUG=
 PRINT_RESULTS='N'
 PRINT_RESULTS_AFTER='N'
 
@@ -58,6 +59,7 @@ do
     -k | --keep-time ) KEEP_TIMESTAMP='Y'; echo Keeping current timestamp ;;
     -f | --no-faketty ) FAKETTY=; echo faketty disabled ;;
     -d | --debug ) LOGGING='N'; PRINT_RESULTS_AFTER='N'; echo Debug mode on, terminal logging or printing results after ;;
+    --debug-2 ) LOGGING='N'; PRINT_RESULTS_AFTER='N'; DEBUG='--log-level 2'; echo FULL DEBUG MODE ON, nothing will be saved ;;
     --print ) LOGGING='N'; PRINT="--print"; echo Printing mode on, no training ;;
     --print-results ) PRINT_RESULTS='Y' ;;
     # everything else passed directly to python

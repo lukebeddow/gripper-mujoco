@@ -22,7 +22,7 @@ class TrainingManager():
 
     # trainer settings
     "trainer" : {
-      "num_episodes" : 60_000,
+      "num_episodes" : 120_000,
       "test_freq" : 5000,
       "save_freq" : 5000,
       "use_curriculum" : False,
@@ -105,14 +105,30 @@ class TrainingManager():
 
     # environment hyperparameters
     "env" : {
+
+      # training parameters
       "max_episode_steps" : 250,
       "object_position_noise_mm" : 10,
       "object_rotation_noise_deg" : 5,
       "base_lim_X_mm" : 300,
       "base_lim_Y_mm" : 200,
       "base_lim_Z_mm" : 30,
+      "base_lim_yaw_rad" : np.pi / 4,
+
+      # camera grasping settings
       "use_rgb_in_observation" : False,
       "use_depth_in_observation" : False,
+      "use_rgb_rendering" : False,
+      "rgb_rendering_method" : "CUT",
+      "image_width" : 50,
+      "image_height" : 50,
+
+      # image preprocessing settings
+      "use_standard_transform": False,
+      "transform_resize_square": 144,
+      "transform_crop_size": 128,
+
+      # grasping sene parameters
       "use_scene_settings" : False,
       "num_objects_in_scene" : 1,
       "scene_grasp_target" : 1,
@@ -120,11 +136,18 @@ class TrainingManager():
       "origin_noise_Y_mm" : 50,
       "scene_X_dimension_mm" : 300,
       "scene_Y_dimension_mm" : 200, 
+
+      # experimental settings
+      "use_expert_in_observation" : False,
+
+      # file and testing parameters
       "test_obj_per_file" : 20,
       "task_reload_chance" : 0.05,
       "test_trials_per_object" : 3,
       "test_objects" : 100,
-      "object_set_name" : "set9_fullset",
+
+      # model parameters (for loading xml files)
+      "object_set_name" : "set9_nosharp_smallspheres",
       "num_segments" : 8,
       "finger_thickness" : 0.9e-3,
       "finger_length" : 235e-3,
@@ -132,11 +155,13 @@ class TrainingManager():
       "finger_modulus" : 193e9,
       "depth_camera" : False,
       "XY_base_actions" : False,
+      "Z_base_rotation" : False,
       "fixed_finger_hook" : True,
-      "finger_hook_angle_degrees" : 90.0,
+      "finger_hook_angle_degrees" : 75.0,
       "finger_hook_length" : 35e-3,
       "segment_inertia_scaling" : 50.0,
       "fingertip_clearance" : 0.01,
+
     },
 
     # cpp simulation settings
@@ -160,6 +185,7 @@ class TrainingManager():
       "stable_palm_force" : 1.0,
       "stable_finger_force_lim" : 4.0,
       "stable_palm_force_lim" : 4.0,
+      "XY_distance_threshold" : 10e-3,
       "cap_reward" : False,
       "fingertip_min_mm" : -12.5, # below (from start position) sets within_limits=false;
       "continous_actions" : True,
@@ -196,6 +222,11 @@ class TrainingManager():
           "value" : 2e-3,
           "sign" : 1
         },
+        "base_yaw" : { 
+          "in_use" : False, 
+          "value" : 5e-3,
+          "sign" : 1
+        },
       },
       "sensor" : {
         # to override noise, use list [mu, std] instead of None
@@ -215,7 +246,13 @@ class TrainingManager():
           "in_use" : False,
           "normalise" : 0.0,
           "read_rate" : -1,
-          "noise_override" : [0.1, 0.0]
+          "noise_override" : None
+        },
+        "base_state_sensor_yaw" : {
+          "in_use" : False,
+          "normalise" : 0.0,
+          "read_rate" : -1,
+          "noise_override" : None
         },
         "bending_gauge" : {
           "in_use" : True,
@@ -280,6 +317,11 @@ class TrainingManager():
         "scaling" : 2,
         "min" : 0.1,
         "max" : 3.0,
+      },
+      "object_XY_distance" : {
+        "used" : False,
+        "min" : -50e-3,
+        "max" : -10e-3,
       },
     },
 
@@ -451,7 +493,7 @@ class TrainingManager():
       found = self.trainer.load_best_id(self.run_name, stage=stage)
       if not found:
         if self.log_level > 0:
-          print(f"TrainingManager.run_test() not run, as training did not statisfy stage = {stage}")
+          print(f"TrainingManager.run_test() not run, as no best id was found, likely as all success rates were zero or training did not statisfy stage = {stage}")
         return
       elif self.log_level > 0:
         print("TrainingMananger.run_test() has loaded best_id =", self.trainer.last_loaded_agent_id)
@@ -491,7 +533,7 @@ class TrainingManager():
     Continue a training (already loaded), either to a new endpoint, or simply adding a
     given number of episodes. A trainer must be loaded before this function is called.
     If neither new_endpoint or extra_episodes are set, the training will continue to the
-    original endpoint
+    original endpoint. set 'with_test=False' to prevent from rerunning
     """
 
     if not hasattr(self, "trainer") or self.trainer is None:
@@ -505,7 +547,7 @@ class TrainingManager():
 
   def load(self, job_num=None, timestamp=None, run_name=None, group_name=None, 
            best_id=False, id=None, path_to_run_folder=None, use_abs_path=False,
-           load_into_new_training=False):
+           load_into_new_training=False, agentonly=False):
     """
     Load the training currently specified. Either pass:
       1) nothing - run_name and group_name are already set in the class
@@ -552,16 +594,17 @@ class TrainingManager():
         stage = "max"
       else: stage = None
       found = self.trainer.load_best_id(self.run_name, group_name=self.group_name,
-                                        path_to_run_folder=path_to_run_folder, stage=stage)
+                                        path_to_run_folder=path_to_run_folder, stage=stage,
+                                        agentonly=agentonly)
       if not found:
         if self.log_level > 0:
           print(f"TrainingMananger.load() warning: load_best_id failed (stage = {stage}). Loading most recent id")
         self.trainer.load(self.run_name, group_name=self.group_name, id=id,
-                        path_to_run_folder=path_to_run_folder)
+                        path_to_run_folder=path_to_run_folder, agentonly=agentonly)
         # raise RuntimeError(f"TrainingMananger.load() error: load_best_id failed (stage = {stage})")
     else:
       self.trainer.load(self.run_name, group_name=self.group_name, id=id,
-                        path_to_run_folder=path_to_run_folder)
+                        path_to_run_folder=path_to_run_folder, agentonly=agentonly)
 
     if load_into_new_training:
       # apply new training details, for saving in a new folder
@@ -809,7 +852,8 @@ class TrainingManager():
     Create an MjEnv environment
     """
 
-    env = MjEnv(log_level=self.log_level, render=self.settings["render"])
+    env = MjEnv(log_level=self.log_level, render=self.settings["render"],
+                device=self.device)
     env = self.configure_env(env)
     if load: env.load()
 
@@ -889,6 +933,7 @@ class TrainingManager():
     env.mj.set.stable_palm_force = set["cpp"]["stable_palm_force"]
     env.mj.set.stable_finger_force_lim = set["cpp"]["stable_finger_force_lim"]
     env.mj.set.stable_palm_force_lim = set["cpp"]["stable_palm_force_lim"]
+    env.mj.set.XY_distance_threshold = set["cpp"]["XY_distance_threshold"]
     env.mj.set.fingertip_min_mm = set["cpp"]["fingertip_min_mm"]
     env.mj.set.continous_actions = set["cpp"]["continous_actions"]
     env.mj.set.use_termination_action = set["cpp"]["use_termination_action"]
@@ -901,6 +946,7 @@ class TrainingManager():
     env.mj.set.base_X.in_use = set["cpp"]["action"]["base_X"]["in_use"]
     env.mj.set.base_Y.in_use = set["cpp"]["action"]["base_Y"]["in_use"]
     env.mj.set.base_Z.in_use = set["cpp"]["action"]["base_Z"]["in_use"]
+    env.mj.set.base_yaw.in_use = set["cpp"]["action"]["base_yaw"]["in_use"]
 
     env.mj.set.gripper_prismatic_X.value = set["cpp"]["action"]["gripper_prismatic_X"]["value"]
     env.mj.set.gripper_revolute_Y.value = set["cpp"]["action"]["gripper_revolute_Y"]["value"]
@@ -908,6 +954,7 @@ class TrainingManager():
     env.mj.set.base_X.value = set["cpp"]["action"]["base_X"]["value"]
     env.mj.set.base_Y.value = set["cpp"]["action"]["base_Y"]["value"]
     env.mj.set.base_Z.value = set["cpp"]["action"]["base_Z"]["value"]
+    env.mj.set.base_yaw.value = set["cpp"]["action"]["base_yaw"]["value"]
 
     env.mj.set.gripper_prismatic_X.sign = set["cpp"]["action"]["gripper_prismatic_X"]["sign"]
     env.mj.set.gripper_revolute_Y.sign = set["cpp"]["action"]["gripper_revolute_Y"]["sign"]
@@ -915,11 +962,13 @@ class TrainingManager():
     env.mj.set.base_X.sign = set["cpp"]["action"]["base_X"]["sign"]
     env.mj.set.base_Y.sign = set["cpp"]["action"]["base_Y"]["sign"]
     env.mj.set.base_Z.sign = set["cpp"]["action"]["base_Z"]["sign"]
+    env.mj.set.base_yaw.sign = set["cpp"]["action"]["base_yaw"]["sign"]
 
     # apply cpp settings - sensors
     env.mj.set.motor_state_sensor.in_use = set["cpp"]["sensor"]["motor_state_sensor"]["in_use"]
     env.mj.set.base_state_sensor_Z.in_use = set["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"]
     env.mj.set.base_state_sensor_XY.in_use = set["cpp"]["sensor"]["base_state_sensor_XY"]["in_use"]
+    env.mj.set.base_state_sensor_yaw.in_use = set["cpp"]["sensor"]["base_state_sensor_yaw"]["in_use"]
     env.mj.set.bending_gauge.in_use = set["cpp"]["sensor"]["bending_gauge"]["in_use"]
     env.mj.set.palm_sensor.in_use = set["cpp"]["sensor"]["palm_sensor"]["in_use"]
     env.mj.set.wrist_sensor_XY.in_use = set["cpp"]["sensor"]["wrist_sensor_XY"]["in_use"]
@@ -928,6 +977,7 @@ class TrainingManager():
     env.mj.set.motor_state_sensor.normalise = set["cpp"]["sensor"]["motor_state_sensor"]["normalise"]
     env.mj.set.base_state_sensor_Z.normalise = set["cpp"]["sensor"]["base_state_sensor_Z"]["normalise"]
     env.mj.set.base_state_sensor_XY.normalise = set["cpp"]["sensor"]["base_state_sensor_XY"]["normalise"]
+    env.mj.set.base_state_sensor_yaw.normalise = set["cpp"]["sensor"]["base_state_sensor_yaw"]["normalise"]
     env.mj.set.bending_gauge.normalise = set["cpp"]["sensor"]["bending_gauge"]["normalise"]
     env.mj.set.palm_sensor.normalise = set["cpp"]["sensor"]["palm_sensor"]["normalise"]
     env.mj.set.wrist_sensor_XY.normalise = set["cpp"]["sensor"]["wrist_sensor_XY"]["normalise"]
@@ -936,6 +986,7 @@ class TrainingManager():
     env.mj.set.motor_state_sensor.read_rate = set["cpp"]["sensor"]["motor_state_sensor"]["read_rate"]
     env.mj.set.base_state_sensor_Z.read_rate = set["cpp"]["sensor"]["base_state_sensor_Z"]["read_rate"]
     env.mj.set.base_state_sensor_XY.read_rate = set["cpp"]["sensor"]["base_state_sensor_XY"]["read_rate"]
+    env.mj.set.base_state_sensor_yaw.read_rate = set["cpp"]["sensor"]["base_state_sensor_yaw"]["read_rate"]
     env.mj.set.bending_gauge.read_rate = set["cpp"]["sensor"]["bending_gauge"]["read_rate"]
     env.mj.set.palm_sensor.read_rate = set["cpp"]["sensor"]["palm_sensor"]["read_rate"]
     env.mj.set.wrist_sensor_XY.read_rate = set["cpp"]["sensor"]["wrist_sensor_XY"]["read_rate"]
@@ -947,6 +998,8 @@ class TrainingManager():
       env.mj.set.base_state_sensor_Z.set_gaussian_noise(*set["cpp"]["sensor"]["base_state_sensor_Z"]["noise_override"])
     if set["cpp"]["sensor"]["base_state_sensor_XY"]["noise_override"] is not None:
       env.mj.set.base_state_sensor_XY.set_gaussian_noise(*set["cpp"]["sensor"]["base_state_sensor_XY"]["noise_override"])
+    if set["cpp"]["sensor"]["base_state_sensor_yaw"]["noise_override"] is not None:
+      env.mj.set.base_state_sensor_yaw.set_gaussian_noise(*set["cpp"]["sensor"]["base_state_sensor_yaw"]["noise_override"])
     if set["cpp"]["sensor"]["bending_gauge"]["noise_override"] is not None:
       env.mj.set.bending_gauge.set_gaussian_noise(*set["cpp"]["sensor"]["bending_gauge"]["noise_override"])
     if set["cpp"]["sensor"]["palm_sensor"]["noise_override"] is not None:
@@ -1053,6 +1106,11 @@ class TrainingManager():
     env.mj.set.object_stable.set    (value,  False,   1)
     env.mj.set.good_bend_sensor.set (value,  False,   1,     self.RT.mBend, self.RT.gBend,  -1)
     env.mj.set.good_palm_sensor.set (value,  False,   1,     self.RT.mPalm, self.RT.gPalm,  -1)
+
+    if self.settings["reward"]["object_XY_distance"]["used"]:
+      d1 = self.settings["reward"]["object_XY_distance"]["min"]
+      d2 = self.settings["reward"]["object_XY_distance"]["max"]
+      env.mj.set.object_XY_distance.set (value,  False,   1,     d1, d2,  -1)
 
     return env
 

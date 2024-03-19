@@ -70,6 +70,7 @@
   XX(  stable_palm_force,       double,   -1.0)      /* palm force (N) on object to consider stable */\
   XX(  stable_finger_force_lim, double,   100.0)    /* finger force (N) limit on the object to stop considering stable */\
   XX(  stable_palm_force_lim,   double,   100.0)    /* palm force (N) limit on the object to stop considering stable*/\
+  XX(  XY_distance_threshold,  double,   10e-3)    /* specified as close to an object if distance is below this */\
   /* 
   is_done() settings */\
   XX(  cap_reward,              bool,     true)    /* prevent reward from moving outside specified bounds */\
@@ -99,6 +100,7 @@
   SS(  motor_state_sensor,      true,     0,        -1)  /* xyz motor states, normalise is ignored */\
   SS(  base_state_sensor_Z,     true,     0,        -1)  /* base position state, normalise is ignored)*/\
   SS(  base_state_sensor_XY,    true,     0,        -1)  /* base position state, normalise is ignored)*/\
+  SS(  base_state_sensor_yaw,   true,     0,        -1)  /* base rotation state, normalise is ignored */\
   SS(  bending_gauge,           true,     20,       10)  /* strain gauge to measure finger bending */\
   SS(  axial_gauge,             false,    3.0,      10)  /* strain gauge to measure axial finger strain */\
   SS(  palm_sensor,             true,     10.0,     10)  /* palm force sensor */\
@@ -112,17 +114,17 @@
 
   3. Actions
       name                      used      value   sign */\
-  AA(  gripper_X,               true,    2.0e-3,  -1)        /* move gripper X motor by m */\
-  AA(  gripper_prismatic_X,     false,     1.0e-3,  -1)        /* move gripper X and Y motors to move prismatically by m */\
-  AA(  gripper_Y,               true,    2.0e-3,  -1)        /* move gripper Y motor by m */\
-  AA(  gripper_revolute_Y,      false,     0.01,    -1)        /* move gripper Y motor with angular motions/targets in radians */\
+  AA(  gripper_X,               false,    2.0e-3,  -1)        /* move gripper X motor by m */\
+  AA(  gripper_prismatic_X,     true,     1.0e-3,  -1)        /* move gripper X and Y motors to move prismatically by m */\
+  AA(  gripper_Y,               false,    2.0e-3,  -1)        /* move gripper Y motor by m */\
+  AA(  gripper_revolute_Y,      true,     0.01,    -1)        /* move gripper Y motor with angular motions/targets in radians */\
   AA(  gripper_Z,               true,     2.0e-3,   1)        /* move gripper Z motor by m */\
   AA(  base_X,                  true,     2.0e-3,   1)        /* move gripper base X by m */\
   AA(  base_Y,                  true,     2.0e-3,   1)        /* move gripper base Y by m */\
   AA(  base_Z,                  true,     2.0e-3,   1)        /* move gripper base Z by m */\
   AA(  base_roll,               false,    0.01,     1)        /* rotate gripper base about X in radians */\
-  AA(  base_pitch,              false,    0.01,     1)        /* rotate gripper base about Y in radians */\
-  AA(  base_yaw,                false,    0.01,     1)        /* rotate gripper base about Z in radians */\
+  AA(  base_pitch,              false,    0.02,     1)        /* rotate gripper base about Y in radians */\
+  AA(  base_yaw,                true,     0.05,     1)        /* rotate gripper base about Z in radians */\
   
   
   
@@ -141,9 +143,10 @@
   BR(  object_contact,          0.005,    false,    1)      /* fingers or palm touches object */\
   BR(  object_stable,           0.01,     false,    1)      /* fingers and palm apply min force */\
   BR(  stable_height,           1.0,      1,        1)      /* object stable and at height target */\
-  BR(  stable_termination,      1.0,      1,        1)      /* object stable and termination signal sent */\
+  BR(  stable_termination,      1.0,      1,        1000)   /* object stable and termination signal sent */\
   BR(  failed_termination,      -1.0,     1,        1)      /* termination signal sent but object not stable */\
-  BR(  successful_grasp,        0.01,     1,        1)      /* metric to indicate a grasp is stable, shouldn't have associated reward */
+  BR(  successful_grasp,        0.01,     1,        1)      /* metric to indicate a grasp is stable, shouldn't have associated reward */\
+  BR(  within_XY_distance,      0.1,      false,    1)      /* are we close enough to the target object */\
   
   
 #define LUKE_MJSETTINGS_LINEAR_REWARD \
@@ -173,6 +176,8 @@
   LR(  finger3_force,           0.0,      false,    1,    0.0,  2.0, 6.0)     /* finger 3 force */\
   LR(  ground_force,            0.0,      false,    1,    0.0,  2.0,  -1)     /* ground force on object */\
   LR(  grasp_metric,            0.0,      false,    1,    0.0,  10.0, -1)     /* grasping metric score */\
+  /* new rewards for multi-object scenes and XY base movement */\
+  LR(  object_XY_distance,      0.05,     false,    1,    -0.2, -5e-3, -1)    /* how far from closest object (take -ve values to converge towards 0) */
 
 // end of user defined simulation settings
 

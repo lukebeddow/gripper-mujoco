@@ -61,6 +61,7 @@ mjvFigure figstepperz;
 mjvFigure figbasex;
 mjvFigure figbasey;
 mjvFigure figbasez;
+mjvFigure figbaserotz;
 
 // OpenGL rendering and UI
 GLFWvidmode vmode;
@@ -128,6 +129,7 @@ struct
     int xbasefig = 0;              // added by luke
     int ybasefig = 0;              // added by luke
     int zbasefig = 0;              // added by luke
+    int zbaserotfig = 0;
     int allactuators = 0;          // added by luke
     int use_SI_sensors = 0;        // added by luke
     int render_rgb = 0;
@@ -231,6 +233,7 @@ const mjuiDef defOption[] =
     {mjITEM_CHECKINT,  "x base",        2, &settings.xbasefig,      " #411"}, // added by luke
     {mjITEM_CHECKINT,  "y base",        2, &settings.ybasefig,      " #411"}, // added by luke
     {mjITEM_CHECKINT,  "z base",        2, &settings.zbasefig,      " #411"}, // added by luke
+    {mjITEM_CHECKINT,  "z base rot",    2, &settings.zbaserotfig,   " #411"}, // added by luke    
     {mjITEM_CHECKINT,  "all actuators", 2, &settings.allactuators,  " #412"}, // added by luke
     {mjITEM_CHECKINT,  "SI values",     2, &settings.use_SI_sensors," #413"}, // added by luke
     {mjITEM_CHECKINT,  "Render rgb",    2, &settings.render_rgb,    " #414"}, // added by luke
@@ -710,6 +713,7 @@ void lukesensorfigsinit(void)
     strcpy(figmotors.linename[3], "bZ");
     strcpy(figmotors.linename[4], "bX");
     strcpy(figmotors.linename[5], "bY");
+    strcpy(figmotors.linename[5], "byaw");
     
 }
 
@@ -735,6 +739,7 @@ void lukesensorfigsupdate(void)
     }
 
     bool base_xyz = luke::use_base_xyz();
+    bool base_z_rot = luke::use_base_z_rot();
 
     // read the data    
     std::vector<luke::gfloat> g1data = data_ptr->finger1_gauge.read(gnum);
@@ -753,6 +758,7 @@ void lukesensorfigsupdate(void)
     std::vector<luke::gfloat> bXdata = data_ptr->x_base_position.read(gnum);
     std::vector<luke::gfloat> bYdata = data_ptr->y_base_position.read(gnum);
     std::vector<luke::gfloat> bZdata = data_ptr->z_base_position.read(gnum);
+    std::vector<luke::gfloat> byawdata = data_ptr->yaw_base_rotation.read(gnum);
 
     // get the corresponding timestamps
     std::vector<float> btdata = myMjClass.gauge_timestamps.read(gnum);
@@ -775,11 +781,14 @@ void lukesensorfigsupdate(void)
         &wXdata, &wYdata, &wZdata
     };
     std::vector<std::vector<luke::gfloat>*> mdata {
-        &mXdata, &mYdata, &mZdata, &bZdata  
+        &mXdata, &mYdata, &mZdata, &bZdata
     };
     if (base_xyz) {
         mdata.push_back(&bXdata);
         mdata.push_back(&bYdata);
+        if (base_z_rot) {
+            mdata.push_back(&byawdata);
+        }
     }
 
     // package figures into iterable vector
@@ -900,16 +909,18 @@ void lukestepperfigsinit(void)
     mjv_defaultFigure(&figbasex);
     mjv_defaultFigure(&figbasey);
     mjv_defaultFigure(&figbasez);
+    mjv_defaultFigure(&figbaserotz);
 
     // what figures are we initialising
     std::vector<mjvFigure*> myfigs {
-        &figstepperx, &figsteppery, &figstepperz, &figbasex, &figbasey, &figbasez
+        &figstepperx, &figsteppery, &figstepperz, &figbasex, &figbasey, &figbasez,
+        &figbaserotz
     };
     
     // what are the figure titles
     std::vector<std::string> titles {
         "Stepper x / um", "Stepper y / um", "Stepper z / um", 
-        "Base x / um", "Base y / um", "Base z / um"
+        "Base x / um", "Base y / um", "Base z / um", "Base z rot / urad"
     };
 
     // // figure limits
@@ -971,6 +982,7 @@ void lukestepperfigsupdate(void)
     }
 
     bool base_xyz = luke::use_base_xyz();
+    bool base_z_rot = luke::use_base_z_rot();
 
     // read the data    
     std::vector<luke::gfloat> txsdata = luke::target_.target_stepperx.read(gnum);
@@ -979,12 +991,14 @@ void lukestepperfigsupdate(void)
     std::vector<luke::gfloat> txbdata = luke::target_.target_basex.read(gnum);
     std::vector<luke::gfloat> tybdata = luke::target_.target_basey.read(gnum);
     std::vector<luke::gfloat> tzbdata = luke::target_.target_basez.read(gnum);
+    std::vector<luke::gfloat> tzrotbdata = luke::target_.target_baseyaw.read(gnum);
     std::vector<luke::gfloat> axsdata = luke::target_.actual_stepperx.read(gnum);
     std::vector<luke::gfloat> aysdata = luke::target_.actual_steppery.read(gnum);
     std::vector<luke::gfloat> azsdata = luke::target_.actual_stepperz.read(gnum);
     std::vector<luke::gfloat> axbdata = luke::target_.actual_basex.read(gnum);
     std::vector<luke::gfloat> aybdata = luke::target_.actual_basey.read(gnum);
     std::vector<luke::gfloat> azbdata = luke::target_.actual_basez.read(gnum);
+    std::vector<luke::gfloat> azrotbdata = luke::target_.actual_baseyaw.read(gnum);
     std::vector<luke::gfloat> timedata = luke::target_.timedata.read(gnum);
 
     // package sensor data pointers in iterable vectors
@@ -1006,6 +1020,9 @@ void lukestepperfigsupdate(void)
     std::vector<std::vector<luke::gfloat>*> bzdata {
         &tzbdata, &azbdata
     };
+    std::vector<std::vector<luke::gfloat>*> bzrotdata {
+        &tzrotbdata, &azrotbdata
+    };
 
     // package figures into iterable vector
     std::vector<mjvFigure*> myfigs {
@@ -1015,6 +1032,9 @@ void lukestepperfigsupdate(void)
         myfigs[3] = &figbasex;
         myfigs.push_back(&figbasey);
         myfigs.push_back(&figbasez);
+        if (base_z_rot) {
+            myfigs.push_back(&figbaserotz);
+        }
     }
 
     // package sensor data in same order as figures
@@ -1025,6 +1045,9 @@ void lukestepperfigsupdate(void)
         sensordata[3] = &bxdata;
         sensordata.push_back(&bydata);
         sensordata.push_back(&bzdata);
+        if (base_z_rot) {
+            sensordata.push_back(&bzrotdata);
+        }
     }
 
     // maximum number of lines on a figure
@@ -1065,6 +1088,7 @@ void lukestepperfigsupdate(void)
 void lukestepperfigshow(mjrRect rect)
 {
     bool base_xyz = luke::use_base_xyz();
+    bool base_z_rot = luke::use_base_z_rot();
 
     // what figures are showing
     std::vector<mjvFigure*> myfigs {
@@ -1074,6 +1098,9 @@ void lukestepperfigshow(mjrRect rect)
         myfigs[3] = &figbasex;
         myfigs.push_back(&figbasey);
         myfigs.push_back(&figbasez);
+        if (base_z_rot) {
+            myfigs.push_back(&figbaserotz);
+        }
     }
     // what settings determine if these are showing
     std::vector<int> flags {
@@ -1086,6 +1113,9 @@ void lukestepperfigshow(mjrRect rect)
         flags[3] = settings.xbasefig;
         flags.push_back(settings.ybasefig);
         flags.push_back(settings.zbasefig);
+        if (base_z_rot) {
+            flags.push_back(settings.zbaserotfig);
+        }
     }
 
     // how many graphs do we need to fit
@@ -1653,6 +1683,8 @@ void makeObjectUI(int oldstate)
         {mjITEM_SLIDERNUM,  "scene Y",         2, &settings.scene_y, "0 1"},
         {mjITEM_BUTTON,   "random base",    2, NULL,                 " #317"},
         {mjITEM_BUTTON,   "set base XY",    2, NULL,                 " #317"},
+        {mjITEM_BUTTON,   "random_yaw",     2, NULL,                 " #317"},
+        {mjITEM_BUTTON,   "gripper visible",     2, NULL,                 " #317"},
         {mjITEM_END}
     };
 
@@ -2361,6 +2393,12 @@ void uiEvent(mjuiState* state)
             {
                 case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7: 
                 case 8: case 9: case 10: case 11: case 12: case 13: case 14: case 15: {
+                    if (luke::get_num_live_objects() == 0) {
+                        myMjClass.spawn_object(settings.object_int, 
+                            settings.object_x_noise_mm * 1e-3,
+                            settings.object_y_noise_mm * 1e-3,
+                            settings.object_z_rot_deg * (3.1416 / 180.0));
+                    }
                     std::vector<float> obs = myMjClass.set_discrete_action(it->itemid);
                     if (settings.complete_action_steps and obs.size() > 0) {
                         myMjClass.action_step();
@@ -2411,7 +2449,8 @@ void uiEvent(mjuiState* state)
                 bool done = myMjClass.is_done();
 
                 std::cout << "Action taken: " << it->itemid << '\n';
-                luke::print_vec(obs, "Observation");
+                myMjClass.debug_observation(obs, true);
+                // luke::print_vec(obs, "Observation");
                 if (myMjClass.s_.use_HER)
                     luke::print_vec(myMjClass.assess_goal(), "Goal performance");
                 std::cout << "Reward is " << reward << '\n';
@@ -2604,6 +2643,15 @@ void uiEvent(mjuiState* state)
             case 38: {         // set base XY position
                 std::cout << "Setting base position to (0.1, 0.1)\n";
                 double z = myMjClass.set_new_base_XY(0.1, 0.1);
+            }
+            case 39: {         // random base yaw
+                std::cout << "Setting base to random yaw = ";
+                double z = myMjClass.random_base_yaw(myMjClass.base_max_[5]);
+                std::cout << z << "\n";
+            }
+            case 40: {         // toggle gripper visible
+                std::cout << "Toggle gripper visibility\n";
+                luke::toggle_gripper_visibility(myMjClass.model);
             }
             }
         }

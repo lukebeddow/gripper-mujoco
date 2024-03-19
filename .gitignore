@@ -1,5 +1,9 @@
 build/
 rl/models/
+rl/image_datasets
+rl/env/image_render_models
+rl/env/expert
+checkpoints
 sample/
 MUJOCO_LOG.TXT
 .vscode/

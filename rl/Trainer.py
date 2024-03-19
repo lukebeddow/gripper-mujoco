@@ -8,6 +8,7 @@ from itertools import count
 import time
 import random
 from datetime import datetime
+import functools
 
 from ModelSaver import ModelSaver
 from agents.DQN import Agent_DQN
@@ -376,7 +377,10 @@ class Trainer:
       self.modelsaver = ModelSaver(self.savedir + "/" + self.group_name)
   
   def to_torch(self, data, dtype=torch.float32):
-    return torch.tensor(data, device=self.device, dtype=dtype).unsqueeze(0)
+    if torch.is_tensor(data):
+      return data.unsqueeze(0)
+    else:
+      return torch.tensor(data, device=self.device, dtype=dtype).unsqueeze(0)
 
   def seed(self, rngseed=None, strict=None):
     """
@@ -422,6 +426,7 @@ class Trainer:
         "agent_name" : self.agent.name,
         "env_data" : self.env.get_save_state(),
         "curriculum_dict" : self.curriculum_dict,
+        "curriculum_change_fcn" : self.curriculum_change,
         "extra_data" : extra_data
       }
 
@@ -498,7 +503,7 @@ class Trainer:
     if self.enable_saving:
       self.modelsaver.save(filename, txtstr=hyper_str, txtonly=True)
 
-  def load(self, run_name, id=None, group_name=None, path_to_run_folder=None):
+  def load(self, run_name, id=None, group_name=None, path_to_run_folder=None, agentonly=False):
     """
     Load a model given a path to it
     """
@@ -526,53 +531,76 @@ class Trainer:
     load_agent = self.modelsaver.load(id=id, folderpath=path_to_run_folder,
                                       filenamestarts="Agent")
     self.last_loaded_agent_id = self.modelsaver.last_loaded_id
-    load_train = self.modelsaver.load(folderpath=path_to_run_folder,
-                                      filenamestarts=self.train_param_savename)
-    try:
-      load_track = self.modelsaver.load(id=id, folderpath=path_to_run_folder, 
-                                      filenamestarts=self.track_savename,
-                                      suffix_numbering=self.trackinfo_numbering)
-    except FileNotFoundError as e:
-      if self.log_level > 0:
-        print("failed\nLoading track failed, trying again with alternative numbering. Error:", e)
-      load_track = self.modelsaver.load(id=id, folderpath=path_to_run_folder, 
-                                    filenamestarts=self.track_savename,
-                                    suffix_numbering=not self.trackinfo_numbering)
-    
-    # extract loaded data
-    self.params = load_train["parameters"]
-    self.run_name = load_train["run_name"]
-    self.group_name = load_train["group_name"]
-    self.env.load_save_state(load_train["env_data"])
-    self.track = load_track
 
-    try:
+    # if we are only loading the agent
+    if agentonly:
+      print("Trainer.load() warning: AGENTONLY=TRUE, setting self.env=None for safety")
+      self.env = None
+
+      # get the name of the agent from the filename saved with
+      name = self.modelsaver.get_recent_file(name="Agent")
+      name = name.split("/")[-1]
+      
+      # trim out the agent part
+      name = name[:5 + len(self.modelsaver.file_ext())]
+
+      to_exec = f"""self.agent = {name}()"""
+      exec(to_exec)
+      self.agent.load_save_state(load_agent, device=self.device)
+
+      print("Trainer.load(): AGENTONLY=True load now completed")
+
+    # regular load behaviour
+    else:
+      load_train = self.modelsaver.load(folderpath=path_to_run_folder,
+                                        filenamestarts=self.train_param_savename)
+      try:
+        load_track = self.modelsaver.load(id=id, folderpath=path_to_run_folder, 
+                                        filenamestarts=self.track_savename,
+                                        suffix_numbering=self.trackinfo_numbering)
+      except FileNotFoundError as e:
+        if self.log_level > 0:
+          print("failed\nLoading track failed, trying again with alternative numbering. Error:", e)
+        load_track = self.modelsaver.load(id=id, folderpath=path_to_run_folder, 
+                                      filenamestarts=self.track_savename,
+                                      suffix_numbering=not self.trackinfo_numbering)
+      
+      # extract loaded data
+      self.params = load_train["parameters"]
+      self.run_name = load_train["run_name"]
+      self.group_name = load_train["group_name"]
+      self.env.load_save_state(load_train["env_data"], device=self.device)
+      self.track = load_track
+
+      # unpack curriculum information
       self.curriculum_dict = load_train["curriculum_dict"]
       if len(self.track.train_curriculum_stages) > 0:
         self.curriculum_dict["stage"] = self.track.train_curriculum_stages[-1]
       else: self.curriculum_dict["stage"] = 0
-    except KeyError as e:
-      print("curriculum_dict not found in loaded trainer_params, old code. Error:", e)
-      self.curriculum_dict = {
-        "stage" : 0,
-        "metric_name" : "",
-        "metric_thresholds" : [],
-        "param_values" : [],
-        "finished" : False,
-        "info" : "",
-      }
+      if "curriculum_fcn" in load_train["curriculum_dict"].keys():
+        self.curriculum_change = functools.partial(load_train["curriculum_dict"]["curriculum_change_fcn"], self)
+        if self.params.use_curriculum:
+          self.curriculum_change(self.curriculum_dict["stage"]) # apply initial stage settings
+      elif self.params.use_curriculum:
+        # TEMPORARY FIX for program: continue_good_curriculum, delete later
+        print("TEMPORARY CURRICULUM FIX: set curriculum function as curriculum_change_object_noise")
+        from launch_training import curriculum_change_object_noise
+        self.curriculum_change = functools.partial(curriculum_change_object_noise, self)
+        print("CURRICULUM ACTIVE: Calling curriculum_change_object_noise now")
+        self.curriculum_change(self.curriculum_dict["stage"]) # apply initial stage settings
 
-    # do we have the agent already, if not, create it
-    if self.agent is None:
-      to_exec = f"""self.agent = {load_train["agent_name"]}()"""
-      exec(to_exec)
-    self.agent.load_save_state(load_agent)
-    self.agent.set_device(self.device)
+      # do we have the agent already, if not, create it
+      if self.agent is None:
+        to_exec = f"""self.agent = {load_train["agent_name"]}()"""
+        exec(to_exec)
+      self.agent.load_save_state(load_agent, device=self.device)
+      if self.log_level >= 2 and hasattr(self.agent, "debug"): 
+        self.agent.debug = True
 
-    # reseed - be aware this will not be contingous
-    self.rngseed = load_train["rngseed"]
-    self.training_reproducible = False # training no longer reproducible
-    self.seed()
+      # reseed - be aware this will not be contingous
+      self.rngseed = load_train["rngseed"]
+      self.training_reproducible = False # training no longer reproducible
+      self.seed()
 
   def run_episode(self, i_episode, test=False):
     """
@@ -818,6 +846,11 @@ class MujocoTrainer(Trainer):
 
     # override the parameters of the base class
     self.params = MujocoTrainer.Parameters()
+
+    # set agent debug level
+    if self.agent is not None:
+      if hasattr(self.agent, "debug"):
+        self.agent.debug = True if self.log_level >= 2 else False
 
     # class variables
     self.last_test_data = None
@@ -1682,7 +1715,8 @@ class MujocoTrainer(Trainer):
 
     return best_sr, best_ep
 
-  def load_best_id(self, run_name, group_name=None, path_to_run_folder=None, stage=None):
+  def load_best_id(self, run_name, group_name=None, path_to_run_folder=None, stage=None,
+                   agentonly=False):
     """
     Try to find the best performing agent and load that. Stage indicates requirements
     for which curriulum stage we can load. If an int, we load that stage, or if "max"
@@ -1709,7 +1743,8 @@ class MujocoTrainer(Trainer):
       best_id_found = True
 
     # try to load, if best id not found it loads most recent (ie id=None)
-    self.load(run_name, id=id, group_name=group_name, path_to_run_folder=path_to_run_folder)
+    self.load(run_name, id=id, group_name=group_name, path_to_run_folder=path_to_run_folder,
+              agentonly=agentonly)
 
     if not best_id_found:
       if stage == "max": stage = self.track.test_curriculum_stages[-1]
@@ -1725,7 +1760,8 @@ class MujocoTrainer(Trainer):
         if self.log_level > 0: 
           print(f"BEST_ID_SUCCESS -> best_id set to {best_id} with best_ep={best_ep}, save_freq={self.params.save_freq} and best_sr={best_sr}")
         # try to load again
-        self.load(run_name, id=best_id, group_name=group_name, path_to_run_folder=path_to_run_folder)
+        self.load(run_name, id=best_id, group_name=group_name, path_to_run_folder=path_to_run_folder,
+                  agentonly=agentonly)
 
     return best_id_found
 
@@ -1737,8 +1773,8 @@ class MujocoTrainer(Trainer):
     defined and overriden! Otherwise a NotImplementedError will be raised
     """
 
-    # allow_backwards = False
-    # allow_multistep = False
+    # allow_backwards = False # not implemented
+    allow_multistep = False # only possible for metric=success_rate
 
     if self.curriculum_dict["finished"]: return
 
@@ -1755,15 +1791,28 @@ class MujocoTrainer(Trainer):
 
     elif self.curriculum_dict["metric_name"] == "success_rate":
 
+      if not hasattr(self, "curriculum_num_tests"):
+        self.curriculum_num_tests = 0
+
+      if self.curriculum_num_tests == len(self.track.avg_successful_grasp):
+        return
+
       # get the most recent success rate
       if len(self.track.avg_successful_grasp) > 0:
         success_rate = self.track.avg_successful_grasp[-1]
       else: success_rate = 0.0
 
       # determine if we have passed the required threshold
-      for t in self.curriculum_dict["metric_thresholds"][stage:]:
-        if success_rate >= t:
-          stage += 1
+      if allow_multistep:
+        for t in self.curriculum_dict["metric_thresholds"][stage:]:
+          if success_rate >= t:
+            stage += 1
+      else:
+        if stage < len(self.curriculum_dict["metric_thresholds"]):
+          if success_rate >= self.curriculum_dict["metric_thresholds"][stage]:
+            stage += 1
+
+      self.curriculum_num_tests = len(self.track.avg_successful_grasp)
 
     # if the metric is not recognised
     else: raise RuntimeError(f"TrainingManager.curriculum_fcn() metric of {self.curriculum_dict['metric_name']} not recognised")
@@ -1827,6 +1876,78 @@ class MujocoTrainer(Trainer):
         self.image_list = []
         self.images_collected = 0
         
+  def print_observation_table(self, observation_list):
+    """
+    Print a table breaking down the features of an observation
+    """
+
+    if not isinstance(observation_list[0], list):
+      observation_list = [observation_list]
+
+    # get observation info
+    info = self.env.mj.debug_observation(observation_list[0], False)
+    if info.startswith("INVALID"): print(info)
+
+    # parse info to get sensor names and n samples (last element is observation length)
+    sensor_names = [x.split(" = ")[0] for x in info.split(" | ")][:-1]
+    sensor_nums = [int(x.split(" = ")[1]) for x in info.split(" | ")][:-1]
+
+    # create the row master for the table
+    sepbig = " || " # seperate sensors
+    sep = " "     # seperate individual values
+
+    # input the sensor value format
+    sub_head = "{{{0}:{1}}}"
+    sf = ".3f"
+    sub_val = sub_head.format(0, sf)
+
+    # now create the rows for the table
+    sub_heading_fields = []
+    main_headings = sepbig
+    sub_headings = sepbig
+    row_string = sepbig
+    main_idx = 0
+    sub_idx = 0
+    for n in sensor_nums:
+      sub_width = len(sub_val.format(-1.0) + sep)
+      width = n * sub_width - len(sep)
+      this_sub = ""
+      for i in range(n):
+        if i != n - 1:
+          this_sub += sub_head.format(sub_idx + i, f"^{sub_width - len(sep)}") + sep
+          row_string += sub_head.format(sub_idx + i, f">{sub_width - len(sep)}{sf}") + sep
+        else:
+          this_sub += sub_head.format(sub_idx + i, f"^{sub_width - len(sep)}") + sepbig
+          row_string += sub_head.format(sub_idx + i, f">{sub_width - len(sep)}{sf}") + sepbig
+        x = n // 2
+        xi = i // 2
+        if i % 2 == 0: # even
+          sub_heading_fields.append(f"X{x-xi}")
+        else: sub_heading_fields.append(f"Y{x-xi}-{x-xi-1}")
+      main_idx += 1
+      sub_idx += n
+      main_headings += f"{{{main_idx}:^{width}}}" + sepbig
+      sub_headings += this_sub
+
+    # print(main_headings)
+    # print(sub_headings)
+    # print(row_string)
+
+    row_prefix = sepbig + "{0:>4}"
+
+    # now input the data
+    sensor_names.insert(0, "dummy") # not sure why I need this
+    main_heading_row = main_headings.format(*sensor_names)
+    print(row_prefix.format("Step") + main_heading_row)
+
+    sub_heading_row = sub_headings.format(*sub_heading_fields)
+    print(row_prefix.format("") + sub_heading_row)
+
+    # now print the table
+    for i, obs in enumerate(observation_list):
+      this_row = row_string.format(*obs)
+      print(row_prefix.format(i) + this_row)
+
 if __name__ == "__main__":
 
   # master seed, torch seed must be set before network creation (random initialisation)
