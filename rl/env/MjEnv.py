@@ -847,6 +847,9 @@ class MjEnv():
       if self.params.use_rgb_in_observation or self.params.use_depth_in_observation:
         image_observation = True
 
+      # do we render every step for image collection (to try and solve bad render issue?)
+      # are can we only render on steps where we actually want to collect images
+
       if image_observation or do_image_collection:
 
         # get the rgb and depth from the scene
@@ -2210,6 +2213,8 @@ class MjEnv():
     """
 
     if self.render_window:
+      # if self.params.depth_camera and not self.params.use_rgb_in_observation:
+      #   self.mj.get_RGBD_numpy()
       self.mj.render()
 
     if self.log_level >= 3:
@@ -2372,6 +2377,7 @@ if __name__ == "__main__":
     gen_obj_set = "set8_demo"
     name = mj._auto_generate_xml_file(gen_obj_set, use_hashes=True, force=True)
     runstr = f"bin/mysimulate -p /home/luke/mujoco-devel/mjcf -o {gen_obj_set} -g {name}"
+
     print(runstr)
 
   # ----- evaluate speed of rgbd function ----- #

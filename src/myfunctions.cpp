@@ -4024,7 +4024,8 @@ int convert_segmentation_integer(int seg_int)
     }
   }
 
-  std::cout << "Warning seg_int = " << seg_int << " not found\n";
+  if (debug_)
+    std::cout << "Warning seg_int = " << seg_int << " not found\n";
 
   return error;
 }

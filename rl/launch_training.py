@@ -3465,22 +3465,106 @@ if __name__ == "__main__":
     vary_3 = None
     repeats = 2
     tm.param_1_name = "best_id"
+
+  elif args.program == "high_noise_image_collection":
+
+    # load the best training, but we continue from the end
+    job = 67
+    timestamp = "19-01-24_16-54"
+    tm.load(job_num=job, timestamp=timestamp, best_id=True,
+            load_into_new_training=False)
+
+    # increase object noise
+    tm.trainer.env.params.object_position_noise_mm = 200
+    tm.trainer.env.params.max_episode_steps = 100
+    tm.trainer.env.mj.set.oob.done = False
+
+    # setup the camera
+    tm.trainer.env._init_rgbd()
+    tm.trainer.env._set_rgbd_size(width=848, height=480)
+
+    import functools
+
+    # enable env image collection with relatively high chance
+    tm.trainer.env.randomise_colours_every_step = True
+    tm.trainer.env.collect_images = True
+    tm.trainer.env.load_next.depth_camera = True
+    tm.trainer.env.image_collection_chance = 1.0 / 100.0
+    tm.trainer.images_collected = 0
+    tm.trainer.image_batches_collected = 0
+    tm.trainer.image_list = []
+    tm.trainer.image_collection_num_per_batch = 1000
+    tm.trainer.image_collection_max_batches = 10
+    tm.trainer.episode_fcn = functools.partial(tm.trainer.image_collection_fcn)
+
+    tm.trainer.env.load()
+
+    # essentially disable learning so behaviour is constant
+    tm.trainer.agent.params.learning_rate_pi = 1e-10
+    tm.trainer.agent.params.learning_rate_vf = 1e-10
+
+    # now continue training
+    extra_episodes = 80_000
+    tm.continue_training(extra_episodes=extra_episodes)
+    print_time_taken()
+
+  elif args.program == "good_grasps_image_collection":
+
+    # Program: pre_paper_baseline
+    timestamp = "19-01-24_16-54"
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [
+      46, 56, 66, 76,
+    ]
+    vary_2 = None
+    vary_3 = None
+    repeats = 1
+    tm.param_1_name = "job num"
     tm.param_2_name = None
     tm.param_3_name = None
     param_1, param_2, param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
                                                          param_3=vary_3, repeats=repeats)
     if args.print: print_training_info()
 
-    tm.load(job_num=job_num, timestamp=timestamp, best_id=param_1,
+    tm.load(job_num=param_1, timestamp=timestamp, best_id=True,
             load_into_new_training=True)
     tm.param_1 = param_1
     tm.param_2 = param_2
     tm.param_3 = param_3
+    
+    # shorten episodes as grasping is already learned
+    tm.trainer.env.params.max_episode_steps = 70 #100
 
-    # tm.trainer.agent.params.steps_per_epoch = 100
+    # increase object noise
+    tm.trainer.env.params.object_position_noise_mm = 200 #20
+    tm.trainer.env.mj.set.oob.done = False
+
+    import functools
+
+    # enable env image collection with relatively high chance
+    tm.trainer.env.randomise_colours_every_step = True
+    tm.trainer.env.collect_images = True
+    tm.trainer.env.image_collection_chance = 1.0 / 100.0
+    tm.trainer.images_collected = 0
+    tm.trainer.image_batches_collected = 0
+    tm.trainer.image_list = []
+    tm.trainer.image_collection_num_per_batch = 1000
+    tm.trainer.image_collection_max_batches = 3
+    tm.trainer.episode_fcn = functools.partial(tm.trainer.image_collection_fcn)
+
+    # load in the depth camera
+    tm.trainer.env.params.image_height = 480
+    tm.trainer.env.params.image_width = 848
+    tm.trainer.env.load(object_set_name="set9_fullset", depth_camera=True)
+
+    # essentially disable learning so behaviour is constant
+    tm.trainer.agent.params.learning_rate_pi = 1e-10
+    tm.trainer.agent.params.learning_rate_vf = 1e-10
 
     # now continue training
-    tm.continue_training(new_endpoint=150_000)
+    extra_episodes = 10_000
+    tm.continue_training(extra_episodes=extra_episodes)
     print_time_taken()
 
   elif args.program == "paper_baseline_1_rigid_fingers":
