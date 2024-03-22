@@ -4089,7 +4089,7 @@ if __name__ == "__main__":
     vary_1 = [5e-6, 1e-5, 3e-5, 6e-5, 1e-4]
     vary_2 = [300, 1000, 3000]
     vary_3 = [True, False]
-    repeats = 3
+    repeats = 2
     tm.param_1_name = "learning rate"
     tm.param_2_name = "steps per epoch"
     tm.param_3_name = "use extra actions"
@@ -4197,7 +4197,7 @@ if __name__ == "__main__":
     vary_1 = [5e-6, 1e-5, 3e-5, 6e-5, 1e-4]
     vary_2 = [300, 1000, 3000]
     vary_3 = [True, False]
-    repeats = 1
+    repeats = 2
     tm.param_1_name = "learning rate"
     tm.param_2_name = "steps per epoch"
     tm.param_3_name = "use extra actions"
