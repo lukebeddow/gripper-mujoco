@@ -162,10 +162,14 @@ void MjClass::configure_settings()
       sampleFcnPtr = &MjType::Sensor::sign_sample;
       break;
     }
-    // case MjType::Sample::scaled_change: {
-    //   sampleFcnPtr = &MjType::Sensor::scaled_change_sample;
-    //   break;
-    // }
+    case MjType::Sample::scaled_change: {
+      sampleFcnPtr = &MjType::Sensor::scaled_change_sample;
+      break;
+    }
+    case MjType::Sample::scaled_change_sq: {
+      sampleFcnPtr = &MjType::Sensor::scaled_change_sq_sample;
+      break;
+    }
     default: {
       throw std::runtime_error("s_.sensor_sample_mode not set to legal value");
     }
@@ -195,6 +199,10 @@ void MjClass::configure_settings()
     }
     case MjType::Sample::scaled_change: {
       stateFcnPtr = &MjType::Sensor::scaled_change_sample;
+      break;
+    }
+    case MjType::Sample::scaled_change_sq: {
+      sampleFcnPtr = &MjType::Sensor::scaled_change_sq_sample;
       break;
     }
     default: {
@@ -925,6 +933,30 @@ void MjClass::sense_gripper_state()
 
   // save the time the reading was made
   step_timestamps.add(data->time);
+
+  // add in cartesian contact point information for MAT
+  std::vector<double> finger_forces_SI(3);
+  finger_forces_SI[0] = sim_sensors_SI_.finger1_gauge.read_element();
+  finger_forces_SI[1] = sim_sensors_SI_.finger2_gauge.read_element();
+  finger_forces_SI[2] = sim_sensors_SI_.finger3_gauge.read_element();
+  double palm_force_SI = sim_sensors_SI_.palm_sensor.read_element();
+  std::vector<luke::Vec3> xyz = luke::get_fingerend_and_palm_xyz(finger_forces_SI);
+
+  // add contact location only if there is a contact force above the threshold
+  constexpr double ft = 0.2; // force threshold 0.2N
+  sim_sensors_.finger1_x_pos.add(((abs(finger_forces_SI[0])) > ft) ? xyz[0].x : 0.0);
+  sim_sensors_.finger1_y_pos.add(((abs(finger_forces_SI[0])) > ft) ? xyz[0].y : 0.0);
+  sim_sensors_.finger1_z_pos.add(((abs(finger_forces_SI[0])) > ft) ? xyz[0].z : 0.0);
+  sim_sensors_.finger2_x_pos.add(((abs(finger_forces_SI[1])) > ft) ? xyz[1].x : 0.0);
+  sim_sensors_.finger2_y_pos.add(((abs(finger_forces_SI[1])) > ft) ? xyz[1].y : 0.0);
+  sim_sensors_.finger2_z_pos.add(((abs(finger_forces_SI[1])) > ft) ? xyz[1].z : 0.0);
+  sim_sensors_.finger3_x_pos.add(((abs(finger_forces_SI[2])) > ft) ? xyz[2].x : 0.0);
+  sim_sensors_.finger3_y_pos.add(((abs(finger_forces_SI[2])) > ft) ? xyz[2].y : 0.0);
+  sim_sensors_.finger3_z_pos.add(((abs(finger_forces_SI[2])) > ft) ? xyz[2].z : 0.0);
+  sim_sensors_.palm_x_pos.add(((palm_force_SI) > ft) ? xyz[3].x : 0.0);
+  sim_sensors_.palm_y_pos.add(((palm_force_SI) > ft) ? xyz[3].y : 0.0);
+  sim_sensors_.palm_z_pos.add(((palm_force_SI) > ft) ? xyz[3].z : 0.0);
+
 }
 
 void MjClass::update_env()
@@ -1079,6 +1111,24 @@ void MjClass::update_env()
   max_gauge_force = std::max(max_gauge_force, last_g3);
   luke::gfloat avg_gauge_force = (1.0/3.0) * (last_g1 + last_g2 + last_g3);
 
+  // determine if a MAT reopen was recently triggered
+  if (recent_MAT_reopen) {
+
+    // how far have the joints moved
+    double xmove = abs(states.gripper_x - luke::Gripper::xy_home);
+    double ymove = abs(states.gripper_y - luke::Gripper::xy_home);
+    double zmove = abs(states.gripper_z - luke::Gripper::z_home);
+    double maxmove = std::max(xmove, ymove);
+    maxmove = std::max(maxmove, zmove);
+
+    if (maxmove > MAT_reopen_XYZ_distance) {
+      recent_MAT_reopen = false;
+      if (s_.debug)
+        std::cout << "MAT reopen no longer recent, furthest joint has moved > "
+          << MAT_reopen_XYZ_distance * 1000 << " mm\n";
+    }
+  }
+
   /* ----- detect state of binary events (EDIT here to add a binary event) ----- */
 
   // another step has been made
@@ -1154,13 +1204,29 @@ void MjClass::update_env()
       env_.obj[i].stable_height = true;
     }
 
-    // if a termination signal has been sent and criteria is met
-    if (env_.cnt.stable_height.value and termination_signal_sent) {
-      env_.cnt.stable_termination.value = true;
-      env_.obj[i].stable_termination = true;
-    }
-    else if (termination_signal_sent) {
-      env_.cnt.failed_termination.value = true;
+    // if a termination signal has been sen
+    if (termination_signal_sent) {
+      // do we require stable or lifted termination
+      if (s_.lifted_termination.done) {
+        // check that the object is lifted to the desired height
+        if (env_.obj[i].lifted_to_height) {
+          env_.cnt.lifted_termination.value = true;
+          env_.obj[i].lifted_termination = true;
+        }
+        else {
+          env_.cnt.failed_termination.value = true;
+        }
+      }
+      else {
+        // check that the object is stably grasped
+        if (env_.cnt.stable_height.value) {
+          env_.cnt.stable_termination.value = true;
+          env_.obj[i].stable_termination = true;
+        }
+        else {
+          env_.cnt.failed_termination.value = true;
+        }
+      }
     }
 
     // are we within a certain threshold distance from an object
@@ -1363,6 +1429,49 @@ double MjClass::random_base_Z_movement(double size)
   return z_move;
 }
 
+void MjClass::MAT_reopen(double new_angle)
+{
+  /* perform the reopen maneuovre for MAT. This means:
+      - reset gripper joints all back to start
+      - move XY of gripper to tactile centre, average of contacts
+      - move yaw of gripper to the new angle
+  */
+
+  constexpr bool debug = false;
+
+  // find the tactile centre
+  double new_x = 0.25 * (
+    sim_sensors_.finger1_x_pos.read_element()
+    + sim_sensors_.finger2_x_pos.read_element()
+    + sim_sensors_.finger3_x_pos.read_element()
+    + sim_sensors_.palm_x_pos.read_element()
+  );
+  double new_y = 0.25 * (
+    sim_sensors_.finger1_y_pos.read_element()
+    + sim_sensors_.finger2_y_pos.read_element()
+    + sim_sensors_.finger3_y_pos.read_element()
+    + sim_sensors_.palm_y_pos.read_element()
+  );
+
+  // open up the gripper fingers and reset the joints (moves base too)
+  luke::set_gripper_and_base_to_reset_position(model, data);
+
+  // now set the gripper base to the tactile centre
+  if (debug)
+    std::cout << "Tactile centre is at: " << new_x << ", " << new_y << "\n";
+  luke::set_base_to_XY_position(data, new_x, new_y);
+
+  // now apply the rotation, current is ABSOLUTE rather than relative
+  luke::set_base_to_yaw(data, new_angle);
+
+  // if we reopen too much, we apply a penalty
+  if (recent_MAT_reopen) {
+    apply_MAT_reopen_penalty = true;
+  }
+
+  recent_MAT_reopen = true;
+}
+
 /* ----- learning functions ----- */
 
 void MjClass::action_step()
@@ -1474,7 +1583,15 @@ std::vector<float> MjClass::set_action(int action, float continous_fraction)
       }
       if (triggered) {
         termination_signal_sent = true;
-        // luke::lift_base_to_height(base_max_[2]); // this is max z height
+        if (s_.lift_on_termination) {
+          // set base target to max height
+          luke::lift_base_to_height(base_max_[2]);
+          // step the simulation so we lift to the max height
+          // hand calibrated, 1x sim_steps_per_actions is enough to get up 30mm
+          for (int i = 0; i < s_.sim_steps_per_action * 2; i++) {
+            step();
+          }
+        }
       }
       wl = true;
       break;
@@ -1762,6 +1879,56 @@ std::vector<luke::gfloat> MjClass::get_observation(MjType::SensorData sensors)
     }
   }
 
+  // get cartesian contact positions for MAT
+  if (s_.cartesian_contacts_XYZ.in_use) {
+
+    // sample data - ONLY USE CHANGE SAMPLE, ignores the simsettings for state sampling
+    std::vector<luke::gfloat> (MjType::Sensor::*cartesianFcnPtr)
+      (luke::SlidingWindow<luke::gfloat>);
+    cartesianFcnPtr = &MjType::Sensor::change_sample;
+    std::vector<luke::gfloat> f1x = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.finger1_x_pos);
+    std::vector<luke::gfloat> f1y = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.finger1_y_pos);
+    std::vector<luke::gfloat> f1z = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.finger1_z_pos);
+    std::vector<luke::gfloat> f2x = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.finger2_x_pos);
+    std::vector<luke::gfloat> f2y = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.finger2_y_pos);
+    std::vector<luke::gfloat> f2z = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.finger2_z_pos);
+    std::vector<luke::gfloat> f3x = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.finger3_x_pos);
+    std::vector<luke::gfloat> f3y = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.finger3_y_pos);
+    std::vector<luke::gfloat> f3z = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.finger3_z_pos);
+    std::vector<luke::gfloat> px = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.palm_x_pos);
+    std::vector<luke::gfloat> py = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.palm_y_pos);
+    std::vector<luke::gfloat> pz = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.palm_z_pos);
+
+    // insert data into observation output
+    observation.insert(observation.end(), f1x.begin(), f1x.end());
+    observation.insert(observation.end(), f1y.begin(), f1y.end());
+    observation.insert(observation.end(), f1z.begin(), f1z.end());
+    observation.insert(observation.end(), f2x.begin(), f2x.end());
+    observation.insert(observation.end(), f2y.begin(), f2y.end());
+    observation.insert(observation.end(), f2z.begin(), f2z.end());
+    observation.insert(observation.end(), f3x.begin(), f3x.end());
+    observation.insert(observation.end(), f3y.begin(), f3y.end());
+    observation.insert(observation.end(), f3z.begin(), f3z.end());
+    observation.insert(observation.end(), px.begin(), px.end());
+    observation.insert(observation.end(), py.begin(), py.end());
+    observation.insert(observation.end(), pz.begin(), pz.end());
+
+    if (debug_obs) {
+      luke::print_vec(f1x, "finger1_x_pos");
+      luke::print_vec(f1y, "finger1_y_pos");
+      luke::print_vec(f1z, "finger1_z_pos");
+      luke::print_vec(f2x, "finger2_x_pos");
+      luke::print_vec(f2y, "finger2_y_pos");
+      luke::print_vec(f2z, "finger2_z_pos");
+      luke::print_vec(f3x, "finger3_x_pos");
+      luke::print_vec(f3y, "finger3_y_pos");
+      luke::print_vec(f3z, "finger3_z_pos");
+      luke::print_vec(px, "palm_x_pos");
+      luke::print_vec(py, "palm_y_pos");
+      luke::print_vec(pz, "palm_z_pos");
+    }
+  }
+
   if (debug_obs) {
     std::cout << "End of observation (n_obs = " << observation.size() << ")\n";
   }
@@ -2012,6 +2179,81 @@ std::string MjClass::debug_observation(std::vector<luke::gfloat> observation, bo
 
     std::string n = std::to_string(byaw.size());
     info += "Base state yaw = " + n + " | ";
+  }
+
+  // get cartesian contact positions for MAT
+  if (s_.cartesian_contacts_XYZ.in_use) {
+
+    // sample data - ONLY USE CHANGE SAMPLE, ignores the simsettings for state sampling
+    std::vector<luke::gfloat> (MjType::Sensor::*cartesianFcnPtr)
+      (luke::SlidingWindow<luke::gfloat>);
+    cartesianFcnPtr = &MjType::Sensor::change_sample;
+    std::vector<luke::gfloat> f1x = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.finger1_x_pos);
+    std::vector<luke::gfloat> f1y = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.finger1_y_pos);
+    std::vector<luke::gfloat> f1z = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.finger1_z_pos);
+    std::vector<luke::gfloat> f2x = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.finger2_x_pos);
+    std::vector<luke::gfloat> f2y = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.finger2_y_pos);
+    std::vector<luke::gfloat> f2z = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.finger2_z_pos);
+    std::vector<luke::gfloat> f3x = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.finger3_x_pos);
+    std::vector<luke::gfloat> f3y = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.finger3_y_pos);
+    std::vector<luke::gfloat> f3z = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.finger3_z_pos);
+    std::vector<luke::gfloat> px = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.palm_x_pos);
+    std::vector<luke::gfloat> py = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.palm_y_pos);
+    std::vector<luke::gfloat> pz = (s_.cartesian_contacts_XYZ.*cartesianFcnPtr)(sensors.palm_z_pos);
+
+    // insert data into observation output
+    observation.insert(observation.end(), f1x.begin(), f1x.end());
+    observation.insert(observation.end(), f1y.begin(), f1y.end());
+    observation.insert(observation.end(), f1z.begin(), f1z.end());
+    observation.insert(observation.end(), f2x.begin(), f2x.end());
+    observation.insert(observation.end(), f2y.begin(), f2y.end());
+    observation.insert(observation.end(), f2z.begin(), f2z.end());
+    observation.insert(observation.end(), f3x.begin(), f3x.end());
+    observation.insert(observation.end(), f3y.begin(), f3y.end());
+    observation.insert(observation.end(), f3z.begin(), f3z.end());
+    observation.insert(observation.end(), px.begin(), px.end());
+    observation.insert(observation.end(), py.begin(), py.end());
+    observation.insert(observation.end(), pz.begin(), pz.end());
+
+    if (debug_obs) {
+      luke::print_vec(f1x, "finger1_x_pos");
+      luke::print_vec(f1y, "finger1_y_pos");
+      luke::print_vec(f1z, "finger1_z_pos");
+      luke::print_vec(f2x, "finger2_x_pos");
+      luke::print_vec(f2y, "finger2_y_pos");
+      luke::print_vec(f2z, "finger2_z_pos");
+      luke::print_vec(f3x, "finger3_x_pos");
+      luke::print_vec(f3y, "finger3_y_pos");
+      luke::print_vec(f3z, "finger3_z_pos");
+      luke::print_vec(px, "palm_x_pos");
+      luke::print_vec(py, "palm_y_pos");
+      luke::print_vec(pz, "palm_z_pos");
+    }
+
+    std::string n = std::to_string(f1x.size());
+    info += "finger1 x pos = " + n + " | ";
+    n = std::to_string(f1y.size());
+    info += "finger1 y pos = " + n + " | ";
+    n = std::to_string(f1z.size());
+    info += "finger1 z pos = " + n + " | ";
+    n = std::to_string(f2x.size());
+    info += "finger2 x pos = " + n + " | ";
+    n = std::to_string(f2y.size());
+    info += "finger2 y pos = " + n + " | ";
+    n = std::to_string(f2z.size());
+    info += "finger2 z pos = " + n + " | ";
+    n = std::to_string(f3x.size());
+    info += "finger3 x pos = " + n + " | ";
+    n = std::to_string(f3y.size());
+    info += "finger3 y pos = " + n + " | ";
+    n = std::to_string(f3z.size());
+    info += "finger3 z pos = " + n + " | ";
+    n = std::to_string(px.size());
+    info += "palm x pos = " + n + " | ";
+    n = std::to_string(py.size());
+    info += "palm y pos = " + n + " | ";
+    n = std::to_string(pz.size());
+    info += "palm z pos = " + n + " | ";
   }
 
   if (debug_obs) {
@@ -2764,6 +3006,14 @@ float MjClass::reward()
   else {
     transition_reward = calc_rewards(env_.cnt, s_);
   }
+
+  // if we are using MAT and a reopen was triggered too recently
+  if (apply_MAT_reopen_penalty) {
+    if (s_.debug) 
+      std::cout << "MAT reopen triggered too recently, reward -= 0.05\n";
+    transition_reward -= 0.05;
+    apply_MAT_reopen_penalty = false;
+  }
    
   // this value is not used in python
   env_.cumulative_reward += transition_reward;
@@ -3394,6 +3644,10 @@ std::string MjClass::print_actions()
         LUKE_MJSETTINGS_ACTION
 
       #undef AA
+
+      case MjType::Action::termination_signal:
+        str += "termination_action\n";
+        break;
 
       default:
         throw std::runtime_error("MjClass::print_actions() received out of bounds int");
@@ -4854,13 +5108,15 @@ void MjType::Settings::update_sensor_settings(double time_since_last_sample)
   base_state_sensor_XY.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
   base_state_sensor_Z.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
   base_state_sensor_yaw.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
+  cartesian_contacts_XYZ.update_n_readings(state_sensor_n_readings_per_step, state_n_prev_steps);
   
   // update n_readings for all except state sensors
   #define SS(NAME, IN_USE, NORM, READRATE)                       \
             if (#NAME != "motor_state_sensor" and                \
                 #NAME != "base_state_sensor_XY" and              \
                 #NAME != "base_state_sensor_Z" and               \
-                #NAME != "base_state_sensor_yaw")                \
+                #NAME != "base_state_sensor_yaw" and             \
+                #NAME != "cartesian_contacts_XYZ")               \
               NAME.update_n_readings(time_since_last_sample);
   
     // run the macro and update all the sensors
@@ -4936,12 +5192,18 @@ void MjType::Settings::apply_noise_params(std::uniform_real_distribution<float>&
     base_state_sensor_yaw.noise_mu = state_noise_mu;
     base_state_sensor_yaw.noise_std = state_noise_std;
   }
+  if (not cartesian_contacts_XYZ.noise_overriden) {
+    cartesian_contacts_XYZ.noise_mag = state_noise_mag;
+    cartesian_contacts_XYZ.noise_mu = state_noise_mu;
+    cartesian_contacts_XYZ.noise_std = state_noise_std;
+  }
 
   // randomise seed for state
   motor_state_sensor.randomise_mu(uniform_dist);
   base_state_sensor_XY.randomise_mu(uniform_dist);
   base_state_sensor_Z.randomise_mu(uniform_dist);
   base_state_sensor_yaw.randomise_mu(uniform_dist);
+  cartesian_contacts_XYZ.randomise_mu(uniform_dist);
 }
 
 void MjType::Settings::scale_rewards(float scale)

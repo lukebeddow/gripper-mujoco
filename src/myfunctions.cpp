@@ -2526,6 +2526,25 @@ void update_target()
   target_.end.update();
 }
 
+void set_gripper_and_base_to_reset_position(mjModel* model, mjData* data)
+{
+  /* reset the gripper and base to their start position, and update the target
+  as well, rather than a regular reset. This is for MAT reopen behaviour */
+
+  // unlock any joint constraints
+  set_all_constraints(model, data, false);
+
+  // set the gripper and base joints to the reset position
+  calibrate_reset(model, data);
+
+  // update the targets
+  target_.next.set_xyz_m(target_.end.xy_home, target_.end.xy_home, target_.end.z_home);
+  target_.end.set_xyz_m(target_.end.xy_home, target_.end.xy_home, target_.end.z_home);
+  target_.base.x = 0.0;
+  target_.base.y = 0.0;
+  target_.base.z = 0.0;
+}
+
 bool set_base_to_XY_position(mjData* data, float x_pos, float y_pos)
 {
   /* set the gripper base to a given XY position immediately */
@@ -3498,6 +3517,74 @@ float get_fingertip_z_height()
   float height_above_min = straight_finger_distance + tip_lift;
 
   return height_above_min + target_.base_min.z;
+}
+
+std::vector<luke::Vec3> get_fingerend_and_palm_xyz(std::vector<double> finger_forces_SI)
+{
+  /* get the xyz position of the fingerend and palm for MAT cartesian contact points.
+  Applies an offset using the given finger forces to account for bending. Does not use
+  mujoco, instead an analytical approach to mirror that used with the real gripper. */
+
+  std::vector<luke::Vec3> pos(4);
+
+  // get gripper base positions
+  double base_x = target_.base.x;
+  double base_y = target_.base.y;
+  double base_z = target_.base.z;
+  double base_z_rot = target_.base.yaw;
+
+  // get gripper joint positions
+  double fing_x = target_.end.get_x_m();
+  double fing_th = target_.end.get_th_rad();
+  double palm_z = target_.end.get_z_m();
+
+  // hardcoded geometric information about the gripper
+  constexpr double fingerend_to_palm_Z = 165e-3;
+  constexpr double PI_23 = M_PI * (2.0 / 3.0);
+  constexpr double angles[3] = { 0.0, PI_23, 2 * PI_23 };
+
+  // deterine how high the three fingerends are above the ground
+  // double straight_finger_distance = -target_.base_min.z - target_.base.z;
+  // double tip_lift = j_.dim.finger_length * (1 - std::cos(fing_th));
+  // double height_above_min = straight_finger_distance + tip_lift;
+  double untilted_fingerend_height = j_.dim.gripper_distance_above_ground - target_.base.z;
+  double tip_lift = j_.dim.finger_length * (1 - std::cos(fing_th));
+  double tilted_fingerend_height = untilted_fingerend_height + tip_lift;
+
+  // loop over the three fingers
+  for (int i = 0; i < 3; i++) {
+
+    // apply tilt to x position
+    double tilt_fing_x = fing_x - j_.dim.finger_length * std::sin(fing_th);
+
+    // apply bending to x and z position
+    double deflection = finger_forces_SI[i] * std::pow(j_.dim.finger_length, 3) / (3 * j_.dim.EI);
+    double deflection_x = deflection * std::cos(fing_th);
+    double deflection_z = deflection * std::sin(fing_th);
+    double final_fing_x = tilt_fing_x + deflection_x;
+
+    // get (x, y) position of the fingerend without tilt (in mujoco co-ord)
+    double x = -final_fing_x * sin(angles[i] + base_z_rot) + base_x;
+    double y = -final_fing_x * cos(angles[i] + base_z_rot) + base_y;
+
+    // save the finger hook centre position
+    luke::Vec3 tippos;
+    tippos.x = x;
+    tippos.y = y;
+    tippos.z = tilted_fingerend_height - deflection_z;
+
+    // save in output vector
+    pos[i] = tippos;
+  }
+
+  // now input the palm position
+  luke::Vec3 palmpos;
+  palmpos.x = base_x;
+  palmpos.y = base_y;
+  palmpos.z = untilted_fingerend_height + fingerend_to_palm_Z - palm_z;
+  pos[3] = palmpos;
+
+  return pos;
 }
 
 float get_fingerend_z_height(mjModel* model, mjData* data)

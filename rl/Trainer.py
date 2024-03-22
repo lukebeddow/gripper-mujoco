@@ -623,7 +623,7 @@ class Trainer:
       # select and perform an action
       action = self.agent.select_action(obs, decay_num=i_episode, test=test)
       (new_obs, reward, terminated, truncated, info) = self.env.step(action)
-   
+      
       # render the new environment
       if self.render: self.env.render()
 
@@ -761,59 +761,8 @@ class Trainer:
   def curriculum_fcn(self, i):
     """
     Empty curriculum function, override if using a curriculum. Takes as input the
-    current episode number, i. See below an example template which uses another
-    function 'self.curriculum_change(stage)' to apply the stage-dependent changes:
-
-    if self.curriculum_dict["finished"]: return
-
-    # determine what stage we are at
-    stage = self.curriculum_dict["stage"]
-
-    # determine the curriculum metric
-    if self.curriculum_dict["metric_name"] == "episode_number":
-
-      for t in self.curriculum_dict["metric_thresholds"][stage:]:
-        if i >= t:
-          stage += 1
-        else: break
-
-    # example of using success rate as a metric
-    elif self.curriculum_dict["metric_name"] == "success_rate":
-
-      # get the most recent success rate
-      success_rate = 0.0 # update this...
-
-      # determine if we have passed the required threshold
-      for t in self.curriculum_dict["metric_thresholds"][stage:]:
-        if success_rate >= t:
-          stage += 1
-
-    # if the metric is not recognised
-    else: raise RuntimeError(f"TrainingManager.curriculum_fcn() metric of {self.curriculum_dict['metric_name']} not recognised")
-
-    # check if we are still at the same stage we were last episode
-    if stage == self.curriculum_dict["stage"]:
-      # check if we have finished the curriculum
-      if stage == len(self.curriculum_dict["metric_thresholds"]): 
-        self.curriculum_dict["finished"] = True
-      return
-
-    # update to the new stage
-    if self.log_level > 0:
-      print(f"Episode = {i}, curriculum is changing from stage {self.curriculum_dict['stage']} to stage {stage}")
-    self.curriculum_dict["stage"] = stage
-
-    # now apply the curriculum change (this function must be user overwritten for a training)
-    self.curriculum_change(stage)
-
-    # save a text file to reflect the changes
-    labelstr = f"Hyperparameters after curriculum change which occured at episode {i}\n"
-    name = f"hyperparameters_curriculum_stage_{stage}"
-    self.save_hyperparameters(filename=name, strheader=labelstr, print_terminal=False)
-    
-    return
+    current episode number, i.
     """
-
     pass
 
 class MujocoTrainer(Trainer):
@@ -1881,8 +1830,24 @@ class MujocoTrainer(Trainer):
     Print a table breaking down the features of an observation
     """
 
-    if not isinstance(observation_list[0], list):
-      observation_list = [observation_list]
+    # check input - ensure we have a nested list of lists
+    if torch.is_tensor(observation_list):
+      observation_list = [((observation_list.cpu()).numpy()).tolist()]
+    elif isinstance(observation_list, np.ndarray):
+      observation_list = [observation_list.tolist()]
+    elif not isinstance(observation_list[0], list):
+      # if we have a list of torch tensors or numpy arrays
+      if torch.is_tensor(observation_list[0]) or isinstance(observation_list[0], np.ndarray):
+        for i, obs in enumerate(observation_list):
+          if torch.is_tensor(obs):
+            obs = (obs.cpu()).numpy()
+          list_obs = obs.tolist()
+          observation_list[i] = list_obs
+      else:
+        # our list is not nested, so nest it
+        observation_list = [observation_list]
+    else:
+      raise RuntimeError("MujocoTrainer.print_observation_table() got unexpected input as 'observation_list'")
 
     # get observation info
     info = self.env.mj.debug_observation(observation_list[0], False)

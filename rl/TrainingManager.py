@@ -139,6 +139,8 @@ class TrainingManager():
 
       # experimental settings
       "use_expert_in_observation" : False,
+      "use_MAT" : False,
+      "MAT_use_reopen" : False,
 
       # file and testing parameters
       "test_obj_per_file" : 20,
@@ -288,7 +290,7 @@ class TrainingManager():
       "scale_rewards" : 1.0,
       "scale_penalties" : 1.0,
       "penalty_termination" : True,
-      "stable_trigger" : 4,
+      "stable_trigger" : 1,
       "dangerous_trigger" : 1,
       "bend" : {
         "min" : 0.0,
@@ -331,6 +333,7 @@ class TrainingManager():
       "metric_thresholds" : [],
       "param_values" : [],
       "change_fcn" : None,
+      "whole_fcn_override" : None,
     },
     
     # this class other settings
@@ -881,9 +884,13 @@ class TrainingManager():
     trainer.curriculum_dict["metric_name"] = self.settings["curriculum"]["metric_name"]
     trainer.curriculum_dict["metric_thresholds"] = self.settings["curriculum"]["metric_thresholds"]
     trainer.curriculum_dict["param_values"] = self.settings["curriculum"]["param_values"]
-    if trainer.params.use_curriculum and trainer.curriculum_change is not None:
-      trainer.curriculum_change = functools.partial(self.settings["curriculum"]["change_fcn"], trainer)
-      trainer.curriculum_change(trainer.curriculum_dict["stage"]) # apply initial stage settings
+    if trainer.params.use_curriculum:
+      if self.settings["curriculum"]["whole_fcn_override"] is not None and trainer.curriculum_fcn is not None:
+        trainer.curriculum_fcn = functools.partial(self.settings["curriculum"]["whole_fcn_override"], trainer)
+        trainer.curriculum_fcn(0) # apply initial episode settings
+      if self.settings["curriculum"]["change_fcn"] is not None and trainer.curriculum_change is not None:
+        trainer.curriculum_change = functools.partial(self.settings["curriculum"]["change_fcn"], trainer)
+        trainer.curriculum_change(trainer.curriculum_dict["stage"]) # apply initial stage settings
     if self.settings["env_image_collection"]:
       if env is not None:
         env.collect_images = True
@@ -1190,7 +1197,46 @@ class TrainingManager():
       env.mj.set.oob.set                    (-1.0,   True,   1)
       if self.settings["reward"]["penalty_termination"]:
         env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"])
-    
+
+    elif self.settings["reward"]["style"] == "MAT":
+      # end criteria                        reward   done   trigger
+      env.mj.set.stable_termination.set     (1.0,    True,   1)
+      env.mj.set.failed_termination.set     (0.0,    True,   1)
+      if self.settings["reward"]["penalty_termination"]:
+        env.mj.set.oob.set                    (0.0,   True,   1)
+        self.set_sensor_reward_thresholds(env)
+        env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"],
+                                           value=0.0)
+        
+    elif self.settings["reward"]["style"] == "MAT_liftonly":
+      # end criteria                        reward   done   trigger
+      env.mj.set.lifted_termination.set     (1.0,    True,   1)
+      env.mj.set.failed_termination.set     (0.0,    True,   1)
+      if self.settings["reward"]["penalty_termination"]:
+        env.mj.set.oob.set                    (0.0,   True,   1)
+        self.set_sensor_reward_thresholds(env)
+        env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"],
+                                           value=0.0)
+        
+    elif self.settings["reward"]["style"] == "MAT_shaped":
+      # prepare reward thresholds
+      self.set_sensor_reward_thresholds(env)
+      # reward each step               reward   done   trigger
+      env.mj.set.step_num.set          (-0.01,  False,   1)
+      # penalties and bonuses
+      env = self.set_sensor_bonuses(env, 0.002 * self.settings["reward"]["scale_rewards"])
+      env = self.set_sensor_penalties(env, -0.002 * self.settings["reward"]["scale_penalties"])
+      # scale based on steps allowed per episode
+      env.mj.set.scale_rewards(100 / env.params.max_episode_steps)
+      # end criteria                        reward   done   trigger
+      env.mj.set.stable_termination.set     (1.0,    True,   1)
+      env.mj.set.failed_termination.set     (-1.0,    True,   1)
+      if self.settings["reward"]["penalty_termination"]:
+        env.mj.set.oob.set                    (-1.0,   True,   1)
+        self.set_sensor_reward_thresholds(env)
+        env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"],
+                                           value=0.0)  
+        
     else:
       raise RuntimeError(f"style={self.settings['reward']['style']} is not a valid option in TrainingManager.create_reward_function()")
 

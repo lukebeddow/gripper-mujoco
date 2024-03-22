@@ -87,6 +87,7 @@ PYBIND11_MODULE(bind, m) {
     .def("set_new_base_XY", &MjClass::set_new_base_XY)
     .def("set_new_base_yaw", &MjClass::set_new_base_yaw)
     .def("random_base_yaw", &MjClass::random_base_yaw)
+    .def("MAT_reopen", &MjClass::MAT_reopen)
 
     // learning functions
     .def("action_step", &MjClass::action_step)
