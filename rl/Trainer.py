@@ -581,7 +581,7 @@ class Trainer:
         self.curriculum_change = functools.partial(load_train["curriculum_dict"]["curriculum_change_fcn"], self)
         if self.params.use_curriculum:
           self.curriculum_change(self.curriculum_dict["stage"]) # apply initial stage settings
-      elif self.params.use_curriculum:
+      elif False and self.params.use_curriculum:
         # TEMPORARY FIX for program: continue_good_curriculum, delete later
         print("TEMPORARY CURRICULUM FIX: set curriculum function as curriculum_change_object_noise")
         from launch_training import curriculum_change_object_noise
