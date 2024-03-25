@@ -696,7 +696,7 @@ if __name__ == "__main__":
     args.log_level = 0
 
   # disable delays for in cases where we are not training
-  if args.demo or args.test or args.print_results:
+  if args.demo or args.print_results:
     args.no_delay = True
 
   # echo these inputs
@@ -708,14 +708,15 @@ if __name__ == "__main__":
     print(" -> Device:", args.device)
 
   # seperate process for safety when running a training program
-  if (not args.no_delay and args.job is not None and (args.program is not None
-      or args.resume is not None)):
-    sleep_for = args.job - args.smallest_job_num
-    if sleep_for < 0: sleep_for = args.job # in case of jobstr "4 5 6 1"
-    if args.log_level > 0:
-      print(f"Sleeping for {sleep_for} seconds to seperate process for safety")
-    sleep(sleep_for)
-    sleep(0.25 * random()) # extra safety
+  if (not args.no_delay):
+    if (args.job is not None and
+        (args.program is not None or args.resume is not None or args.test)):
+      sleep_for = args.job - args.smallest_job_num
+      if sleep_for < 0: sleep_for = args.job # in case of jobstr "4 5 6 1"
+      if args.log_level > 0:
+        print(f"Sleeping for {sleep_for} seconds to seperate process for safety")
+      sleep(sleep_for)
+      sleep(0.25 * random()) # extra safety
 
   # ----- special cases ----- #
 

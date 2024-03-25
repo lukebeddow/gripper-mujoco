@@ -1379,7 +1379,7 @@ class MujocoTrainer(Trainer):
       if print_overall: print(overall_avg_table)
 
     # save a flag for final success rate
-    self.last_test_success_rate = total_counter.object_stable.active_sum / N
+    self.last_test_success_rate = total_counter.successful_grasp.active_sum / N
 
     return output_str
 
