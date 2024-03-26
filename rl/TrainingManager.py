@@ -281,6 +281,12 @@ class TrainingManager():
           "normalise" : 10.0,
           "read_rate" : 10,
           "noise_override" : None
+        },
+        "cartesian_contacts_XYZ" : {
+          "in_use" : False,
+          "normalise" : 0.0,
+          "read_rate" : -1,
+          "noise_override" : [0, 0]
         }
       }
     },
@@ -982,6 +988,7 @@ class TrainingManager():
     env.mj.set.palm_sensor.in_use = set["cpp"]["sensor"]["palm_sensor"]["in_use"]
     env.mj.set.wrist_sensor_XY.in_use = set["cpp"]["sensor"]["wrist_sensor_XY"]["in_use"]
     env.mj.set.wrist_sensor_Z.in_use = set["cpp"]["sensor"]["wrist_sensor_Z"]["in_use"]
+    env.mj.set.cartesian_contacts_XYZ.in_use = set["cpp"]["sensor"]["cartesian_contacts_XYZ"]["in_use"]
 
     env.mj.set.motor_state_sensor.normalise = set["cpp"]["sensor"]["motor_state_sensor"]["normalise"]
     env.mj.set.base_state_sensor_Z.normalise = set["cpp"]["sensor"]["base_state_sensor_Z"]["normalise"]
@@ -991,6 +998,7 @@ class TrainingManager():
     env.mj.set.palm_sensor.normalise = set["cpp"]["sensor"]["palm_sensor"]["normalise"]
     env.mj.set.wrist_sensor_XY.normalise = set["cpp"]["sensor"]["wrist_sensor_XY"]["normalise"]
     env.mj.set.wrist_sensor_Z.normalise = set["cpp"]["sensor"]["wrist_sensor_Z"]["normalise"]
+    env.mj.set.cartesian_contacts_XYZ.normalise = set["cpp"]["sensor"]["cartesian_contacts_XYZ"]["normalise"]
 
     env.mj.set.motor_state_sensor.read_rate = set["cpp"]["sensor"]["motor_state_sensor"]["read_rate"]
     env.mj.set.base_state_sensor_Z.read_rate = set["cpp"]["sensor"]["base_state_sensor_Z"]["read_rate"]
@@ -1000,6 +1008,7 @@ class TrainingManager():
     env.mj.set.palm_sensor.read_rate = set["cpp"]["sensor"]["palm_sensor"]["read_rate"]
     env.mj.set.wrist_sensor_XY.read_rate = set["cpp"]["sensor"]["wrist_sensor_XY"]["read_rate"]
     env.mj.set.wrist_sensor_Z.read_rate = set["cpp"]["sensor"]["wrist_sensor_Z"]["read_rate"]
+    env.mj.set.cartesian_contacts_XYZ.read_rate = set["cpp"]["sensor"]["cartesian_contacts_XYZ"]["read_rate"]
 
     if set["cpp"]["sensor"]["motor_state_sensor"]["noise_override"] is not None:
       env.mj.set.motor_state_sensor.set_gaussian_noise(*set["cpp"]["sensor"]["motor_state_sensor"]["noise_override"])
@@ -1017,6 +1026,8 @@ class TrainingManager():
       env.mj.set.wrist_sensor_XY.set_gaussian_noise(*set["cpp"]["sensor"]["wrist_sensor_XY"]["noise_override"])
     if set["cpp"]["sensor"]["wrist_sensor_Z"]["noise_override"] is not None:
       env.mj.set.wrist_sensor_Z.set_gaussian_noise(*set["cpp"]["sensor"]["wrist_sensor_Z"]["noise_override"])
+    if set["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"] is not None:
+      env.mj.set.cartesian_contacts_XYZ.set_gaussian_noise(*set["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"])
 
     # rewards are the exception, they are not set in this function
 
@@ -1223,6 +1234,10 @@ class TrainingManager():
     elif self.settings["reward"]["style"] == "MAT_shaped":
       # prepare reward thresholds
       self.set_sensor_reward_thresholds(env)
+      env.mj.set.cap_reward = True
+      env.mj.set.quit_if_cap_exceeded = False
+      env.mj.set.reward_cap_lower_bound = -1.0
+      env.mj.set.reward_cap_upper_bound = 1.0
       # bonuses only
       env = self.set_sensor_bonuses(env, 0.002 * self.settings["reward"]["scale_rewards"])
       # scale based on steps allowed per episode
