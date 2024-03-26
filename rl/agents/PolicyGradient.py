@@ -1233,7 +1233,8 @@ class Agent_PPO_MAT:
     grad_clamp_value: float = 200 # paper specified
 
     # options
-    use_extra_actions: bool = True 
+    use_extra_actions: bool = True
+    use_MAT_logprob: bool = True
 
     # options not in use for exact paper implementation
     use_random_action_noise: bool = False # paper implied
@@ -1386,7 +1387,9 @@ class Agent_PPO_MAT:
     # store values from before the environment steps to put into buffer
     self.last_state = state
     self.last_value = value
-    self.last_logprob = self.compute_actlogp(action) # compute the MAT action logprob
+    if self.params.use_MAT_logprob:
+      logprob = self.compute_actlogp(action) # compute the MAT action logprob
+    self.last_logprob = logprob 
 
     return action.squeeze(0) # from tensor([[x]]) to tensor([x])
       
@@ -1497,8 +1500,9 @@ class Agent_PPO_MAT:
 
     # Policy loss
     pi, logp = self.mlp_ac.pi(obs, act)
-    logp = self.compute_actlogp(act) # compute the MAT action logprob
-    logp.requires_grad_(True) # enable gradient calculations
+    if self.params.use_MAT_logprob:
+      logp = self.compute_actlogp(act) # compute the MAT action logprob
+      logp.requires_grad_(True) # enable gradient calculations
     ratio = torch.exp(logp - logp_old)
     soft_advantage = adv - self.params.temperature_alpha * logp # MAT addition, to make soft
     clip_ratio = torch.clamp(ratio, 1-self.params.clip_ratio, 1+self.params.clip_ratio)

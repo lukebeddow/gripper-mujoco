@@ -98,6 +98,7 @@ class TrainingManager():
       "adam_beta2" : 0.999, # paper implied
       "grad_clamp_value" : 200, # paper specified
       "use_extra_actions" : True ,
+      "use_MAT_logprob" : True,
       "use_random_action_noise" : False, # paper implied
       "use_KL_early_stop" : False, # paper implied
       "target_kl" : 0.01,
