@@ -1210,36 +1210,37 @@ class Agent_PPO:
     self.mode = "test"
     self.mlp_ac.testing_mode()
 
-class Agent_PPO_Discriminator:
+class Agent_PPO_MAT:
 
-  name = "Agent_PPO_Discriminator"
+  name = "Agent_PPO_MAT"
 
   @dataclass
   class Parameters:
 
-    # discriminator only parameters
-    learning_rate_discrim: float = 5e-5
-    loss_criterion_discrim: str = "MSELoss"
-
-    # PPO hyperparameters
-    learning_rate_pi: float = 3e-4
-    learning_rate_vf: float = 1e-3
-    gamma: float = 0.99
-    steps_per_epoch: int = 4000
-    clip_ratio: float = 0.2
-    train_pi_iters: int = 80
-    train_vf_iters: int = 80
-    lam: float = 0.97
-    target_kl: float = 0.01
-    max_kl_ratio: float = 1.5
-    use_random_action_noise: bool = True
-    random_action_noise_size: float = 0.2
+    # key learning hyperparameters
+    learning_rate_pi: float = 1e-4 # paper specified
+    learning_rate_vf: float = 1e-4 # paper specified
+    gamma: float = 0.999 # paper specified
+    steps_per_epoch: int = 300 # paper specified (based on my understanding)
+    clip_ratio: float = 0.2 # paper specified
+    train_pi_iters: int = 10 # paper specified (based on my understanding)
+    train_vf_iters: int = 10 # paper specified (based on my understanding)
+    lam: float = 0.95 # paper specified
+    temperature_alpha: float = 5e-4 # paper specified
+    optimiser: str = "adam" # paper specified
+    adam_beta1: float = 0.9 # paper implied
+    adam_beta2: float = 0.999 # paper implied
+    grad_clamp_value: float = 200 # paper specified
 
     # options
-    optimiser: str = "adam" # adam/adamW/RMSProp
-    adam_beta1: float = 0.9
-    adam_beta2: float = 0.999
-    # loss_criterion: str = "MSELoss" # smoothL1Loss/MSELoss/Huber
+    use_extra_actions: bool = True 
+
+    # options not in use for exact paper implementation
+    use_random_action_noise: bool = False # paper implied
+    use_KL_early_stop: bool = False # paper implied
+    target_kl: float = 0.01
+    max_kl_ratio: float = 1.5
+    random_action_noise_size: float = 0.05
 
     def update(self, newdict, hard=True):
       for key, value in newdict.items():
@@ -1250,22 +1251,22 @@ class Agent_PPO_Discriminator:
   Transition = namedtuple('Transition',
                           ('state', 'action', 'reward', 'advantage', 'log_prob', 'terminal'))
 
-  def __init__(self, device="cpu", rngseed=None, mode="train"):
+  def __init__(self, device="cpu", rngseed=None, mode="train", steps=None, debug=False):
     """
     Soft actor-critic agent for a given environment
     """
 
-    self.params = Agent_PPO_Discriminator.Parameters()
+    self.params = Agent_PPO_MAT.Parameters()
     self.device = torch.device(device)
     self.rngseed = rngseed
     self.rng = np.random.default_rng(rngseed)
     self.mode = mode
     self.steps_done = 0
-    self.episodes_done = 0
-    self.first_step = True
-    self.running_loss = 0
+    self.debug = debug
+    if steps is not None:
+      self.params.steps_per_epoch = steps
 
-  def init(self, network, discriminator=None, obs_dim=None, action_dim=None, n_discrim=None):
+  def init(self, network, obs_dim=None, action_dim=None, device=None):
     """
     Main initialisation of the agent, applies settings and creates network. This
     function can be called with network='loaded' to initialise settings but not
@@ -1274,40 +1275,62 @@ class Agent_PPO_Discriminator:
 
     if network != "loaded":
 
-      self.ppo = Agent_PPO(device=self.device, rngseed=self.rngseed, mode=self.mode)
-      self.ppo.params.update(asdict(self.params), hard=False)
-
-      self.discrim = discriminator
-
       if obs_dim is None: obs_dim = network.n_obs
       if action_dim is None: action_dim = network.action_dim
-      if n_discrim is None: n_discrim = discriminator.n_output
 
-      self.ppo.init(network, obs_dim=obs_dim, action_dim=action_dim)
-
-      self.n_discrim = n_discrim
-      self.action_dim = action_dim + n_discrim
-      self.n_actions = network.n_actions + discriminator.n_output
+      self.mlp_ac = network
+      self.action_dim = action_dim
+      self.n_actions = network.n_actions
       self.n_obs = obs_dim
 
-    self.optimiser = torch.optim.Adam(self.discrim.parameters(),
-                                      lr=self.params.learning_rate_discrim,
-                                      betas=(self.params.adam_beta1,
-                                              self.params.adam_beta2))
-    
-    if self.params.loss_criterion_discrim.lower() == "smoothl1loss":
-      self.loss_criterion = nn.SmoothL1Loss()
-    elif self.params.loss_criterion_discrim.lower() == "mseloss":
-      self.loss_criterion = nn.MSELoss()
-    elif self.params.loss_criterion_discrim.lower() == "huber":
-      self.loss_criterion = nn.HuberLoss()
+    # create a fresh buffer for storing trajectories, rewards, actions etc
+    self.buffer = PPOBuffer(self.params.steps_per_epoch, self.n_obs, self.action_dim, 
+                            self.device, self.params.gamma, self.params.lam)
 
+    # set the network to the given device
+    if device is not None: self.device = device
     self.set_device(self.device)
+
+    if self.params.optimiser.lower() == "rmsprop":
+      self.vf_optimiser = torch.optim.RMSprop(self.mlp_ac.vf.parameters(), 
+                                             lr=self.params.learning_rate_vf)
+      self.pi_optimiser = torch.optim.RMSprop(self.mlp_ac.pi.parameters(),
+                                              lr=self.params.learning_rate_pi)
+    elif self.params.optimiser.lower() == "adam":
+      self.vf_optimiser = torch.optim.Adam(self.mlp_ac.vf.parameters(),
+                                          lr=self.params.learning_rate_vf,
+                                          betas=(self.params.adam_beta1,
+                                                 self.params.adam_beta2))
+      self.pi_optimiser = torch.optim.Adam(self.mlp_ac.pi.parameters(),
+                                           lr=self.params.learning_rate_pi,
+                                           betas=(self.params.adam_beta1,
+                                                  self.params.adam_beta2))
+    elif self.params.optimiser.lower() == "adamw":
+      self.vf_optimiser = torch.optim.AdamW(self.mlp_ac.vf.parameters(),
+                                           lr=self.params.learning_rate_vf,
+                                           betas=(self.params.adam_beta1,
+                                                  self.params.adam_beta2),
+                                           amsgrad=True)
+      self.pi_optimiser = torch.optim.AdamW(self.mlp_ac.pi.parameters(),
+                                            lr=self.params.learning_rate_pi,
+                                            betas=(self.params.adam_beta1,
+                                                   self.params.adam_beta2),
+                                            amsgrad=True)
+      
+    else: raise RuntimeError(f"Invalid optimiser choice '{self.params.optimiser}', options are 'adam' or 'rmsprop'")
+
+    # if self.params.loss_criterion.lower() == "smoothl1loss":
+    #   self.loss_criterion = nn.SmoothL1Loss()
+    # elif self.params.loss_criterion.lower() == "mseloss":
+    #   self.loss_criterion = nn.MSELoss()
+    # elif self.params.loss_criterion.lower() == "huber":
+    #   self.loss_criterion = nn.HuberLoss()
+
     self.seed()
 
     if self.mode == "train": self.training_mode()
     elif self.mode == "test": self.testing_mode()
-    else: raise RuntimeError(f"Agent given mode={self.mode} but valid options are 'test' and 'train'")
+    else: raise RuntimeError(f"Agent_DQN given mode={self.mode} but valid options are 'test' and 'train'")
   
   def set_device(self, device):
     """
@@ -1315,14 +1338,25 @@ class Agent_PPO_Discriminator:
     """
 
     if device == "cuda" and not torch.cuda.is_available(): 
-      print("Agent.set_device() received request for 'cuda', but torch.cuda.is_available() == False, hence using cpu")
+      print("Agent_PPO.set_device() received request for 'cuda', but torch.cuda.is_available() == False, hence using cpu")
       device = "cpu"
 
     self.device = torch.device(device)
 
-    self.ppo.set_device(device)
-    self.discrim.to(self.device)
-  
+    self.buffer.all_to(self.device)
+    self.mlp_ac.set_device(self.device)
+
+    # if hasattr(self, "pi_optimiser"):
+    #   # extra safety: https://github.com/pytorch/pytorch/issues/2830#issuecomment-336194949
+    #   for state in self.vf_optimiser.state.values():
+    #     for k, v in state.items():
+    #       if isinstance(v, torch.Tensor):
+    #         state[k] = v.to(self.device)
+    #   for state in self.pi_optimiser.state.values():
+    #     for k, v in state.items():
+    #       if isinstance(v, torch.Tensor):
+    #         state[k] = v.to(self.device)
+
   def seed(self, rngseed=None):
     """
     Set a random seed for the entire environment
@@ -1332,7 +1366,6 @@ class Agent_PPO_Discriminator:
       else: rngseed = np.random.randint(0, 2_147_483_647)
     self.rngseed = rngseed
     self.rng = np.random.default_rng(rngseed)
-    self.ppo.seed(rngseed=self.rngseed)
 
   def select_action(self, state, decay_num, test=False):
     """
@@ -1341,22 +1374,21 @@ class Agent_PPO_Discriminator:
     This function should return a tensor([x, y, z, ...])
     """
 
-    # take the state and feed it through the discriminator
-    if self.first_step:
-      extra = torch.zeros(self.n_discrim, requires_grad=True).unsqueeze(0)
-    else:
-      with torch.no_grad():
-        extra = self.discrim(self.copy_last_state)
+    if self.mode == "test": test = True
 
-    # create the new state vector
-    augmented_state = torch.concat((state, extra), axis=1)
+    action, value, logprob = self.mlp_ac.step(state)
 
-    # copy the state variable for the discriminator
-    self.copy_last_state = augmented_state.detach().clone()
-    self.copy_last_state.requires_grad_(True)
+    if not test and self.params.use_random_action_noise:
+      a = self.params.random_action_noise_size
+      noise = 2 * a * self.rng.random((1, len(action[0]))) - a
+      action += torch.tensor(noise, device=action.device)
 
-    # get the action from PPO and return it
-    return self.ppo.select_action(augmented_state.detach(), None)
+    # store values from before the environment steps to put into buffer
+    self.last_state = state
+    self.last_value = value
+    self.last_logprob = self.compute_actlogp(action) # compute the MAT action logprob
+
+    return action.squeeze(0) # from tensor([[x]]) to tensor([x])
       
   def get_save_state(self):
     """
@@ -1366,13 +1398,17 @@ class Agent_PPO_Discriminator:
     to_save = {
       "name" : self.name,
       "parameters" : self.params,
-      "main" : self.ppo.get_save_state(),
-      "discrim" : self.discrim,
+      "buffer" : self.buffer,
+      "network" : self.mlp_ac, # do I want to save only the state dict?
+      "optimiser_state_dict" : {
+         "vf_optimiser" : self.vf_optimiser.state_dict(),
+         "pi_optimiser" : self.pi_optimiser.state_dict()
+      }
     }
 
     return to_save
   
-  def load_save_state(self, saved_dict):
+  def load_save_state(self, saved_dict, device="cpu"):
     """
     Load the agent with a given saved state
     """
@@ -1383,8 +1419,16 @@ class Agent_PPO_Discriminator:
     
     # input the saved data
     self.params = saved_dict["parameters"]
-    self.ppo.load_save_state(saved_dict["main"])
-    self.discrim = saved_dict["discrim"]
+    self.init(saved_dict["network"], device=device)
+    self.buffer = saved_dict["buffer"]
+    self.vf_optimiser.load_state_dict(saved_dict["optimiser_state_dict"]["vf_optimiser"])
+    self.pi_optimiser.load_state_dict(saved_dict["optimiser_state_dict"]["pi_optimiser"])
+
+    # move to the correct device
+    self.set_device(device)
+
+    # prepare class variables
+    self.steps_done = self.buffer.index
 
   def get_params_dict(self):
     """
@@ -1392,9 +1436,122 @@ class Agent_PPO_Discriminator:
     """
     param_dict = asdict(self.params)
     param_dict.update({
-      "main" : self.ppo.get_params_dict()
+      "network_name" : self.mlp_ac.name
     })
     return param_dict
+
+  def compute_actlogp(self, action):
+    """
+    Compute the action log probabilities based on an action vector. MAT uses the
+    sigmoid to get probabilities and then samples them randomly. Action is a tensor
+    [B x A] where B is the batch number and A are the individual action vectors
+    """
+
+    # if we are using the extra actions [a_reopen, a_wrist, a_wrist_stdev]
+    if self.params.use_extra_actions:
+
+      # trim out the two wrist actions
+      action = action[:,:-2]
+
+      # apply the sigmoid to all elements
+      actprobs = 1.0 / (1.0 + torch.exp(-action))
+
+      # calculate the logprob
+      actlogprob = (
+        torch.log(actprobs[:,-1]) # logprob(a_reopen)
+        + (1 - actprobs[:,-1]) * torch.log(actprobs[:,-2]) # (1-a_reopen) * (logprop(a_lift))
+        + (1 - actprobs[:,-1]) * (1 - actprobs[:,-2]) * torch.sum( # (1-a_reopen) * (1-a_lift)
+          torch.log(actprobs[:,:-2]), dim=1) # times sum{logprob(a_finger)}
+      )
+
+    # or we are not using extra actions, only [a_fingers, a_lift]
+    else:
+
+      # apply the sigmoid to all elements
+      actprobs = 1.0 / (1.0 + torch.exp(-action))
+
+      # calculate the logprob
+      actlogprob = (
+        torch.log(actprobs[:,-1]) # (logprop(a_lift))
+        + (1 - actprobs[:,-1]) * torch.sum( # (1-a_lift)
+          torch.log(actprobs[:,:-1]), dim=1) # times sum{logprob(a_finger)}
+      )
+
+    return actlogprob
+
+  def compute_loss_v(self, data):
+    """
+    Compute the value function loss
+    """
+    obs, ret = data['obs'], data['ret']
+    return ((self.mlp_ac.vf(obs) - ret)**2).mean()
+  
+  def compute_loss_pi(self, data):
+    """
+    Compute PPO policy loss for MAT with soft term
+    """
+    obs, act, adv, logp_old = data['obs'], data['act'], data['adv'], data['logp']
+
+    # print("act is", act)
+    # print("act shape is", act.shape)
+
+    # Policy loss
+    pi, logp = self.mlp_ac.pi(obs, act)
+    logp = self.compute_actlogp(act) # compute the MAT action logprob
+    logp.requires_grad_(True) # enable gradient calculations
+    ratio = torch.exp(logp - logp_old)
+    soft_advantage = adv - self.params.temperature_alpha * logp # MAT addition, to make soft
+    clip_ratio = torch.clamp(ratio, 1-self.params.clip_ratio, 1+self.params.clip_ratio)
+    min_ratio = torch.min(ratio, clip_ratio)
+    loss_pi = -(min_ratio * soft_advantage).mean()
+
+    # Useful extra info
+    approx_kl = (logp_old - logp).mean().item()
+    ent = pi.entropy().mean().item()
+    clipped = ratio.gt(1+self.params.clip_ratio) | ratio.lt(1-self.params.clip_ratio)
+    clipfrac = torch.as_tensor(clipped, dtype=torch.float32).mean().item()
+    pi_info = dict(kl=approx_kl, ent=ent, cf=clipfrac)
+
+    return loss_pi, pi_info
+
+  def optimise_model(self):
+
+    if self.debug:
+      t1 = time.perf_counter()
+      print("Agent.optimise_model() now running ...", end="", flush=True)
+
+    data = self.buffer.get()
+
+    pi_l_old, pi_info_old = self.compute_loss_pi(data)
+    pi_l_old = pi_l_old.item()
+    v_l_old = self.compute_loss_v(data).item()
+
+    # Train policy with multiple steps of gradient descent
+    for i in range(self.params.train_pi_iters):
+      self.pi_optimiser.zero_grad()
+      loss_pi, pi_info = self.compute_loss_pi(data)
+      kl = pi_info['kl']
+      if self.params.use_KL_early_stop:
+        if kl > self.params.max_kl_ratio * self.params.target_kl:
+          # print('Early stopping at step %d due to reaching max kl.'%i)
+          break
+      loss_pi.backward()
+      if self.params.grad_clamp_value is not None:
+        torch.nn.utils.clip_grad_value_(self.mlp_ac.pi.parameters(), self.params.grad_clamp_value)
+      self.pi_optimiser.step()
+
+    # Value function learning
+    for i in range(self.params.train_vf_iters):
+      self.vf_optimiser.zero_grad()
+      loss_v = self.compute_loss_v(data)
+      loss_v.backward()
+      if self.params.grad_clamp_value is not None:
+        torch.nn.utils.clip_grad_value_(self.mlp_ac.vf.parameters(), self.params.grad_clamp_value)
+      self.vf_optimiser.step()
+      
+    if self.debug:
+      t2 = time.perf_counter()
+      print(f"finished after {(t2 - t1):.3f} seconds")
 
   def update_step(self, state, action, next_state, reward, terminal, truncated):
     """
@@ -1403,58 +1560,60 @@ class Agent_PPO_Discriminator:
 
     if self.mode != "train": return
 
+    # print("state", state.shape)
+    # print("action", action.shape)
+    # print("next_state", next_state.shape)
+    # print("reward", reward.shape)
+    # print("terminal", terminal.shape)
+
+    # save buffer, but we use the state/value/logprob from before the action was
+    # applied in the environment, we will get this 'state' next step
+    self.buffer.push(
+      self.last_state,
+      action,
+      reward,
+      self.last_value,
+      self.last_logprob * truncated # no prob if max_step_num exceeded
+    )
+
     self.steps_done += 1
 
-    self.ppo.update_step(state, action, next_state, reward, terminal, truncated)
+    epoch_ended = (self.steps_done >= self.params.steps_per_epoch)
+    terminal = bool(terminal.item())
 
-    # do supervised learning on the discriminator
-    if self.first_step:
-      self.first_step = False
+    # if trajectory did not reach terminal state, bootstrap value target
+    if truncated or epoch_ended:
+      _, end_value, _ = self.mlp_ac.step(self.last_state)
     else:
-      target = self.get_target_vector()
-      target = torch.tensor(target, dtype=torch.float32).unsqueeze(0)
-      self.optimiser.zero_grad()
+      end_value = 0
 
-      # get and scale the network outputs from [-1,1] to [0,1]
-      from_net = self.copy_last_state[0][-self.n_discrim:].unsqueeze(0)
-      loss = self.loss_criterion(from_net, target)
-      loss.backward()
-      self.optimiser.step()
-      self.running_loss += loss.item()
+    # add the trajectory to the buffer
+    self.buffer.finish_trajectory(end_value)
 
-    # try to normalise the loss by the number of steps
-    if terminal or truncated:
-      self.running_loss /= self.steps_done
+    # update the model and reset the epoch step counter
+    if epoch_ended:
+      self.optimise_model()
+      self.steps_done = 0
 
   def update_episode(self, i_episode, finished=False):
     """
     Run this at the end of every training episode
     """
-
-    self.episodes_done += 1
-    print_loss = 125
-    if self.episodes_done % print_loss == 0:
-      print("Discriminator loss =", self.running_loss)
-
-    self.first_step = True
-    self.running_loss = 0.0
-    self.ppo.update_episode(i_episode, finished)
+    pass
 
   def training_mode(self):
     """
     Put the agent into training mode
     """
     self.mode = "train"
-    self.ppo.training_mode()
-    self.discrim.train()
+    self.mlp_ac.training_mode()
 
   def testing_mode(self):
     """
     Put the agent in testing mode
     """
     self.mode = "test"
-    self.ppo.testing_mode()
-    self.discrim.eval()
+    self.mlp_ac.testing_mode()
 
 if __name__ == "__main__":
 

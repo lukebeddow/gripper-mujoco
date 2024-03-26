@@ -83,24 +83,26 @@ class TrainingManager():
       "grad_clamp_value" : None,
     },
 
-    "Agent_PPO_Discriminator" : {
-      "learning_rate_discrim" : 5e-5,
-      "loss_criterion_discrim" : "MSELoss",
-      "learning_rate_pi" : 5e-5,
-      "learning_rate_vf" : 5e-5,
-      "gamma" : 0.99,
-      "steps_per_epoch" : 6000,
-      "clip_ratio" : 0.2,
-      "train_pi_iters" : 80,
-      "train_vf_iters" : 80,
-      "lam" : 0.97,
+    "Agent_PPO_MAT" : {
+      "learning_rate_pi" : 1e-4, # paper specified
+      "learning_rate_vf" : 1e-4, # paper specified
+      "gamma" : 0.999, # paper specified
+      "steps_per_epoch" : 300, # paper specified (based on my understanding)
+      "clip_ratio" : 0.2, # paper specified
+      "train_pi_iters" : 10, # paper specified (based on my understanding)
+      "train_vf_iters" : 10, # paper specified (based on my understanding)
+      "lam" : 0.95, # paper specified
+      "temperature_alpha" : 5e-4, # paper specified
+      "optimiser" : "adam", # paper specified
+      "adam_beta1" : 0.9, # paper implied
+      "adam_beta2" : 0.999, # paper implied
+      "grad_clamp_value" : 200, # paper specified
+      "use_extra_actions" : True ,
+      "use_random_action_noise" : False, # paper implied
+      "use_KL_early_stop" : False, # paper implied
       "target_kl" : 0.01,
       "max_kl_ratio" : 1.5,
-      "use_random_action_noise" : True,
       "random_action_noise_size" : 0.05,
-      "optimiser" : "adam",
-      "adam_beta1" : 0.9,
-      "adam_beta2" : 0.999,
     },
 
     # environment hyperparameters
@@ -1221,19 +1223,15 @@ class TrainingManager():
     elif self.settings["reward"]["style"] == "MAT_shaped":
       # prepare reward thresholds
       self.set_sensor_reward_thresholds(env)
-      # reward each step               reward   done   trigger
-      env.mj.set.step_num.set          (-0.01,  False,   1)
-      # penalties and bonuses
+      # bonuses only
       env = self.set_sensor_bonuses(env, 0.002 * self.settings["reward"]["scale_rewards"])
-      env = self.set_sensor_penalties(env, -0.002 * self.settings["reward"]["scale_penalties"])
       # scale based on steps allowed per episode
-      env.mj.set.scale_rewards(100 / env.params.max_episode_steps)
+      env.mj.set.scale_rewards(0.5*(100 / env.params.max_episode_steps))
       # end criteria                        reward   done   trigger
       env.mj.set.stable_termination.set     (1.0,    True,   1)
-      env.mj.set.failed_termination.set     (-1.0,    True,   1)
+      env.mj.set.failed_termination.set     (0.0,    True,   1)
       if self.settings["reward"]["penalty_termination"]:
-        env.mj.set.oob.set                    (-1.0,   True,   1)
-        self.set_sensor_reward_thresholds(env)
+        env.mj.set.oob.set                  (0.0,   True,   1)
         env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"],
                                            value=0.0)  
         

@@ -426,6 +426,7 @@ class Trainer:
         "agent_name" : self.agent.name,
         "env_data" : self.env.get_save_state(),
         "curriculum_dict" : self.curriculum_dict,
+        "curriculum_fcn" : self.curriculum_fcn,
         "curriculum_change_fcn" : self.curriculum_change,
         "extra_data" : extra_data
       }
@@ -577,17 +578,27 @@ class Trainer:
       if len(self.track.train_curriculum_stages) > 0:
         self.curriculum_dict["stage"] = self.track.train_curriculum_stages[-1]
       else: self.curriculum_dict["stage"] = 0
+
+      # load in the curriculum functions
+      if "curriculum_change_fcn" in load_train["curriculum_dict"].keys():
+        self.curriculum_change_fcn = functools.partial(load_train["curriculum_dict"]["curriculum_change_fcn"], self)
       if "curriculum_fcn" in load_train["curriculum_dict"].keys():
-        self.curriculum_change = functools.partial(load_train["curriculum_dict"]["curriculum_change_fcn"], self)
-        if self.params.use_curriculum:
+        self.curriculum_fcn = functools.partial(load_train["curriculum_dict"]["curriculum_fcn"], self)
+      else:
+        # TEMPORARY FIX for program: mat_liftonly
+        if self.group_name == "22-03-24":
+          print("TEMPORARY CURRICULUM FIX: set curriculum function as curriculum_change_object_noise")
+          from launch_training import curriculum_fcn_MAT
+          self.curriculum_fcn = functools.partial(curriculum_fcn_MAT, self)
+          print("CURRICULUM ACTIVE: Calling curriculum_fcn_MAT now")
+          self.curriculum_fcn(10) # apply settings based on best success rate
+        else:
+          print("CURRICULUM WARNING: self.curriculum_fcn not set in dict")
           self.curriculum_change(self.curriculum_dict["stage"]) # apply initial stage settings
-      elif False and self.params.use_curriculum:
-        # TEMPORARY FIX for program: continue_good_curriculum, delete later
-        print("TEMPORARY CURRICULUM FIX: set curriculum function as curriculum_change_object_noise")
-        from launch_training import curriculum_change_object_noise
-        self.curriculum_change = functools.partial(curriculum_change_object_noise, self)
-        print("CURRICULUM ACTIVE: Calling curriculum_change_object_noise now")
-        self.curriculum_change(self.curriculum_dict["stage"]) # apply initial stage settings
+
+      # run the curriculum function to update to the current curriculum
+      if self.params.use_curriculum:
+        self.curriculum_fcn(self.track.episodes_done)
 
       # do we have the agent already, if not, create it
       if self.agent is None:
