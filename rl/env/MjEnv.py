@@ -550,7 +550,7 @@ class MjEnv():
 
     return cpp_settings
 
-  def _set_MAT_action(self, action):
+  def _set_MAT_action_old(self, action):
     """
     Set the action in simulaton when using MAT. Expects numpy array of values
     """
@@ -587,6 +587,30 @@ class MjEnv():
     else:
       # apply sigmoid to all actions then feed in directly
       action = sigmoid_bernoulli_sample(action)
+
+    self._set_action(action)
+
+  def _set_MAT_action(self, action):
+    """
+    New updated version, where action vector is already binary when it is input
+    """
+
+    if self.params.MAT_use_reopen:
+
+      a_wrist = action[-1]
+      a_reopen = action[-2]
+      a_lift = action[-3]
+
+      if a_reopen > 0.5 and a_lift > 0.5:
+        print("action vector is", action)
+        raise RuntimeError("MjEnv._set_MAT_action() error: reopen and lift both set True")
+      
+      if a_reopen:
+        self.mj.MAT_reopen(a_wrist)
+        # no other actions can trigger, finger motions are disabled
+        return
+
+      action = action[:-2] # trim off the reopen and wrist actions, keep lift
 
     self._set_action(action)
 

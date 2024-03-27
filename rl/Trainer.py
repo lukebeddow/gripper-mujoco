@@ -13,7 +13,7 @@ import functools
 from ModelSaver import ModelSaver
 from agents.DQN import Agent_DQN
 from agents.ActorCritic import MLPActorCriticAC, Agent_SAC
-from agents.PolicyGradient import MLPActorCriticPG, Agent_PPO
+from agents.PolicyGradient import MLPActorCriticPG, Agent_PPO, Agent_PPO_MAT
 from env.MjEnv import MjEnv
 import networks
 
@@ -33,7 +33,7 @@ class TrackTraining:
     self.plot_episode_time = False
     self.plot_train_raw = False
     self.plot_train_avg = True
-    self.plot_test_raw = False
+    self.plot_test_raw = True
     self.plot_test_metrics = False
     # general
     self.episodes_done = 0
@@ -61,7 +61,7 @@ class TrackTraining:
     self.fig = None
     self.axs = None
 
-  def add_test_metrics(self, metrics_to_add, dtype=None):
+  def add_test_metrics(self, metrics_to_add, dtype=None, values=None):
     """
     Include additional test metrics
     """
@@ -72,10 +72,16 @@ class TrackTraining:
 
     if isinstance(metrics_to_add, str):
       metrics_to_add = [metrics_to_add]
+    if isinstance(values, np.ndarray):
+      values = [values]
 
-    for m in metrics_to_add:
+    for i, m in enumerate(metrics_to_add):
       self.test_metric_names.append(m)
-      self.test_metric_values.append(np.array([], dtype=dtype))
+      if values is None:
+        thisvalue = np.array([], dtype=dtype)
+      else:
+        thisvalue = values[i]
+      self.test_metric_values.append(thisvalue)
 
     self.n_test_metrics = len(self.test_metric_names)
 
@@ -195,7 +201,7 @@ class TrackTraining:
           self.axs.append([axs4, axs4]) # add paired to hold the pattern
         if self.plot_test_metrics:
           for i in range(self.n_test_metrics):
-            fig5, axs5 = plt.subplots(2, 1)
+            fig5, axs5 = plt.subplots(1, 1)
             self.fig.append(fig5)
             self.axs.append([axs5, axs5]) # add paired to hold the pattern
 
@@ -580,10 +586,10 @@ class Trainer:
       else: self.curriculum_dict["stage"] = 0
 
       # load in the curriculum functions
-      if "curriculum_change_fcn" in load_train["curriculum_dict"].keys():
-        self.curriculum_change_fcn = functools.partial(load_train["curriculum_dict"]["curriculum_change_fcn"], self)
-      if "curriculum_fcn" in load_train["curriculum_dict"].keys():
-        self.curriculum_fcn = functools.partial(load_train["curriculum_dict"]["curriculum_fcn"], self)
+      if "curriculum_change_fcn" in load_train.keys():
+        self.curriculum_change_fcn = load_train["curriculum_change_fcn"]
+      if "curriculum_fcn" in load_train.keys():
+        self.curriculum_fcn = load_train["curriculum_fcn"]
       else:
         # TEMPORARY FIX for program: mat_liftonly
         if self.group_name == "22-03-24":

@@ -16,8 +16,9 @@ from Trainer import MujocoTrainer
 from TrainingManager import TrainingManager
 from agents.DQN import Agent_DQN
 from agents.ActorCritic import MLPActorCriticAC, Agent_SAC
-from agents.PolicyGradient import MLPActorCriticPG, Agent_PPO, Agent_PPO_MAT
+from agents.PolicyGradient import MLPActorCriticPG, Agent_PPO
 from agents.PolicyGradient import CNNActorCriticPG, NetActorCriticPG, MixedNetworkFromEncoder
+from agents.PolicyGradient import Agent_PPO_MAT, MATActorCriticPG
 import networks
 
 def vary_all_inputs(raw_inputarg=None, param_1=None, param_2=None, param_3=None, repeats=None):
@@ -683,6 +684,8 @@ if __name__ == "__main__":
 
   args = parser.parse_args()
 
+  # exit()
+
   timestamp = args.timestamp if args.timestamp else datetime.now().strftime(datestr)
 
   # default device
@@ -709,7 +712,7 @@ if __name__ == "__main__":
 
   # seperate process for safety when running a training program
   if (not args.no_delay):
-    if (args.job is not None and
+    if (args.job is not None and not args.plot and
         (args.program is not None or args.resume is not None or args.test)):
       sleep_for = args.job - args.smallest_job_num
       if sleep_for < 0: sleep_for = args.job # in case of jobstr "4 5 6 1"
@@ -755,6 +758,11 @@ if __name__ == "__main__":
     if args.log_level > 0: print("launch_training.py will plot a training")
 
     tm.load(job_num=args.job, timestamp=args.timestamp, id=args.load_id)
+    tm.trainer.track.plot_train_avg = True
+    tm.trainer.track.plot_test_raw = True
+    tm.trainer.track.add_test_metrics(metrics_to_add=["Success rate"], 
+                                      values=[tm.trainer.track.avg_successful_grasp])
+    tm.trainer.track.plot_test_metrics = True
     tm.trainer.track.plot(plttitle=tm.group_name + "/" + tm.run_name)
     input("Press enter to quit plotting windows and terminate program")
     exit()
@@ -4590,19 +4598,22 @@ if __name__ == "__main__":
       (1e-6, 5e-5),
       (1e-5, 5e-5),
       (1e-4, 5e-5),
+      (1e-3, 5e-5),
       (1e-6, 5e-4),
       (1e-5, 5e-4),
       (1e-4, 5e-4),
+      (1e-3, 5e-4),
       (1e-6, 5e-3),
       (1e-5, 5e-3),
       (1e-4, 5e-3),
+      (1e-3, 5e-3),
     ]
     vary_2 = [150, 300, 600]
-    vary_3 = [(10, False), (80, True)]
-    repeats = 1
+    vary_3 = [False, True]
+    repeats = 3
     tm.param_1_name = "lr/temperature"
     tm.param_2_name = "steps per epoch"
-    tm.param_3_name = "iters/use_kl"
+    tm.param_3_name = "extra actions"
     tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
                                                          param_3=vary_3, repeats=repeats)
     if args.print: print_training_info()
@@ -4664,21 +4675,124 @@ if __name__ == "__main__":
     tm.settings["Agent_PPO_MAT"]["learning_rate_pi"] = tm.param_1[0]  # 1e-4 paper specified
     tm.settings["Agent_PPO_MAT"]["learning_rate_vf"] = tm.param_1[0]  # 1e-4 paper specified
     tm.settings["Agent_PPO_MAT"]["steps_per_epoch"] = tm.param_2
-    tm.settings["Agent_PPO_MAT"]["train_pi_iters"] = tm.param_3[0]
-    tm.settings["Agent_PPO_MAT"]["train_vf_iters"] = tm.param_3[0]
-    tm.settings["Agent_PPO_MAT"]["use_KL_early_stop"] = tm.param_3[1]
-
-    # NEW: TEST WITHOUT NEW LOGPROB CALCULATION
-    tm.settings["Agent_PPO_MAT"]["use_MAT_logprob"] = False
 
     # create the environment
     env = tm.make_env()
 
     # apply the agent settings
-    layers = [128 for i in range(6)]
-    n = 3 if tm.settings["env"]["MAT_use_reopen"] else 0
-    network = MLPActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes=layers,
-                                continous_actions=True)
+    layers = [128 for i in range(6)] # only applies to pi, vf is set to [3*128]
+    n = 2 if use_extra_actions else 0
+    network = MATActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes=layers,
+                                use_extra_actions=use_extra_actions)
+    
+    # make the agent
+    agent = Agent_PPO_MAT(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+
+    # add an extra test on the old object set
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    
+    print_time_taken()
+
+  elif args.program == "panic_check":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [
+      (1e-6, 5e-5),
+      (1e-5, 5e-5),
+      (1e-4, 5e-5),
+      (1e-3, 5e-5),
+      (1e-6, 5e-4),
+      (1e-5, 5e-4),
+      (1e-4, 5e-4),
+      (1e-3, 5e-4),
+      (1e-6, 5e-3),
+      (1e-5, 5e-3),
+      (1e-4, 5e-3),
+      (1e-3, 5e-3),
+    ]
+    vary_2 = [False, True]
+    vary_3 = None
+    repeats = 1
+    tm.param_1_name = "lr/temperature"
+    tm.param_2_name = "extra actions"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply env settings
+    use_extra_actions = tm.param_2
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["use_MAT"] = True
+    tm.settings["env"]["MAT_use_reopen"] = use_extra_actions
+    tm.settings["env"]["max_episode_steps"] = 250 # Horizon = 250 in paper, see eq.5
+    # tm.settings["env"]["base_lim_yaw_rad"] = np.pi / 4 # reduce from [-pi, +pi] in paper due to symettry
+    tm.settings["env"]["finger_thickness"] = 1.0e-3 # put same fingers on as TMech eval
+    tm.settings["env"]["finger_width"] = 24e-3
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["XY_base_actions"] = True # enable for xml, but not actions
+    tm.settings["env"]["Z_base_rotation"] = True # enable for xml, but not actions
+
+    # apply state and sensor settings
+    tm.settings["cpp"]["sensor_n_prev_steps"] = 20
+    tm.settings["cpp"]["state_n_prev_steps"] = 20
+    tm.settings["cpp"]["sensor_sample_mode"] = 6 # scaled square of change, saturates at 0.1 change
+    tm.settings["cpp"]["state_sample_mode"] = 4 # binary change information, no threshold, 0.05 in paper
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"] = [0, 0]
+    
+    # # possible to change noise settings to improve learning
+    # tm.settings["cpp"]["sensor_noise_std"] = 0.01 # reduce based on real life
+
+    # apply action settings
+    tm.settings["cpp"]["use_termination_action"] = True # for final lift
+
+    # turn on or off Z height
+    use_Z = False
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["action"]["base_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["sensor"]["wrist_sensor_Z"]["in_use"] = use_Z
+    if not use_Z:
+      tm.settings["env"]["fingertip_clearance"] = 5e-3 # closer to ground given no Z height changes. Original=10e-3
+      tm.settings["cpp"]["base_position_noise"] = 0e-3 # disable base position noise? Original=5e-3
+
+    # apply reward settings
+    tm.settings["reward"]["style"] = "MAT_liftonly"
+    tm.settings["reward"]["penalty_termination"] = True # do we end early for oob and dangerous forces
+    tm.settings["reward"]["stable_trigger"] = 1
+
+    # enable the curriculum of step size adjustments
+    tm.settings["trainer"]["use_curriculum"] = True
+    tm.settings["curriculum"]["whole_fcn_override"] = curriculum_fcn_MAT
+    tm.settings["curriculum"]["param_values"] = [
+      [2e-3, 8e-3], # gripper_X action min/max
+      [0.015, 0.06], # gripper_Y action min/max
+      [4e-3, 16e-3], # gripper_Z action min/max
+      [2e-3, 8e-3], # base_Z action min/max
+      [0.2, 0.8],   # time per action min/max
+    ]
+
+    # apply agent hyperparameters
+    tm.settings["Agent_PPO_MAT"]["use_extra_actions"] = use_extra_actions
+    tm.settings["Agent_PPO_MAT"]["learning_rate_pi"] = tm.param_1[0]  # 1e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["learning_rate_vf"] = tm.param_1[0]  # 1e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["steps_per_epoch"] = 300
+
+    # create the environment
+    env = tm.make_env()
+
+    tm.settings["trainer"]["test_freq"] = 1000
+
+    # apply the agent settings
+    layers = [128 for i in range(6)] # only applies to pi, vf is set to [3*128]
+    n = 2 if use_extra_actions else 0
+    network = MATActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes=layers,
+                                use_extra_actions=use_extra_actions)
     
     # make the agent
     agent = Agent_PPO_MAT(device=args.device)

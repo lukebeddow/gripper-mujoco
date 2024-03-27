@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions.normal import Normal
 from torch.distributions.categorical import Categorical
+from torch.distributions.bernoulli import Bernoulli
 from torchaudio.functional import lfilter
 
 # ----- helper functions, networks, data buffers ----- #
@@ -405,7 +406,7 @@ class PPOBuffer:
                 adv=self.advantages, logp=self.logprobs)
     return data
 
-# ----- actor critic network building blocks ----- #
+# ----- base actor critic network building blocks ----- #
 
 class Actor(nn.Module):
 
@@ -502,7 +503,7 @@ class MLPActorCriticPG(nn.Module):
     # policy builder depends on action space
     if continous_actions:
       self.action_dim = action_dim
-      self.pi= MLPGaussianActor(n_obs, action_dim, hidden_sizes, activation, device=device)
+      self.pi = MLPGaussianActor(n_obs, action_dim, hidden_sizes, activation, device=device)
     else:
       self.action_dim = 1 # discrete so only one action
       self.pi = MLPCategoricalActor(n_obs, action_dim, hidden_sizes, activation, device=device)
@@ -549,6 +550,8 @@ class MLPActorCriticPG(nn.Module):
     self.mode = "test"
     self.pi.eval()
     self.vf.eval()
+
+# ----- CNN and multi-input actor critics ----- #
 
 class CNNCategoricalActor(Actor):
     
@@ -794,6 +797,131 @@ class NetActorCriticPG(nn.Module):
     with torch.no_grad():
       pi = self.pi._distribution(obs)
       a = pi.sample()
+      logp_a = self.pi._log_prob_from_distribution(pi, a)
+      val = self.vf(obs)
+    return a, val, logp_a
+
+  def act(self, obs):
+    return self.step(obs)[0]
+
+  def set_device(self, device):
+    self.pi.to_device(device)
+    self.vf.to_device(device)
+    self.device = device
+
+  def training_mode(self):
+    """
+    Put the agent into training mode
+    """
+    self.mode = "train"
+    self.pi.train()
+    self.vf.train()
+
+  def testing_mode(self):
+    """
+    Put the agent in testing mode
+    """
+    self.mode = "test"
+    self.pi.eval()
+    self.vf.eval()
+
+# ----- MAT specific ----- #
+    
+class MATActor(Actor):
+
+  def __init__(self, obs_dim, act_dim, hidden_sizes, activation, device="cpu",
+               use_extra_actions=True):
+    super().__init__()
+    log_std = -0.5 * np.ones(1, dtype=np.float32) # only for wrist action
+    self.log_std = torch.nn.Parameter(torch.as_tensor(log_std))
+    self.net = mlp([obs_dim] + list(hidden_sizes) + [act_dim], activation)
+    self.sigmoid = nn.Sigmoid()
+    self.use_extra_actions = use_extra_actions
+    self.to_device(device)
+
+  def _distribution(self, obs):
+    act = self.net(obs) # run observation through network
+    if self.use_extra_actions:
+      sigact = self.sigmoid(act[:, :-1]) # exclude wrist
+      wrist_mu = act[:,-1] # exctract wrist action mean
+      # log_std stays on cpu so we need to move this to our device
+      std = torch.exp(self.log_std).to(self.device) # convert from log->regular
+      return (Bernoulli(probs=sigact), Normal(wrist_mu, std))
+    else:
+      sigact = self.sigmoid(act)
+      return Bernoulli(probs=sigact)
+
+  def _log_prob_from_distribution(self, pi, act):
+    """Calculate the log prob using the equation from the MAT paper"""
+    if self.use_extra_actions:
+      finger_probs = pi[0].probs[:,:-2] # exclude lift and reopen (pi[0] has no wrist)
+      lift_probs = pi[0].probs[:,-2]
+      reopen_probs = pi[0].probs[:,-1]
+      lift_act = act[:,-3]
+      reopen_act = act[:,-2]
+      wrist_act = act[:,-1] # excluded from logprob calculation
+      logprob = (
+        torch.log(reopen_probs) 
+        + (1-reopen_act) * (torch.log(lift_probs))
+        + (1-reopen_act) * (1-lift_act) * (torch.sum(torch.log(finger_probs), axis=1))
+      )
+    else:
+      finger_probs = pi.probs[:,:-1] # exclude lift
+      lift_probs = pi.probs[:,-1]
+      lift_act = act[:,-1]
+      logprob = (
+        torch.log(lift_probs)
+        + (1-lift_act) * (torch.sum(torch.log(finger_probs), axis=1))
+      )
+    return logprob
+  
+  def to_device(self, device=None):
+    if device is None:
+      device = self.device
+    self.net.to(device)
+    self.device = device
+
+class MATActorCriticPG(nn.Module):
+
+  name = "MLPActorCriticPG_"
+
+  def __init__(self, n_obs, action_dim, hidden_sizes=(128, 128, 128, 128, 128, 128),
+                activation=nn.ReLU, mode="train", device="cpu", use_extra_actions=True):
+    super().__init__()
+
+    self.n_obs = n_obs
+    self.n_actions = action_dim
+    self.mode = mode
+    self.device = device
+
+    self.action_dim = action_dim
+    self.pi = MATActor(n_obs, action_dim, hidden_sizes, activation, device=device,
+                            use_extra_actions=use_extra_actions)
+
+    # build value function - use paper specified hidden sizes
+    self.vf  = MLPCritic(n_obs, (128, 128, 128), activation)
+
+    if self.mode not in ["test", "train"]:
+      raise RuntimeError(f"MLPActorCriticPG given mode={mode}, should be 'test' or 'train'")
+
+    # add hidden layer size into the name
+    for i in range(len(hidden_sizes)):
+      if i == 0: self.name += f"{hidden_sizes[i]}"
+      if i > 0: self.name += f"x{hidden_sizes[i]}"
+
+  def step(self, obs):
+    with torch.no_grad():
+      pi = self.pi._distribution(obs)
+      if self.pi.use_extra_actions:
+        a_1 = pi[0].sample()
+        a_2 = pi[1].sample()
+        # if reopen action is triggered, lift must be zero
+        reopen_triggered = a_1[:,-1] > 0.5
+        a_1[reopen_triggered, -2] = 0.0
+        # concatenate resultant action tensor
+        a = torch.concatenate((a_1, a_2.unsqueeze(0)), dim=1)
+      else:
+        a = pi.sample()
       logp_a = self.pi._log_prob_from_distribution(pi, a)
       val = self.vf(obs)
     return a, val, logp_a
@@ -1234,7 +1362,6 @@ class Agent_PPO_MAT:
 
     # options
     use_extra_actions: bool = True
-    use_MAT_logprob: bool = True
 
     # options not in use for exact paper implementation
     use_random_action_noise: bool = False # paper implied
@@ -1387,8 +1514,6 @@ class Agent_PPO_MAT:
     # store values from before the environment steps to put into buffer
     self.last_state = state
     self.last_value = value
-    if self.params.use_MAT_logprob:
-      logprob = self.compute_actlogp(action) # compute the MAT action logprob
     self.last_logprob = logprob 
 
     return action.squeeze(0) # from tensor([[x]]) to tensor([x])
@@ -1450,6 +1575,8 @@ class Agent_PPO_MAT:
     [B x A] where B is the batch number and A are the individual action vectors
     """
 
+    sigmoid = torch.nn.Sigmoid()
+
     # if we are using the extra actions [a_reopen, a_wrist, a_wrist_stdev]
     if self.params.use_extra_actions:
 
@@ -1457,7 +1584,8 @@ class Agent_PPO_MAT:
       action = action[:,:-2]
 
       # apply the sigmoid to all elements
-      actprobs = 1.0 / (1.0 + torch.exp(-action))
+      # actprobs = 1.0 / (1.0 + torch.exp(-action))
+      actprobs = sigmoid(action)
 
       # calculate the logprob
       actlogprob = (
@@ -1472,6 +1600,8 @@ class Agent_PPO_MAT:
 
       # apply the sigmoid to all elements
       actprobs = 1.0 / (1.0 + torch.exp(-action))
+
+      # avoid sigmoid for numerical instability
 
       # calculate the logprob
       actlogprob = (
@@ -1495,21 +1625,16 @@ class Agent_PPO_MAT:
     """
     obs, act, adv, logp_old = data['obs'], data['act'], data['adv'], data['logp']
 
-    # print("act is", act)
-    # print("act shape is", act.shape)
-
     # Policy loss
     pi, logp = self.mlp_ac.pi(obs, act)
-    if self.params.use_MAT_logprob:
-      logp = self.compute_actlogp(act) # compute the MAT action logprob
-      logp.requires_grad_(True) # enable gradient calculations
     ratio = torch.exp(logp - logp_old)
     soft_advantage = adv - self.params.temperature_alpha * logp # MAT addition, to make soft
     clip_ratio = torch.clamp(ratio, 1-self.params.clip_ratio, 1+self.params.clip_ratio)
     min_ratio = torch.min(ratio, clip_ratio)
     loss_pi = -(min_ratio * soft_advantage).mean()
 
-    # Useful extra info
+    # Useful extra info - should not be used with MAT!
+    if self.mlp_ac.pi.use_extra_actions: pi = pi[0]
     approx_kl = (logp_old - logp).mean().item()
     ent = pi.entropy().mean().item()
     clipped = ratio.gt(1+self.params.clip_ratio) | ratio.lt(1-self.params.clip_ratio)
@@ -1577,7 +1702,7 @@ class Agent_PPO_MAT:
       action,
       reward,
       self.last_value,
-      self.last_logprob * truncated # no prob if max_step_num exceeded
+      self.last_logprob * (not truncated) # no prob if max_step_num exceeded
     )
 
     self.steps_done += 1
