@@ -826,7 +826,166 @@ class NetActorCriticPG(nn.Module):
     self.vf.eval()
 
 # ----- MAT specific ----- #
+
+class MATNet(nn.Module):
+
+  name = "MATNet"
+
+  def __init__(self, act_dim, n=20, tanh_features=10, use_extra=False):
+
+    super(MATNet, self).__init__()
+
+    if use_extra:
+      if act_dim == 6: use_Z = False
+      elif act_dim == 7: use_Z = True
+      else: raise RuntimeError(f"MATNet has use_extra = {use_extra} and act_dim = {act_dim}")
+    else:
+      if act_dim == 4: use_Z = False
+      elif act_dim == 5: use_Z = True
+      else: raise RuntimeError(f"MATNet has use_extra = {use_extra} and act_dim = {act_dim}")
+
+    self.n = n
+    self.con_n = 4
+    self.jnt_n = 3 + use_Z
+    self.xyz_n = 12
+
+    self.contacts_binary = nn.Sequential(
+      nn.Linear((n+1) * self.con_n, 128), nn.ReLU(),
+      nn.Linear(128, 128), nn.ReLU(),
+      nn.Linear(128, 128), nn.ReLU(),
+      nn.Linear(128, tanh_features), nn.Tanh()
+    )
+
+    self.delta_contacts = nn.Sequential(
+      nn.Linear(n * self.con_n, 128), nn.ReLU(),
+      nn.Linear(128, 128), nn.ReLU(),
+      nn.Linear(128, 128), nn.ReLU(),
+      nn.Linear(128, tanh_features), nn.Tanh()
+    )
+
+    self.joint_angles = nn.Sequential(
+      nn.Linear((n+1) * self.jnt_n, 128), nn.ReLU(),
+      nn.Linear(128, 128), nn.ReLU(),
+      nn.Linear(128, 128), nn.ReLU(),
+      nn.Linear(128, tanh_features), nn.Tanh()
+    )
+
+    self.delta_joints = nn.Sequential(
+      nn.Linear(n * self.jnt_n, 128), nn.ReLU(),
+      nn.Linear(128, 128), nn.ReLU(),
+      nn.Linear(128, 128), nn.ReLU(),
+      nn.Linear(128, tanh_features), nn.Tanh()
+    )
+
+    self.contacts_xyz = nn.Sequential(
+      nn.Linear((n+1) * self.xyz_n, 128), nn.ReLU(),
+      nn.Linear(128, 128), nn.ReLU(),
+      nn.Linear(128, 128), nn.ReLU(),
+      nn.Linear(128, tanh_features), nn.Tanh()
+    )
+
+    self.delta_xyz = nn.Sequential(
+      nn.Linear(n * self.xyz_n, 128), nn.ReLU(),
+      nn.Linear(128, 128), nn.ReLU(),
+      nn.Linear(128, 128), nn.ReLU(),
+      nn.Linear(128, tanh_features), nn.Tanh()
+    )
+
+    self.main_net = nn.Sequential(
+      nn.Linear(tanh_features*6, 128), nn.ReLU(),
+      nn.Linear(128, 128), nn.ReLU(),
+      nn.Linear(128, 128), nn.ReLU(),
+      nn.Linear(128, act_dim)
+    )
+
+    # determine how to divide the deltas from main data
+    n2 = self.n * 2 + 1
+    self.con_ind = sum([(list(range(n2*i, n2*(i+1), 2))) for i in range(self.con_n)], [])
+    self.dcon_ind = sum([(list(range(1 + n2*i, n2*(i+1) - 1, 2))) for i in range(self.con_n)], [])
+    self.jnt_ind = sum([(list(range(n2*i, n2*(i+1), 2))) for i in range(self.jnt_n)], [])
+    self.djnt_ind = sum([(list(range(1 + n2*i, n2*(i+1) - 1, 2))) for i in range(self.jnt_n)], [])
+    self.xyz_ind = sum([(list(range(n2*i, n2*(i+1), 2))) for i in range(self.xyz_n)], [])
+    self.dxyz_ind = sum([(list(range(1 + n2*i, n2*(i+1) - 1, 2))) for i in range(self.xyz_n)], [])
+
+  def split_obs(self, obs):
+    """
+    Split the incoming observation into parts given that the structure is that
+    for each category (contacts, joints, xyz) the regular and deltas are
+    alternating order
+    """
+
+    # print("obs size is", obs.shape)
+    # print("estimated size is", [self.jnt_n * (2*self.n + 1), 
+    #    self.con_n * (2*self.n + 1), 
+    #    self.xyz_n * (2*self.n + 1)],
+    #    "with sum", [self.jnt_n * (2*self.n + 1) + 
+    #    self.con_n * (2*self.n + 1) + 
+    #    self.xyz_n * (2*self.n + 1)])
+
+    # order is important since some are composed of more values
+    (all_contacts, all_joints, all_xyz) = torch.split(obs,
+      [self.con_n * (2*self.n + 1), 
+       self.jnt_n * (2*self.n + 1), 
+       self.xyz_n * (2*self.n + 1)], 
+       dim=1
+    )
+
+    # seperate out the alternating values
+    contacts = all_contacts[:, self.con_ind]
+    d_contacts = all_contacts[:, self.dcon_ind]
+    joints = all_joints[:, self.jnt_ind]
+    d_joints = all_joints[:, self.djnt_ind]
+    xyz = all_xyz[:, self.xyz_ind]
+    d_xyz = all_xyz[:, self.dxyz_ind]
+
+    # print("contacts shape is", contacts.shape, "values are", contacts[0])
+    # print("d_contacts shape is", d_contacts.shape, "values are", d_contacts[0])
+    # print("joints shape is", joints.shape, "values are", joints[0])
+    # print("d_joints shape is", d_joints.shape, "values are", d_joints[0])
+    # print("xyz shape is", xyz.shape, "values are", xyz[0])
+    # print("d_xyz shape is", d_xyz.shape, "values are", d_xyz[0])
+
+    return (contacts, d_contacts, joints, d_joints, xyz, d_xyz)
+
+  def forward(self, obs):
+    """
+    Takes the input vector, splits it up, and runs it through
+    """
+
+    # split the observation into the constituent parts
+    (contacts, d_contacts, joints, d_joints, xyz, d_xyz) = self.split_obs(obs)
+
+    # run all the inputs through networks into tanh features
+    f_con = self.contacts_binary(contacts)
+    f_dcon = self.delta_contacts(d_contacts)
+    f_jnt = self.joint_angles(joints)
+    f_djnt = self.delta_joints(d_joints)
+    f_xyz = self.contacts_xyz(xyz)
+    f_dxyz = self.delta_xyz(d_xyz)
+
+    # concatenate all the features
+    feature_vec = torch.concat(
+      (f_con, f_dcon, f_jnt, f_djnt, f_xyz, f_dxyz), dim=1)
     
+    # run through the final network
+    output = self.main_net(feature_vec)
+
+    return output
+  
+  def to_device(self, device=None):
+    """
+    Set a pytorch device for the network
+    """
+    if device is not None:
+      device = torch.device(device)
+    self.contacts_binary.to(device)
+    self.delta_contacts.to(device)
+    self.joint_angles.to(device)
+    self.delta_joints.to(device)
+    self.contacts_xyz.to(device)
+    self.delta_xyz.to(device)
+    self.main_net.to(device)
+   
 class MATActor(Actor):
 
   def __init__(self, obs_dim, act_dim, hidden_sizes, activation, device="cpu",
@@ -834,7 +993,8 @@ class MATActor(Actor):
     super().__init__()
     log_std = -0.5 * np.ones(1, dtype=np.float32) # only for wrist action
     self.log_std = torch.nn.Parameter(torch.as_tensor(log_std))
-    self.net = mlp([obs_dim] + list(hidden_sizes) + [act_dim], activation)
+    if hidden_sizes == "paper": self.net = MATNet(act_dim, use_extra=use_extra_actions)
+    else: self.net = mlp([obs_dim] + list(hidden_sizes) + [act_dim], activation)
     self.sigmoid = nn.Sigmoid()
     self.use_extra_actions = use_extra_actions
     self.to_device(device)

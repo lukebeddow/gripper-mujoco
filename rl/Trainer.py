@@ -1209,9 +1209,9 @@ class MujocoTrainer(Trainer):
       total_counter.object_contact.percent,
       total_counter.palm_force.percent,
       total_counter.exceed_limits.percent,
-      obj_counter.exceed_bend_sensor.percent,
-      obj_counter.exceed_palm_sensor.percent,
-      obj_counter.exceed_wrist_sensor.percent
+      total_counter.exceed_bend_sensor.percent,
+      total_counter.exceed_palm_sensor.percent,
+      total_counter.exceed_wrist_sensor.percent
     )
 
     # now extract category data
