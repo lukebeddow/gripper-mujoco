@@ -831,18 +831,9 @@ class MATNet(nn.Module):
 
   name = "MATNet"
 
-  def __init__(self, act_dim, n=20, tanh_features=10, use_extra=False):
+  def __init__(self, act_dim, n=20, tanh_features=10, use_extra=False, use_Z=False):
 
     super(MATNet, self).__init__()
-
-    if use_extra:
-      if act_dim == 6: use_Z = False
-      elif act_dim == 7: use_Z = True
-      else: raise RuntimeError(f"MATNet has use_extra = {use_extra} and act_dim = {act_dim}")
-    else:
-      if act_dim == 4: use_Z = False
-      elif act_dim == 5: use_Z = True
-      else: raise RuntimeError(f"MATNet has use_extra = {use_extra} and act_dim = {act_dim}")
 
     self.n = n
     self.con_n = 4
@@ -989,14 +980,16 @@ class MATNet(nn.Module):
 class MATActor(Actor):
 
   def __init__(self, obs_dim, act_dim, hidden_sizes, activation, device="cpu",
-               use_extra_actions=True):
+               use_extra_actions=True, use_Z=False):
     super().__init__()
     log_std = -0.5 * np.ones(1, dtype=np.float32) # only for wrist action
     self.log_std = torch.nn.Parameter(torch.as_tensor(log_std))
-    if hidden_sizes == "paper": self.net = MATNet(act_dim, use_extra=use_extra_actions)
+    if hidden_sizes == "paper": 
+      self.net = MATNet(act_dim, use_extra=use_extra_actions, use_Z=use_Z)
     else: self.net = mlp([obs_dim] + list(hidden_sizes) + [act_dim], activation)
     self.sigmoid = nn.Sigmoid()
     self.use_extra_actions = use_extra_actions
+    self.use_Z = use_Z
     self.to_device(device)
 
   def _distribution(self, obs):
@@ -1013,26 +1006,44 @@ class MATActor(Actor):
 
   def _log_prob_from_distribution(self, pi, act):
     """Calculate the log prob using the equation from the MAT paper"""
-    if self.use_extra_actions:
-      finger_probs = pi[0].probs[:,:-2] # exclude lift and reopen (pi[0] has no wrist)
-      lift_probs = pi[0].probs[:,-2]
-      reopen_probs = pi[0].probs[:,-1]
-      lift_act = act[:,-3]
-      reopen_act = act[:,-2]
-      wrist_act = act[:,-1] # excluded from logprob calculation
-      logprob = (
-        torch.log(reopen_probs) 
-        + (1-reopen_act) * (torch.log(lift_probs))
-        + (1-reopen_act) * (1-lift_act) * (torch.sum(torch.log(finger_probs), axis=1))
-      )
+    # normal: use termination action instead of Z height
+    if not self.use_Z:
+      if self.use_extra_actions:
+        finger_probs = pi[0].probs[:,:-2] # exclude lift and reopen (pi[0] has no wrist)
+        lift_probs = pi[0].probs[:,-2]
+        reopen_probs = pi[0].probs[:,-1]
+        lift_act = act[:,-3]
+        reopen_act = act[:,-2]
+        wrist_act = act[:,-1] # excluded from logprob calculation
+        logprob = (
+          torch.log(reopen_probs) 
+          + (1-reopen_act) * (torch.log(lift_probs))
+          + (1-reopen_act) * (1-lift_act) * (torch.sum(torch.log(finger_probs), axis=1))
+        )
+      else:
+        finger_probs = pi.probs[:,:-1] # exclude lift
+        lift_probs = pi.probs[:,-1]
+        lift_act = act[:,-1]
+        logprob = (
+          torch.log(lift_probs)
+          + (1-lift_act) * (torch.sum(torch.log(finger_probs), axis=1))
+        )
+    # paper modification: use Z height instead of termination action
     else:
-      finger_probs = pi.probs[:,:-1] # exclude lift
-      lift_probs = pi.probs[:,-1]
-      lift_act = act[:,-1]
-      logprob = (
-        torch.log(lift_probs)
-        + (1-lift_act) * (torch.sum(torch.log(finger_probs), axis=1))
-      )
+      if self.use_extra_actions:
+        finger_probs = pi[0].probs[:,:-1] # exclude reopen (pi[0] has no wrist)
+        reopen_probs = pi[0].probs[:,-1]
+        reopen_act = act[:,-2]
+        wrist_act = act[:,-1] # excluded from logprob calculation
+        logprob = (
+          torch.log(reopen_probs) 
+          + (1-reopen_act) * (torch.sum(torch.log(finger_probs), axis=1))
+        )
+      else:
+        finger_probs = pi.probs[:,:] # no lift termination, so include all
+        logprob = (
+          (torch.sum(torch.log(finger_probs), axis=1))
+        )
     return logprob
   
   def to_device(self, device=None):
@@ -1046,7 +1057,8 @@ class MATActorCriticPG(nn.Module):
   name = "MLPActorCriticPG_"
 
   def __init__(self, n_obs, action_dim, hidden_sizes=(128, 128, 128, 128, 128, 128),
-                activation=nn.ReLU, mode="train", device="cpu", use_extra_actions=True):
+                activation=nn.ReLU, mode="train", device="cpu", use_extra_actions=True,
+                use_Z=False):
     super().__init__()
 
     self.n_obs = n_obs
@@ -1056,7 +1068,7 @@ class MATActorCriticPG(nn.Module):
 
     self.action_dim = action_dim
     self.pi = MATActor(n_obs, action_dim, hidden_sizes, activation, device=device,
-                            use_extra_actions=use_extra_actions)
+                            use_extra_actions=use_extra_actions, use_Z=use_Z)
 
     # build value function - use paper specified hidden sizes
     self.vf  = MLPCritic(n_obs, (128, 128, 128), activation)

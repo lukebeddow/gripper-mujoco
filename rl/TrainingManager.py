@@ -1248,7 +1248,25 @@ class TrainingManager():
       if self.settings["reward"]["penalty_termination"]:
         env.mj.set.oob.set                  (0.0,   True,   1)
         env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"],
-                                           value=0.0)  
+                                           value=0.0)
+        
+    elif self.settings["reward"]["style"] == "MAT_shaped_no_term":
+      # prepare reward thresholds
+      self.set_sensor_reward_thresholds(env)
+      env.mj.set.cap_reward = True
+      env.mj.set.quit_if_cap_exceeded = False
+      env.mj.set.reward_cap_lower_bound = -1.0
+      env.mj.set.reward_cap_upper_bound = 1.0
+      # bonuses only
+      env = self.set_sensor_bonuses(env, 0.002 * self.settings["reward"]["scale_rewards"])
+      # scale based on steps allowed per episode
+      env.mj.set.scale_rewards(0.5*(100 / env.params.max_episode_steps))
+      # end criteria                        reward   done   trigger
+      env.mj.set.stable_height.set          (1.0,    True,    1)
+      if self.settings["reward"]["penalty_termination"]:
+        env.mj.set.oob.set                  (0.0,   True,   1)
+        env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"],
+                                           value=0.0)
         
     else:
       raise RuntimeError(f"style={self.settings['reward']['style']} is not a valid option in TrainingManager.create_reward_function()")
