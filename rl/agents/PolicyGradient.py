@@ -836,8 +836,8 @@ class MATNet(nn.Module):
     super(MATNet, self).__init__()
 
     self.n = n
-    self.con_n = 4
-    self.jnt_n = 3 + use_Z
+    self.con_n = 4 + use_Z # wrist sensor added
+    self.jnt_n = 3 + use_Z # wrist motion added
     self.xyz_n = 12
 
     self.contacts_binary = nn.Sequential(

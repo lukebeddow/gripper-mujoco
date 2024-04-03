@@ -5059,7 +5059,7 @@ if __name__ == "__main__":
     if not use_Z:
       tm.settings["env"]["fingertip_clearance"] = 5e-3 # closer to ground given no Z height changes. Original=10e-3
       tm.settings["cpp"]["base_position_noise"] = 0e-3 # disable base position noise? Original=5e-3
-      # apply action settings
+      # enable final lift/termination action
       tm.settings["cpp"]["use_termination_action"] = True # for final lift
 
     # apply reward settings
@@ -5089,6 +5089,10 @@ if __name__ == "__main__":
     tm.settings["Agent_PPO_MAT"]["use_KL_early_stop"] = True # False paper implied
     tm.settings["Agent_PPO_MAT"]["train_pi_iters"] = tm.param_2 # 10 paper specified (based on my understanding)
     tm.settings["Agent_PPO_MAT"]["train_vf_iters"] = tm.param_2 # 10 paper specified (based on my understanding)
+
+    # if not using termination action, change steps per epoch
+    if use_Z:
+      tm.settings["Agent_PPO_MAT"]["steps_per_epoch"] = 3000
 
     # create the environment
     env = tm.make_env()
