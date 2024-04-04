@@ -990,6 +990,7 @@ class MATActor(Actor):
     self.sigmoid = nn.Sigmoid()
     self.use_extra_actions = use_extra_actions
     self.use_Z = use_Z
+    self.disable_MAT_logprob = False # can override to do normal logprob
     self.to_device(device)
 
   def _distribution(self, obs):
@@ -1007,6 +1008,11 @@ class MATActor(Actor):
   def _log_prob_from_distribution(self, pi, act):
     """Calculate the log prob using the equation from the MAT paper"""
     # normal: use termination action instead of Z height
+    if self.disable_MAT_logprob:
+      if self.use_extra_actions:
+        return pi[0].log_prob(act[:,:-1]).sum(axis=-1) + pi[1].log_prob(act[:,-1]).sum(axis=-1)
+      else:
+        return pi.log_prob(act).sum(axis=-1)
     if not self.use_Z:
       if self.use_extra_actions:
         finger_probs = pi[0].probs[:,:-2] # exclude lift and reopen (pi[0] has no wrist)
@@ -1392,6 +1398,10 @@ class Agent_PPO:
     clip_adv = torch.clamp(ratio, 1-self.params.clip_ratio, 1+self.params.clip_ratio) * adv
     loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
 
+    # TEMPORARY FIX FOR MAT, DELETE LATER
+    if isinstance(pi, tuple):
+      pi = pi[0]
+
     # Useful extra info
     approx_kl = (logp_old - logp).mean().item()
     ent = pi.entropy().mean().item()
@@ -1468,7 +1478,7 @@ class Agent_PPO:
       action,
       reward,
       self.last_value,
-      self.last_logprob
+      self.last_logprob * (not truncated) # DELETE THIS AFTER MAT TESTING DONE
     )
 
     self.steps_done += 1
@@ -1739,50 +1749,6 @@ class Agent_PPO_MAT:
       "network_name" : self.mlp_ac.name
     })
     return param_dict
-
-  def compute_actlogp(self, action):
-    """
-    Compute the action log probabilities based on an action vector. MAT uses the
-    sigmoid to get probabilities and then samples them randomly. Action is a tensor
-    [B x A] where B is the batch number and A are the individual action vectors
-    """
-
-    sigmoid = torch.nn.Sigmoid()
-
-    # if we are using the extra actions [a_reopen, a_wrist, a_wrist_stdev]
-    if self.params.use_extra_actions:
-
-      # trim out the two wrist actions
-      action = action[:,:-2]
-
-      # apply the sigmoid to all elements
-      # actprobs = 1.0 / (1.0 + torch.exp(-action))
-      actprobs = sigmoid(action)
-
-      # calculate the logprob
-      actlogprob = (
-        torch.log(actprobs[:,-1]) # logprob(a_reopen)
-        + (1 - actprobs[:,-1]) * torch.log(actprobs[:,-2]) # (1-a_reopen) * (logprop(a_lift))
-        + (1 - actprobs[:,-1]) * (1 - actprobs[:,-2]) * torch.sum( # (1-a_reopen) * (1-a_lift)
-          torch.log(actprobs[:,:-2]), dim=1) # times sum{logprob(a_finger)}
-      )
-
-    # or we are not using extra actions, only [a_fingers, a_lift]
-    else:
-
-      # apply the sigmoid to all elements
-      actprobs = 1.0 / (1.0 + torch.exp(-action))
-
-      # avoid sigmoid for numerical instability
-
-      # calculate the logprob
-      actlogprob = (
-        torch.log(actprobs[:,-1]) # (logprop(a_lift))
-        + (1 - actprobs[:,-1]) * torch.sum( # (1-a_lift)
-          torch.log(actprobs[:,:-1]), dim=1) # times sum{logprob(a_finger)}
-      )
-
-    return actlogprob
 
   def compute_loss_v(self, data):
     """
