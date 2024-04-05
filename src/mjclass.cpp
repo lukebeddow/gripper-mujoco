@@ -461,6 +461,7 @@ void MjClass::reset()
   s_.base_state_sensor_XY.reset();
   s_.base_state_sensor_Z.reset();
   s_.base_state_sensor_yaw.reset();
+  s_.cartesian_contacts_XYZ.reset();
 
   // refetch the gripper base limits in case they have changed
   base_min_ = luke::get_base_min();
