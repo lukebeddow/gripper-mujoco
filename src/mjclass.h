@@ -1690,7 +1690,7 @@ public:
   bool set_new_base_yaw(double yaw);
   double random_base_yaw(double size);
   double random_base_Z_movement(double size);
-  void MAT_reopen(double new_angle);
+  std::vector<float> MAT_reopen(double new_angle);
 
   // learning functions
   void action_step();
@@ -1747,6 +1747,7 @@ public:
     std::vector<float> sensor_data);
   std::vector<float> get_real_observation();
   std::vector<float> get_simple_state_vector(MjType::SensorData sensor);
+  std::vector<float> get_SI_gauge_forces(std::vector<float> raw_gauges);
 
   // misc
   void forward() { mj_forward(model, data); }

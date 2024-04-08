@@ -648,6 +648,7 @@ class TrainingManager():
     self.train_best_ep = None
     self.full_test_sr = None
     self.trained_to = None
+    self.test_performance_matrix = None
 
   def get_training_summary(self, filepath=None, load_existing=True):
     """
@@ -760,6 +761,10 @@ class TrainingManager():
           elif line.startswith("\tParam 3"):
             self.param_3 = item
             self.param_3_name = splits[0].split(": ")[-1]
+
+    # now parse the test time performance
+    test_perf = self.trainer.read_test_performance(string_input=sections[1])
+    self.test_performance_matrix = test_perf
 
     return True
 

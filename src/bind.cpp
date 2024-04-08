@@ -140,6 +140,7 @@ PYBIND11_MODULE(bind, m) {
     .def("input_real_data", &MjClass::input_real_data)
     .def("get_real_observation", &MjClass::get_real_observation)
     .def("get_simple_state_vector", &MjClass::get_simple_state_vector)
+    .def("get_SI_gauge_forces", &MjClass::get_SI_gauge_forces)
 
     // misc
     .def("tick", &MjClass::tick)

@@ -982,6 +982,7 @@ class MATActor(Actor):
   def __init__(self, obs_dim, act_dim, hidden_sizes, activation, device="cpu",
                use_extra_actions=True, use_Z=False):
     super().__init__()
+    self.act_dim = act_dim
     log_std = -0.5 * np.ones(1, dtype=np.float32) # only for wrist action
     self.log_std = torch.nn.Parameter(torch.as_tensor(log_std))
     if hidden_sizes == "paper": 
@@ -991,25 +992,50 @@ class MATActor(Actor):
     self.use_extra_actions = use_extra_actions
     self.use_Z = use_Z
     self.disable_MAT_logprob = False # can override to do normal logprob
+    self.use_MAT_sampling = True # can override to have regular action sampling
     self.to_device(device)
+
+  def disable_MAT_sampling(self):
+    """
+    Turn off MAT action sampling
+    """
+    log_std = -0.5 * np.ones(self.act_dim, dtype=np.float32) # for all actions
+    self.log_std = torch.nn.Parameter(torch.as_tensor(log_std))
+    self.use_MAT_sampling = False
+    self.disable_MAT_logprob = True
 
   def _distribution(self, obs):
     act = self.net(obs) # run observation through network
-    if self.use_extra_actions:
-      sigact = self.sigmoid(act[:, :-1]) # exclude wrist
-      wrist_mu = act[:,-1] # exctract wrist action mean
-      # log_std stays on cpu so we need to move this to our device
-      std = torch.exp(self.log_std).to(self.device) # convert from log->regular
-      return (Bernoulli(probs=sigact), Normal(wrist_mu, std))
+    if self.use_MAT_sampling:
+      if self.use_extra_actions:
+        sigact = self.sigmoid(act[:, :-1]) # exclude wrist
+        wrist_mu = act[:,-1] # exctract wrist action mean
+        # log_std stays on cpu so we need to move this to our device
+        std = torch.exp(self.log_std).to(self.device) # convert from log->regular
+        return (Bernoulli(probs=sigact), Normal(wrist_mu, std))
+      else:
+        sigact = self.sigmoid(act)
+        return Bernoulli(probs=sigact)
     else:
-      sigact = self.sigmoid(act)
-      return Bernoulli(probs=sigact)
+      std = torch.exp(self.log_std).to(self.device)
+      return Normal(act, std)
+    
+  def _bernoulli_log_prob(self, act, prob):
+    """
+    Calculate the log probability of a bernoulli sampled action.
+
+    The formula is: x log(p) + (1 - x) log(1-p)
+
+    where x is the sampled value (act) and p is the probability
+    """
+    return act * torch.log(prob) + (1 - act) * torch.log(1 - prob)
+
 
   def _log_prob_from_distribution(self, pi, act):
     """Calculate the log prob using the equation from the MAT paper"""
     # normal: use termination action instead of Z height
     if self.disable_MAT_logprob:
-      if self.use_extra_actions:
+      if self.use_MAT_sampling and self.use_extra_actions:
         return pi[0].log_prob(act[:,:-1]).sum(axis=-1) + pi[1].log_prob(act[:,-1]).sum(axis=-1)
       else:
         return pi.log_prob(act).sum(axis=-1)
@@ -1018,37 +1044,62 @@ class MATActor(Actor):
         finger_probs = pi[0].probs[:,:-2] # exclude lift and reopen (pi[0] has no wrist)
         lift_probs = pi[0].probs[:,-2]
         reopen_probs = pi[0].probs[:,-1]
+        fing_act = act[:,:-3]
         lift_act = act[:,-3]
         reopen_act = act[:,-2]
         wrist_act = act[:,-1] # excluded from logprob calculation
         logprob = (
-          torch.log(reopen_probs) 
-          + (1-reopen_act) * (torch.log(lift_probs))
-          + (1-reopen_act) * (1-lift_act) * (torch.sum(torch.log(finger_probs), axis=1))
+          self._bernoulli_log_prob(reopen_act, reopen_probs) 
+          + (1-reopen_act) * self._bernoulli_log_prob(lift_act, lift_probs)
+          + (1-reopen_act) * (1-lift_act) * (
+              torch.sum(self._bernoulli_log_prob(fing_act, finger_probs), axis=1)
+            )
         )
       else:
         finger_probs = pi.probs[:,:-1] # exclude lift
         lift_probs = pi.probs[:,-1]
+        fing_act = act[:,-1]
         lift_act = act[:,-1]
         logprob = (
-          torch.log(lift_probs)
-          + (1-lift_act) * (torch.sum(torch.log(finger_probs), axis=1))
+          self._bernoulli_log_prob(lift_act, lift_probs)
+          + (1-lift_act) * (
+            torch.sum(self._bernoulli_log_prob(fing_act, finger_probs), axis=1)
+          )
         )
     # paper modification: use Z height instead of termination action
     else:
       if self.use_extra_actions:
         finger_probs = pi[0].probs[:,:-1] # exclude reopen (pi[0] has no wrist)
         reopen_probs = pi[0].probs[:,-1]
+        fing_act = act[:,:-2]
         reopen_act = act[:,-2]
         wrist_act = act[:,-1] # excluded from logprob calculation
         logprob = (
-          torch.log(reopen_probs) 
-          + (1-reopen_act) * (torch.sum(torch.log(finger_probs), axis=1))
+          self._bernoulli_log_prob(reopen_act, reopen_probs)
+          + (1-reopen_act) * (
+            torch.sum(self._bernoulli_log_prob(fing_act, finger_probs), axis=1)
+          )
+        )
+
+        finger_probs = pi[0].probs[:,:-2] # exclude lift and reopen (pi[0] has no wrist)
+        lift_probs = pi[0].probs[:,-2]
+        reopen_probs = pi[0].probs[:,-1]
+        fing_act = act[:,:-3]
+        lift_act = act[:,-3]
+        reopen_act = act[:,-2]
+        wrist_act = act[:,-1] # excluded from logprob calculation
+        logprob = (
+          self._bernoulli_log_prob(reopen_act, reopen_probs) 
+          + (1-reopen_act) * self._bernoulli_log_prob(lift_act, lift_probs)
+          + (1-reopen_act) * (1-lift_act) * (
+              torch.sum(self._bernoulli_log_prob(fing_act, finger_probs), axis=1)
+            )
         )
       else:
         finger_probs = pi.probs[:,:] # no lift termination, so include all
+        fing_act = act[:, :]
         logprob = (
-          (torch.sum(torch.log(finger_probs), axis=1))
+          torch.sum(self._bernoulli_log_prob(fing_act, finger_probs), axis=1)
         )
     return logprob
   
@@ -1478,7 +1529,7 @@ class Agent_PPO:
       action,
       reward,
       self.last_value,
-      self.last_logprob * (not truncated) # DELETE THIS AFTER MAT TESTING DONE
+      self.last_logprob
     )
 
     self.steps_done += 1
@@ -1739,6 +1790,12 @@ class Agent_PPO_MAT:
 
     # prepare class variables
     self.steps_done = self.buffer.index
+
+    # make MATActor forward compatible
+    if not hasattr(self.mlp_ac.pi, "disable_MAT_logprob"):
+      self.mlp_ac.pi.disable_MAT_logprob = False
+    if not hasattr(self.mlp_ac.pi, "use_Z"):
+      self.mlp_ac.pi.use_Z = False
 
   def get_params_dict(self):
     """

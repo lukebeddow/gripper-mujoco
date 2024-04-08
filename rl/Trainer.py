@@ -1454,30 +1454,34 @@ class MujocoTrainer(Trainer):
 
     return best_sr, best_ep
 
-  def read_test_performance(self, as_string=False):
+  def read_test_performance(self, as_string=False, string_input=None):
     """
     Read the test performance into a numpy array
     """
 
-    try:
+    if string_input is None:
+      try:
 
-      readroot = self.savedir + "/" + self.group_name + "/"
-      readpath = readroot + self.run_name + "/"
-      readname = self.test_performances_filename + ".txt"
+        readroot = self.savedir + "/" + self.group_name + "/"
+        readpath = readroot + self.run_name + "/"
+        readname = self.test_performances_filename + ".txt"
 
-      with open(readpath + readname, "r") as f:
-        txt = f.read()
+        with open(readpath + readname, "r") as f:
+          txt = f.read()
 
-    except Exception as e:
-      if self.log_level > 0:
-        print(f"TrainDQN.read_test_performance() error: {e}")
-      if as_string:
-        return f"TrainDQN.read_test_performance() error: {e}"
-      else:
-        # make sure this is correct length!
-        return np.zeros((6,1))
-    
-    if as_string: return txt
+      except Exception as e:
+        if self.log_level > 0:
+          print(f"TrainDQN.read_test_performance() error: {e}")
+        if as_string:
+          return f"TrainDQN.read_test_performance() error: {e}"
+        else:
+          # make sure this is correct length!
+          return np.zeros((6,1))
+      
+      if as_string: return txt
+      
+    else:
+      txt = string_input
 
     lines = txt.splitlines()
 

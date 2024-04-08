@@ -550,46 +550,6 @@ class MjEnv():
 
     return cpp_settings
 
-  def _set_MAT_action_old(self, action):
-    """
-    Set the action in simulaton when using MAT. Expects numpy array of values
-    """
-
-    def sigmoid_bernoulli_sample(x):
-      x = 1.0 / (1.0 + np.exp(-x)) # apply sigmoid
-      return np.array(random_train.random(len(x)) < x, dtype=np.float32) # bernoulli sample
-    
-    if self.params.MAT_use_reopen:
-
-      # extract the two wrist orientation actions (angle, stdev)
-      a_wrist = action[-2]
-      a_stdev = action[-1]
-
-      # apply the gaussian to the wrist actions and scale by pi
-      a_wrist = random_train.normal(np.tanh(a_wrist), abs(a_stdev)) * np.pi
-
-      # run all the other actions through the sigmoid and bernoulli sampling
-      action = sigmoid_bernoulli_sample(action[:-2])
-
-      # now get the lift and reopen actions
-      a_lift = action[-2]
-      a_reopen = action[-1]
-
-      # have we triggered (and enabled) reopen actions
-      if a_reopen > 0.5:
-        self.mj.MAT_reopen(a_wrist)
-        if a_lift > 0.5:
-          action[-2] = 0.0 # cannot lift and reopen in the same step
-
-      # trim off the reopen action
-      action = action[:-1]
-
-    else:
-      # apply sigmoid to all actions then feed in directly
-      action = sigmoid_bernoulli_sample(action)
-
-    self._set_action(action)
-
   def _set_MAT_action(self, action):
     """
     New updated version, where action vector is already binary when it is input
@@ -605,14 +565,12 @@ class MjEnv():
         print("action vector is", action)
         raise RuntimeError("MjEnv._set_MAT_action() error: reopen and lift both set True")
       
-      if a_reopen:
-        self.mj.MAT_reopen(a_wrist)
-        # no other actions can trigger, finger motions are disabled
-        return
+      # reopen, but trigger no further actions (eg finger motions)
+      if a_reopen: return self.mj.MAT_reopen(a_wrist)
 
       action = action[:-2] # trim off the reopen and wrist actions, keep lift
 
-    self._set_action(action)
+    return self._set_action(action)
 
   def _set_action(self, action):
     """

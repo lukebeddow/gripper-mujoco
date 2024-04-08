@@ -1430,7 +1430,7 @@ double MjClass::random_base_Z_movement(double size)
   return z_move;
 }
 
-void MjClass::MAT_reopen(double new_angle)
+std::vector<float> MjClass::MAT_reopen(double new_angle)
 {
   /* perform the reopen maneuovre for MAT. This means:
       - reset gripper joints all back to start
@@ -1471,6 +1471,8 @@ void MjClass::MAT_reopen(double new_angle)
   }
 
   recent_MAT_reopen = true;
+
+  return luke::get_target_state_vector();
 }
 
 /* ----- learning functions ----- */
@@ -3225,10 +3227,7 @@ void MjClass::calibrate_real_sensors()
 std::vector<float> MjClass::input_real_data(std::vector<float> state_data, 
   std::vector<float> sensor_data)
 {
-  /* insert real data */
-
-  // do we save ALL data even if we aren't using it
-  bool save_all = true;
+  /* insert real data. Certain quantities (motors/gauges/palm) must always be input and saved */
 
   // safety check to ensure we configure and calibrate before running with real data
   static bool first_call = true;
@@ -3238,17 +3237,42 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     first_call = false;
   }
 
-  // check the state vector has an expected length
+  // what states should be input (must be in this order!)
+  bool motors = true; // always input, see rl_grasping_node.py - s_.motor_state_sensor.in_use;
   bool base_xy = s_.base_state_sensor_XY.in_use;
+  bool base_z = s_.base_state_sensor_Z.in_use;
   bool base_z_rot = s_.base_state_sensor_yaw.in_use;
-  if (state_data.size() != 4 and not base_xy) {
-    throw std::runtime_error("state_data size != 4 but base_xyz = false in MjClass::input_real_data()");
+  int state_expected_length = 3*motors + 2*base_xy + base_z + base_z_rot; // hardcoded amounts of data for each state
+  if (state_data.size() != state_expected_length) {
+    throw std::runtime_error("MjClass::input_real_data() error: state_data has expected length = " + std::to_string(state_expected_length) + ", but actual length is " + std::to_string(state_data.size()));
   }
-  if (state_data.size() != 6 and base_xy and not base_z_rot) {
-    throw std::runtime_error("state_data size != 6 but base_xyz = true and base_z_rot = false in MjClass::input_real_data()");
-  }
-  if (state_data.size() != 7 and base_xy and base_z_rot) {
-    throw std::runtime_error("state_data size != 7 but base_xyz = true and base_z_rot = true in MjClass::input_real_data()");
+
+  // if (base_z and base_xy and base_z_rot and state_data.size() != 7) {
+  //   throw std::runtime_error("MjClass::input_real_data() error: state_data size != 7 but (base_z = true, base_xyz = true, base_z_rot = true), state size is " + std::to_string(state_data.size()));
+  // }
+  // if (base_z and base_xy and not base_z_rot and state_data.size() != 6)
+  // {
+  //   throw std::runtime_error("MjClass::input_real_data() error: state_data size != 6 but (base_z = true, base_xyz = true, base_z_rot = false), state size is " + std::to_string(state_data.size()));
+  // }
+  // if (base_z and not base_xy and base_z_rot and state_data.size() != 5) {
+  //   throw std::runtime_error("MjClass::input_real_data() error: state_data size != 5 but (base_z = true, base_xyz = false, base_z_rot = true), state size is " + std::to_string(state_data.size()));
+  // }
+  // if (base_z and not base_xy and not base_z_rot and state_data.size() != 4) {
+  //   throw std::runtime_error("MjClass::input_real_data() error: state_data size != 4 but (base_z = true, base_xyz = false, base_z_rot = false), state size is " + std::to_string(state_data.size()));
+  // }
+  // if (not base_z and not base_xy and not base_z_rot and state_data.size() != 3) {
+  //   throw std::runtime_error("MjClass::input_real_data() error: state_data size != 3 but (base_z = false, base_xyz = false, base_z_rot = false), state size is " + std::to_string(state_data.size()));
+  // }
+
+  // what sensors should be input (must be in this order!)
+  bool gauges = true; // always input, see rl_grasping_node.py - s_.bending_gauge.in_use;
+  bool palm = true; // always input, see rl_grasping_node.py - s_.palm_sensor.in_use;
+  bool wrist_Z = true; // always input, see rl_grasping_node.py - s_.wrist_sensor_Z.in_use;
+  bool wrist_XY = false; // not yet added to this function - s_.wrist_sensor_XY.in_use; 
+  bool cart_XYZ = s_.cartesian_contacts_XYZ.in_use;
+  int sensor_expected_length = 3*gauges + palm + 2*wrist_XY + wrist_Z + 12*cart_XYZ; // hardcoded amounts of data for each sensor
+  if (sensor_data.size() != sensor_expected_length) {
+    throw std::runtime_error("MjClass::input_real_data() error: sensor_data has expected length = " + std::to_string(sensor_expected_length) + ", but actual length is " + std::to_string(sensor_data.size()));
   }
 
   // vector which outputs all the freshly normalised values
@@ -3264,7 +3288,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
   // std::cout << "Adding state noise of " << s_.motor_state_sensor.noise_std << '\n';
   // std::cout << "Adding sensor noise of " << s_.bending_gauge.noise_std << '\n';
 
-  if (save_all or s_.motor_state_sensor.in_use) {
+  if (motors) {
 
     // normalise and save state data
     real_sensors_.raw.x_motor_position.add(state_data[i]);
@@ -3295,7 +3319,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     ++i; 
   }
 
-  if (base_xy and (save_all or s_.base_state_sensor_XY.in_use)) {
+  if (base_xy) {
 
     real_sensors_.raw.x_base_position.add(state_data[i]);
     real_sensors_.SI.x_base_position.add(state_data[i]);
@@ -3315,7 +3339,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
 
   }
   
-  if (save_all or s_.base_state_sensor_Z.in_use) {
+  if (base_z) {
 
     real_sensors_.raw.z_base_position.add(state_data[i]);
     real_sensors_.SI.z_base_position.add(state_data[i]);
@@ -3327,7 +3351,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
 
   }
 
-  if (base_z_rot and (save_all or s_.base_state_sensor_yaw.in_use)) {
+  if (base_z_rot) {
 
     real_sensors_.raw.yaw_base_rotation.add(state_data[i]);
     real_sensors_.SI.yaw_base_rotation.add(state_data[i]);
@@ -3342,7 +3366,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
   // add sensor data - pay attention to order! Input vector must be the same
   int j = 0;
 
-  if (save_all or s_.bending_gauge.in_use) {
+  if (gauges) {
 
     // calibrate the finger 1 sensor
     if (real_sensors_.f1_calibration.size() < real_sensors_.calibration_samples) {
@@ -3404,7 +3428,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
 
   }
 
-  if (save_all or s_.palm_sensor.in_use) {
+  if (palm) {
 
     // calibrate the palm sensor
     if (real_sensors_.palm_calibration.size() < real_sensors_.calibration_samples) {
@@ -3428,7 +3452,7 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     
   }
 
-  if (save_all or s_.wrist_sensor_Z.in_use) {
+  if (wrist_Z) {
 
     constexpr bool debug_wrist_Z = false;
     float pre_cal = sensor_data[j]; // for debugging only
@@ -3470,6 +3494,82 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     }
   }
 
+  if (cart_XYZ) {
+
+    // add cartesian contacts, no calibration, scaling or normalisation necessary
+    real_sensors_.raw.finger1_x_pos.add(sensor_data[j]);
+    real_sensors_.SI.finger1_x_pos.add(sensor_data[j]);
+    real_sensors_.normalised.finger1_x_pos.add(sensor_data[j]);
+    output.push_back(sensor_data[j]);
+    ++j;
+
+    real_sensors_.raw.finger1_y_pos.add(sensor_data[j]);
+    real_sensors_.SI.finger1_y_pos.add(sensor_data[j]);
+    real_sensors_.normalised.finger1_y_pos.add(sensor_data[j]);
+    output.push_back(sensor_data[j]);
+    ++j;
+
+    real_sensors_.raw.finger1_z_pos.add(sensor_data[j]);
+    real_sensors_.SI.finger1_z_pos.add(sensor_data[j]);
+    real_sensors_.normalised.finger1_z_pos.add(sensor_data[j]);
+    output.push_back(sensor_data[j]);
+    ++j;
+
+    real_sensors_.raw.finger2_x_pos.add(sensor_data[j]);
+    real_sensors_.SI.finger2_x_pos.add(sensor_data[j]);
+    real_sensors_.normalised.finger2_x_pos.add(sensor_data[j]);
+    output.push_back(sensor_data[j]);
+    ++j;
+
+    real_sensors_.raw.finger2_y_pos.add(sensor_data[j]);
+    real_sensors_.SI.finger2_y_pos.add(sensor_data[j]);
+    real_sensors_.normalised.finger2_y_pos.add(sensor_data[j]);
+    output.push_back(sensor_data[j]);
+    ++j;
+
+    real_sensors_.raw.finger2_z_pos.add(sensor_data[j]);
+    real_sensors_.SI.finger2_z_pos.add(sensor_data[j]);
+    real_sensors_.normalised.finger2_z_pos.add(sensor_data[j]);
+    output.push_back(sensor_data[j]);
+    ++j;
+
+    real_sensors_.raw.finger3_x_pos.add(sensor_data[j]);
+    real_sensors_.SI.finger3_x_pos.add(sensor_data[j]);
+    real_sensors_.normalised.finger3_x_pos.add(sensor_data[j]);
+    output.push_back(sensor_data[j]);
+    ++j;
+
+    real_sensors_.raw.finger3_y_pos.add(sensor_data[j]);
+    real_sensors_.SI.finger3_y_pos.add(sensor_data[j]);
+    real_sensors_.normalised.finger3_y_pos.add(sensor_data[j]);
+    output.push_back(sensor_data[j]);
+    ++j;
+
+    real_sensors_.raw.finger3_z_pos.add(sensor_data[j]);
+    real_sensors_.SI.finger3_z_pos.add(sensor_data[j]);
+    real_sensors_.normalised.finger3_z_pos.add(sensor_data[j]);
+    output.push_back(sensor_data[j]);
+    ++j;
+
+    real_sensors_.raw.palm_x_pos.add(sensor_data[j]);
+    real_sensors_.SI.palm_x_pos.add(sensor_data[j]);
+    real_sensors_.normalised.palm_x_pos.add(sensor_data[j]);
+    output.push_back(sensor_data[j]);
+    ++j;
+
+    real_sensors_.raw.palm_y_pos.add(sensor_data[j]);
+    real_sensors_.SI.palm_y_pos.add(sensor_data[j]);
+    real_sensors_.normalised.palm_y_pos.add(sensor_data[j]);
+    output.push_back(sensor_data[j]);
+    ++j;
+
+    real_sensors_.raw.palm_z_pos.add(sensor_data[j]);
+    real_sensors_.SI.palm_z_pos.add(sensor_data[j]);
+    real_sensors_.normalised.palm_z_pos.add(sensor_data[j]);
+    output.push_back(sensor_data[j]);
+    ++j;
+  }
+
   // // add timestamp data - not used currently
   // gauge_timestamps.add(timestamp);
   // palm_timestamps.add(timestamp);
@@ -3487,6 +3587,7 @@ std::vector<float> MjClass::get_real_observation()
   s_.base_state_sensor_XY.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
   s_.base_state_sensor_Z.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
   s_.base_state_sensor_yaw.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
+  s_.cartesian_contacts_XYZ.update_n_readings(samples_since_last_obs, s_.state_n_prev_steps);
   s_.bending_gauge.update_n_readings(samples_since_last_obs, s_.sensor_n_prev_steps);
   s_.palm_sensor.update_n_readings(samples_since_last_obs, s_.sensor_n_prev_steps);
   s_.wrist_sensor_Z.update_n_readings(samples_since_last_obs, s_.sensor_n_prev_steps);
@@ -3508,71 +3609,95 @@ std::vector<float> MjClass::get_simple_state_vector(MjType::SensorData sensor)
   constexpr bool debug_obs = false;
   constexpr bool return_all = true;
 
+  // what states should be returned (check its the same as input_real_data())
+  bool motors = true; // always input, see rl_grasping_node.py - s_.motor_state_sensor.in_use;
+  bool base_xy = s_.base_state_sensor_XY.in_use;
+  bool base_z = s_.base_state_sensor_Z.in_use;
+  bool base_z_rot = s_.base_state_sensor_yaw.in_use;
+
+  // what sensors should be returned (check its the same as input_real_data())
+  bool gauges = true; // always input, see rl_grasping_node.py - s_.bending_gauge.in_use;
+  bool palm = true; // always input, see rl_grasping_node.py - s_.palm_sensor.in_use;
+  bool wrist_Z = true; // always input, see rl_grasping_node.py - s_.wrist_sensor_Z.in_use;
+  bool wrist_XY = false; // not yet added to this function - s_.wrist_sensor_XY.in_use; 
+  bool cart_XYZ = false; // not interested in this - s_.cartesian_contacts_XYZ.in_use;
+
   std::vector<luke::gfloat> simple_state;
 
   // get bending strain gauge sensor output
-  if (s_.bending_gauge.in_use) {
+  if (gauges) {
 
     simple_state.push_back(sensor.read_finger1_gauge());
     simple_state.push_back(sensor.read_finger2_gauge());
     simple_state.push_back(sensor.read_finger3_gauge());
   }
 
-  // get axial strain gauge sensor output
-  if (return_all or s_.axial_gauge.in_use) {
-
-    simple_state.push_back(sensor.read_finger1_axial_gauge());
-    simple_state.push_back(sensor.read_finger2_axial_gauge());
-    simple_state.push_back(sensor.read_finger3_axial_gauge());
-  }
-
   // get palm sensor output
-  if (return_all or s_.palm_sensor.in_use) {
+  if (palm) {
 
     simple_state.push_back(sensor.read_palm_sensor());
   }
 
   // get wrist sensor XY output
-  if (return_all or s_.wrist_sensor_XY.in_use) {
+  if (wrist_XY) {
 
     simple_state.push_back(sensor.read_wrist_X_sensor());
     simple_state.push_back(sensor.read_wrist_Y_sensor());
   }
 
   // get wrist sensor Z output
-  if (return_all or s_.wrist_sensor_Z.in_use) {
+  if (wrist_Z) {
     
     simple_state.push_back(sensor.read_wrist_Z_sensor());
   }
 
   // get motor state output
-  if (return_all or s_.motor_state_sensor.in_use) {
+  if (motors) {
 
     simple_state.push_back(sensor.read_x_motor_position());
     simple_state.push_back(sensor.read_y_motor_position());
     simple_state.push_back(sensor.read_z_motor_position());
   }
 
-  // // get base XY state
-  // if (return_all or s_.base_state_sensor_XY.in_use) {
+  // get base XY state
+  if (base_xy) {
 
-  //   simple_state.push_back(sensor.read_x_base_position());
-  //   simple_state.push_back(sensor.read_y_base_position());
-  // }
+    simple_state.push_back(sensor.read_x_base_position());
+    simple_state.push_back(sensor.read_y_base_position());
+  }
 
   // get base Z state
-  if (return_all or s_.base_state_sensor_Z.in_use) {
+  if (base_z) {
 
     simple_state.push_back(sensor.read_z_base_position());
   }
 
   // get base Z yaw
-  if (return_all or s_.base_state_sensor_yaw.in_use) {
+  if (base_z_rot) {
 
     simple_state.push_back(sensor.read_yaw_base_rotation());
   }
-  
+
   return simple_state;
+}
+
+std::vector<float> MjClass::get_SI_gauge_forces(std::vector<float> raw_gauges)
+{
+  /* special function to return the SI force values for a raw gauge input, without
+  saving it. Takes a 4 element input (g1, g2, g3, palm) */
+
+  std::vector<float> output(4);
+
+  if (raw_gauges.size() != 4)
+    throw std::runtime_error("MjClass::get_SI_gauge_forces() error: raw_gauge input values did not have length 4");
+
+  // calibrate raw readings to SI values in Newtons (assumes offset calibrated from 20 calls to 'input_real_data()')
+  output[0] = real_sensors_.g1.apply_calibration(raw_gauges[0]);
+  output[1] = real_sensors_.g2.apply_calibration(raw_gauges[1]);
+  output[2] = real_sensors_.g3.apply_calibration(raw_gauges[2]);
+  output[3] = real_sensors_.palm.apply_calibration(raw_gauges[3]);
+
+  return output;
 }
 
 /* ----- misc ----- */
