@@ -5585,7 +5585,7 @@ if __name__ == "__main__":
       """
 
     # disable MAT logprob calculation, not learning with this
-    network.pi.disable_MAT_logprob = tm.param_2[1]
+    network.pi.disable_MAT_logprob = not tm.param_2[1]
 
     # complete the training, also test on old set after
     tm.run_training(agent, env)
