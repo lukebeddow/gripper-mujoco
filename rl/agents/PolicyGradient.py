@@ -1134,9 +1134,12 @@ class MATActorCriticPG(nn.Module):
       raise RuntimeError(f"MLPActorCriticPG given mode={mode}, should be 'test' or 'train'")
 
     # add hidden layer size into the name
-    for i in range(len(hidden_sizes)):
-      if i == 0: self.name += f"{hidden_sizes[i]}"
-      if i > 0: self.name += f"x{hidden_sizes[i]}"
+    if hidden_sizes == "paper":
+      self.name += "paper_architecture"
+    else:
+      for i in range(len(hidden_sizes)):
+        if i == 0: self.name += f"{hidden_sizes[i]}"
+        if i > 0: self.name += f"x{hidden_sizes[i]}"
 
   def step(self, obs):
     with torch.no_grad():
