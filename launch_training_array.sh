@@ -44,6 +44,7 @@ LOGGING='Y'
 DEBUG=
 PRINT_RESULTS='N'
 PRINT_RESULTS_AFTER='N'
+RANDOMISE='N'
 
 PY_ARGS=() # arguments passed directly into python without parsing
 
@@ -62,6 +63,7 @@ do
     --debug-2 ) LOGGING='N'; PRINT_RESULTS_AFTER='N'; DEBUG='--log-level 2'; echo FULL DEBUG MODE ON, nothing will be saved ;;
     --print ) LOGGING='N'; PRINT="--print"; echo Printing mode on, no training ;;
     --print-results ) PRINT_RESULTS='Y' ;;
+    --randomise ) RANDOMISE='Y'; echo Randomising job order submission ;;
     # everything else passed directly to python
     --program ) PRINT_RESULTS_AFTER='Y' ; PY_ARGS+=( ${!i} ) ;;
     * ) PY_ARGS+=( ${!i} ) ;;
@@ -112,6 +114,15 @@ IND=0
 
 # extracts the first job number (so an input of "2 3 1" gives 2 incorrectly)
 MIN_JOB_NUM=${ARRAY_INDEXES%% *} # https://stackoverflow.com/questions/15685736/how-to-extract-a-particular-element-from-an-array-in-bash
+
+# randomly shuffle the order (only makes sense if stagger is set)
+if [ $RANDOMISE = 'Y' ]
+then
+    RAND_INDEXES=( $(shuf -e "$jobs"))
+    echo ${RAND_INDEXES[@]}
+    echo Shuffle should have happened
+    echo $(shuf -e "$jobs")
+fi
 
 # loop through the jobs we have been assigned
 for I in ${ARRAY_INDEXES[@]}
