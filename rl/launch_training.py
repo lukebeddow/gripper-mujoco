@@ -251,7 +251,7 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
   if found_param_2: headings.append(tm.param_2_name)
   if found_param_3: headings.append(tm.param_3_name)
   if found_trained_to: headings.append("Trained to")
-  if found_best_reward: headings.append("Best reward")
+  if print_reward and found_best_reward: headings.append("Best reward")
   if do_min_max_ep:
     if min_ep is not None and max_ep is not None:
       headings.append(f"Best SR range {min_ep} - {max_ep}")
