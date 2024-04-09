@@ -1030,15 +1030,17 @@ class MATActor(Actor):
     """
     return act * torch.log(prob) + (1 - act) * torch.log(1 - prob)
 
-
   def _log_prob_from_distribution(self, pi, act):
     """Calculate the log prob using the equation from the MAT paper"""
-    # normal: use termination action instead of Z height
+    
+    # special case for debugging, disable parts of MAT
     if self.disable_MAT_logprob:
       if self.use_MAT_sampling and self.use_extra_actions:
         return pi[0].log_prob(act[:,:-1]).sum(axis=-1) + pi[1].log_prob(act[:,-1]).sum(axis=-1)
       else:
         return pi.log_prob(act).sum(axis=-1)
+      
+    # regular case: use termination action
     if not self.use_Z:
       if self.use_extra_actions:
         finger_probs = pi[0].probs[:,:-2] # exclude lift and reopen (pi[0] has no wrist)
@@ -1058,7 +1060,7 @@ class MATActor(Actor):
       else:
         finger_probs = pi.probs[:,:-1] # exclude lift
         lift_probs = pi.probs[:,-1]
-        fing_act = act[:,-1]
+        fing_act = act[:,:-1]
         lift_act = act[:,-1]
         logprob = (
           self._bernoulli_log_prob(lift_act, lift_probs)
@@ -1066,7 +1068,8 @@ class MATActor(Actor):
             torch.sum(self._bernoulli_log_prob(fing_act, finger_probs), axis=1)
           )
         )
-    # paper modification: use Z height instead of termination action
+
+    # modified case: use Z height instead of termination action
     else:
       if self.use_extra_actions:
         finger_probs = pi[0].probs[:,:-1] # exclude reopen (pi[0] has no wrist)
@@ -1097,10 +1100,11 @@ class MATActor(Actor):
         )
       else:
         finger_probs = pi.probs[:,:] # no lift termination, so include all
-        fing_act = act[:, :]
+        fing_act = act[:,:]
         logprob = (
           torch.sum(self._bernoulli_log_prob(fing_act, finger_probs), axis=1)
         )
+        
     return logprob
   
   def to_device(self, device=None):
