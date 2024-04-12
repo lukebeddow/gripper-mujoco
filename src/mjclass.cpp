@@ -3247,23 +3247,6 @@ std::vector<float> MjClass::input_real_data(std::vector<float> state_data,
     throw std::runtime_error("MjClass::input_real_data() error: state_data has expected length = " + std::to_string(state_expected_length) + ", but actual length is " + std::to_string(state_data.size()));
   }
 
-  // if (base_z and base_xy and base_z_rot and state_data.size() != 7) {
-  //   throw std::runtime_error("MjClass::input_real_data() error: state_data size != 7 but (base_z = true, base_xyz = true, base_z_rot = true), state size is " + std::to_string(state_data.size()));
-  // }
-  // if (base_z and base_xy and not base_z_rot and state_data.size() != 6)
-  // {
-  //   throw std::runtime_error("MjClass::input_real_data() error: state_data size != 6 but (base_z = true, base_xyz = true, base_z_rot = false), state size is " + std::to_string(state_data.size()));
-  // }
-  // if (base_z and not base_xy and base_z_rot and state_data.size() != 5) {
-  //   throw std::runtime_error("MjClass::input_real_data() error: state_data size != 5 but (base_z = true, base_xyz = false, base_z_rot = true), state size is " + std::to_string(state_data.size()));
-  // }
-  // if (base_z and not base_xy and not base_z_rot and state_data.size() != 4) {
-  //   throw std::runtime_error("MjClass::input_real_data() error: state_data size != 4 but (base_z = true, base_xyz = false, base_z_rot = false), state size is " + std::to_string(state_data.size()));
-  // }
-  // if (not base_z and not base_xy and not base_z_rot and state_data.size() != 3) {
-  //   throw std::runtime_error("MjClass::input_real_data() error: state_data size != 3 but (base_z = false, base_xyz = false, base_z_rot = false), state size is " + std::to_string(state_data.size()));
-  // }
-
   // what sensors should be input (must be in this order!)
   bool gauges = true; // always input, see rl_grasping_node.py - s_.bending_gauge.in_use;
   bool palm = true; // always input, see rl_grasping_node.py - s_.palm_sensor.in_use;

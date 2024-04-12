@@ -1391,22 +1391,28 @@ namespace MjType
           // Calibration new_gauges {1.23e-6}; // for cut fingers, 28x0.9, 17/02/24
 
           double calibration_gradient;
+          std::string idstr = "";
           switch (gauge_num) {
             case 1: 
-              calibration_gradient = 1.2015e-6;
+              calibration_gradient = 1.2015e-6; idstr = "cut fingers";
+              // calibration_gradient = 1.2654e-6; idstr = "75deg bent fingers";
               break;
             case 2:
-              calibration_gradient = 1.2369e-6;
+              calibration_gradient = 1.2369e-6; idstr = "cut fingers";
+              // calibration_gradient = 1.3044e-6; idstr = "75deg bent fingers";
               break;
             case 3:
-              calibration_gradient = 1.2540e-6;
+              calibration_gradient = 1.2540e-6; idstr = "cut fingers";
+              // calibration_gradient = 1.3084e-6; idstr = "75deg bent fingers";
               break;
             default:
               throw std::runtime_error("get_gauge_calibration(...) error, given gauge_num not [1,2,3]");
           }
           if (debug_fcn) {
             std::cout << "Finger (0.9 x 28) number " << gauge_num << " calibrated to "
-              << calibration_gradient << "\n";
+              << calibration_gradient
+              << " (" << idstr << ")"
+              << "\n";
           }
           Calibration cut_finger {calibration_gradient};
           return cut_finger;

@@ -5513,11 +5513,11 @@ if __name__ == "__main__":
 
     # define what to vary this training, dependent on job number
     vary_1 = [1e-5, 5e-5, 1e-4]
-    vary_2 = None
+    vary_2 = [False, True]
     vary_3 = None
     repeats = 5
     tm.param_1_name = "learning rate"
-    tm.param_2_name = None
+    tm.param_2_name = "use_MAT_ppo"
     tm.param_3_name = None
     tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
                                                          param_3=vary_3, repeats=repeats)
