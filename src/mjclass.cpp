@@ -4805,8 +4805,8 @@ float MjClass::find_highest_stable_timestep()
     factor = tune_param * 0.65;
   }
 
-  // for safety, reduce timestep by 10 percent
-  std::cout << "factor is " << factor << "\n";
+  // for safety, reduce timestep by hand calibrated factors
+  // std::cout << "factor is " << factor << "\n";
   float final_timestep = next_timestep * factor;
 
   // round the timestep to a whole number of microseconds

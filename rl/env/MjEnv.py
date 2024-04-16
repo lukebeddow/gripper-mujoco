@@ -2364,31 +2364,20 @@ if __name__ == "__main__":
 
   # ---- automatically generate new xml files ----- #
 
-  generate_new_xml = True
+  generate_new_xml = False
   if generate_new_xml:
 
-    # widths = [24e-3, 28e-3]
-    # segments = [8]
-    # xy_base = [False, True]
-    # inertia = [1, 50]
-
-    # mj.load_next.num_segments = 8
-    # angles = [90]
-    # for a in angles:
-    #   mj.load_next.finger_hook_angle_degrees = a
-    #   mj.load_next.finger_hook_length = 100e-3
-    #   mj.load_next.XY_base_actions = True
-    #   mj._auto_generate_xml_file("set_test_large", use_hashes=True, silent=True)
-
-    # for w in widths:
+    # segments = list(range(3, 31))
+    # fingers = [(0.9e-3, 28e-3), (1.0e-3, 24e-3), (1.0e-3, 28e-3)]
+    # inertia = [1, 10, 50, 100]
+    # for t, w in fingers:
     #   for N in segments:
-    #     for xy in xy_base:
-    #       for i in inertia:
-    #         mj.load_next.finger_width = w
-    #         mj.load_next.num_segments = N
-    #         mj.load_next.XY_base_actions = xy
-    #         mj.load_next.segment_inertia_scaling = i
-    #         mj._auto_generate_xml_file("set8_fullset_1500", use_hashes=True)
+    #     for i in inertia:
+    #       mj.load_next.finger_width = w
+    #       mj.load_next.num_segments = N
+    #       mj.load_next.finger_thickness = t
+    #       mj.load_next.segment_inertia_scaling = i
+    #       mj._auto_generate_xml_file("set9_testing", use_hashes=True)
 
     mj.params.test_objects = 20
     mj.load_next.finger_hook_angle_degrees = 75
