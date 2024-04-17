@@ -107,6 +107,8 @@ class MjEnv():
 
     # experimental features
     use_expert_in_observation: bool = False
+    use_MAT: bool = False
+    MAT_use_reopen: bool = False
 
     # file and testing parameters
     test_obj_per_file: int = 20
@@ -548,6 +550,28 @@ class MjEnv():
 
     return cpp_settings
 
+  def _set_MAT_action(self, action):
+    """
+    New updated version, where action vector is already binary when it is input
+    """
+
+    if self.params.MAT_use_reopen:
+
+      a_wrist = action[-1]
+      a_reopen = action[-2]
+      a_lift = action[-3]
+
+      if a_reopen > 0.5 and a_lift > 0.5:
+        print("action vector is", action)
+        raise RuntimeError("MjEnv._set_MAT_action() error: reopen and lift both set True")
+      
+      # reopen, but trigger no further actions (eg finger motions)
+      if a_reopen: return self.mj.MAT_reopen(a_wrist)
+
+      action = action[:-2] # trim off the reopen and wrist actions, keep lift
+
+    return self._set_action(action)
+
   def _set_action(self, action):
     """
     Set the action, either for simulation or real world. If using simulation
@@ -569,7 +593,10 @@ class MjEnv():
     Take an action in the simulation
     """
 
-    self._set_action(action)
+    if self.params.use_MAT:
+      self._set_MAT_action(action)
+    else:
+      self._set_action(action)
 
     # step the simulation for the given time (mj.set.time_for_action)
     self.mj.action_step()
@@ -2337,45 +2364,34 @@ if __name__ == "__main__":
 
   # ---- automatically generate new xml files ----- #
 
-  generate_new_xml = True
+  generate_new_xml = False
   if generate_new_xml:
 
-    # widths = [24e-3, 28e-3]
-    # segments = [8]
-    # xy_base = [False, True]
-    # inertia = [1, 50]
-
-    # mj.load_next.num_segments = 8
-    # angles = [90]
-    # for a in angles:
-    #   mj.load_next.finger_hook_angle_degrees = a
-    #   mj.load_next.finger_hook_length = 100e-3
-    #   mj.load_next.XY_base_actions = True
-    #   mj._auto_generate_xml_file("set_test_large", use_hashes=True, silent=True)
-
-    # for w in widths:
+    # segments = list(range(3, 31))
+    # fingers = [(0.9e-3, 28e-3), (1.0e-3, 24e-3), (1.0e-3, 28e-3)]
+    # inertia = [1, 10, 50, 100]
+    # for t, w in fingers:
     #   for N in segments:
-    #     for xy in xy_base:
-    #       for i in inertia:
-    #         mj.load_next.finger_width = w
-    #         mj.load_next.num_segments = N
-    #         mj.load_next.XY_base_actions = xy
-    #         mj.load_next.segment_inertia_scaling = i
-    #         mj._auto_generate_xml_file("set8_fullset_1500", use_hashes=True)
+    #     for i in inertia:
+    #       mj.load_next.finger_width = w
+    #       mj.load_next.num_segments = N
+    #       mj.load_next.finger_thickness = t
+    #       mj.load_next.segment_inertia_scaling = i
+    #       mj._auto_generate_xml_file("set9_testing", use_hashes=True)
 
     mj.params.test_objects = 20
     mj.load_next.finger_hook_angle_degrees = 75
     mj.load_next.finger_width = 28e-3
     mj.load_next.fingertip_clearance = 0.01
-    mj.load_next.XY_base_actions = False
-    mj.load_next.Z_base_rotation = False
-    mj.load_next.num_segments = 3
-    mj.load_next.segment_inertia_scaling = 1.0
+    mj.load_next.XY_base_actions = True
+    mj.load_next.Z_base_rotation = True
+    mj.load_next.num_segments = 8
+    mj.load_next.segment_inertia_scaling = 50.0
     # mj.load_next.finger_length = 200e-3
     # mj.load_next.finger_thickness = 1.9e-3
 
-    gen_obj_set = "set8_demo"
-    name = mj._auto_generate_xml_file(gen_obj_set, use_hashes=True, force=True)
+    gen_obj_set = "set9_fullset"
+    name = mj._auto_generate_xml_file(gen_obj_set, use_hashes=True, force=False)
     runstr = f"bin/mysimulate -p /home/luke/mujoco-devel/mjcf -o {gen_obj_set} -g {name}"
 
     print(runstr)

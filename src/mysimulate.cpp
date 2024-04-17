@@ -1685,6 +1685,8 @@ void makeObjectUI(int oldstate)
         {mjITEM_BUTTON,   "set base XY",    2, NULL,                 " #317"},
         {mjITEM_BUTTON,   "random_yaw",     2, NULL,                 " #317"},
         {mjITEM_BUTTON,   "gripper visible",     2, NULL,                 " #317"},
+        {mjITEM_BUTTON,   "f-end/palm xyz",  2, NULL,                " #317"},
+        {mjITEM_BUTTON,   "MAT reopen",  2, NULL,                " #317"},
         {mjITEM_END}
     };
 
@@ -2639,19 +2641,49 @@ void uiEvent(mjuiState* state)
                 std::cout << "Performaning a random base movement with noise " << myMjClass.s_.base_position_noise << "\n";
                 double z = myMjClass.random_base_Z_movement(myMjClass.s_.base_position_noise);
                 std::cout << "Amount of noise applied was " << z << "\n";
+                break;
             }
             case 38: {         // set base XY position
                 std::cout << "Setting base position to (0.1, 0.1)\n";
                 double z = myMjClass.set_new_base_XY(0.1, 0.1);
+                break;
             }
             case 39: {         // random base yaw
                 std::cout << "Setting base to random yaw = ";
                 double z = myMjClass.random_base_yaw(myMjClass.base_max_[5]);
                 std::cout << z << "\n";
+                break;
             }
             case 40: {         // toggle gripper visible
                 std::cout << "Toggle gripper visibility\n";
                 luke::toggle_gripper_visibility(myMjClass.model);
+                break;
+            }
+            case 41: {         // print f-end/palm xyz fingerend palm cartesian positions
+                std::vector<double> finger_forces_SI(3);
+                finger_forces_SI[0] = myMjClass.sim_sensors_SI_.finger1_gauge.read_element();
+                finger_forces_SI[1] = myMjClass.sim_sensors_SI_.finger2_gauge.read_element();
+                finger_forces_SI[2] = myMjClass.sim_sensors_SI_.finger3_gauge.read_element();
+                std::vector<luke::Vec3> xyz = luke::get_fingerend_and_palm_xyz(finger_forces_SI);
+                std::cout << "Printing fingerend and palm cartesian xyz positions\n";
+                for (int i = 0; i < 4; i++) {
+                    std::cout << "Finger " << i + 1 << " (4=palm)\n";
+                    std::cout << "\tx = " << xyz[i].x << "\n";
+                    std::cout << "\ty = " << xyz[i].y << "\n";
+                    std::cout << "\tz = " << xyz[i].z << "\n";
+                }
+                break;
+            }
+            case 42: {         // MAT reopen
+
+                std::uniform_real_distribution<double> distribution(-3.14, 3.14);
+                double rand_angle = distribution(*MjType::generator);
+
+                std::cout << "Performing MAT reopen with random angle = "
+                    << rand_angle << " rad (" << rand_angle * (180.0/3.141592)
+                    << " degrees)\n";
+                myMjClass.MAT_reopen(rand_angle);
+                break;
             }
             }
         }

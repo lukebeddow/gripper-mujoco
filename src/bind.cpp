@@ -87,6 +87,7 @@ PYBIND11_MODULE(bind, m) {
     .def("set_new_base_XY", &MjClass::set_new_base_XY)
     .def("set_new_base_yaw", &MjClass::set_new_base_yaw)
     .def("random_base_yaw", &MjClass::random_base_yaw)
+    .def("MAT_reopen", &MjClass::MAT_reopen)
 
     // learning functions
     .def("action_step", &MjClass::action_step)
@@ -139,6 +140,7 @@ PYBIND11_MODULE(bind, m) {
     .def("input_real_data", &MjClass::input_real_data)
     .def("get_real_observation", &MjClass::get_real_observation)
     .def("get_simple_state_vector", &MjClass::get_simple_state_vector)
+    .def("get_SI_gauge_forces", &MjClass::get_SI_gauge_forces)
 
     // misc
     .def("tick", &MjClass::tick)

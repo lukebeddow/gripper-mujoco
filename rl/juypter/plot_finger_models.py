@@ -142,6 +142,7 @@ if get_data:
   
   if args.get_timesteps:
     print("Timestep data")
+    print(f"t={args.thickness * 1e3:.1f}, w={args.width * 1e3:.1f}, inertia={args.inertia_scaling}")
     headings = f"{'N':<5} | {'Timestep / ms':<20}"
     rows = "{:<5} | {:<20.3f}"
     print(headings)

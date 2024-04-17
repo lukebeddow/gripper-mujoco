@@ -65,12 +65,13 @@ namespace MjType
   // what are the possible sampling methods to get observation data
   struct Sample {
     enum {
-      raw = 0,    // return raw values
-      change,     // add the change between values ie (a, b-a, b)
-      average,    // add the average between values ie (a, (a+b)/2, b)
-      median,     // add the median between values ie (a, med(a...b), b)
-      sign,       // add the sign of the change ie (a, sign(b-a), b) where sign() outputs -1,0,+1
-      scaled_change // change but scale it as a ratio of some maximum amount (eg max state change)
+      raw = 0,            // 0 return raw values
+      change,             // 1 add the change between values ie (a, b-a, b)
+      average,            // 2 add the average between values ie (a, (a+b)/2, b)
+      median,             // 3 add the median between values ie (a, med(a...b), b)
+      sign,               // 4 add the sign of the change ie (a, sign(b-a), b) where sign() outputs -1,0,+1
+      scaled_change,      // 5 change but scale it as a ratio of some maximum amount (eg max state change)
+      scaled_change_sq    // 6 as above but change scales with the square to shrink small values 
     };
   };
 
@@ -104,6 +105,10 @@ namespace MjType
 
     // hardcoded variable for 'scaled_change_sample' testing
     float max_change_amount = 0.07;
+    
+    // hardcoded variable for 'scaled_change_sample_squared' testing
+    float max_change_amount_2 = 0.10;
+    float scaled_change_sq_factor = 1.0 / (max_change_amount_2 * max_change_amount_2);
 
     Sensor(bool in_use, float normalise, float read_rate)
       : in_use(in_use), normalise(normalise), read_rate(read_rate)
@@ -405,7 +410,7 @@ namespace MjType
     std::vector<luke::gfloat> scaled_change_sample(luke::SlidingWindow<luke::gfloat> data)
     {
       /* sample the first and last reading as well as the change, but scale
-      the change by the maximum possible change [x0, dx, x1] */
+      the change by the maximum possible, f, change [x0, f*(x1-x0), x1] */
 
       // make the return vector, first element is furthest back reading
       std::vector<luke::gfloat> result(2 * prev_steps + 1);
@@ -419,6 +424,29 @@ namespace MjType
         if (scaled_change > 1.0) scaled_change = 1.0;
         else if (scaled_change < -1.0) scaled_change = -1.0;
         result[i * 2 + 1] = scaled_change;
+      }
+
+      return result;
+    }
+
+    std::vector<luke::gfloat> scaled_change_sq_sample(luke::SlidingWindow<luke::gfloat> data)
+    {
+      /* sample the first and last reading as well as the change, but scale
+      the change by the maximum possible, f, change [x0, f*(x1-x0), x1] */
+
+      // make the return vector, first element is furthest back reading
+      std::vector<luke::gfloat> result(2 * prev_steps + 1);
+      result[0] = data.read_element(total_readings - 1); // read_element is 0 indexed
+
+      // loop through steps to add in elements
+      for (int i = 0; i < prev_steps; i++) {
+        int first_sample = total_readings - 1 - i * readings_per_step;
+        result[i * 2 + 2] = data.read_element(first_sample - readings_per_step);
+        float change = abs(result[i * 2 + 2] - result[i * 2]);
+        float scaled_change_sq = (result[i * 2 + 2] - result[i * 2]) * change * scaled_change_sq_factor;
+        if (scaled_change_sq > 1.0) scaled_change_sq = 1.0;
+        else if (scaled_change_sq < -1.0) scaled_change_sq = -1.0;
+        result[i * 2 + 1] = scaled_change_sq;
       }
 
       return result;
@@ -810,6 +838,7 @@ namespace MjType
       bool stable {};
       bool stable_height {};
       bool stable_termination {};
+      bool lifted_termination {};
       bool successfully_grasped {};
 
       void print() {
@@ -1172,7 +1201,7 @@ namespace MjType
   // data containers for all of the possible sensors
   struct SensorData {
 
-    static constexpr int buffer_size = 250;
+    static constexpr int buffer_size = 1000;
 
     // storage containers for state data
     luke::SlidingWindow<luke::gfloat> x_motor_position { buffer_size };
@@ -1197,6 +1226,20 @@ namespace MjType
     luke::SlidingWindow<luke::gfloat> wrist_Y_sensor { buffer_size };
     luke::SlidingWindow<luke::gfloat> wrist_Z_sensor { buffer_size };
 
+    // storage for cartesian contact point information (for MAT)
+    luke::SlidingWindow<luke::gfloat> finger1_x_pos { buffer_size };
+    luke::SlidingWindow<luke::gfloat> finger1_y_pos { buffer_size };
+    luke::SlidingWindow<luke::gfloat> finger1_z_pos { buffer_size };
+    luke::SlidingWindow<luke::gfloat> finger2_x_pos { buffer_size };
+    luke::SlidingWindow<luke::gfloat> finger2_y_pos { buffer_size };
+    luke::SlidingWindow<luke::gfloat> finger2_z_pos { buffer_size };
+    luke::SlidingWindow<luke::gfloat> finger3_x_pos { buffer_size };
+    luke::SlidingWindow<luke::gfloat> finger3_y_pos { buffer_size };
+    luke::SlidingWindow<luke::gfloat> finger3_z_pos { buffer_size };
+    luke::SlidingWindow<luke::gfloat> palm_x_pos { buffer_size };
+    luke::SlidingWindow<luke::gfloat> palm_y_pos { buffer_size };
+    luke::SlidingWindow<luke::gfloat> palm_z_pos { buffer_size };
+
     void reset() {
       x_motor_position.reset();
       y_motor_position.reset();
@@ -1217,6 +1260,21 @@ namespace MjType
       wrist_X_sensor.reset();
       wrist_Y_sensor.reset();
       wrist_Z_sensor.reset();
+
+      // reset MAT storage containers
+      finger1_x_pos.reset();
+      finger1_y_pos.reset();
+      finger1_z_pos.reset();
+      finger2_x_pos.reset();
+      finger2_y_pos.reset();
+      finger2_z_pos.reset();
+      finger3_x_pos.reset();
+      finger3_y_pos.reset();
+      finger3_z_pos.reset();
+      palm_x_pos.reset();
+      palm_y_pos.reset();
+      palm_z_pos.reset();
+
     }
 
     // getters to read the most recent element for each sensor, exposed to python
@@ -1239,6 +1297,20 @@ namespace MjType
     luke::gfloat read_wrist_X_sensor() { return wrist_X_sensor.read_element(); }
     luke::gfloat read_wrist_Y_sensor() { return wrist_Y_sensor.read_element(); }
     luke::gfloat read_wrist_Z_sensor() { return wrist_Z_sensor.read_element(); }
+
+    // getters for MAT cartesian contact points
+    luke::gfloat read_finger1_x_pos() { return finger1_x_pos.read_element(); }
+    luke::gfloat read_finger1_y_pos() { return finger1_y_pos.read_element(); }
+    luke::gfloat read_finger1_z_pos() { return finger1_z_pos.read_element(); }
+    luke::gfloat read_finger2_x_pos() { return finger2_x_pos.read_element(); }
+    luke::gfloat read_finger2_y_pos() { return finger2_y_pos.read_element(); }
+    luke::gfloat read_finger2_z_pos() { return finger2_z_pos.read_element(); }
+    luke::gfloat read_finger3_x_pos() { return finger3_x_pos.read_element(); }
+    luke::gfloat read_finger3_y_pos() { return finger3_y_pos.read_element(); }
+    luke::gfloat read_finger3_z_pos() { return finger3_z_pos.read_element(); }
+    luke::gfloat read_palm_x_pos() { return palm_x_pos.read_element(); }
+    luke::gfloat read_palm_y_pos() { return palm_y_pos.read_element(); }
+    luke::gfloat read_palm_z_pos() { return palm_z_pos.read_element(); }
   };
 
   // real sensor calibration data structure
@@ -1319,22 +1391,28 @@ namespace MjType
           // Calibration new_gauges {1.23e-6}; // for cut fingers, 28x0.9, 17/02/24
 
           double calibration_gradient;
+          std::string idstr = "";
           switch (gauge_num) {
             case 1: 
-              calibration_gradient = 1.2015e-6;
+              calibration_gradient = 1.2015e-6; idstr = "cut fingers";
+              // calibration_gradient = 1.2654e-6; idstr = "75deg bent fingers";
               break;
             case 2:
-              calibration_gradient = 1.2369e-6;
+              calibration_gradient = 1.2369e-6; idstr = "cut fingers";
+              // calibration_gradient = 1.3044e-6; idstr = "75deg bent fingers";
               break;
             case 3:
-              calibration_gradient = 1.2540e-6;
+              calibration_gradient = 1.2540e-6; idstr = "cut fingers";
+              // calibration_gradient = 1.3084e-6; idstr = "75deg bent fingers";
               break;
             default:
               throw std::runtime_error("get_gauge_calibration(...) error, given gauge_num not [1,2,3]");
           }
           if (debug_fcn) {
             std::cout << "Finger (0.9 x 28) number " << gauge_num << " calibrated to "
-              << calibration_gradient << "\n";
+              << calibration_gradient
+              << " (" << idstr << ")"
+              << "\n";
           }
           Calibration cut_finger {calibration_gradient};
           return cut_finger;
@@ -1539,6 +1617,13 @@ public:
   bool termination_signal_sent = false;   // has termination action been triggered
   int scene_grasp_target = 0;             // number of target grasps to achieve in a scene
   int current_grasp_num = 0;              // number of grasps achieved
+  bool recent_MAT_reopen = false;         // reopen run when using MAT method
+  double MAT_reopen_XYZ_distance = 8.5e-3;// joint distance required for MAT reopen not to be recent
+  /* on above ^ paper says distance of 0.2rad, and actions range from 0.1-0.4rad. So we choose <9mm
+  as our smallest actions are 2mm and 4mm. So it takes 4 actions with the smallest MAT paper action,
+  and for us it will take either 3 or 5 actions. This is as close as we can get given XY and Z actions
+  for us have different sizes */
+  bool apply_MAT_reopen_penalty = false;  // if reopen too recently, apply a -0.05 penalty
 
   // track the timestamps of sensor updates, this is for plotting in mysimlulate.cpp
   luke::SlidingWindow<float> step_timestamps { MjType::SensorData::buffer_size };
@@ -1611,6 +1696,7 @@ public:
   bool set_new_base_yaw(double yaw);
   double random_base_yaw(double size);
   double random_base_Z_movement(double size);
+  std::vector<float> MAT_reopen(double new_angle);
 
   // learning functions
   void action_step();
@@ -1667,6 +1753,7 @@ public:
     std::vector<float> sensor_data);
   std::vector<float> get_real_observation();
   std::vector<float> get_simple_state_vector(MjType::SensorData sensor);
+  std::vector<float> get_SI_gauge_forces(std::vector<float> raw_gauges);
 
   // misc
   void forward() { mj_forward(model, data); }

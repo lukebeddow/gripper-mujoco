@@ -22,3 +22,4 @@ mjcf
 profile/
 *.out*
 rl/juypter/data_gather_logs
+# rl/juypter/thesis_plots
