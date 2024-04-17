@@ -5699,6 +5699,37 @@ if __name__ == "__main__":
                 load_best_id=True)
     print_time_taken()
 
+  elif args.program == "inertia_scale_test":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1, 10, 100]
+    vary_2 = None
+    vary_3 = None
+    repeats = 15
+    tm.param_1_name = "inertia scale"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply training specific settings and create the environment
+    tm.settings["env"]["segment_inertia_scaling"] = tm.param_1
+    env = tm.make_env()
+
+    # apply the agent settings and make the agent
+    layers = [128 for i in range(4)]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                               continous_actions=True)
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number
