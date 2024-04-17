@@ -483,7 +483,7 @@ class TrainingManager():
     # save final summary of training
     self.save_training_summary()
 
-  def run_test(self, heuristic=False, trials_per_obj=10, render=False, pause=False,
+  def run_test(self, heuristic=False, trials_per_obj=20, render=False, pause=False,
                demo=False, different_object_set=None, load_best_id=False):
     """
     Perform a thorough test on the model, including loading the best performing network
