@@ -127,7 +127,7 @@ class MjEnv():
     XY_base_actions: bool = False
     Z_base_rotation: bool = False
     fixed_finger_hook: bool = True
-    finger_hook_angle_degrees: float = 90.0
+    finger_hook_angle_degrees: float = 75.0
     finger_hook_length: float = 35e-3
     segment_inertia_scaling: float = 50.0
     fingertip_clearance: float = 10e-3
@@ -2269,7 +2269,7 @@ if __name__ == "__main__":
   mj.mj.set.mujoco_timestep = 3.187e-3
   mj.mj.set.auto_set_timestep = False
 
-  mj.load("set8_fullset_1500", num_segments=8, finger_width=28e-3, finger_thickness=0.9e-3)
+  # mj.load("set8_fullset_1500", num_segments=8, finger_width=28e-3, finger_thickness=0.9e-3)
   
   # ----- try out rgb rendering with CUT models ----- #
 
@@ -2364,7 +2364,7 @@ if __name__ == "__main__":
 
   # ---- automatically generate new xml files ----- #
 
-  generate_new_xml = False
+  generate_new_xml = True
   if generate_new_xml:
 
     # segments = list(range(3, 31))
