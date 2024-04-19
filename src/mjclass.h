@@ -1298,6 +1298,26 @@ namespace MjType
     luke::gfloat read_wrist_Y_sensor() { return wrist_Y_sensor.read_element(); }
     luke::gfloat read_wrist_Z_sensor() { return wrist_Z_sensor.read_element(); }
 
+    std::vector<luke::gfloat> readN_x_motor_position(int n) { return x_motor_position.read(n); }
+    std::vector<luke::gfloat> readN_y_motor_position(int n) { return y_motor_position.read(n); }
+    std::vector<luke::gfloat> readN_z_motor_position(int n) { return z_motor_position.read(n); }
+    std::vector<luke::gfloat> readN_x_base_position(int n) { return x_base_position.read(n); }
+    std::vector<luke::gfloat> readN_y_base_position(int n) { return y_base_position.read(n); }
+    std::vector<luke::gfloat> readN_z_base_position(int n) { return z_base_position.read(n); }
+    std::vector<luke::gfloat> readN_roll_base_rotation(int n) { return roll_base_rotation.read(n); }
+    std::vector<luke::gfloat> readN_pitch_base_rotation(int n) { return pitch_base_rotation.read(n); }
+    std::vector<luke::gfloat> readN_yaw_base_rotation(int n) { return yaw_base_rotation.read(n); }
+    std::vector<luke::gfloat> readN_finger1_gauge(int n) { return finger1_gauge.read(n); }
+    std::vector<luke::gfloat> readN_finger2_gauge(int n) { return finger2_gauge.read(n); }
+    std::vector<luke::gfloat> readN_finger3_gauge(int n) { return finger3_gauge.read(n); }
+    std::vector<luke::gfloat> readN_palm_sensor(int n) { return palm_sensor.read(n); }
+    std::vector<luke::gfloat> readN_finger1_axial_gauge(int n) { return finger1_axial_gauge.read(n); }
+    std::vector<luke::gfloat> readN_finger2_axial_gauge(int n) { return finger2_axial_gauge.read(n); }
+    std::vector<luke::gfloat> readN_finger3_axial_gauge(int n) { return finger3_axial_gauge.read(n); }
+    std::vector<luke::gfloat> readN_wrist_X_sensor(int n) { return wrist_X_sensor.read(n); }
+    std::vector<luke::gfloat> readN_wrist_Y_sensor(int n) { return wrist_Y_sensor.read(n); }
+    std::vector<luke::gfloat> readN_wrist_Z_sensor(int n) { return wrist_Z_sensor.read(n); }
+
     // getters for MAT cartesian contact points
     luke::gfloat read_finger1_x_pos() { return finger1_x_pos.read_element(); }
     luke::gfloat read_finger1_y_pos() { return finger1_y_pos.read_element(); }

@@ -2269,7 +2269,44 @@ if __name__ == "__main__":
   mj.mj.set.mujoco_timestep = 3.187e-3
   mj.mj.set.auto_set_timestep = False
 
-  # mj.load("set8_fullset_1500", num_segments=8, finger_width=28e-3, finger_thickness=0.9e-3)
+  # ---- automatically generate new xml files ----- #
+
+  generate_new_xml = True
+  if generate_new_xml:
+
+    # segments = list(range(3, 31))
+    # fingers = [(0.9e-3, 28e-3), (1.0e-3, 24e-3), (1.0e-3, 28e-3)]
+    # inertia = [1, 10, 50, 100]
+    # for t, w in fingers:
+    #   for N in segments:
+    #     for i in inertia:
+    #       mj.load_next.finger_width = w
+    #       mj.load_next.num_segments = N
+    #       mj.load_next.finger_thickness = t
+    #       mj.load_next.segment_inertia_scaling = i
+    #       mj._auto_generate_xml_file("set9_testing", use_hashes=True)
+
+    mj.params.test_objects = 20
+    mj.load_next.finger_hook_angle_degrees = 90
+    mj.load_next.finger_width = 28e-3
+    mj.load_next.finger_thickness = 0.96e-3
+    mj.load_next.fingertip_clearance = 120e-3 / 2 + 5e-3
+    mj.load_next.XY_base_actions = True
+    mj.load_next.Z_base_rotation = True
+    mj.load_next.num_segments = 8
+    mj.load_next.segment_inertia_scaling = 50.0
+    # mj.load_next.finger_length = 200e-3
+    # mj.load_next.finger_thickness = 1.9e-3
+
+    gen_obj_set = "set_object_sizes"
+    name = mj._auto_generate_xml_file(gen_obj_set, use_hashes=True, force=False)
+    runstr = f"bin/mysimulate -p /home/luke/mujoco-devel/mjcf -o {gen_obj_set} -g {name}"
+
+    print(runstr)
+    exit()
+
+  # load for the remaining different options
+  mj.load("set8_fullset_1500", num_segments=8, finger_width=28e-3, finger_thickness=0.9e-3)
   
   # ----- try out rgb rendering with CUT models ----- #
 
@@ -2361,40 +2398,6 @@ if __name__ == "__main__":
     print(f"Time taken for mask was {(t3 - t2) * 1e3:.3f} ms")
 
     mj._plot_scene_mask()
-
-  # ---- automatically generate new xml files ----- #
-
-  generate_new_xml = True
-  if generate_new_xml:
-
-    # segments = list(range(3, 31))
-    # fingers = [(0.9e-3, 28e-3), (1.0e-3, 24e-3), (1.0e-3, 28e-3)]
-    # inertia = [1, 10, 50, 100]
-    # for t, w in fingers:
-    #   for N in segments:
-    #     for i in inertia:
-    #       mj.load_next.finger_width = w
-    #       mj.load_next.num_segments = N
-    #       mj.load_next.finger_thickness = t
-    #       mj.load_next.segment_inertia_scaling = i
-    #       mj._auto_generate_xml_file("set9_testing", use_hashes=True)
-
-    mj.params.test_objects = 20
-    mj.load_next.finger_hook_angle_degrees = 75
-    mj.load_next.finger_width = 28e-3
-    mj.load_next.fingertip_clearance = 0.01
-    mj.load_next.XY_base_actions = True
-    mj.load_next.Z_base_rotation = True
-    mj.load_next.num_segments = 8
-    mj.load_next.segment_inertia_scaling = 50.0
-    # mj.load_next.finger_length = 200e-3
-    # mj.load_next.finger_thickness = 1.9e-3
-
-    gen_obj_set = "set9_fullset"
-    name = mj._auto_generate_xml_file(gen_obj_set, use_hashes=True, force=False)
-    runstr = f"bin/mysimulate -p /home/luke/mujoco-devel/mjcf -o {gen_obj_set} -g {name}"
-
-    print(runstr)
 
   # ----- evaluate speed of rgbd function ----- #
 
