@@ -31,7 +31,7 @@ OUTCPP := bin
 OUTPY := rl/env/mjpy
 
 # default object set name
-DEFAULT_OBJECTSET = set6_fullset_800_50i
+DEFAULT_OBJECTSET = set9_fullset
 
 # where is the gripper-description submodule (if we have it)
 DESCRIPTION_MODULE := description
@@ -41,6 +41,9 @@ MJCF_FOLDER := mjcf
 
 # do we want to prevent any rendering libraries from compiling (1=True, 0=false)
 PREVENT_RENDERING = 0
+
+# do we depend on boost libraries (in boostdep.cpp), default = no
+DEPENDS_BOOST = 0
 
 # ----- conditional compilation with user defined options ----- #
 
@@ -52,7 +55,6 @@ OPTIM = -O2
 endif
 
 # define library locations - this file contains user specified options
-DEPENDS_BOOST = 0 # by default do not depend on boost
 include buildsettings.mk
 
 # ----- compilation settings ----- #
