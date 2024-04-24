@@ -300,6 +300,8 @@ class MjEnv():
         m = "lab-op"
       elif machine == "zotac-PC":
         m = "zotac"
+      elif machine == "luke-laptop-wsl":
+        m = "wsl"
       else:
         raise RuntimeError(f"MjEnv()._auto_generate_xml_file() does not recognise this machine: {machine}")
       

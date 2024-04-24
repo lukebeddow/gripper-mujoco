@@ -74,6 +74,12 @@ echo Python only arguments are: ${PY_ARGS[@]}
 
 # ----- main job submission ----- #
 
+# create the log folder if needed
+if [ $LOGGING = 'Y' ]
+then
+    mkdir -p $LOG_FOLDER
+fi
+
 # navigate to correct directory
 cd $path_to_mymujoco/$python_folder || exit
 
