@@ -9,6 +9,7 @@ int num_xml_tasks = 4; // intentionally low number to accomodate different objec
 bool print_step = false;
 bool print_ep = true;
 bool debug_print = false;
+bool allow_done = false; // allow early termination
 
 bool learning_step(MjClass& mj)
 {
@@ -66,6 +67,8 @@ void load_task(MjClass& mj, int task_num, std::string object_set = "default")
     "--task", std::to_string(task_num),
     "--width", "28",
     "--segments", "8",
+    "--thickness", "1.0",
+    "--path", "/home/luke/mujoco-devel/mjcf/"
   };
 
   if (object_set != "default") {
@@ -89,7 +92,7 @@ void run_test(int num_episodes, int step_cap, int reload_rate)
   // user options
   bool randxml = false;
   bool use_default_object_set = true;
-  std::string object_set = "set7_fullset_1500_50i_updated";
+  std::string object_set = "set9_fullset";
   bool use_random_seed = true;
   int random_seed = 13572;
 
@@ -109,9 +112,12 @@ void run_test(int num_episodes, int step_cap, int reload_rate)
     mj.s_.random_seed = random_seed;
   }
 
-  // hardcode stable timestep
-  mj.s_.auto_set_timestep = false;
-  mj.s_.mujoco_timestep = 3.187e-3;
+  // auto-detect stable timestep
+  mj.s_.auto_set_timestep = true;
+  // mj.s_.mujoco_timestep = 3.187e-3;
+
+  // to determine length of simulation time
+  int action_step_counter = 0;
 
   // begin timer
   mj.tick();
@@ -132,7 +138,9 @@ void run_test(int num_episodes, int step_cap, int reload_rate)
       if (print_step) std::cout << "Episode " << i << " step " << j << '\n';
 
       bool done = learning_step(mj);
-      if (done) break;
+      action_step_counter += 1;
+
+      if (done and allow_done) break;
     }
 
     if (i % reload_rate == 0) {
@@ -158,7 +166,13 @@ void run_test(int num_episodes, int step_cap, int reload_rate)
   // finish timing
   float total_time = mj.tock();
 
-  std::cout << "The total time was " << total_time << '\n';
+  // determine how long was simulated
+  double sim_time = action_step_counter * mj.s_.time_for_action;
+  double realtime_factor = sim_time / total_time;
+
+  std::cout << "The total time was " << total_time 
+    << " seconds. " << sim_time << " seconds were simulated, hence the realtime speed up is "
+    << realtime_factor << '\n';
 
   return;
 }
@@ -173,7 +187,7 @@ int main(int argc, char** argv)
   /* settings of 20, 200, 20 -> mujoco-2.2.0 takes 12.307/12.888/12.729 seconds */
   int num_episodes = 20;
   int step_cap = 200;
-  int reload_rate = 20;
+  int reload_rate = 21;
 
   run_test(num_episodes, step_cap, reload_rate);
 
