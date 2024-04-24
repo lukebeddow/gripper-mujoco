@@ -221,3 +221,37 @@ DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
 MAKEFLAGS += -j8 # jN => use N parallel cores
 
 endif
+
+# ----- compiling on the lab desktop PC ----- #
+ifeq ($(filter wsl, $(MAKECMDGOALS)), wsl)
+
+# set this command goal as a phony target (important)
+.PHONY: wsl
+
+# what machine are we compiling for
+MACHINE = luke-laptop-wsl
+
+# mjcf files location (model files like gripper/objects)
+MJCF_PATH = /home/luke/mujoco-devel/mjcf
+
+# path to python executable (eg venv) and header files
+PYTHON = /home/luke/pyenv/py38_mujoco
+PYTHON_EXE = $(PYTHON)/bin/python
+PYTHON_INCLUDE = $(PYTHON)/include/python3.8
+
+# local machine library locations
+PYTHON_PATH = /usr/include/python3.6m
+PYBIND_PATH = # none, use system library
+ARMA_PATH = # none, use system library
+MUJOCO_PATH = /home/luke/repo/mujoco-2.1.5
+MUJOCO_LIB = $(MUJOCO_PATH)/lib
+RENDER_PATH = # none, use system library
+CORE_LIBS = -L$(MUJOCO_LIB) -lmujoco -larmadillo 
+RENDER_LIBS = -lglfw
+DEFINE_VAR = -DLUKE_MJCF_PATH='"$(MJCF_PATH)"' \
+						 -DLUKE_MACHINE='"$(MACHINE)"'
+
+# extras
+MAKEFLAGS += -j8 # jN => use N parallel cores
+
+endif
