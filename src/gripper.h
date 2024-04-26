@@ -34,7 +34,7 @@ public:
   constexpr static double hook_length = 35.0e-3;
 
   constexpr static double xy_lead = 4;
-  constexpr static double xy_gear = 1.5;
+  constexpr static double xy_gear = 1.0;
   constexpr static double xy_steps_per_rev = 400;
 
   constexpr static double z_lead = 4.8768;

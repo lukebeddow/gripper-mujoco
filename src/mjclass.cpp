@@ -4520,6 +4520,11 @@ std::vector<float> MjClass::profile_error(std::vector<float> profile_X, std::vec
 
   if (truth_X.size() != truth_Y.size())
     throw std::runtime_error("ground truth X and Y lengths are different in profile_error(...)");
+  
+  if (profile_X[0] > profile_X[profile_X.size() - 1])
+    throw std::runtime_error("profile X must increase from the first value to the last");
+  if (truth_X[0] > truth_X[truth_X.size() - 1])
+    throw std::runtime_error("truth X must increase from the first value to the last");
 
   int n_profile = profile_X.size();
   int n_truth = truth_X.size();

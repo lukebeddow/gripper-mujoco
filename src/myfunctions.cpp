@@ -207,7 +207,7 @@ struct JointSettings {
   struct Dim {
     
     double finger_length = 235e-3;                    // set by mjcf file
-    double finger_thickness = 0.9e-3;                 // set by mjcf file
+    double finger_thickness = 0.96e-3;                 // set by mjcf file
     double finger_width = 28e-3;                      // set by mjcf file
     double hook_length = 35e-3;                       // set by mjcf file
     double hook_angle_degrees = 90.0;                 // set by mjcf file
@@ -274,7 +274,7 @@ struct JointSettings {
     bool stepper = true;
     int num_steps = 10;                         // number of stepper motors steps in one chunk
     double pulses_per_s = 2000;                 // stepper motor pulses per second, this sets speed (2000pps = 300rpm)
-    Gain gripper_kp {100, 40, 1000};            // proportional gains for gripper xyz motors {x, y, z}
+    Gain gripper_kp {250, 15, 1000};            // proportional gains for gripper xyz motors {x, y, z}
     Gain gripper_kd {1, 1, 1};                  // derivative gains for gripper xyz motors {x, y, z}
     Gain base_xyz_kp {500, 500, 2000};          // proportional gains for base xyz motions {x, y, z}
     Gain base_xyz_kd {80, 80, 100};             // derivative gains for base xyz motions {x, y, z}
@@ -282,6 +282,17 @@ struct JointSettings {
     Gain base_rot_kd {80, 80, 6};
 
     double time_per_step = 0.0;                 // runtime depends
+
+    void update_gains(double EI) {
+      // x motor gain based on line of best fit (experimental analysis)
+      gripper_kp.x = EI * 541.3 + 49.65;
+      gripper_kp.y = EI * 44.92 - 0.846;
+
+      std::cout << "Gripper EI=" << EI << " gives kp.x = "
+        << gripper_kp.x << " and kp.y = "
+        << gripper_kp.y << "\n";
+    }
+
   } ctrl;
 
   /* ----- automatically generated settings ----- */
@@ -352,7 +363,10 @@ struct JointSettings {
 
     // special case, reset joint stiffness vector
     dim.reset();
-
+    
+    // get new gains based on updated EI
+    ctrl.update_gains(dim.EI);
+    
     // reset the VectorStructs
     idx.reset();
     qposadr.reset();
@@ -460,6 +474,9 @@ static double last_step_time_ = 0.0;
 
 // turn on/off debug mode for this file only
 constexpr static bool debug_ = false; 
+
+// disable revolute joint equality constraint
+constexpr static bool disable_rev_constraint = true;
 
 /* ----- initialising, setup, and utilities ----- */
 
@@ -2216,13 +2233,13 @@ void update_constraints(mjModel* model, mjData* data)
 
   if (new_x != old_x) {
     if (new_x) {
-      // constraint enable is true
+      // constraint enable is false
       for (int i : j_.con_idx.prismatic) {
         set_constraint(model, data, i, false);
       }
     }
     else {
-      // constraint enable is false
+      // constraint enable is true
       for (int i : j_.con_idx.prismatic) {
         set_constraint(model, data, i, true);
       }
@@ -2232,15 +2249,17 @@ void update_constraints(mjModel* model, mjData* data)
   
   if (new_y != old_y) {
     if (new_y) {
-      // constraint enable is true
+      // constraint enable is false
       for (int i : j_.con_idx.revolute) {
         set_constraint(model, data, i, false);
       }
     }
     else {
-      // constraint enable is false
+      // constraint enable is true
       for (int i : j_.con_idx.revolute) {
-        set_constraint(model, data, i, true);
+        if (not disable_rev_constraint) {
+          set_constraint(model, data, i, true);
+        }
       }
     }
     old_y = new_y;
@@ -2248,13 +2267,13 @@ void update_constraints(mjModel* model, mjData* data)
 
   if (new_z != old_z) {
     if (new_z) {
-      // constraint enable is true
+      // constraint enable is false
       for (int i : j_.con_idx.palm) {
         set_constraint(model, data, i, false);
       }
     }
     else {
-      // constraint enable is false
+      // constraint enable is true
       for (int i : j_.con_idx.palm) {
         set_constraint(model, data, i, true);
       }
@@ -2660,6 +2679,18 @@ void set_base_to_max_height(mjData* data)
   float max_height = target_.base_min.z;
 
   set_base_to_Z_position(data, max_height);
+}
+
+Vec3 get_gripper_target_actual()
+{
+  /* return the actual current positions of the xyz motors */
+
+  Vec3 out;
+  out.x = 1e-6 * double(target_.actual_stepperx.read_element());
+  out.y = 1e-6 * double(target_.actual_steppery.read_element());
+  out.z = 1e-6 * double(target_.actual_stepperz.read_element());
+
+  return out;
 }
 
 /* ----- sensing ------ */
@@ -3376,7 +3407,10 @@ bool change_finger_thickness(float thickness)
 
   j_.dim.finger_thickness = thickness;
   j_.dim.I = (j_.dim.finger_width * std::pow(j_.dim.finger_thickness, 3)) / 12.0;
-  j_.dim.EI = j_.dim.E * j_.dim.I;
+  j_.dim.update_EI();
+
+  // also update controller gains based on the new EI
+  j_.ctrl.update_gains(j_.dim.EI);
 
   if (local_debug) {
     std::cout << "Finger thickness changed, now is " << j_.dim.finger_thickness
@@ -3413,7 +3447,10 @@ bool change_finger_width(float width)
 
   j_.dim.finger_width = width;
   j_.dim.I = (j_.dim.finger_width * std::pow(j_.dim.finger_thickness, 3)) / 12.0;
-  j_.dim.EI = j_.dim.E * j_.dim.I;
+  j_.dim.update_EI();
+
+  // also update controller gains based on the new EI
+  j_.ctrl.update_gains(j_.dim.EI);
 
   if (local_debug) {
     std::cout << "Finger width changed, now is " << j_.dim.finger_width
@@ -3448,7 +3485,10 @@ bool change_youngs_modulus(float E)
   }
 
   j_.dim.E = E;
-  j_.dim.EI = j_.dim.E * j_.dim.I;
+  j_.dim.update_EI();
+
+  // also update controller gains based on the new EI
+  j_.ctrl.update_gains(j_.dim.EI);
 
   if (local_debug) {
     std::cout << "Youngs modulus changed, now is " << j_.dim.E

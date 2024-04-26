@@ -134,6 +134,7 @@ void set_base_to_max_height(mjData* data);
 void print_target();
 void update_target();
 void set_gripper_and_base_to_reset_position(mjModel* model, mjData* data);
+Vec3 get_gripper_target_actual();
 
 // sensing
 gfloat read_armadillo_gauge(const mjData* data, int finger);

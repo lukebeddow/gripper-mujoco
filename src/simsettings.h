@@ -34,7 +34,7 @@
   /*
   automatic settings value detection, and parameters for guiding this */\
   XX(  auto_set_timestep,       bool,     true)     /* find the highest stable timestep, overrides mujoco_timestep */\
-  XX(  auto_calibrate_gauges,   bool,     false)     /* normalise gauges between +-5N, overrides bending_gauge.normalise */\
+  XX(  auto_calibrate_gauges,   bool,     true)     /* normalise gauges between +-5N, overrides bending_gauge.normalise */\
   XX(  auto_sim_steps,          bool,     true)     /* automatically find the sim steps per action, overrides sim_steps_per_action */\
   XX(  auto_exceed_lateral_lim, bool,     false)     /* calculate safe finger bending automaticalled based on yield load */\
   XX(  time_for_action,         double,    0.2)      /* time in seconds to give for each action to complete, only used if auto_sim_steps=true */\
@@ -107,7 +107,7 @@
   SS(  palm_sensor,             true,     10.0,     10)  /* palm force sensor */\
   SS(  wrist_sensor_XY,         false,    5.0,      10)  /* force wrist sensor X and Y forces */\
   SS(  wrist_sensor_Z,          true,     10.0,     10)  /* force wrist sensor Z force */\
-  SS(  cartesian_contacts_XYZ,  true,    0,        -1)  /* cartesian fingertip and palm positions, normalise is ignored */\
+  SS(  cartesian_contacts_XYZ,  false,    0,        -1)  /* cartesian fingertip and palm positions, normalise is ignored */\
   
   
 #define LUKE_MJSETTINGS_ACTION \

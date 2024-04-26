@@ -2290,7 +2290,7 @@ if __name__ == "__main__":
     mj.load_next.finger_hook_angle_degrees = 90
     mj.load_next.finger_width = 28e-3
     mj.load_next.finger_thickness = 0.96e-3
-    mj.load_next.fingertip_clearance = 120e-3 / 2 + 5e-3
+    mj.load_next.fingertip_clearance = 120e-3 / 2 + 6e-3
     mj.load_next.XY_base_actions = True
     mj.load_next.Z_base_rotation = True
     mj.load_next.num_segments = 8
