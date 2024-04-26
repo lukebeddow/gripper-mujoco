@@ -288,9 +288,9 @@ struct JointSettings {
       gripper_kp.x = EI * 541.3 + 49.65;
       gripper_kp.y = EI * 44.92 - 0.846;
 
-      std::cout << "Gripper EI=" << EI << " gives kp.x = "
-        << gripper_kp.x << " and kp.y = "
-        << gripper_kp.y << "\n";
+      // std::cout << "Gripper EI=" << EI << " gives kp.x = "
+      //   << gripper_kp.x << " and kp.y = "
+      //   << gripper_kp.y << "\n";
     }
 
   } ctrl;
