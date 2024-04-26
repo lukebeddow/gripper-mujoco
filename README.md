@@ -164,24 +164,23 @@ To run a python training, we can use ```rl/launch_training.py```. This file has 
 rl/launch_training.py
 
 Command line syntax:
-  [-p, --program] program_name      name of training program (you will define this) which must have NO whitespace
+  [-p, --program] program_name      name of training program (you will define this) which must have no whitespace
   [-j, --job] job_number            job number for this training, you will define how the job number affects the training, if at all
   [-t, --timestamp] %d-%m-%y_%H-%M  timestamp for training, mainly used to load old trainings, must follow format eg 15-01-23_12:34
   [-d, --device] device             select cpu or gpu in pytorch, should be either 'cpu' or 'cuda'
   [-r, --render]                    sets training to render to the screen
-  [-c, --continue] number           continue a training specified with a timestamp and job number, can set [--new-endpoint] X, or [--extra-episodes] Y
+  [-c, --continue]                  continue a training specified with a timestamp and job number, can set [--new-endpoint] X, or [--extra-episodes] Y
   [-g, --plot]                      load and then plot graphs from an existing training specified with a timestamp and job number
-  [--print-results]                 print table of results from previous training batch specified with a timestamp and for specific job numbers a [--job-string] "A:B" or "A B C D"
+  [--print-results]                 print table of results from previous training batch specified with a timestamp and for specific job numbers a [--job-string] "A:D" or "A B C D"
   [--demo] [num_trials]             render to the screen a demonstration test of a training specified with a timestamp and job number, default num_trials=30
   [--test] [object_set]             run a full test of a training specified with a timestamp and job number, optionally on a new object set, default=training set
   [--log-level] int                 set the log level, 0=none, 1=key info (default) 2=extra info, 3=per episode key info, 4=all info, actions/rewards etc
-  [--no-delay]                      turn off default behaviour of sleeping for job_number seconds before running any job
-  [--rngseed] seed                  set a specific rngseed (warning: trainings are NOT currently reproducible, seeding is pointless)
+  [--rngseed] seed                  set a specific rngseed (warning: trainings are not currently reproducible, seeding limited effect)
 ```
 
 For the majority of cases, the workflow is to define a new 'program' in ```rl/launch_training.py```, and then run this with ```python3 launch_training.py -p program_name -j job_num```.
 
-You define a new program by addding it to the bottom of ```rl/launch_training.py```, after ```if __name__ == "__main__":```. The very bottom part of this file is structured as an ```if args.program == "A"...elif args.program == "B"...elif args.program == "C" etc...```, switching between different training programs. You can add your own training program by copying the following template into the ```if..elif...``` and before the last ```else:```. Note that the python object ```tm``` is the training manager from ```rl/TrainingManager.py```.
+You define a new program by adding it to the bottom of ```rl/launch_training.py```, after ```if __name__ == "__main__":```. The very bottom part of this file is structured as an ```if args.program == "A"...elif args.program == "B"...elif args.program == "C" etc...```, switching between different training programs. You can add your own training program by copying the following template into the ```if..elif...``` and before the last ```else:```. Note that the python object ```tm``` is the training manager from ```rl/TrainingManager.py```.
 
 ```python
 elif args.program == "example_template":
@@ -275,11 +274,17 @@ The job string ```1:18``` will be parsed into the numbers "1 2 3 ... 18". Then, 
 ./launch_training_array.sh
 
 Command line syntax:
-  [-d, --debug]                     debug mode, print training output in terminal and not in ~/training_logs, also add '--no-delay' to trainings
-  [-s, --stagger] num               run only num trainings at a time, all must finish before next batch will start
+  [-d, --debug]                     debug mode, print training output in terminal and not in ~/training_logs
+  [--debug-2]                       debug mode 2, same as above but also set --log-level=2 for more detailed output
+  [--print]                         print mode, does not run any trainings, instead prints all the varied parameter details for each job number
+  [-s, --stagger] num               run only 'num' trainings at a time in batches, each batch must entirely finish before next batch will start
 ```
 
-By default, if you run a training program, this script prints a table of results for those trainings once they are all finished (using the ```--print-results``` input to ```rl/launch_training.py```).
+By default, if you run a training program, this script prints a table of results for those trainings once they are all finished (using the ```--print-results``` input to ```rl/launch_training.py```). In order to print a table of results during the training to monitor progress, or to see results again afterwards you can use the following, which auto detects the job numbers:
+
+```
+./launch_training_array.sh --print-results -t <timestamp>
+```
 
 ## Cluster
 
