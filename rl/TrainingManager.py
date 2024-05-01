@@ -1199,6 +1199,15 @@ class TrainingManager():
       if self.settings["reward"]["penalty_termination"]:
         env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"])
 
+    elif self.settings["reward"]["style"] == "sparse":
+      # prepare reward thresholds
+      self.set_sensor_reward_thresholds(env)
+      # end criteria                   reward   done   trigger
+      env.mj.set.stable_height.set     (1.0,    True,    1)
+      env.mj.set.oob.set               (-1.0,   True,    1)
+      if self.settings["reward"]["penalty_termination"]:
+        env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"])
+
     elif self.settings["reward"]["style"] == "termination_action_v1":
       # prepare reward thresholds
       self.set_sensor_reward_thresholds(env)
@@ -1215,16 +1224,6 @@ class TrainingManager():
       env.mj.set.oob.set                    (-1.0,   True,   1)
       if self.settings["reward"]["penalty_termination"]:
         env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"])
-
-    elif self.settings["reward"]["style"] == "MAT":
-      # end criteria                        reward   done   trigger
-      env.mj.set.stable_termination.set     (1.0,    True,   1)
-      env.mj.set.failed_termination.set     (0.0,    True,   1)
-      if self.settings["reward"]["penalty_termination"]:
-        env.mj.set.oob.set                    (0.0,   True,   1)
-        self.set_sensor_reward_thresholds(env)
-        env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"],
-                                           value=0.0)
         
     elif self.settings["reward"]["style"] == "MAT_liftonly":
       # end criteria                        reward   done   trigger
@@ -1233,43 +1232,6 @@ class TrainingManager():
       if self.settings["reward"]["penalty_termination"]:
         env.mj.set.oob.set                    (0.0,   True,   1)
         self.set_sensor_reward_thresholds(env)
-        env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"],
-                                           value=0.0)
-        
-    elif self.settings["reward"]["style"] == "MAT_shaped":
-      # prepare reward thresholds
-      self.set_sensor_reward_thresholds(env)
-      env.mj.set.cap_reward = True
-      env.mj.set.quit_if_cap_exceeded = False
-      env.mj.set.reward_cap_lower_bound = -1.0
-      env.mj.set.reward_cap_upper_bound = 1.0
-      # bonuses only
-      env = self.set_sensor_bonuses(env, 0.002 * self.settings["reward"]["scale_rewards"])
-      # scale based on steps allowed per episode
-      env.mj.set.scale_rewards(0.5*(100 / env.params.max_episode_steps))
-      # end criteria                        reward   done   trigger
-      env.mj.set.stable_termination.set     (1.0,    True,   1)
-      env.mj.set.failed_termination.set     (0.0,    True,   1)
-      if self.settings["reward"]["penalty_termination"]:
-        env.mj.set.oob.set                  (0.0,   True,   1)
-        env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"],
-                                           value=0.0)
-        
-    elif self.settings["reward"]["style"] == "MAT_shaped_no_term":
-      # prepare reward thresholds
-      self.set_sensor_reward_thresholds(env)
-      env.mj.set.cap_reward = True
-      env.mj.set.quit_if_cap_exceeded = False
-      env.mj.set.reward_cap_lower_bound = -1.0
-      env.mj.set.reward_cap_upper_bound = 1.0
-      # bonuses only
-      env = self.set_sensor_bonuses(env, 0.002 * self.settings["reward"]["scale_rewards"])
-      # scale based on steps allowed per episode
-      env.mj.set.scale_rewards(0.5*(100 / env.params.max_episode_steps))
-      # end criteria                        reward   done   trigger
-      env.mj.set.stable_height.set          (1.0,    True,    1)
-      if self.settings["reward"]["penalty_termination"]:
-        env.mj.set.oob.set                  (0.0,   True,   1)
         env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"],
                                            value=0.0)
         
