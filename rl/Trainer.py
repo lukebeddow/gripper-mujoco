@@ -732,19 +732,20 @@ class Trainer:
       # check if we should adjust the training curriculum
       if self.params.use_curriculum: self.curriculum_fcn(i_episode)
 
-      if self.log_level == 1 and (i_episode - 1) % self.log_rate_for_episodes == 0:
-        print("Begin training episode", i_episode, flush=True)
-      elif self.log_level > 1:
+      str_to_add = ""
+      if self.print_avg_return:
         avg_return = self.track.get_avg_return()
         if avg_return is not None: str_to_add = f". Average return = {avg_return}"
-        else: str_to_add = ""
+
+      if self.log_level == 1 and (i_episode - 1) % self.log_rate_for_episodes == 0:
+        print(f"Begin training episode {i_episode}{str_to_add}", flush=True)
+      elif self.log_level > 1:
         print(f"Begin training episode {i_episode} at {datetime.now().strftime('%H:%M')}" + str_to_add, flush=True)
 
       self.run_episode(i_episode)
 
       # plot graphs to the screen
       if self.plot: self.track.plot(plt_frequency_seconds=1)
-      if self.print_avg_return: self.track.print_training()
 
       # check if we need to do any episode level updates (eg target network)
       self.agent.update_episode(i_episode)

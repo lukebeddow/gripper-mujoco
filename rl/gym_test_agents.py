@@ -64,24 +64,24 @@ hypers = {
   },
 
   "Agent_SAC" : {
-    "learning_rate" : 5e-5,
+    "learning_rate" : 5e-3,
     "gamma" : 0.999,
     "alpha" : 0.2,
     "batch_size" : 128,
-    "update_after_steps" : 1000,
-    "update_every_steps" : 50,
-    "random_start_episodes" : 1000,
+    "update_after_steps" : 10000,
+    "update_every_steps" : 1000,
+    "random_start_episodes" : 10,
     "optimiser" : "adam",
     "adam_beta1" : 0.9,
     "adam_beta2" : 0.999,
     "min_memory_replay" : 5000,
-    "memory_replay" : 75_000,
+    "memory_replay" : 25_000,
     "soft_target_tau" : 0.05,
   },
 
   "Agent_PPO" : {
-    "learning_rate_pi" : 5e-5,
-    "learning_rate_vf" : 5e-5,
+    "learning_rate_pi" : 5e-4,
+    "learning_rate_vf" : 5e-4,
     "gamma" : 0.99,
     "steps_per_epoch" : 6000,
     "clip_ratio" : 0.2,
@@ -111,6 +111,7 @@ if __name__ == "__main__":
   # training device
   device = "cpu"
   continous = True
+  log_level = 2
 
   # make the environment
   # env = gym.make("LunarLander-v2") #, render_mode="human")
@@ -121,7 +122,7 @@ if __name__ == "__main__":
   env = GymHandler(env)
 
   # make the agent
-  agent = Agent_PPO
+  agent = Agent_SAC
   layers = [128 for i in range(2)]
   if agent.name == "Agent_DQN":
     if continous: raise RuntimeError("DQN is for discrete")
@@ -133,7 +134,7 @@ if __name__ == "__main__":
     network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
                                continous_actions=continous)
 
-  agent = agent(device=device)
+  agent = agent(device=device, debug=True if log_level>1 else False)
   agent.params.update(hypers[agent.name])
   agent.init(network)
 
@@ -143,8 +144,8 @@ if __name__ == "__main__":
   
   # prepare settings and proceed with training
   trainer.params.num_episodes = 10000
-  trainer.log_level = 2
+  trainer.log_level = log_level
   trainer.log_rate_for_episodes = 1
-  trainer.track.avg_num = 2
+  trainer.track.avg_num = 5
   # trainer.load("run_16-28", group_name="19-09-23")
   trainer.train()

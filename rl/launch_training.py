@@ -5878,6 +5878,43 @@ if __name__ == "__main__":
                 load_best_id=True)
     print_time_taken()
 
+  elif args.program == "try_sac":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-5, 3e-5, 1e-4, 3e-4, 1e-3]
+    vary_2 = [0.1, 0.2, 0.3]
+    vary_3 = [False, True]
+    repeats = 1
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "temperature alpha"
+    tm.param_3_name = "liftonly"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    tm.settings["Agent_SAC"]["learning_rate"] = tm.param_1
+    tm.settings["Agent_SAC"]["alpha"] = tm.param_2
+
+    # create the environment
+    env = tm.make_env()
+
+    if tm.param_3:
+      # set successful grasp as lifted to height
+      env.mj.set.lifted_to_height.set(1.0, True, 1)
+      env.mj.set.stable_height.set(0.0, False, 1)
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = MLPActorCriticAC(env.n_obs, env.n_actions, hidden_sizes=layers)
+    agent = Agent_SAC(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number

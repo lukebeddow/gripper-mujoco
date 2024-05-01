@@ -213,7 +213,7 @@ class Agent_SAC:
   Transition = namedtuple('Transition',
                           ('state', 'action', 'next_state', 'reward', 'terminal'))
 
-  def __init__(self, device="cpu", rngseed=None, mode="train"):
+  def __init__(self, device="cpu", rngseed=None, mode="train", debug=False):
     """
     Soft actor-critic agent for a given environment
     """
@@ -223,6 +223,7 @@ class Agent_SAC:
     self.rngseed = rngseed
     self.mode = mode
     self.steps_done = 0
+    self.debug = debug
 
   def init(self, network):
     """
@@ -243,7 +244,7 @@ class Agent_SAC:
     self.set_device(self.device)
 
     self.q_network_parameters = itertools.chain(self.mlp_ac.q1.parameters(),
-                                           self.mlp_ac.q2.parameters())
+                                                self.mlp_ac.q2.parameters())
 
     if self.params.optimiser.lower() == "rmsprop":
       self.q_optimiser = torch.optim.RMSprop(self.q_network_parameters, 
@@ -443,6 +444,8 @@ class Agent_SAC:
     # only begin to optimise when enough memory is built up
     if (len(self.memory)) < self.params.min_memory_replay:
       return
+    
+    # print("Optimse model, steps done", self.steps_done)
 
     # sample and transpose a batch
     batch = self.memory.batch(self.params.batch_size)
