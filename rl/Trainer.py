@@ -380,7 +380,8 @@ class Trainer:
     self.trackinfo_numbering = not track_info_overwrite
 
     if self.enable_saving:
-      self.modelsaver = ModelSaver(self.savedir + "/" + self.group_name)
+      self.modelsaver = ModelSaver(self.savedir + "/" + self.group_name,
+                                   log_level=self.log_level)
   
   def to_torch(self, data, dtype=torch.float32):
     if torch.is_tensor(data):
@@ -510,21 +511,26 @@ class Trainer:
     if self.enable_saving:
       self.modelsaver.save(filename, txtstr=hyper_str, txtonly=True)
 
-  def load(self, run_name, id=None, group_name=None, path_to_run_folder=None, agentonly=False):
+  def load(self, run_name, id=None, group_name=None, path_to_run_folder=None, 
+           agentonly=False, trackonly=False):
     """
     Load a model given a path to it
     """
+
+    if agentonly and trackonly:
+      raise RuntimeError("Trainer.load() error: agentonly=True and trackonly=True, incompatible arguments")
 
     # check if modelsaver is defined
     if not hasattr(self, "modelsaver"):
       if path_to_run_folder is not None:
         print(f"load not given a modelsaver, making one from path_to_group: {path_to_run_folder}")
-        self.modelsaver = ModelSaver(path_to_run_folder)
+        self.modelsaver = ModelSaver(path_to_run_folder, log_level=self.log_level)
       elif group_name is not None:
         # try to find the group from this folder
         pathhere = os.path.dirname(os.path.abspath(__file__))
         print(f"load not given modelsaver or path_to_group, assuming group is local at {pathhere + '/' + self.savedir}")
-        self.modelsaver = ModelSaver(pathhere + "/" + self.savedir + "/" + self.group_name)
+        self.modelsaver = ModelSaver(pathhere + "/" + self.savedir + "/" + self.group_name,
+                                     log_level=self.log_level)
       else:
         raise RuntimeError("load not given a modelsaver and either of a) path_to_run_folder b) group_name (if group can be found locally)")
     
@@ -535,49 +541,56 @@ class Trainer:
     if path_to_run_folder is not None:
       path_to_run_folder += "/" + run_name
 
-    load_agent = self.modelsaver.load(id=id, folderpath=path_to_run_folder,
-                                      filenamestarts="Agent")
-    self.last_loaded_agent_id = self.modelsaver.last_loaded_id
+    do_load_agent = not trackonly
+    do_load_track = not agentonly
+    do_load_training = not (trackonly + agentonly)
 
-    # if we are only loading the agent
-    if agentonly:
-      print("Trainer.load() warning: AGENTONLY=TRUE, setting self.env=None for safety")
-      self.env = None
+    if do_load_agent:
 
-      # get the name of the agent from the filename saved with
-      name = self.modelsaver.get_recent_file(name="Agent")
-      name = name.split("/")[-1]
-      
-      # trim out the agent part
-      name = name[:5 + len(self.modelsaver.file_ext())]
+      load_agent = self.modelsaver.load(id=id, folderpath=path_to_run_folder,
+                                        filenamestarts="Agent")
+      self.last_loaded_agent_id = self.modelsaver.last_loaded_id
 
-      to_exec = f"""self.agent = {name}()"""
-      exec(to_exec)
-      self.agent.load_save_state(load_agent, device=self.device)
+      # if we are only loading the agent
+      if agentonly:
+        if self.log_level > 0:
+          print("Trainer.load() warning: AGENTONLY=TRUE, setting self.env=None for safety")
+        self.env = None
 
-      print("Trainer.load(): AGENTONLY=True load now completed")
+        # get the name of the agent from the filename saved with
+        name = self.modelsaver.get_recent_file(name="Agent")
+        name = name.split("/")[-1]
+        
+        # trim out the agent part
+        name = name[:5 + len(self.modelsaver.file_ext())]
 
-    # regular load behaviour
-    else:
+        to_exec = f"""self.agent = {name}()"""
+        exec(to_exec)
+        self.agent.load_save_state(load_agent, device=self.device)
+
+        if self.log_level > 0:
+          print("Trainer.load(): AGENTONLY=True load now completed")
+
+    if do_load_track:
+      self.track = self.modelsaver.load(id=id, folderpath=path_to_run_folder, 
+                                      filenamestarts=self.track_savename,
+                                      suffix_numbering=self.trackinfo_numbering)
+      if trackonly:
+        if self.log_level > 0:
+          print("Trainer.load() warning: TRACKONLY=TRUE, setting self.agent=None and self.env=None for safety")
+        self.env = None
+        self.agent = None
+
+    if do_load_training:
+
       load_train = self.modelsaver.load(folderpath=path_to_run_folder,
                                         filenamestarts=self.train_param_savename)
-      try:
-        load_track = self.modelsaver.load(id=id, folderpath=path_to_run_folder, 
-                                        filenamestarts=self.track_savename,
-                                        suffix_numbering=self.trackinfo_numbering)
-      except FileNotFoundError as e:
-        if self.log_level > 0:
-          print("failed\nLoading track failed, trying again with alternative numbering. Error:", e)
-        load_track = self.modelsaver.load(id=id, folderpath=path_to_run_folder, 
-                                      filenamestarts=self.track_savename,
-                                      suffix_numbering=not self.trackinfo_numbering)
       
       # extract loaded data
       self.params = load_train["parameters"]
       self.run_name = load_train["run_name"]
       self.group_name = load_train["group_name"]
       self.env.load_save_state(load_train["env_data"], device=self.device)
-      self.track = load_track
 
       # unpack curriculum information
       self.curriculum_dict = load_train["curriculum_dict"]

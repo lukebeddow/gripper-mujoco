@@ -33,7 +33,7 @@ def lz4_decompress_pickle(file):
 
 class ModelSaver:
 
-  def __init__(self, path, root=None, use_compression=True, compressor="lz4"):
+  def __init__(self, path, root=None, use_compression=True, compressor="lz4", log_level=1):
     """
     Saves learned models at relative path
     """
@@ -50,6 +50,7 @@ class ModelSaver:
     self.folder_names = "train_{}/"         # default name of created folders, then formatted with date
     self.last_saved_id = None               # id of most recently saved object
     self.last_loaded_id = None              # id of most recently loaded object
+    self.log_level = log_level
 
     # if we are given a root, we can use abs paths not relative
     if not root:
@@ -177,8 +178,9 @@ class ModelSaver:
 
     # are we returning the integer number of this file
     if return_int:
-      print("Biggest number found was", num_max)
-      print("Number of matching files found", len(files))
+      if self.log_level > 0:
+        print("Biggest number found was", num_max)
+        print("Number of matching files found", len(files))
       if num_max != len(files):
         raise RuntimeError(f"ModelSaver.get_recent_file() has return_int=True and found a mismatch between the biggest number ({num_max}) and number of files ({len(files)})")
       return num_max
@@ -264,7 +266,8 @@ class ModelSaver:
         else: break
           
     if most_recent[0] == -1:
-      print("No recent folders found at path:", path)
+      if self.log_level > 0:
+        print("No recent folders found at path:", path)
       return None
 
     # if we don't want the most recent, but the x-th (eg 2nd, 4th,...)
@@ -284,8 +287,9 @@ class ModelSaver:
           if inserted == True: break
         if inserted == False: sorted_entries.append(all_entries[i])
       if x_most_recent < 0 or x_most_recent >= len(sorted_entries):
-        print("x_most recent (", x_most_recent, "), out of bounds - max is", 
-              len(sorted_entries))
+        if self.log_level > 0:
+          print("x_most recent (", x_most_recent, "), out of bounds - max is", 
+                len(sorted_entries))
         return None
       return folders[sorted_entries[x_most_recent][0]]
 
@@ -303,14 +307,16 @@ class ModelSaver:
     root_recent = self.get_recent_file(self.path)
 
     if root_recent != None:
-      print("Found the most recent file:", root_recent)
+      if self.log_level > 0:
+        print("Found the most recent file:", root_recent)
       return root_recent
 
     # see if there is a recent folder
     recent_folder = self.get_recent_folder(self.path)
 
     if recent_folder == None:
-      print(f"No recent file or recent folder found in {self.path}")
+      if self.log_level > 0:
+        print(f"No recent file or recent folder found in {self.path}")
       return None
 
     # go into this recent folder to find a recent file
@@ -319,18 +325,22 @@ class ModelSaver:
     if file_in_folder == None:
       i = 1
       while True:
-        print(f"No recent file found in {self.path + recent_folder}")
+        if self.log_level > 0:
+          print(f"No recent file found in {self.path + recent_folder}")
         recent_folder = self.get_recent_folder(self.path, x_most_recent=i)
         if recent_folder == None: break
         file_in_folder = self.get_recent_file(self.path + recent_folder)
         if file_in_folder == None: i += 1
         else:
-          print("Found the most recent file:", recent_folder + "/" + file_in_folder)
+          if self.log_level > 0:
+            print("Found the most recent file:", recent_folder + "/" + file_in_folder)
           return recent_folder + "/" + file_in_folder
-      print("No recent files found at all, giving up")
+      if self.log_level > 0:
+        print("No recent files found at all, giving up")
       return None
 
-    print("Found the most recent file:", recent_folder + "/" + file_in_folder)
+    if self.log_level > 0:
+      print("Found the most recent file:", recent_folder + "/" + file_in_folder)
     return recent_folder + "/" + file_in_folder
 
   def new_folder(self, name=None, label=None, suffix=None, notimestamp=None):
@@ -436,7 +446,8 @@ class ModelSaver:
     # if only saving a text file
     if txtonly != None:
       savename = name + '.txt'
-      print(f"Saving text only {savepath + savename}")
+      if self.log_level > 0:
+        print(f"Saving text only {savepath + savename}")
       with open(savepath + savename, 'w') as openfile:
         openfile.write(txtstr)
       return savepath + savename
@@ -464,7 +475,8 @@ class ModelSaver:
     else: savename = name + file_extension
 
     # save
-    print(f"Saving file {savepath + savename} with pickle ... ", end="", flush=True)
+    if self.log_level > 0:
+      print(f"Saving file {savepath + savename} with pickle ... ", end="", flush=True)
     if compression:
       if self.compressor == "bz2":
         bz2_compressed_pickle(savepath + savename, pyobj)
@@ -473,7 +485,8 @@ class ModelSaver:
     else:
       with open(savepath + savename, 'wb') as openfile:
         pickle.dump(pyobj, openfile)
-    print("finished", flush=True)
+    if self.log_level > 0:
+      print("finished", flush=True)
 
     # if we are asked to save a .txt file too
     if txtstr != None:
@@ -482,7 +495,8 @@ class ModelSaver:
       txtname = name + '_' + self.file_num.format(save_id) + ext
       with open(savepath + txtname, 'w') as openfile:
         openfile.write(txtstr)
-        print(f"Saved also: {txtname}")
+        if self.log_level > 0:
+          print(f"Saved also: {txtname}")
 
     return savepath + savename
 
@@ -573,7 +587,8 @@ class ModelSaver:
             loadpath += filenamestarts + self.uncompressed_extension
 
       if loadpath == None:
-        print(f"No model found at path {loadpath} with id {id}")
+        if self.log_level > 0:
+          print(f"No model found at path {loadpath} with id {id}")
 
     # determine how to load the file in question
     if compression_override is not None:
@@ -585,11 +600,13 @@ class ModelSaver:
     elif loadpath.endswith(self.lz4_extension):
       compressed = True
     else:
-      print(f"loadpath does NOT end with a recognised file extension: {loadpath}")
-      print(f"Trying to load using current compression setting of {self.use_compression}")
+      if self.log_level > 0:
+        print(f"loadpath does NOT end with a recognised file extension: {loadpath}")
+        print(f"Trying to load using current compression setting of {self.use_compression}")
       compressed = self.use_compression
 
-    print(f"Loading file {loadpath} with pickle ... ", end="", flush=True)
+    if self.log_level > 0:
+      print(f"Loading file {loadpath} with pickle ... ", end="", flush=True)
 
     if compressed:
       if loadpath.endswith(self.bz2_extension):
@@ -599,8 +616,9 @@ class ModelSaver:
     else:
       with open(loadpath, 'rb') as f:
         loaded_obj = pickle.load(f)
-        
-    print("finished", flush=True)
+
+    if self.log_level > 0:  
+      print("finished", flush=True)
 
     self.last_loadpath = loadpath
 

@@ -558,7 +558,7 @@ class TrainingManager():
 
   def load(self, job_num=None, timestamp=None, run_name=None, group_name=None, 
            best_id=False, id=None, path_to_run_folder=None, use_abs_path=False,
-           load_into_new_training=False, agentonly=False):
+           load_into_new_training=False, agentonly=False, trackonly=False):
     """
     Load the training currently specified. Either pass:
       1) nothing - run_name and group_name are already set in the class
@@ -606,16 +606,18 @@ class TrainingManager():
       else: stage = None
       found = self.trainer.load_best_id(self.run_name, group_name=self.group_name,
                                         path_to_run_folder=path_to_run_folder, stage=stage,
-                                        agentonly=agentonly)
+                                        agentonly=agentonly, trackonly=trackonly)
       if not found:
         if self.log_level > 0:
           print(f"TrainingMananger.load() warning: load_best_id failed (stage = {stage}). Loading most recent id")
         self.trainer.load(self.run_name, group_name=self.group_name, id=id,
-                        path_to_run_folder=path_to_run_folder, agentonly=agentonly)
+                        path_to_run_folder=path_to_run_folder, agentonly=agentonly, 
+                        trackonly=trackonly)
         # raise RuntimeError(f"TrainingMananger.load() error: load_best_id failed (stage = {stage})")
     else:
       self.trainer.load(self.run_name, group_name=self.group_name, id=id,
-                        path_to_run_folder=path_to_run_folder, agentonly=agentonly)
+                        path_to_run_folder=path_to_run_folder, agentonly=agentonly, 
+                        trackonly=trackonly)
 
     if load_into_new_training:
       # apply new training details, for saving in a new folder
