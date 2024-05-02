@@ -5881,24 +5881,26 @@ if __name__ == "__main__":
   elif args.program == "try_sac":
 
     # define what to vary this training, dependent on job number
-    vary_1 = [1e-5, 3e-5, 1e-4, 3e-4, 1e-3]
-    vary_2 = [0.1, 0.2, 0.3]
-    vary_3 = [False, True]
+    vary_1 = [1e-5, 1e-4, 1e-3]
+    vary_2 = [1, 10, 100]
+    vary_3 = [500, 2500]
     repeats = 1
     tm.param_1_name = "learning rate"
-    tm.param_2_name = "temperature alpha"
-    tm.param_3_name = "liftonly"
+    tm.param_2_name = "update_every_steps"
+    tm.param_3_name = "random_start_episodes"
     tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
                                                          param_3=vary_3, repeats=repeats)
     if args.print: print_training_info()
 
+    liftonly = True
     tm.settings["Agent_SAC"]["learning_rate"] = tm.param_1
-    tm.settings["Agent_SAC"]["alpha"] = tm.param_2
+    tm.settings["Agent_SAC"]["update_every_steps"] = tm.param_2
+    tm.settings["Agent_SAC"]["random_start_episodes"] = tm.param_3
 
     # create the environment
     env = tm.make_env()
 
-    if tm.param_3:
+    if liftonly:
       # set successful grasp as lifted to height
       env.mj.set.lifted_to_height.set(1.0, True, 1)
       env.mj.set.stable_height.set(0.0, False, 1)
