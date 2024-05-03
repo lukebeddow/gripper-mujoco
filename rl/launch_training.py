@@ -5917,6 +5917,69 @@ if __name__ == "__main__":
                 load_best_id=True)
     print_time_taken()
 
+  elif args.program == "try_dqn":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-5, 5e-5, 1e-4]
+    vary_2 = [0.5, 1.0]
+    vary_3 = [False, True]
+    repeats = 3
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "action size scale factor"
+    tm.param_3_name = "use step size curriculum"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    tm.settings["Agent_DQN"]["learning_rate"] = tm.param_1
+
+    # convert to discrete actions, reduce their size slightly
+    size_reduction = tm.param_2
+    tm.settings["cpp"]["continous_actions"] = False
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] *= size_reduction
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] *= size_reduction
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] *= size_reduction
+    tm.settings["cpp"]["action"]["base_Z"]["value"] *= size_reduction
+
+    if tm.param_3:
+      # enable the curriculum of step size adjustments
+      max_size_scaling = 4.0 # how much bigger are the biggest step sizes compared to normal
+      tm.settings["trainer"]["use_curriculum"] = True
+      tm.settings["curriculum"]["whole_fcn_override"] = curriculum_fcn_MAT
+      tm.settings["curriculum"]["param_values"] = [
+        # gripper_X action min/max
+        [tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"],
+         tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] * max_size_scaling],
+        # gripper_Y action min/max
+        [tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"],
+         tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] * max_size_scaling],
+        # gripper_Z action min/max
+        [tm.settings["cpp"]["action"]["gripper_Z"]["value"],
+         tm.settings["cpp"]["action"]["gripper_Z"]["value"] * max_size_scaling],
+        # base_Z action min/max
+        [tm.settings["cpp"]["action"]["base_Z"]["value"],
+         tm.settings["cpp"]["action"]["base_Z"]["value"] * max_size_scaling],
+        # time per action min/max
+        [tm.settings["cpp"]["time_for_action"],
+         tm.settings["cpp"]["time_for_action"] * max_size_scaling],   
+      ]
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = networks.VariableNetwork([env.n_obs, *layers, env.n_actions], 
+                                       device=args.device)
+    agent = Agent_DQN(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number

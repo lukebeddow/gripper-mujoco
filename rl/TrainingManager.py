@@ -153,7 +153,7 @@ class TrainingManager():
       # model parameters (for loading xml files)
       "object_set_name" : "set9_nosharp_smallspheres",
       "num_segments" : 8,
-      "finger_thickness" : 0.9e-3,
+      "finger_thickness" : 0.86e-3,
       "finger_length" : 235e-3,
       "finger_width" : 28e-3,
       "finger_modulus" : 193e9,
