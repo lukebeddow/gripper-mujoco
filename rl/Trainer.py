@@ -1700,7 +1700,7 @@ class MujocoTrainer(Trainer):
     return best_sr, best_ep
 
   def load_best_id(self, run_name, group_name=None, path_to_run_folder=None, stage=None,
-                   agentonly=False):
+                   agentonly=False, trackonly=False):
     """
     Try to find the best performing agent and load that. Stage indicates requirements
     for which curriulum stage we can load. If an int, we load that stage, or if "max"
@@ -1728,7 +1728,7 @@ class MujocoTrainer(Trainer):
 
     # try to load, if best id not found it loads most recent (ie id=None)
     self.load(run_name, id=id, group_name=group_name, path_to_run_folder=path_to_run_folder,
-              agentonly=agentonly)
+              agentonly=agentonly, trackonly=trackonly)
 
     if not best_id_found:
       if stage == "max": stage = self.track.test_curriculum_stages[-1]
@@ -1745,7 +1745,7 @@ class MujocoTrainer(Trainer):
           print(f"BEST_ID_SUCCESS -> best_id set to {best_id} with best_ep={best_ep}, save_freq={self.params.save_freq} and best_sr={best_sr}")
         # try to load again
         self.load(run_name, id=best_id, group_name=group_name, path_to_run_folder=path_to_run_folder,
-                  agentonly=agentonly)
+                  agentonly=agentonly, trackonly=trackonly)
 
     return best_id_found
 
