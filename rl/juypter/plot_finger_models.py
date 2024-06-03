@@ -21,6 +21,7 @@ parser.add_argument("-E", "--youngs-modulus", type=float, default=193e9)
 parser.add_argument("--inertia-scaling", default=50, type=int)
 parser.add_argument("--save-data", default=True, type=bool)
 parser.add_argument("--get-timesteps", action="store_true")
+parser.add_argument("--save-suffix", default="")
 
 args = parser.parse_args()
 
@@ -68,6 +69,7 @@ force_style = args.force_style
 if force_style == 0: force_style_str = "PL"
 elif force_style == 1: force_style_str = "UDL"
 elif force_style == 2: force_style_str = "EM"
+elif force_style == 3: force_style_str = "2PL"
 
 # global variables
 max_force = 3
@@ -153,11 +155,11 @@ if get_data:
   # take care with overwrites - use the .py version in the terminal for overwrites
   overwrite = args.save_data
 
-  name_style = "sim_bending_E{0:.2f}_{1}.pickle"
+  name_style = "sim_bending_E{0:.2f}_{1}{2}.pickle"
   rigidity = mj.mj.get_finger_rigidity()
 
   if overwrite:
     thickness_mm = mj.params.finger_thickness * 1000
     width_mm = mj.params.finger_width * 1000
-    with open(save_folder + "/" + name_style.format(rigidity, force_style_str), "wb") as f:
+    with open(save_folder + "/" + name_style.format(rigidity, force_style_str, args.save_suffix), "wb") as f:
       pickle.dump(data, f)

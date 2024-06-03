@@ -233,8 +233,16 @@ class MjEnv():
     config_file = "gripper.yaml"
     mjcf_folder = "mjcf"
     yaml_path = f"{description_path}/{config_folder}/{config_file}"
-    with open(yaml_path) as file:
-      gripper_details = yaml.safe_load(file)
+
+    # try to open the file, make multiple tries in case clash with other process
+    attempts = 10
+    for i in range(attempts):
+      with open(yaml_path) as file:
+        gripper_details = yaml.safe_load(file)
+      if gripper_details is not None: break
+      time.sleep(0.1 + 0.25 * np.random.random())
+    if gripper_details is None:
+      raise RuntimeError(f"MjEnv._auto_generate_xml_file(): read only 'None' from gripper_details yaml file at path: {yaml_path}")
 
     original_details = deepcopy(gripper_details)
 
@@ -1342,6 +1350,7 @@ class MjEnv():
       "final_squeeze" : True,
       "fixed_angle" : True,
       # "palm_first" : True,
+      "heuristic_method" : "default", # default=paper, PID=full PID, hybrid=paper + PID
     }
 
   # ----- utilities for loading CUT/cycleGAN models ----- #
@@ -1701,7 +1710,7 @@ class MjEnv():
       - 6. Loop squeezing actions to aim for specific grasp force
     """
 
-    def bend_to_force(target_force_N, possible_action=None, limit_force_N=10):
+    def bend_to_force(target_force_N, possible_action=None, limit_force_N=4):
       """
       Try to bend the fingers to a certain force
       """
@@ -1737,14 +1746,16 @@ class MjEnv():
 
       return action
 
-    def palm_push_to_force(target_force_N, limit_force_N=10):
+    def palm_push_to_force(target_force_N, limit_force_N=4):
       """
       Try to push with the palm to a specific force
       """
 
-      time.sleep(0.2)
+      # time.sleep(0.2)
 
       action = None
+
+      # print(palm_reading)
 
       # if we have palm sensing
       if True or palm:
@@ -1837,7 +1848,6 @@ class MjEnv():
       # avg_bend = max_bend
     if palm:
       palm_reading = self.mj.get_palm_force(self.heuristic_real_world)
-      print("palm reading is", palm_reading)
     if wrist:
       wrist_reading = self.mj.get_wrist_force(self.heuristic_real_world)
 

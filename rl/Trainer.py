@@ -907,7 +907,7 @@ class MujocoTrainer(Trainer):
 
     ep_start = time.time()
 
-    cumulative_reward = 0
+    # cumulative_reward = 0
 
     # count up through actions
     for t in count():
@@ -917,7 +917,7 @@ class MujocoTrainer(Trainer):
       # human written action selection function
       action = self.env.get_heuristic_action()
       action = torch.tensor(action) # to fit with select_action(...)
-      (new_obs, reward, terminated, truncated, info) = self.env.step(action.item())
+      (new_obs, reward, terminated, truncated, info) = self.env.step(action)
    
       # render the new environment
       if self.render: self.env.render()
@@ -926,7 +926,7 @@ class MujocoTrainer(Trainer):
       else: done = False
 
       obs = new_obs
-      cumulative_reward += reward.cpu()
+      # cumulative_reward += reward
 
       # check if this episode is over and log if we aren't testing
       if done:

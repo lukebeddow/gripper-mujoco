@@ -4046,6 +4046,22 @@ MjType::CurveFitData::PoseData MjClass::validate_curve_under_force(float force, 
     if (force_style == 0) luke::apply_tip_force(force);
     else if (force_style == 1) luke::apply_UDL(force);
     else if (force_style == 2) luke::apply_tip_moment(force);
+    else if (force_style == 3) {
+      // apply half the force at the tip
+      double half_frc = force * 0.5;
+      luke::apply_tip_force(half_frc);
+      // apply half the force half way along the beam
+      int N = luke::get_N();
+      if (N % 2 == 0) {
+        // for even numbers, apply directly on middle joint
+        luke::set_segment_force((N / 2), true, half_frc);
+      }
+      else {
+        // for odd numbers, M=FL, offset force into moment on nearest joint
+        double dist = (luke::get_finger_length() / (double) N) * 0.5;
+        luke::set_segment_moment((N / 2), true, half_frc * dist);
+      }
+    }
     else {
       std::cout << "force_style = " << force_style << '\n';
       throw std::runtime_error("force style was not valid in validate_curve_under_force(...)");
@@ -4102,7 +4118,8 @@ MjType::CurveFitData MjClass::curve_validation_regime(bool print, int force_styl
   }
   
   // NOTE: not forces in newtons, these are 100/200/300/400g (ie 0.981*1/2/3/4)
-  std::vector<float> forces { 1 * 0.981, 2 * 0.981, 3 * 0.981, 4 * 0.981 };
+  constexpr float g = 0.981;
+  std::vector<float> forces { 1 * g, 2 * g, 3 * g, 4 * g };
 
   // scale forces to get equal theoretical tip deflection
   float L = luke::get_finger_length();
@@ -4118,6 +4135,11 @@ MjType::CurveFitData MjClass::curve_validation_regime(bool print, int force_styl
       // M = 2LF / 3
       // forces[i] *= 0.15667;
       forces[i] *= (2*L) / 3.0;
+    }
+  }
+  else if (force_style == 3) {
+    for (int i = 0; i < forces.size(); i++) {
+      forces[i] *= (32.0 / 21.0);
     }
   }
 

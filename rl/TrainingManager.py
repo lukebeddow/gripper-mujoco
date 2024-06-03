@@ -456,7 +456,7 @@ class TrainingManager():
 
     return create_new
 
-  def run_training(self, agent, env):
+  def run_training(self, agent, env, test_after=True):
     """
     Initialise the agent, apply settings, and make everything ready for training
     """
@@ -477,8 +477,9 @@ class TrainingManager():
     self.trainer.train()
 
     # finish by loading the best training and running an in depth test on it
-    self.run_test(trials_per_obj=self.settings["final_test_trials_per_object"],
-                  load_best_id=True)
+    if test_after:
+      self.run_test(trials_per_obj=self.settings["final_test_trials_per_object"],
+                    load_best_id=True)
       
     # save final summary of training
     self.save_training_summary()
@@ -493,7 +494,7 @@ class TrainingManager():
       print(f"\nPreparing to perform a model test, trials_per_obj = {trials_per_obj}, load_best_id = {load_best_id}, heuristic = {heuristic}")
 
     # are we loading the best performing model before this test
-    if load_best_id:
+    if load_best_id and not heuristic:
       # check if we should only finalise tests on trainings that reached a certain stage
       if self.settings["final_test_only_stage"] is not None:
         stage = self.settings["final_test_only_stage"]
@@ -882,6 +883,8 @@ class TrainingManager():
     Create a MujocoTrainer
     """
 
+    if agent is None: agent = EmptyAgent()
+
     trainer = MujocoTrainer(agent, env, rngseed=self.rngseed, device=self.device,
                             log_level=self.log_level, plot=self.settings["plot"], 
                             render=self.settings["render"], group_name=self.group_name, 
@@ -1249,6 +1252,13 @@ class TrainingManager():
     env.mj.set.object_stable.trigger = self.settings["reward"]["stable_trigger"]
 
     return env
+
+class EmptyAgent:
+  def __init__(self): pass
+  def training_mode(self): pass
+  def testing_mode(self): pass
+  def to_device(self): pass
+  def seed(self, rngseed=None): pass
 
 if __name__ == "__main__":
 

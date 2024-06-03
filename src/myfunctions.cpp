@@ -1024,6 +1024,7 @@ void set_finger_stiffness_using_model(mjModel* model)
       float c;
       if (n == 1) {
         c = ((2 * j_.dim.EI) / j_.dim.finger_length) * ((N*N) / (double)(N - (1.0/3.0)));
+        // c = ((2 * N * j_.dim.EI) / j_.dim.finger_length);
       }
       else {
         c = (N * j_.dim.EI) / j_.dim.finger_length;
@@ -3023,6 +3024,19 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
       theory_x[i + 1 + ffs] = x;
       theory_y[i + 1 + ffs] = theory_factor * std::pow(x, 2);
     }
+    else if (force_style == 3) {
+      double tf = (force / j_.dim.EI);
+      double x = (i + 1) * j_.dim.segment_length;
+      double L = j_.dim.finger_length;
+      theory_x[i + 1 + ffs] = x;
+      if (x <= 0.5*L) {
+        theory_y[i + 1 + ffs] = (tf/8) * (std::pow(x, 2)) * (2*L - x); 
+      }
+      else {
+        theory_y[i + 1 + ffs] = (tf/12) * (std::pow(x, 2)) * (3*L - x)
+          - (tf/96) * std::pow(L, 3) + (tf/16) * L * L * x; 
+      }
+    }
     else {
       std::cout << "force_style = " << force_style << '\n';
       throw std::runtime_error("force style was not valid in verify_small_angle_model(...)");
@@ -3130,6 +3144,52 @@ void fill_theory_curve(std::vector<float>& theory_X, std::vector<float>& theory_
       double x = L * ((i / (float) (num - 1)));
       theory_X[i] = x;
       theory_Y[i] = theory_factor * (std::pow(x, 2)); 
+    }
+  }
+  else if (force_style == 3) {
+
+    // create two point load theory curve
+    for (int i = 0; i < num; i++) {
+      double tf = ((force) / j_.dim.EI);
+      double x = L * ((i / (float) (num - 1)));
+      theory_X[i] = x;
+      // theory_Y[i] = (tf/2) * (-std::pow(x, 3) + 3 * L * std::pow(x, 2))
+      //               + (tf/2) * (-(1.0/6.0)*std::pow(x,3) + (L/4.0)*std::pow(x,2));
+      if (x <= 0.5*L) {
+        // theory_Y[i] = (tf/8) * (std::pow(x, 2)) * (2*L - x); 
+        // theory_Y[i] = -(tf/6) * (std::pow(x, 3)) + (tf/8) * L * (std::pow(x, 2));
+        // double adjust = 0.25;
+        // theory_Y[i] = adjust * (tf/6) * (-2 * std::pow(x, 3) + (9.0/2.0) * L * std::pow(x, 2)); 
+        // theory_Y[i] = (force / (12 * j_.dim.EI)) * (-(4.0 / 3.0) * std::pow(x, 3) + 4 * L * std::pow(x, 2));
+        // theory_Y[i] = (force / (24 * j_.dim.EI)) * (-(8.0 / 3.0) * std::pow(x, 3) + 7 * L * std::pow(x, 2));
+        // // monday - gpt
+        // theory_Y[i] = (force / (8 * j_.dim.EI)) * (2 * L * pow(x, 2) - pow(x, 3));
+        // monday - me
+        theory_Y[i] = (force / (12 * j_.dim.EI)) * (4.5 * L * pow(x, 2) - 2 * pow(x, 3));
+      }
+      else {
+        // theory_Y[i] = -(tf/12) * (std::pow(x, 3)) * (3*L - x)
+        //               - (tf/16) * std::pow(L, 2) * x
+        //               + (tf/96) * std::pow(L, 3);
+        // theory_Y[i] = -(tf/12) * (std::pow(x, 3))
+        //               + (tf/16) * std::pow(L, 2) * x
+        //               + (tf/48) * std::pow(L, 3);
+        // theory_Y[i] = (tf/6) * (-std::pow(x, 3) + 3 * L * std::pow(x, 2))
+        //               + (tf/24) * std::pow(L, 3)
+        //               + (tf/8) * std::pow(L, 2) * (0.5 * L - x);
+        // theory_Y[i] = (force / (12 * j_.dim.EI)) * (-std::pow(x, 3) + 3 * L * std::pow(x, 2));
+                      // + ((force * std::pow(L, 3)) / (192 * j_.dim.EI));
+        // theory_Y[i] = (force / (12 * j_.dim.EI)) * (-std::pow(x, 3) + 3 * L * std::pow(x, 2))
+        //               + ((5 * force * std::pow(L, 3)) / (48 * j_.dim.EI))
+        //               - ((force * std::pow(L, 2) * x) / (24 * j_.dim.EI));
+        // // monday - gpt
+        // theory_Y[i] = (force / (12 * j_.dim.EI)) * (-pow(x, 3) + 3 * L * pow(x, 2))
+        //               + (force / (48 * j_.dim.EI)) * pow(L, 2) * (3 * x - 0.5 * L);
+        // monday - me
+        theory_Y[i] = (force / (12 * j_.dim.EI)) * (-pow(x, 3) + 3 * L * pow(x, 2))
+                      + (force / (96 * j_.dim.EI)) * pow(L, 2) * (6 * x - L);
+      }
+      
     }
   }
   else {

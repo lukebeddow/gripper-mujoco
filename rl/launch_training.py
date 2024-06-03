@@ -793,7 +793,13 @@ if __name__ == "__main__":
       print(" -> Heuristic set to", args.heuristic)
       if args.demo: print(" -> Demo set, number of trials is", args.demo)
 
-    tm.load(job_num=args.job, timestamp=args.timestamp, best_id=best_id, id=args.load_id)
+    if args.heuristic:
+      tm.settings["cpp"]["continous_actions"] = False
+      tm.settings["cpp"]["time_for_action"] = 0.4 # double it, palm issues
+      env = tm.make_env(load=False)
+      tm.trainer = tm.make_trainer(env=env)
+    else:
+      tm.load(job_num=args.job, timestamp=args.timestamp, best_id=best_id, id=args.load_id)
     tm.run_test(heuristic=args.heuristic, demo=args.demo, render=args.render, pause=args.pause,
                 different_object_set=args.test)
     exit()
@@ -5978,6 +5984,44 @@ if __name__ == "__main__":
     tm.run_training(agent, env)
     tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
                 load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "test_heuristics":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = None
+    vary_2 = None
+    vary_3 = None
+    repeats = None
+    tm.param_1_name = None
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+    
+    # apply the varied settings (very important!)
+    tm.settings["cpp"]["continous_actions"] = False
+    tm.settings["trainer"]["num_episodes"] = 1
+
+    # # choose any additional settings to change
+    # tm.settings["A"]["B"] = X
+    # tm.settings["C"]["D"] = Y
+    # tm.settings["E"]["F"] = Z
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent, may depend on variable settings above
+    layers = [env.n_obs, 64, 64, env.n_actions]
+    network = networks.VariableNetwork(layers, device=args.device)
+    agent = Agent_DQN(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env, test_after=False)
+    tm.run_test(trials_per_obj=1, different_object_set="set8_fullset_1500",
+                load_best_id=False, demo=5, heuristic=True)
     print_time_taken()
 
   elif args.program == "example_template":
