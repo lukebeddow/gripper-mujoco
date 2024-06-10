@@ -2300,7 +2300,7 @@ if __name__ == "__main__":
 
     mj.params.test_objects = 20
     mj.load_next.finger_hook_angle_degrees = 90
-    mj.load_next.finger_width = 28e-3
+    mj.load_next.finger_width = 3e-3
     mj.load_next.finger_thickness = 0.96e-3
     mj.load_next.fingertip_clearance = 120e-3 / 2 + 6e-3
     mj.load_next.XY_base_actions = True
@@ -2310,7 +2310,7 @@ if __name__ == "__main__":
     # mj.load_next.finger_length = 200e-3
     # mj.load_next.finger_thickness = 1.9e-3
 
-    gen_obj_set = "set_object_sizes"
+    gen_obj_set = "set8_fullset_1500"
     name = mj._auto_generate_xml_file(gen_obj_set, use_hashes=True, force=False)
     runstr = f"bin/mysimulate -p /home/luke/mujoco-devel/mjcf -o {gen_obj_set} -g {name}"
 
