@@ -182,6 +182,7 @@ class TrainingManager():
       "state_noise_mu" : 0.025,
       "state_noise_std" : 0.0,
       "base_position_noise" : 5e-3,
+      "palm_scale_factor" : 1.0,
       "oob_distance" : 75e-3,
       "lift_height" : 15e-3,
       "gripper_target_height" : 20e-3,
@@ -950,6 +951,7 @@ class TrainingManager():
     env.mj.set.state_noise_mu = set["cpp"]["state_noise_mu"]
     env.mj.set.state_noise_std = set["cpp"]["state_noise_std"]
     env.mj.set.base_position_noise = set["cpp"]["base_position_noise"]
+    env.mj.set.palm_scale_factor = set["cpp"]["palm_scale_factor"]
 
     env.mj.set.oob_distance = set["cpp"]["oob_distance"]
     env.mj.set.lift_height = set["cpp"]["lift_height"]

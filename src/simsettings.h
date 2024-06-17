@@ -61,6 +61,7 @@
   XX(  state_noise_mu,          double,   0.025)    /* abs range of state sensor mean shift*/\
   XX(  state_noise_std,         double,   0.0)      /* std deviation of noise, <= 0 means uniform*/\
   XX(  base_position_noise,     double,   6e-3)     /* uniform noise on base starting position, is tracked by base sensor */\
+  XX(  palm_scale_factor,       double,   1.0)      /* scale palm force value readings by this factor */\
   /* 
   update_env() settings */\
   XX(  oob_distance,            double,   75e-3)    /* distance to consider object out of bounds */\

@@ -825,6 +825,9 @@ void MjClass::monitor_sensors()
     // read
     luke::gfloat palm_reading = forces.all.palm_local[0];
 
+    // scale reading based on experimental data, before any processing
+    palm_reading *= s_.palm_scale_factor;
+
     // save SI
     sim_sensors_SI_.palm_sensor.add(palm_reading);
 
