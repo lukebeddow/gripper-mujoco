@@ -1698,6 +1698,7 @@ void makeObjectUI(int oldstate)
         {mjITEM_BUTTON,     "print frc",       2, NULL,     " #300"},
         {mjITEM_BUTTON,     "msr constrict",       2, NULL,     " #300"},
         {mjITEM_BUTTON,     "msr tilt",       2, NULL,     " #300"},
+        {mjITEM_BUTTON,     "msr palm",       2, NULL,     " #300"},
         {mjITEM_END}
     };
 
@@ -2803,6 +2804,49 @@ void uiEvent(mjuiState* state)
                         << force_matrix[i][1] << " | "
                         << force_matrix[i][2] << " | "
                         << avg << "\n";
+                }
+                std::cout << "Finished. Sphere diameter was: "
+                    << objbox.x * 1e3 << " mm\n";
+
+                break;
+            }
+            case 50: {         // measure palm
+
+                std::cout << "Running a force measurement program (palm)\n";
+                std::cout << "WARNING: to run this set j_.ctrl.num_steps = 1 "
+                    "and j_.ctrl.pulses_per_s = 5000. Then run the program twice\n";
+                myMjClass.reset_object();
+                myMjClass.spawn_object(0);
+                std::vector<double> pos;
+                std::vector<double> z_actual;
+                double start = 60;
+                for (double i = start; i < start + 25; i += 0.25) 
+                    pos.push_back(i * 1e-3);
+                std::vector<double> force_vector;
+                // go to start position
+                luke::set_gripper_target_m(130e-3, 130e-3, pos[0]);
+                for (int i = 0; i < 100; i++) myMjClass.action_step();
+                for (int i = 0; i < pos.size(); i++) {
+                    // set the gripper target
+                    luke::set_gripper_target_m(130e-3, 130e-3, pos[i]);
+                    // step the simulation to reach it
+                    for (int j = 0; j < 5; j++) myMjClass.action_step();
+                    // record the force
+                    double force = myMjClass.sim_sensors_SI_.read_palm_sensor();
+                    force_vector.push_back(force);
+                    // record the actual y motor position
+                    luke::Vec3 actual = luke::get_gripper_target_actual();
+                    z_actual.push_back(actual.z);
+                }
+                // print out the final result
+                luke::Vec3 objbox = luke::get_object_xyz_bounding_box(0);
+                std::cout << "Sphere xyz bounding box is: "
+                    << objbox.x << ", " << objbox.y << ", " << objbox.z << "\n";
+                std::cout << "XY pos | Z actual | Force\n";
+                for (int i = 0; i < force_vector.size(); i++) {
+                    std::cout << pos[i]*1e3 << " | "
+                        << z_actual[i]*1e3 << " | "
+                        << force_vector[i] << "\n";
                 }
                 std::cout << "Finished. Sphere diameter was: "
                     << objbox.x * 1e3 << " mm\n";

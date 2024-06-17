@@ -1968,7 +1968,7 @@ void control_gripper(const mjModel* model, mjData* data, Gripper& target)
 
   double u = 0;
 
-  double force_lim = 100;
+  // double force_lim = 100;
 
   int n = j_.num.panda + j_.num.base;
 
