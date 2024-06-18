@@ -222,7 +222,7 @@ class Agent_DQN:
 
     return to_save
   
-  def load_save_state(self, saved_dict):
+  def load_save_state(self, saved_dict, device=None):
     """
     Load the agent with a given saved state
     """
@@ -235,6 +235,9 @@ class Agent_DQN:
     self.params = saved_dict["parameters"]
     self.init(saved_dict["network"])
     self.memory.memory = saved_dict["memory"]
+
+    if device is not None:
+      self.set_device(device)
     self.memory.all_to(self.device)
     self.optimiser.load_state_dict(saved_dict["optimiser_state_dict"])
 

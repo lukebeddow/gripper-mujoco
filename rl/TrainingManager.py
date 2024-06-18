@@ -30,7 +30,7 @@ class TrainingManager():
 
     # agent hyperparameters
     "Agent_DQN" : {
-      "learning_rate" : 5e-5,
+      "learning_rate" : 1e-5,
       "gamma" : 0.999,
       "batch_size" : 128,
       "eps_start" : 0.9,
