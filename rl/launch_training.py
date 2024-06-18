@@ -5992,7 +5992,7 @@ if __name__ == "__main__":
     vary_1 = [False, True]
     vary_2 = None
     vary_3 = None
-    repeats = 3
+    repeats = 15
     tm.param_1_name = "random at end"
     tm.param_2_name = None
     tm.param_3_name = None
@@ -6025,8 +6025,8 @@ if __name__ == "__main__":
 
     # complete the training
     tm.run_training(agent, env, test_after=False)
-    tm.run_test(trials_per_obj=1, different_object_set="set8_fullset_1500",
-                load_best_id=False, demo=5, heuristic=True)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=False, heuristic=True)
     print_time_taken()
 
   elif args.program == "palm_scaling":
