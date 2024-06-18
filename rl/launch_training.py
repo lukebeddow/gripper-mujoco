@@ -5989,30 +5989,35 @@ if __name__ == "__main__":
   elif args.program == "test_heuristics":
 
     # define what to vary this training, dependent on job number
-    vary_1 = None
+    vary_1 = [False, True]
     vary_2 = None
     vary_3 = None
-    repeats = None
-    tm.param_1_name = None
+    repeats = 3
+    tm.param_1_name = "random at end"
     tm.param_2_name = None
     tm.param_3_name = None
     tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
                                                          param_3=vary_3, repeats=repeats)
     if args.print: print_training_info()
     
-    # apply the varied settings (very important!)
+    # prepare to test
     tm.settings["cpp"]["continous_actions"] = False
     tm.settings["trainer"]["num_episodes"] = 1
+    tm.settings["cpp"]["debug"] = True
 
-    # # choose any additional settings to change
-    # tm.settings["A"]["B"] = X
-    # tm.settings["C"]["D"] = Y
-    # tm.settings["E"]["F"] = Z
+    # set dqn step sizes
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 1e-3
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.01
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 2e-3
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3
 
     # create the environment
     env = tm.make_env()
 
-    # make the agent, may depend on variable settings above
+    # adjust heuristic parameters
+    env.heuristic_params["random_at_end"] = tm.param_1
+
+    # make a dummy agent, not used
     layers = [env.n_obs, 64, 64, env.n_actions]
     network = networks.VariableNetwork(layers, device=args.device)
     agent = Agent_DQN(device=args.device)

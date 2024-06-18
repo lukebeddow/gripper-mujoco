@@ -1349,6 +1349,7 @@ class MjEnv():
       "final_palm_target_N" : 1.5,
       "final_squeeze" : True,
       "fixed_angle" : True,
+      "random_at_end" : True,
       # "palm_first" : True,
       "heuristic_method" : "default", # default=paper, PID=full PID, hybrid=paper + PID
     }
@@ -1827,6 +1828,7 @@ class MjEnv():
     final_palm_target_N = self.heuristic_params["final_palm_target_N"]
     final_squeeze = self.heuristic_params["final_squeeze"]
     fixed_angle = self.heuristic_params["fixed_angle"]
+    random_at_end = self.heuristic_params["random_at_end"]
     # palm_first = self.heuristic_params["palm_first"]
 
     # hardcode action values
@@ -1968,10 +1970,24 @@ class MjEnv():
           action = palm_push_to_force(final_palm_target_N, limit_force_N=limit_palm_target_N)
           action_name = "palm forward"
 
-      # or just try to lift higher
-      if action is None:
+      # # or just try to lift higher
+      # if action is None:
+      #   action = H_up
+      #   action_name = "height up"
+
+      if action is None and random_at_end:
+        choice = random_train.integers(0, 3)
+        options = [
+          (X_close, "finger X close"),
+          (Z_plus, "palm forward"),
+          (Z_minus, "palm backward"),
+          (H_up, "height up")
+        ]
+        action = options[choice][0]
+        action_name = options[choice][1]
+      elif action is None:
         action = H_up
-        action_name = "height up"
+        action_name = "height_up"
 
       # if no sensors, choose random action
       if not bending and not palm and not wrist:

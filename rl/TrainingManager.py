@@ -533,7 +533,7 @@ class TrainingManager():
     if self.settings["save"]:
       savetxt = f"TrainingMananger.run_test() final success rate = {self.trainer.last_test_success_rate}\n"
       savetxt += "\n" + test_report
-      if heuristic: savename = "heuristic_test_"
+      if heuristic: savename = "heuristic_full_test_"
       elif demo: savename = "demo_test_"
       else: savename = "full_test_"
       if different_object_set is not None and isinstance(different_object_set, str):
