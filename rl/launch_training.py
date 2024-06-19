@@ -5989,11 +5989,11 @@ if __name__ == "__main__":
   elif args.program == "test_heuristics":
 
     # define what to vary this training, dependent on job number
-    vary_1 = [False, True]
+    vary_1 = None
     vary_2 = None
     vary_3 = None
-    repeats = 15
-    tm.param_1_name = "random at end"
+    repeats = 10
+    tm.param_1_name = None
     tm.param_2_name = None
     tm.param_3_name = None
     tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
@@ -6003,7 +6003,8 @@ if __name__ == "__main__":
     # prepare to test
     tm.settings["cpp"]["continous_actions"] = False
     tm.settings["trainer"]["num_episodes"] = 1
-    tm.settings["cpp"]["debug"] = True
+    tm.settings["cpp"]["stable_finger_force"] = 0.5
+    tm.settings["cpp"]["stable_palm_force"] = 0.5
 
     # set dqn step sizes
     tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 1e-3
@@ -6014,8 +6015,9 @@ if __name__ == "__main__":
     # create the environment
     env = tm.make_env()
 
-    # adjust heuristic parameters
-    env.heuristic_params["random_at_end"] = tm.param_1
+    # # adjust heuristic parameters
+    # env.heuristic_params["final_bend_target_N"] = tm.param_1
+    # env.heuristic_params["final_palm_target_N"] = tm.param_2
 
     # make a dummy agent, not used
     layers = [env.n_obs, 64, 64, env.n_actions]

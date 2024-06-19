@@ -47,6 +47,19 @@ class ReplayMemory(object):
     # detailed explanation). This converts batch-array of Transitions
     # to Transition of batch-arrays.
     transitions = self.sample(batch_size)
+
+    # chatgpt recommended, but doesn't work - however device management is not working
+    # batch = self.transition(*zip(*transitions))
+
+    # # Convert the batched data to tensors and move to the appropriate device
+    # state = self.to_torch(batch.state)
+    # action = self.to_torch(batch.action)
+    # next_state = self.to_torch(batch.next_state)
+    # reward = self.to_torch(batch.reward)
+    # terminal = self.to_torch(batch.terminal)
+
+    # return self.transition(state, action, next_state, reward, terminal)
+
     return self.transition(*zip(*transitions))
 
   def __len__(self):
@@ -153,6 +166,7 @@ class MLPActorCriticAC(nn.Module):
     with torch.no_grad():
       actions, _ = self.pi(obs, deterministic, False)
       return actions.squeeze(0)
+      # return actions
       
   def set_device(self, device):
     self.pi.to(device)
@@ -332,7 +346,7 @@ class Agent_SAC:
     if decay_num < self.params.random_start_episodes:
       return torch.tensor([2*self.rng.random() - 1 for x in range(self.n_actions)], dtype=torch.float32)
 
-    return self.mlp_ac.act(state, test) # test=True means determinstic=True
+    return self.mlp_ac.act(state, deterministic=test) # test=True means determinstic=True
       
   def get_save_state(self):
     """

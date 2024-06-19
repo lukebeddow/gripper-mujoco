@@ -19,8 +19,9 @@ class GymHandler():
     self.rngseed = rngseed
     self.seed()
     self.continous_actions = False
+    self.device = "cpu"
   def step(self, action):
-    return self.env.step(action)
+    return self.env.step(action.to(self.device))
   def reset(self, rngseed=None):
     obs, info = self.env.reset(seed=rngseed)
     return obs
@@ -64,12 +65,12 @@ hypers = {
   },
 
   "Agent_SAC" : {
-    "learning_rate" : 5e-3,
+    "learning_rate" : 1e-3,
     "gamma" : 0.999,
     "alpha" : 0.2,
     "batch_size" : 128,
-    "update_after_steps" : 10000,
-    "update_every_steps" : 1000,
+    "update_after_steps" : 1000,
+    "update_every_steps" : 1,
     "random_start_episodes" : 10,
     "optimiser" : "adam",
     "adam_beta1" : 0.9,
@@ -109,20 +110,21 @@ if __name__ == "__main__":
     torch.manual_seed(rngseed)
 
   # training device
-  device = "cpu"
+  device = "cuda"
   continous = True
   log_level = 2
 
   # make the environment
   # env = gym.make("LunarLander-v2") #, render_mode="human")
-  if continous:
-    env = gym.make('MountainCarContinuous-v0')
-  else:
-    env = gym.make('MountainCar-v0')
+  env = gym.make("Pendulum-v1")
+  # if continous:
+  #   env = gym.make('MountainCarContinuous-v0')
+  # else:
+  #   env = gym.make('MountainCar-v0')
   env = GymHandler(env)
 
   # make the agent
-  agent = Agent_SAC
+  agent = Agent_DQN
   layers = [128 for i in range(2)]
   if agent.name == "Agent_DQN":
     if continous: raise RuntimeError("DQN is for discrete")

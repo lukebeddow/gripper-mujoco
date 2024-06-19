@@ -1349,7 +1349,7 @@ class MjEnv():
       "final_palm_target_N" : 1.5,
       "final_squeeze" : True,
       "fixed_angle" : True,
-      "random_at_end" : True,
+      "random_at_end" : False,
       # "palm_first" : True,
       "heuristic_method" : "default", # default=paper, PID=full PID, hybrid=paper + PID
     }
