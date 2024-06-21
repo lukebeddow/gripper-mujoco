@@ -6095,6 +6095,43 @@ if __name__ == "__main__":
     tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500", load_best_id=True)
     print_time_taken()
 
+  elif args.program == "dqn_2":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = None
+    vary_2 = None
+    vary_3 = None
+    repeats = 15
+    tm.param_1_name = None
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # convert to discrete actions
+    tm.settings["cpp"]["continous_actions"] = False
+
+    # set original dqn step sizes
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 1e-3
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.01
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 2e-3
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = networks.VariableNetwork([env.n_obs, *layers, env.n_actions], device=args.device)
+    agent = Agent_DQN(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500", load_best_id=True)
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number
