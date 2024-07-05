@@ -44,6 +44,7 @@ class TrainingManager():
       "memory_replay" : 75_000,
       "soft_target_update" : False,
       "soft_target_tau" : 0.05,
+      "use_double_dqn" : False,
       "grad_clamp_value" : 1.0,
       "loss_criterion" : "smoothL1Loss"
     },
@@ -593,7 +594,8 @@ class TrainingManager():
       self.group_name = path_to_run_folder.split("/")[-1]
   
     # make the trainer (overwrite any existing trainer)
-    self.trainer = self.make_trainer(None, self.make_env(load=False))
+
+    self.trainer = self.make_trainer(None, self.make_env(load=False) if not trackonly else None)
 
     # special case, we want to remake the modelsaver in load()
     if run_name and path_to_run_folder is not None:
@@ -951,7 +953,10 @@ class TrainingManager():
     env.mj.set.state_noise_mu = set["cpp"]["state_noise_mu"]
     env.mj.set.state_noise_std = set["cpp"]["state_noise_std"]
     env.mj.set.base_position_noise = set["cpp"]["base_position_noise"]
-    env.mj.set.palm_scale_factor = set["cpp"]["palm_scale_factor"]
+    try:
+      env.mj.set.palm_scale_factor = set["cpp"]["palm_scale_factor"]
+    except AttributeError as e:
+      print(f"TrainingMananger() warning: {e}")
 
     env.mj.set.oob_distance = set["cpp"]["oob_distance"]
     env.mj.set.lift_height = set["cpp"]["lift_height"]
@@ -960,7 +965,10 @@ class TrainingManager():
     env.mj.set.stable_palm_force = set["cpp"]["stable_palm_force"]
     env.mj.set.stable_finger_force_lim = set["cpp"]["stable_finger_force_lim"]
     env.mj.set.stable_palm_force_lim = set["cpp"]["stable_palm_force_lim"]
-    env.mj.set.XY_distance_threshold = set["cpp"]["XY_distance_threshold"]
+    try:
+      env.mj.set.XY_distance_threshold = set["cpp"]["XY_distance_threshold"]
+    except AttributeError as e:
+      print(f"TrainingMananger() warning: {e}")
     env.mj.set.fingertip_min_mm = set["cpp"]["fingertip_min_mm"]
     env.mj.set.continous_actions = set["cpp"]["continous_actions"]
     env.mj.set.use_termination_action = set["cpp"]["use_termination_action"]

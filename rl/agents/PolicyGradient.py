@@ -1836,7 +1836,9 @@ class Agent_PPO_MAT:
     loss_pi = -(min_ratio * soft_advantage).mean()
 
     # Useful extra info - should not be used with MAT!
-    if self.mlp_ac.pi.use_extra_actions: pi = pi[0]
+    try:
+      if self.mlp_ac.pi.use_extra_actions: pi = pi[0]
+    except AttributeError as e: pass
     approx_kl = (logp_old - logp).mean().item()
     ent = pi.entropy().mean().item()
     clipped = ratio.gt(1+self.params.clip_ratio) | ratio.lt(1-self.params.clip_ratio)

@@ -6132,6 +6132,84 @@ if __name__ == "__main__":
     tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500", load_best_id=True)
     print_time_taken()
 
+  elif args.program == "double_dqn":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [False, True]
+    vary_2 = None
+    vary_3 = None
+    repeats = 15
+    tm.param_1_name = "soft update"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # convert to discrete actions
+    tm.settings["cpp"]["continous_actions"] = False
+
+    # enable double dqn and soft target update
+    tm.settings["Agent_DQN"]["use_double_dqn"] = True
+    tm.settings["Agent_DQN"]["soft_target_update"] = tm.param_1
+    tm.settings["Agent_DQN"]["soft_target_tau"] = 0.05
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = networks.VariableNetwork([env.n_obs, *layers, env.n_actions], device=args.device)
+    agent = Agent_DQN(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500", load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "PPO_temp":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-4, 5e-4]
+    vary_2 = None
+    vary_3 = None
+    repeats = 15
+    tm.param_1_name = "temperature"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # create the environment
+    env = tm.make_env()
+
+    # apply agent hyperparameters
+    tm.settings["Agent_PPO_MAT"]["learning_rate_pi"] = 5e-4
+    tm.settings["Agent_PPO_MAT"]["learning_rate_vf"] = 5e-4
+    tm.settings["Agent_PPO_MAT"]["temperature_alpha"] = tm.param_1
+    tm.settings["Agent_PPO_MAT"]["steps_per_epoch"] = 6000
+    tm.settings["Agent_PPO_MAT"]["gamma"] = 0.99
+    tm.settings["Agent_PPO_MAT"]["train_pi_iters"] = 10 # drop these since no KL early stop
+    tm.settings["Agent_PPO_MAT"]["train_vf_iters"] = 10 # drop these since no KL early stop
+    tm.settings["Agent_PPO_MAT"]["lam"] = 0.97
+    tm.settings["Agent_PPO_MAT"]["use_random_action_noise"] = False # temp should search
+    tm.settings["Agent_PPO_MAT"]["use_KL_early_stop"] = False # avoid this
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+    agent = Agent_PPO_MAT(device=args.device)
+    agent.init(network)
+
+    # complete the training, also test on old set after
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number
