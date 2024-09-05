@@ -6213,7 +6213,7 @@ if __name__ == "__main__":
   elif args.program == "network_comparison":
 
     # define what to vary this training, dependent on job number
-    vary_1 = [2, 4, 6]
+    vary_1 = [1, 2, 8]
     vary_2 = None
     vary_3 = None
     repeats = 10
@@ -6223,6 +6223,10 @@ if __name__ == "__main__":
     tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
                                                          param_3=vary_3, repeats=repeats)
     if args.print: print_training_info()
+
+    # use EI2 fingers which seem to have the least variance
+    tm.settings["env"]["finger_thickness"] = 0.96e-3
+    tm.settings["env"]["finger_width"] = 24e-3
 
     # create the environment
     env = tm.make_env()
