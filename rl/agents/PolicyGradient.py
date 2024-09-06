@@ -1211,6 +1211,10 @@ class Agent_PPO:
 
     # options
     optimiser: str = "adam" # adam/adamW/RMSProp
+    use_kl_penalty: bool = False
+    use_entropy_regularisation: bool = False
+    kl_penalty_coefficient: float = 0.2
+    entropy_coefficient: float = 1e-4
     adam_beta1: float = 0.9
     adam_beta2: float = 0.999
     grad_clamp_value: float = None
@@ -1446,24 +1450,29 @@ class Agent_PPO:
     """
     obs, act, adv, logp_old = data['obs'], data['act'], data['adv'], data['logp']
 
-    # print("act is", act)
-    # print("act shape is", act.shape)
-    # if act.shape == (10, 8): act = act[:,0]
-
     # Policy loss
     pi, logp = self.mlp_ac.pi(obs, act)
     ratio = torch.exp(logp - logp_old)
-    clip_adv = torch.clamp(ratio, 1-self.params.clip_ratio, 1+self.params.clip_ratio) * adv
-    loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
 
-    # TEMPORARY FIX FOR MAT, DELETE LATER
-    if isinstance(pi, tuple):
-      pi = pi[0]
+    # are we using PPO penalty
+    if self.params.use_kl_penalty:
+      kl_divergence = (logp_old - logp).mean()
+      loss_pi = -(ratio * adv).mean() + self.params.kl_penalty_coefficient * kl_divergence
+
+    # else we are using PPO clip
+    else:
+      clip_adv = torch.clamp(ratio, 1 - self.params.clip_ratio, 1 + self.params.clip_ratio) * adv
+      loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
+
+    # are we using entropy regularization
+    if self.params.use_entropy_regularisation:
+      entropy = pi.entropy().mean()
+      loss_pi -= self.params.entropy_coefficient * entropy
 
     # Useful extra info
     approx_kl = (logp_old - logp).mean().item()
     ent = pi.entropy().mean().item()
-    clipped = ratio.gt(1+self.params.clip_ratio) | ratio.lt(1-self.params.clip_ratio)
+    clipped = ratio.gt(1 + self.params.clip_ratio) | ratio.lt(1 - self.params.clip_ratio)
     clipfrac = torch.as_tensor(clipped, dtype=torch.float32).mean().item()
     pi_info = dict(kl=approx_kl, ent=ent, cf=clipfrac)
 
