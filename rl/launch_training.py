@@ -6277,6 +6277,84 @@ if __name__ == "__main__":
                 load_best_id=True)
     print_time_taken()
 
+  elif args.program == "noise_comparison":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [0, 0.5, 1.5, 2.0]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    tm.param_1_name = "noise scaling"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # use EI2 fingers which seem to have the least variance
+    tm.settings["env"]["finger_thickness"] = 0.96e-3
+    tm.settings["env"]["finger_width"] = 24e-3
+
+    # scale the amount of noise
+    tm.settings["cpp"]["sensor_noise_mu"] *= tm.param_1
+    tm.settings["cpp"]["sensor_noise_std"] *= tm.param_1
+    tm.settings["cpp"]["state_noise_mu"] *= tm.param_1
+    tm.settings["cpp"]["state_noise_std"] *= tm.param_1
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "sensing_steps_comparison":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1, 5, 7]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    tm.param_1_name = "n_prev_steps"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # use EI2 fingers which seem to have the least variance
+    tm.settings["env"]["finger_thickness"] = 0.96e-3
+    tm.settings["env"]["finger_width"] = 24e-3
+
+    # scale the amount of noise
+    tm.settings["cpp"]["sensor_n_prev_steps"] = tm.param_1
+    tm.settings["cpp"]["state_n_prev_steps"] = tm.param_1
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number
