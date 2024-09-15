@@ -623,7 +623,14 @@ class Trainer:
       if self.agent is None:
         to_exec = f"""self.agent = {load_train["agent_name"]}()"""
         exec(to_exec)
-      self.agent.load_save_state(load_agent, device=self.device)
+      # try to load the save state, but catch situation where we have empty agent
+      try:
+        self.agent.load_save_state(load_agent, device=self.device)
+      except NotImplementedError as e:
+        # agent is not actually loaded, so load as above
+        to_exec = f"""self.agent = {load_train["agent_name"]}()"""
+        exec(to_exec)
+        self.agent.load_save_state(load_agent, device=self.device)
       if self.log_level >= 2 and hasattr(self.agent, "debug"): 
         self.agent.debug = True
 

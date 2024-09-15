@@ -775,6 +775,29 @@ if __name__ == "__main__":
     input("Press enter to quit plotting windows and terminate program")
     exit()
 
+  if args.resume:
+
+    if args.timestamp is None:
+      raise RuntimeError(f"launch_training.py: a timestamp [-t, --timestamp] in the following format '{datestr}' is required to load existing trainigs")
+    if args.new_endpoint is None and args.extra_episodes is None:
+      if args.log_level > 0:
+        print("launch_training.py warning: [-c, --continue] has been used without either [--new-endpoint] or [--extra-episodes]. Original training endpoint will be used")
+    
+    if args.log_level > 0: print(f"launch_training.py is continuing a traing, new_endpoint={args.new_endpoint}, extra_episodes={args.extra_episodes}")
+
+    tm.load(job_num=args.job, timestamp=args.timestamp, id=args.load_id)
+
+    # adjust command line settings as load overrides them
+    tm.settings["plot"] = args.plot
+    tm.settings["render"] = args.render
+    if args.savedir is not None: tm.settings["savedir"] = args.savedir
+
+    tm.continue_training(new_endpoint=args.new_endpoint, extra_episodes=args.extra_episodes)
+    
+    # if a test given to complete after training, let that happen, else we are done
+    if not args.test:
+      exit()
+
   if args.test or args.demo:
 
     if args.timestamp is None:
@@ -802,26 +825,6 @@ if __name__ == "__main__":
       tm.load(job_num=args.job, timestamp=args.timestamp, best_id=best_id, id=args.load_id)
     tm.run_test(heuristic=args.heuristic, demo=args.demo, render=args.render, pause=args.pause,
                 different_object_set=args.test)
-    exit()
-
-  if args.resume:
-
-    if args.timestamp is None:
-      raise RuntimeError(f"launch_training.py: a timestamp [-t, --timestamp] in the following format '{datestr}' is required to load existing trainigs")
-    if args.new_endpoint is None and args.extra_episodes is None:
-      if args.log_level > 0:
-        print("launch_training.py warning: [-c, --continue] has been used without either [--new-endpoint] or [--extra-episodes]. Original training endpoint will be used")
-    
-    if args.log_level > 0: print(f"launch_training.py is continuing a traing, new_endpoint={args.new_endpoint}, extra_episodes={args.extra_episodes}")
-
-    tm.load(job_num=args.job, timestamp=args.timestamp, id=args.load_id)
-
-    # adjust command line settings as load overrides them
-    tm.settings["plot"] = args.plot
-    tm.settings["render"] = args.render
-    if args.savedir is not None: tm.settings["savedir"] = args.savedir
-
-    tm.continue_training(new_endpoint=args.new_endpoint, extra_episodes=args.extra_episodes)
     exit()
 
   if args.save_expert:
@@ -6338,6 +6341,43 @@ if __name__ == "__main__":
     # scale the amount of noise
     tm.settings["cpp"]["sensor_n_prev_steps"] = tm.param_1
     tm.settings["cpp"]["state_n_prev_steps"] = tm.param_1
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "max_palm_force":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [2.0, 3.0, 5.0]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    tm.param_1_name = "max_palm_force"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # use EI2 fingers which seem to have the least variance
+    tm.settings["env"]["finger_thickness"] = 0.96e-3
+    tm.settings["env"]["finger_width"] = 24e-3
+
+    # set the parameter
+    tm.settings["cpp"]["stable_palm_force_lim"] = tm.param_1
 
     # create the environment
     env = tm.make_env()

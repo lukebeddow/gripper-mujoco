@@ -1273,6 +1273,8 @@ class EmptyAgent:
   def testing_mode(self): pass
   def to_device(self): pass
   def seed(self, rngseed=None): pass
+  def load_save_state(self, *args, **kwargs):
+    raise NotImplementedError
 
 if __name__ == "__main__":
 
