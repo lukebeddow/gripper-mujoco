@@ -1,5 +1,7 @@
 # grippermujoco
 
+<img src="https://github.com/lukebeddow/gifs-and-resources/blob/main/sim vs real grasping.gif" width="40%" height="40%"/>
+
 Code for simulating my gripper with mujoco. The ```src``` folder contains c++ code which interfaces with mujoco, this is compiled into binaries in ```bin``` as well as a python module in ```rl/env/mjpy/bind.so``` for use with machine learning frameworks.
 
 ## Download
