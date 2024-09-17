@@ -108,6 +108,9 @@ struct
     int scene_objects = 0;
     double scene_x = 0.5;
     double scene_y = 0.5;
+    double motor_x = 1e3 * luke::Gripper::xy_home;
+    double motor_y = 1e3 * luke::Gripper::xy_home;
+    double motor_z = 1e3 * luke::Gripper::z_home;
 
     // action flags
     mjtNum action_motor_mm = 2;
@@ -1600,6 +1603,7 @@ void makeSettingsUI(int oldstate)
         {mjITEM_SLIDERNUM,"solimp_wdth",       2, &myMjClass.model->opt.o_solimp[2],  "0 0.01"},
         {mjITEM_SLIDERNUM,"solimp_mpt",        2, &myMjClass.model->opt.o_solimp[3],  "0 1.0"},
         {mjITEM_SLIDERNUM,"solimp_pow",        2, &myMjClass.model->opt.o_solimp[4],  "0 6.0"},
+        {mjITEM_CHECKINT, "cal gauges",        2, &myMjClass.s_.auto_calibrate_gauges,  " #700"},
         {mjITEM_END}
     };
 
@@ -1685,6 +1689,16 @@ void makeObjectUI(int oldstate)
         {mjITEM_BUTTON,   "set base XY",    2, NULL,                 " #317"},
         {mjITEM_BUTTON,   "random_yaw",     2, NULL,                 " #317"},
         {mjITEM_BUTTON,   "gripper visible",     2, NULL,                 " #317"},
+        {mjITEM_BUTTON,   "f-end/palm xyz",  2, NULL,                " #317"},
+        {mjITEM_BUTTON,   "MAT reopen",  2, NULL,                " #317"},
+        {mjITEM_BUTTON,   "set target",  2, NULL,                " #318"},
+        {mjITEM_SLIDERNUM,  "motor X",         2, &settings.motor_x, "49 140"},
+        {mjITEM_SLIDERNUM,  "motor Y",         2, &settings.motor_y, "49 140"},
+        {mjITEM_SLIDERNUM,  "motor Z",         2, &settings.motor_z, "0 165"},
+        {mjITEM_BUTTON,     "print frc",       2, NULL,     " #300"},
+        {mjITEM_BUTTON,     "msr constrict",       2, NULL,     " #300"},
+        {mjITEM_BUTTON,     "msr tilt",       2, NULL,     " #300"},
+        {mjITEM_BUTTON,     "msr palm",       2, NULL,     " #300"},
         {mjITEM_END}
     };
 
@@ -2639,19 +2653,205 @@ void uiEvent(mjuiState* state)
                 std::cout << "Performaning a random base movement with noise " << myMjClass.s_.base_position_noise << "\n";
                 double z = myMjClass.random_base_Z_movement(myMjClass.s_.base_position_noise);
                 std::cout << "Amount of noise applied was " << z << "\n";
+                break;
             }
             case 38: {         // set base XY position
                 std::cout << "Setting base position to (0.1, 0.1)\n";
                 double z = myMjClass.set_new_base_XY(0.1, 0.1);
+                break;
             }
             case 39: {         // random base yaw
                 std::cout << "Setting base to random yaw = ";
                 double z = myMjClass.random_base_yaw(myMjClass.base_max_[5]);
                 std::cout << z << "\n";
+                break;
             }
             case 40: {         // toggle gripper visible
                 std::cout << "Toggle gripper visibility\n";
                 luke::toggle_gripper_visibility(myMjClass.model);
+                break;
+            }
+            case 41: {         // print f-end/palm xyz fingerend palm cartesian positions
+                std::vector<double> finger_forces_SI(3);
+                finger_forces_SI[0] = myMjClass.sim_sensors_SI_.finger1_gauge.read_element();
+                finger_forces_SI[1] = myMjClass.sim_sensors_SI_.finger2_gauge.read_element();
+                finger_forces_SI[2] = myMjClass.sim_sensors_SI_.finger3_gauge.read_element();
+                std::vector<luke::Vec3> xyz = luke::get_fingerend_and_palm_xyz(finger_forces_SI);
+                std::cout << "Printing fingerend and palm cartesian xyz positions\n";
+                for (int i = 0; i < 4; i++) {
+                    std::cout << "Finger " << i + 1 << " (4=palm)\n";
+                    std::cout << "\tx = " << xyz[i].x << "\n";
+                    std::cout << "\ty = " << xyz[i].y << "\n";
+                    std::cout << "\tz = " << xyz[i].z << "\n";
+                }
+                break;
+            }
+            case 42: {         // MAT reopen
+
+                std::uniform_real_distribution<double> distribution(-3.14, 3.14);
+                double rand_angle = distribution(*MjType::generator);
+
+                std::cout << "Performing MAT reopen with random angle = "
+                    << rand_angle << " rad (" << rand_angle * (180.0/3.141592)
+                    << " degrees)\n";
+                myMjClass.MAT_reopen(rand_angle);
+                break;
+            }
+            case 43: {         // gripper target set
+
+                std::cout << "Setting gripper target as (x, y, z)mm: ("
+                    << settings.motor_x*1e-3 << ", "
+                    << settings.motor_y*1e-3 << ", "
+                    << settings.motor_z*1e-3 << ")\n";
+                luke::set_gripper_target_m(settings.motor_x*1e-3, 
+                    settings.motor_y*1e-3, settings.motor_z*1e-3);
+                break;
+            }
+            case 47: {         // print finger forces
+
+                std::cout << "Printing gripper finger forces:\n"
+                    << "Finger 1: " << myMjClass.sim_sensors_SI_.read_finger1_gauge() << " N\n"
+                    << "Finger 2: " << myMjClass.sim_sensors_SI_.read_finger2_gauge() << " N\n"
+                    << "Finger 3: " << myMjClass.sim_sensors_SI_.read_finger3_gauge() << " N\n"
+                    << "Palm: " << myMjClass.sim_sensors_SI_.read_palm_sensor() << " N\n"
+                    << "Wrist Z: " << myMjClass.sim_sensors_SI_.read_wrist_Z_sensor() << " N\n";
+                break;
+            }
+            case 48: {         // measure constrict
+
+                std::cout << "Running a force measurement program (constrict)\n";
+                myMjClass.reset_object();
+                myMjClass.spawn_object(0);
+                std::vector<double> pos;
+                for (int i = 130; i >= 58; i -= 2) pos.push_back(i * 1e-3);
+                std::vector<std::vector<double>> force_matrix;
+                // go to start position
+                luke::set_gripper_target_m(pos[0], pos[0], 5e-3);
+                for (int i = 0; i < 10; i++) myMjClass.action_step();
+                for (int i = 0; i < pos.size(); i++) {
+                    // set the gripper target
+                    luke::set_gripper_target_m(pos[i], pos[i], 5e-3);
+                    // step the simulation to reach it
+                    for (int j = 0; j < 7; j++) myMjClass.action_step();
+                    // record the forces
+                    std::vector<double> forces(3);
+                    forces[0] = myMjClass.sim_sensors_SI_.read_finger1_gauge();
+                    forces[1] = myMjClass.sim_sensors_SI_.read_finger2_gauge();
+                    forces[2] = myMjClass.sim_sensors_SI_.read_finger3_gauge();
+                    force_matrix.push_back(forces);
+                }
+                // print out the final result
+                luke::Vec3 objbox = luke::get_object_xyz_bounding_box(0);
+                std::cout << "Sphere xyz bounding box is: "
+                    << objbox.x << ", " << objbox.y << ", " << objbox.z << "\n";
+                std::cout << "XY pos | Gauge1 | Gauge2 | Gauge3 | Avg\n";
+                for (int i = 0; i < force_matrix.size(); i++) {
+                    double avg = (1/3.0) * (force_matrix[i][0] + force_matrix[i][1]
+                        + force_matrix[i][2]);
+                    std::cout << pos[i]*1e3 << " | "
+                        << force_matrix[i][0] << " | "
+                        << force_matrix[i][1] << " | "
+                        << force_matrix[i][2] << " | "
+                        << avg << "\n";
+                }
+                std::cout << "Finished. Sphere diameter was: "
+                    << objbox.x * 1e3 << " mm\n";
+
+                break;
+            }
+            case 49: {         // measure tilt
+
+                std::cout << "Running a force measurement program (tilt)\n";
+                std::cout << "WARNING: to run this set j_.ctrl.num_steps = 1 "
+                    "and j_.ctrl.pulses_per_s = 5000. Then run the program twice\n";
+                myMjClass.reset_object();
+                myMjClass.spawn_object(0);
+                std::vector<double> pos;
+                std::vector<double> y_actual;
+                double start = 100;
+                for (double i = start; i > start - 6; i -= 0.25) 
+                    pos.push_back(i * 1e-3);
+                std::vector<std::vector<double>> force_matrix;
+                // go to start position
+                luke::set_gripper_target_m(pos[0], pos[0], 5e-3);
+                for (int i = 0; i < 100; i++) myMjClass.action_step();
+                for (int i = 0; i < pos.size(); i++) {
+                    // set the gripper target
+                    luke::set_gripper_target_m(pos[0], pos[i], 5e-3);
+                    // step the simulation to reach it
+                    for (int j = 0; j < 5; j++) myMjClass.action_step();
+                    // record the forces
+                    std::vector<double> forces(3);
+                    forces[0] = myMjClass.sim_sensors_SI_.read_finger1_gauge();
+                    forces[1] = myMjClass.sim_sensors_SI_.read_finger2_gauge();
+                    forces[2] = myMjClass.sim_sensors_SI_.read_finger3_gauge();
+                    force_matrix.push_back(forces);
+                    // record the actual y motor position
+                    luke::Vec3 actual = luke::get_gripper_target_actual();
+                    y_actual.push_back(actual.y);
+                }
+                // print out the final result
+                luke::Vec3 objbox = luke::get_object_xyz_bounding_box(0);
+                std::cout << "Sphere xyz bounding box is: "
+                    << objbox.x << ", " << objbox.y << ", " << objbox.z << "\n";
+                std::cout << "XY pos | Y actual | Gauge1 | Gauge2 | Gauge3 | Avg\n";
+                for (int i = 0; i < force_matrix.size(); i++) {
+                    double avg = (1/3.0) * (force_matrix[i][0] + force_matrix[i][1]
+                        + force_matrix[i][2]);
+                    std::cout << pos[i]*1e3 << " | "
+                        << y_actual[i]*1e3 << " | "
+                        << force_matrix[i][0] << " | "
+                        << force_matrix[i][1] << " | "
+                        << force_matrix[i][2] << " | "
+                        << avg << "\n";
+                }
+                std::cout << "Finished. Sphere diameter was: "
+                    << objbox.x * 1e3 << " mm\n";
+
+                break;
+            }
+            case 50: {         // measure palm
+
+                std::cout << "Running a force measurement program (palm)\n";
+                std::cout << "WARNING: to run this set j_.ctrl.num_steps = 1 "
+                    "and j_.ctrl.pulses_per_s = 5000. Then run the program twice\n";
+                myMjClass.reset_object();
+                myMjClass.spawn_object(0);
+                std::vector<double> pos;
+                std::vector<double> z_actual;
+                double start = 60;
+                for (double i = start; i < start + 25; i += 0.25) 
+                    pos.push_back(i * 1e-3);
+                std::vector<double> force_vector;
+                // go to start position
+                luke::set_gripper_target_m(130e-3, 130e-3, pos[0]);
+                for (int i = 0; i < 100; i++) myMjClass.action_step();
+                for (int i = 0; i < pos.size(); i++) {
+                    // set the gripper target
+                    luke::set_gripper_target_m(130e-3, 130e-3, pos[i]);
+                    // step the simulation to reach it
+                    for (int j = 0; j < 5; j++) myMjClass.action_step();
+                    // record the force
+                    double force = myMjClass.sim_sensors_SI_.read_palm_sensor();
+                    force_vector.push_back(force);
+                    // record the actual y motor position
+                    luke::Vec3 actual = luke::get_gripper_target_actual();
+                    z_actual.push_back(actual.z);
+                }
+                // print out the final result
+                luke::Vec3 objbox = luke::get_object_xyz_bounding_box(0);
+                std::cout << "Sphere xyz bounding box is: "
+                    << objbox.x << ", " << objbox.y << ", " << objbox.z << "\n";
+                std::cout << "XY pos | Z actual | Force\n";
+                for (int i = 0; i < force_vector.size(); i++) {
+                    std::cout << pos[i]*1e3 << " | "
+                        << z_actual[i]*1e3 << " | "
+                        << force_vector[i] << "\n";
+                }
+                std::cout << "Finished. Sphere diameter was: "
+                    << objbox.x * 1e3 << " mm\n";
+
+                break;
             }
             }
         }

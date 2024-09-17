@@ -29,6 +29,21 @@ parseJobs()
     fi
 }
 
+autoGetTimestamp()
+{
+    # get the name of the most recent training log file
+    recent_run=$(cd $LOG_FOLDER && ls -1t | head -1)
+    echo Auto-detected most recent_run is: $recent_run
+
+    # split it by underscore into four variables
+    IFS="_" read v1 v2 v3 v4 <<< "$recent_run"
+
+    # reconstruct and save the timestamp
+    under="_"
+    timestamp="$v2$under$v3"
+    echo Auto-detected timestamp is: $timestamp
+}
+
 # from: https://stackoverflow.com/questions/1401002/how-to-trick-an-application-into-thinking-its-stdout-is-a-terminal-not-a-pipe
 faketty() {
     script -qfc "$(printf "%q " "$@")" /dev/null
@@ -44,6 +59,7 @@ LOGGING='Y'
 DEBUG=
 PRINT_RESULTS='N'
 PRINT_RESULTS_AFTER='N'
+RANDOMISE='N'
 
 PY_ARGS=() # arguments passed directly into python without parsing
 
@@ -62,6 +78,8 @@ do
     --debug-2 ) LOGGING='N'; PRINT_RESULTS_AFTER='N'; DEBUG='--log-level 2'; echo FULL DEBUG MODE ON, nothing will be saved ;;
     --print ) LOGGING='N'; PRINT="--print"; echo Printing mode on, no training ;;
     --print-results ) PRINT_RESULTS='Y' ;;
+    -a | --auto-print ) PRINT_RESULTS='Y'; autoGetTimestamp ;;
+    --randomise ) RANDOMISE='Y'; echo Randomising job order submission ;;
     # everything else passed directly to python
     --program ) PRINT_RESULTS_AFTER='Y' ; PY_ARGS+=( ${!i} ) ;;
     * ) PY_ARGS+=( ${!i} ) ;;
@@ -118,6 +136,15 @@ IND=0
 
 # extracts the first job number (so an input of "2 3 1" gives 2 incorrectly)
 MIN_JOB_NUM=${ARRAY_INDEXES%% *} # https://stackoverflow.com/questions/15685736/how-to-extract-a-particular-element-from-an-array-in-bash
+
+# randomly shuffle the order (only makes sense if stagger is set)
+if [ $RANDOMISE = 'Y' ]
+then
+    RAND_INDEXES=( $(shuf -e "$jobs"))
+    echo ${RAND_INDEXES[@]}
+    echo Shuffle should have happened
+    echo $(shuf -e "$jobs")
+fi
 
 # loop through the jobs we have been assigned
 for I in ${ARRAY_INDEXES[@]}

@@ -13,7 +13,7 @@ import functools
 from ModelSaver import ModelSaver
 from agents.DQN import Agent_DQN
 from agents.ActorCritic import MLPActorCriticAC, Agent_SAC
-from agents.PolicyGradient import MLPActorCriticPG, Agent_PPO
+from agents.PolicyGradient import MLPActorCriticPG, Agent_PPO, Agent_PPO_MAT
 from env.MjEnv import MjEnv
 import networks
 
@@ -33,7 +33,7 @@ class TrackTraining:
     self.plot_episode_time = False
     self.plot_train_raw = False
     self.plot_train_avg = True
-    self.plot_test_raw = False
+    self.plot_test_raw = True
     self.plot_test_metrics = False
     # general
     self.episodes_done = 0
@@ -61,7 +61,7 @@ class TrackTraining:
     self.fig = None
     self.axs = None
 
-  def add_test_metrics(self, metrics_to_add, dtype=None):
+  def add_test_metrics(self, metrics_to_add, dtype=None, values=None):
     """
     Include additional test metrics
     """
@@ -72,10 +72,16 @@ class TrackTraining:
 
     if isinstance(metrics_to_add, str):
       metrics_to_add = [metrics_to_add]
+    if isinstance(values, np.ndarray):
+      values = [values]
 
-    for m in metrics_to_add:
+    for i, m in enumerate(metrics_to_add):
       self.test_metric_names.append(m)
-      self.test_metric_values.append(np.array([], dtype=dtype))
+      if values is None:
+        thisvalue = np.array([], dtype=dtype)
+      else:
+        thisvalue = values[i]
+      self.test_metric_values.append(thisvalue)
 
     self.n_test_metrics = len(self.test_metric_names)
 
@@ -195,7 +201,7 @@ class TrackTraining:
           self.axs.append([axs4, axs4]) # add paired to hold the pattern
         if self.plot_test_metrics:
           for i in range(self.n_test_metrics):
-            fig5, axs5 = plt.subplots(2, 1)
+            fig5, axs5 = plt.subplots(1, 1)
             self.fig.append(fig5)
             self.axs.append([axs5, axs5]) # add paired to hold the pattern
 
@@ -374,7 +380,8 @@ class Trainer:
     self.trackinfo_numbering = not track_info_overwrite
 
     if self.enable_saving:
-      self.modelsaver = ModelSaver(self.savedir + "/" + self.group_name)
+      self.modelsaver = ModelSaver(self.savedir + "/" + self.group_name,
+                                   log_level=self.log_level)
   
   def to_torch(self, data, dtype=torch.float32):
     if torch.is_tensor(data):
@@ -426,6 +433,7 @@ class Trainer:
         "agent_name" : self.agent.name,
         "env_data" : self.env.get_save_state(),
         "curriculum_dict" : self.curriculum_dict,
+        "curriculum_fcn" : self.curriculum_fcn,
         "curriculum_change_fcn" : self.curriculum_change,
         "extra_data" : extra_data
       }
@@ -503,21 +511,26 @@ class Trainer:
     if self.enable_saving:
       self.modelsaver.save(filename, txtstr=hyper_str, txtonly=True)
 
-  def load(self, run_name, id=None, group_name=None, path_to_run_folder=None, agentonly=False):
+  def load(self, run_name, id=None, group_name=None, path_to_run_folder=None, 
+           agentonly=False, trackonly=False):
     """
     Load a model given a path to it
     """
+
+    if agentonly and trackonly:
+      raise RuntimeError("Trainer.load() error: agentonly=True and trackonly=True, incompatible arguments")
 
     # check if modelsaver is defined
     if not hasattr(self, "modelsaver"):
       if path_to_run_folder is not None:
         print(f"load not given a modelsaver, making one from path_to_group: {path_to_run_folder}")
-        self.modelsaver = ModelSaver(path_to_run_folder)
+        self.modelsaver = ModelSaver(path_to_run_folder, log_level=self.log_level)
       elif group_name is not None:
         # try to find the group from this folder
         pathhere = os.path.dirname(os.path.abspath(__file__))
         print(f"load not given modelsaver or path_to_group, assuming group is local at {pathhere + '/' + self.savedir}")
-        self.modelsaver = ModelSaver(pathhere + "/" + self.savedir + "/" + self.group_name)
+        self.modelsaver = ModelSaver(pathhere + "/" + self.savedir + "/" + self.group_name,
+                                     log_level=self.log_level)
       else:
         raise RuntimeError("load not given a modelsaver and either of a) path_to_run_folder b) group_name (if group can be found locally)")
     
@@ -528,72 +541,96 @@ class Trainer:
     if path_to_run_folder is not None:
       path_to_run_folder += "/" + run_name
 
-    load_agent = self.modelsaver.load(id=id, folderpath=path_to_run_folder,
-                                      filenamestarts="Agent")
-    self.last_loaded_agent_id = self.modelsaver.last_loaded_id
+    do_load_agent = not trackonly
+    do_load_track = not agentonly
+    do_load_training = not (trackonly + agentonly)
 
-    # if we are only loading the agent
-    if agentonly:
-      print("Trainer.load() warning: AGENTONLY=TRUE, setting self.env=None for safety")
-      self.env = None
+    if do_load_agent:
 
-      # get the name of the agent from the filename saved with
-      name = self.modelsaver.get_recent_file(name="Agent")
-      name = name.split("/")[-1]
-      
-      # trim out the agent part
-      name = name[:5 + len(self.modelsaver.file_ext())]
+      load_agent = self.modelsaver.load(id=id, folderpath=path_to_run_folder,
+                                        filenamestarts="Agent")
+      self.last_loaded_agent_id = self.modelsaver.last_loaded_id
 
-      to_exec = f"""self.agent = {name}()"""
-      exec(to_exec)
-      self.agent.load_save_state(load_agent, device=self.device)
+      # if we are only loading the agent
+      if agentonly:
+        if self.log_level > 0:
+          print("Trainer.load() warning: AGENTONLY=TRUE, setting self.env=None for safety")
+        self.env = None
 
-      print("Trainer.load(): AGENTONLY=True load now completed")
+        # get the name of the agent from the filename saved with
+        name = self.modelsaver.get_recent_file(name="Agent")
+        name = name.split("/")[-1]
+        
+        # trim out the agent part
+        name = name[:5 + len(self.modelsaver.file_ext())]
 
-    # regular load behaviour
-    else:
+        to_exec = f"""self.agent = {name}()"""
+        exec(to_exec)
+        self.agent.load_save_state(load_agent, device=self.device)
+
+        if self.log_level > 0:
+          print("Trainer.load(): AGENTONLY=True load now completed")
+
+    if do_load_track:
+      self.track = self.modelsaver.load(id=id, folderpath=path_to_run_folder, 
+                                      filenamestarts=self.track_savename,
+                                      suffix_numbering=self.trackinfo_numbering)
+      if trackonly:
+        if self.log_level > 0:
+          print("Trainer.load() warning: TRACKONLY=TRUE, setting self.agent=None and self.env=None for safety")
+        self.env = None
+        self.agent = None
+
+    if do_load_training:
+
       load_train = self.modelsaver.load(folderpath=path_to_run_folder,
                                         filenamestarts=self.train_param_savename)
-      try:
-        load_track = self.modelsaver.load(id=id, folderpath=path_to_run_folder, 
-                                        filenamestarts=self.track_savename,
-                                        suffix_numbering=self.trackinfo_numbering)
-      except FileNotFoundError as e:
-        if self.log_level > 0:
-          print("failed\nLoading track failed, trying again with alternative numbering. Error:", e)
-        load_track = self.modelsaver.load(id=id, folderpath=path_to_run_folder, 
-                                      filenamestarts=self.track_savename,
-                                      suffix_numbering=not self.trackinfo_numbering)
       
       # extract loaded data
       self.params = load_train["parameters"]
       self.run_name = load_train["run_name"]
       self.group_name = load_train["group_name"]
       self.env.load_save_state(load_train["env_data"], device=self.device)
-      self.track = load_track
 
       # unpack curriculum information
       self.curriculum_dict = load_train["curriculum_dict"]
       if len(self.track.train_curriculum_stages) > 0:
         self.curriculum_dict["stage"] = self.track.train_curriculum_stages[-1]
       else: self.curriculum_dict["stage"] = 0
-      if "curriculum_fcn" in load_train["curriculum_dict"].keys():
-        self.curriculum_change = functools.partial(load_train["curriculum_dict"]["curriculum_change_fcn"], self)
-        if self.params.use_curriculum:
+
+      # load in the curriculum functions
+      if "curriculum_change_fcn" in load_train.keys():
+        self.curriculum_change_fcn = load_train["curriculum_change_fcn"]
+      if "curriculum_fcn" in load_train.keys():
+        self.curriculum_fcn = load_train["curriculum_fcn"]
+      else:
+        # TEMPORARY FIX for program: mat_liftonly
+        if self.group_name == "22-03-24":
+          print("TEMPORARY CURRICULUM FIX: set curriculum function as curriculum_change_object_noise")
+          from launch_training import curriculum_fcn_MAT
+          self.curriculum_fcn = functools.partial(curriculum_fcn_MAT, self)
+          print("CURRICULUM ACTIVE: Calling curriculum_fcn_MAT now")
+          self.curriculum_fcn(10) # apply settings based on best success rate
+        else:
+          print("CURRICULUM WARNING: self.curriculum_fcn not set in dict")
           self.curriculum_change(self.curriculum_dict["stage"]) # apply initial stage settings
-      elif self.params.use_curriculum:
-        # TEMPORARY FIX for program: continue_good_curriculum, delete later
-        print("TEMPORARY CURRICULUM FIX: set curriculum function as curriculum_change_object_noise")
-        from launch_training import curriculum_change_object_noise
-        self.curriculum_change = functools.partial(curriculum_change_object_noise, self)
-        print("CURRICULUM ACTIVE: Calling curriculum_change_object_noise now")
-        self.curriculum_change(self.curriculum_dict["stage"]) # apply initial stage settings
+
+      # run the curriculum function to update to the current curriculum
+      if self.params.use_curriculum:
+        self.curriculum_fcn(self.track.episodes_done)
 
       # do we have the agent already, if not, create it
       if self.agent is None:
         to_exec = f"""self.agent = {load_train["agent_name"]}()"""
         exec(to_exec)
-      self.agent.load_save_state(load_agent, device=self.device)
+      # try to load the save state, but catch situation where we have empty agent
+      try:
+        self.agent.load_save_state(load_agent, device=self.device)
+      except NotImplementedError as e:
+        # agent is not actually loaded, so load as above
+        to_exec = f"""self.agent = {load_train["agent_name"]}()"""
+        exec(to_exec)
+        self.agent.load_save_state(load_agent, device=self.device)
       if self.log_level >= 2 and hasattr(self.agent, "debug"): 
         self.agent.debug = True
 
@@ -623,7 +660,7 @@ class Trainer:
       # select and perform an action
       action = self.agent.select_action(obs, decay_num=i_episode, test=test)
       (new_obs, reward, terminated, truncated, info) = self.env.step(action)
-   
+      
       # render the new environment
       if self.render: self.env.render()
 
@@ -715,19 +752,20 @@ class Trainer:
       # check if we should adjust the training curriculum
       if self.params.use_curriculum: self.curriculum_fcn(i_episode)
 
-      if self.log_level == 1 and (i_episode - 1) % self.log_rate_for_episodes == 0:
-        print("Begin training episode", i_episode, flush=True)
-      elif self.log_level > 1:
+      str_to_add = ""
+      if self.print_avg_return:
         avg_return = self.track.get_avg_return()
         if avg_return is not None: str_to_add = f". Average return = {avg_return}"
-        else: str_to_add = ""
+
+      if self.log_level == 1 and (i_episode - 1) % self.log_rate_for_episodes == 0:
+        print(f"Begin training episode {i_episode}{str_to_add}", flush=True)
+      elif self.log_level > 1:
         print(f"Begin training episode {i_episode} at {datetime.now().strftime('%H:%M')}" + str_to_add, flush=True)
 
       self.run_episode(i_episode)
 
       # plot graphs to the screen
       if self.plot: self.track.plot(plt_frequency_seconds=1)
-      if self.print_avg_return: self.track.print_training()
 
       # check if we need to do any episode level updates (eg target network)
       self.agent.update_episode(i_episode)
@@ -761,59 +799,8 @@ class Trainer:
   def curriculum_fcn(self, i):
     """
     Empty curriculum function, override if using a curriculum. Takes as input the
-    current episode number, i. See below an example template which uses another
-    function 'self.curriculum_change(stage)' to apply the stage-dependent changes:
-
-    if self.curriculum_dict["finished"]: return
-
-    # determine what stage we are at
-    stage = self.curriculum_dict["stage"]
-
-    # determine the curriculum metric
-    if self.curriculum_dict["metric_name"] == "episode_number":
-
-      for t in self.curriculum_dict["metric_thresholds"][stage:]:
-        if i >= t:
-          stage += 1
-        else: break
-
-    # example of using success rate as a metric
-    elif self.curriculum_dict["metric_name"] == "success_rate":
-
-      # get the most recent success rate
-      success_rate = 0.0 # update this...
-
-      # determine if we have passed the required threshold
-      for t in self.curriculum_dict["metric_thresholds"][stage:]:
-        if success_rate >= t:
-          stage += 1
-
-    # if the metric is not recognised
-    else: raise RuntimeError(f"TrainingManager.curriculum_fcn() metric of {self.curriculum_dict['metric_name']} not recognised")
-
-    # check if we are still at the same stage we were last episode
-    if stage == self.curriculum_dict["stage"]:
-      # check if we have finished the curriculum
-      if stage == len(self.curriculum_dict["metric_thresholds"]): 
-        self.curriculum_dict["finished"] = True
-      return
-
-    # update to the new stage
-    if self.log_level > 0:
-      print(f"Episode = {i}, curriculum is changing from stage {self.curriculum_dict['stage']} to stage {stage}")
-    self.curriculum_dict["stage"] = stage
-
-    # now apply the curriculum change (this function must be user overwritten for a training)
-    self.curriculum_change(stage)
-
-    # save a text file to reflect the changes
-    labelstr = f"Hyperparameters after curriculum change which occured at episode {i}\n"
-    name = f"hyperparameters_curriculum_stage_{stage}"
-    self.save_hyperparameters(filename=name, strheader=labelstr, print_terminal=False)
-    
-    return
+    current episode number, i.
     """
-
     pass
 
 class MujocoTrainer(Trainer):
@@ -927,7 +914,7 @@ class MujocoTrainer(Trainer):
 
     ep_start = time.time()
 
-    cumulative_reward = 0
+    # cumulative_reward = 0
 
     # count up through actions
     for t in count():
@@ -937,7 +924,7 @@ class MujocoTrainer(Trainer):
       # human written action selection function
       action = self.env.get_heuristic_action()
       action = torch.tensor(action) # to fit with select_action(...)
-      (new_obs, reward, terminated, truncated, info) = self.env.step(action.item())
+      (new_obs, reward, terminated, truncated, info) = self.env.step(action)
    
       # render the new environment
       if self.render: self.env.render()
@@ -946,7 +933,7 @@ class MujocoTrainer(Trainer):
       else: done = False
 
       obs = new_obs
-      cumulative_reward += reward.cpu()
+      # cumulative_reward += reward
 
       # check if this episode is over and log if we aren't testing
       if done:
@@ -1243,9 +1230,9 @@ class MujocoTrainer(Trainer):
       total_counter.object_contact.percent,
       total_counter.palm_force.percent,
       total_counter.exceed_limits.percent,
-      obj_counter.exceed_bend_sensor.percent,
-      obj_counter.exceed_palm_sensor.percent,
-      obj_counter.exceed_wrist_sensor.percent
+      total_counter.exceed_bend_sensor.percent,
+      total_counter.exceed_palm_sensor.percent,
+      total_counter.exceed_wrist_sensor.percent
     )
 
     # now extract category data
@@ -1430,7 +1417,7 @@ class MujocoTrainer(Trainer):
       if print_overall: print(overall_avg_table)
 
     # save a flag for final success rate
-    self.last_test_success_rate = total_counter.object_stable.active_sum / N
+    self.last_test_success_rate = total_counter.successful_grasp.active_sum / N
 
     return output_str
 
@@ -1488,30 +1475,34 @@ class MujocoTrainer(Trainer):
 
     return best_sr, best_ep
 
-  def read_test_performance(self, as_string=False):
+  def read_test_performance(self, as_string=False, string_input=None):
     """
     Read the test performance into a numpy array
     """
 
-    try:
+    if string_input is None:
+      try:
 
-      readroot = self.savedir + "/" + self.group_name + "/"
-      readpath = readroot + self.run_name + "/"
-      readname = self.test_performances_filename + ".txt"
+        readroot = self.savedir + "/" + self.group_name + "/"
+        readpath = readroot + self.run_name + "/"
+        readname = self.test_performances_filename + ".txt"
 
-      with open(readpath + readname, "r") as f:
-        txt = f.read()
+        with open(readpath + readname, "r") as f:
+          txt = f.read()
 
-    except Exception as e:
-      if self.log_level > 0:
-        print(f"TrainDQN.read_test_performance() error: {e}")
-      if as_string:
-        return f"TrainDQN.read_test_performance() error: {e}"
-      else:
-        # make sure this is correct length!
-        return np.zeros((6,1))
-    
-    if as_string: return txt
+      except Exception as e:
+        if self.log_level > 0:
+          print(f"TrainDQN.read_test_performance() error: {e}")
+        if as_string:
+          return f"TrainDQN.read_test_performance() error: {e}"
+        else:
+          # make sure this is correct length!
+          return np.zeros((6,1))
+      
+      if as_string: return txt
+      
+    else:
+      txt = string_input
 
     lines = txt.splitlines()
 
@@ -1716,7 +1707,7 @@ class MujocoTrainer(Trainer):
     return best_sr, best_ep
 
   def load_best_id(self, run_name, group_name=None, path_to_run_folder=None, stage=None,
-                   agentonly=False):
+                   agentonly=False, trackonly=False):
     """
     Try to find the best performing agent and load that. Stage indicates requirements
     for which curriulum stage we can load. If an int, we load that stage, or if "max"
@@ -1744,7 +1735,7 @@ class MujocoTrainer(Trainer):
 
     # try to load, if best id not found it loads most recent (ie id=None)
     self.load(run_name, id=id, group_name=group_name, path_to_run_folder=path_to_run_folder,
-              agentonly=agentonly)
+              agentonly=agentonly, trackonly=trackonly)
 
     if not best_id_found:
       if stage == "max": stage = self.track.test_curriculum_stages[-1]
@@ -1761,7 +1752,7 @@ class MujocoTrainer(Trainer):
           print(f"BEST_ID_SUCCESS -> best_id set to {best_id} with best_ep={best_ep}, save_freq={self.params.save_freq} and best_sr={best_sr}")
         # try to load again
         self.load(run_name, id=best_id, group_name=group_name, path_to_run_folder=path_to_run_folder,
-                  agentonly=agentonly)
+                  agentonly=agentonly, trackonly=trackonly)
 
     return best_id_found
 
@@ -1881,8 +1872,24 @@ class MujocoTrainer(Trainer):
     Print a table breaking down the features of an observation
     """
 
-    if not isinstance(observation_list[0], list):
-      observation_list = [observation_list]
+    # check input - ensure we have a nested list of lists
+    if torch.is_tensor(observation_list):
+      observation_list = [((observation_list.cpu()).numpy()).tolist()]
+    elif isinstance(observation_list, np.ndarray):
+      observation_list = [observation_list.tolist()]
+    elif not isinstance(observation_list[0], list):
+      # if we have a list of torch tensors or numpy arrays
+      if torch.is_tensor(observation_list[0]) or isinstance(observation_list[0], np.ndarray):
+        for i, obs in enumerate(observation_list):
+          if torch.is_tensor(obs):
+            obs = (obs.cpu()).numpy()
+          list_obs = obs.tolist()
+          observation_list[i] = list_obs
+      else:
+        # our list is not nested, so nest it
+        observation_list = [observation_list]
+    else:
+      raise RuntimeError("MujocoTrainer.print_observation_table() got unexpected input as 'observation_list'")
 
     # get observation info
     info = self.env.mj.debug_observation(observation_list[0], False)

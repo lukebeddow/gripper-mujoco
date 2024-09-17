@@ -30,7 +30,7 @@ class TrainingManager():
 
     # agent hyperparameters
     "Agent_DQN" : {
-      "learning_rate" : 5e-5,
+      "learning_rate" : 1e-5,
       "gamma" : 0.999,
       "batch_size" : 128,
       "eps_start" : 0.9,
@@ -44,6 +44,7 @@ class TrainingManager():
       "memory_replay" : 75_000,
       "soft_target_update" : False,
       "soft_target_tau" : 0.05,
+      "use_double_dqn" : False,
       "grad_clamp_value" : 1.0,
       "loss_criterion" : "smoothL1Loss"
     },
@@ -53,14 +54,14 @@ class TrainingManager():
       "gamma" : 0.999,
       "alpha" : 0.2,
       "batch_size" : 128,
-      "update_after_steps" : 1000,
-      "update_every_steps" : 50,
-      "random_start_episodes" : 1000,
+      "update_after_steps" : 250,
+      "update_every_steps" : 100,
+      "random_start_episodes" : 500,
       "optimiser" : "adam",
       "adam_beta1" : 0.9,
       "adam_beta2" : 0.999,
       "min_memory_replay" : 5000,
-      "memory_replay" : 75_000,
+      "memory_replay" : 50_000,
       "soft_target_tau" : 0.05,
     },
 
@@ -78,29 +79,35 @@ class TrainingManager():
       "use_random_action_noise" : True,
       "random_action_noise_size" : 0.05,
       "optimiser" : "adam",
+      "use_kl_penalty" : False,
+      "use_entropy_regularisation" : False,
+      "kl_penalty_coefficient" : 0.2,
+      "entropy_coefficient" : 1e-4,
       "adam_beta1" : 0.9,
       "adam_beta2" : 0.999,
       "grad_clamp_value" : None,
     },
 
-    "Agent_PPO_Discriminator" : {
-      "learning_rate_discrim" : 5e-5,
-      "loss_criterion_discrim" : "MSELoss",
-      "learning_rate_pi" : 5e-5,
-      "learning_rate_vf" : 5e-5,
-      "gamma" : 0.99,
-      "steps_per_epoch" : 6000,
-      "clip_ratio" : 0.2,
-      "train_pi_iters" : 80,
-      "train_vf_iters" : 80,
-      "lam" : 0.97,
+    "Agent_PPO_MAT" : {
+      "learning_rate_pi" : 1e-4, # paper specified
+      "learning_rate_vf" : 1e-4, # paper specified
+      "gamma" : 0.999, # paper specified
+      "steps_per_epoch" : 300, # paper specified (based on my understanding)
+      "clip_ratio" : 0.2, # paper specified
+      "train_pi_iters" : 10, # paper specified (based on my understanding)
+      "train_vf_iters" : 10, # paper specified (based on my understanding)
+      "lam" : 0.95, # paper specified
+      "temperature_alpha" : 5e-4, # paper specified
+      "optimiser" : "adam", # paper specified
+      "adam_beta1" : 0.9, # paper implied
+      "adam_beta2" : 0.999, # paper implied
+      "grad_clamp_value" : 200, # paper specified
+      "use_extra_actions" : True ,
+      "use_random_action_noise" : False, # paper implied
+      "use_KL_early_stop" : False, # paper implied
       "target_kl" : 0.01,
       "max_kl_ratio" : 1.5,
-      "use_random_action_noise" : True,
       "random_action_noise_size" : 0.05,
-      "optimiser" : "adam",
-      "adam_beta1" : 0.9,
-      "adam_beta2" : 0.999,
     },
 
     # environment hyperparameters
@@ -139,6 +146,8 @@ class TrainingManager():
 
       # experimental settings
       "use_expert_in_observation" : False,
+      "use_MAT" : False,
+      "MAT_use_reopen" : False,
 
       # file and testing parameters
       "test_obj_per_file" : 20,
@@ -149,7 +158,7 @@ class TrainingManager():
       # model parameters (for loading xml files)
       "object_set_name" : "set9_nosharp_smallspheres",
       "num_segments" : 8,
-      "finger_thickness" : 0.9e-3,
+      "finger_thickness" : 0.86e-3,
       "finger_length" : 235e-3,
       "finger_width" : 28e-3,
       "finger_modulus" : 193e9,
@@ -178,6 +187,7 @@ class TrainingManager():
       "state_noise_mu" : 0.025,
       "state_noise_std" : 0.0,
       "base_position_noise" : 5e-3,
+      "palm_scale_factor" : 1.0,
       "oob_distance" : 75e-3,
       "lift_height" : 15e-3,
       "gripper_target_height" : 20e-3,
@@ -277,6 +287,12 @@ class TrainingManager():
           "normalise" : 10.0,
           "read_rate" : 10,
           "noise_override" : None
+        },
+        "cartesian_contacts_XYZ" : {
+          "in_use" : False,
+          "normalise" : 0.0,
+          "read_rate" : -1,
+          "noise_override" : [0, 0]
         }
       }
     },
@@ -288,7 +304,7 @@ class TrainingManager():
       "scale_rewards" : 1.0,
       "scale_penalties" : 1.0,
       "penalty_termination" : True,
-      "stable_trigger" : 4,
+      "stable_trigger" : 1,
       "dangerous_trigger" : 1,
       "bend" : {
         "min" : 0.0,
@@ -331,6 +347,7 @@ class TrainingManager():
       "metric_thresholds" : [],
       "param_values" : [],
       "change_fcn" : None,
+      "whole_fcn_override" : None,
     },
     
     # this class other settings
@@ -445,7 +462,7 @@ class TrainingManager():
 
     return create_new
 
-  def run_training(self, agent, env):
+  def run_training(self, agent, env, test_after=True):
     """
     Initialise the agent, apply settings, and make everything ready for training
     """
@@ -466,13 +483,14 @@ class TrainingManager():
     self.trainer.train()
 
     # finish by loading the best training and running an in depth test on it
-    self.run_test(trials_per_obj=self.settings["final_test_trials_per_object"],
-                  load_best_id=True)
+    if test_after:
+      self.run_test(trials_per_obj=self.settings["final_test_trials_per_object"],
+                    load_best_id=True)
       
     # save final summary of training
     self.save_training_summary()
 
-  def run_test(self, heuristic=False, trials_per_obj=10, render=False, pause=False,
+  def run_test(self, heuristic=False, trials_per_obj=20, render=False, pause=False,
                demo=False, different_object_set=None, load_best_id=False):
     """
     Perform a thorough test on the model, including loading the best performing network
@@ -482,7 +500,7 @@ class TrainingManager():
       print(f"\nPreparing to perform a model test, trials_per_obj = {trials_per_obj}, load_best_id = {load_best_id}, heuristic = {heuristic}")
 
     # are we loading the best performing model before this test
-    if load_best_id:
+    if load_best_id and not heuristic:
       # check if we should only finalise tests on trainings that reached a certain stage
       if self.settings["final_test_only_stage"] is not None:
         stage = self.settings["final_test_only_stage"]
@@ -520,7 +538,7 @@ class TrainingManager():
     if self.settings["save"]:
       savetxt = f"TrainingMananger.run_test() final success rate = {self.trainer.last_test_success_rate}\n"
       savetxt += "\n" + test_report
-      if heuristic: savename = "heuristic_test_"
+      if heuristic: savename = "heuristic_full_test_"
       elif demo: savename = "demo_test_"
       else: savename = "full_test_"
       if different_object_set is not None and isinstance(different_object_set, str):
@@ -547,7 +565,7 @@ class TrainingManager():
 
   def load(self, job_num=None, timestamp=None, run_name=None, group_name=None, 
            best_id=False, id=None, path_to_run_folder=None, use_abs_path=False,
-           load_into_new_training=False, agentonly=False):
+           load_into_new_training=False, agentonly=False, trackonly=False):
     """
     Load the training currently specified. Either pass:
       1) nothing - run_name and group_name are already set in the class
@@ -580,7 +598,8 @@ class TrainingManager():
       self.group_name = path_to_run_folder.split("/")[-1]
   
     # make the trainer (overwrite any existing trainer)
-    self.trainer = self.make_trainer(None, self.make_env(load=False))
+
+    self.trainer = self.make_trainer(None, self.make_env(load=False) if not trackonly else None)
 
     # special case, we want to remake the modelsaver in load()
     if run_name and path_to_run_folder is not None:
@@ -595,16 +614,18 @@ class TrainingManager():
       else: stage = None
       found = self.trainer.load_best_id(self.run_name, group_name=self.group_name,
                                         path_to_run_folder=path_to_run_folder, stage=stage,
-                                        agentonly=agentonly)
+                                        agentonly=agentonly, trackonly=trackonly)
       if not found:
         if self.log_level > 0:
           print(f"TrainingMananger.load() warning: load_best_id failed (stage = {stage}). Loading most recent id")
         self.trainer.load(self.run_name, group_name=self.group_name, id=id,
-                        path_to_run_folder=path_to_run_folder, agentonly=agentonly)
+                        path_to_run_folder=path_to_run_folder, agentonly=agentonly, 
+                        trackonly=trackonly)
         # raise RuntimeError(f"TrainingMananger.load() error: load_best_id failed (stage = {stage})")
     else:
       self.trainer.load(self.run_name, group_name=self.group_name, id=id,
-                        path_to_run_folder=path_to_run_folder, agentonly=agentonly)
+                        path_to_run_folder=path_to_run_folder, agentonly=agentonly, 
+                        trackonly=trackonly)
 
     if load_into_new_training:
       # apply new training details, for saving in a new folder
@@ -637,6 +658,7 @@ class TrainingManager():
     self.train_best_ep = None
     self.full_test_sr = None
     self.trained_to = None
+    self.test_performance_matrix = None
 
   def get_training_summary(self, filepath=None, load_existing=True):
     """
@@ -749,6 +771,10 @@ class TrainingManager():
           elif line.startswith("\tParam 3"):
             self.param_3 = item
             self.param_3_name = splits[0].split(": ")[-1]
+
+    # now parse the test time performance
+    test_perf = self.trainer.read_test_performance(string_input=sections[1])
+    self.test_performance_matrix = test_perf
 
     return True
 
@@ -864,6 +890,8 @@ class TrainingManager():
     Create a MujocoTrainer
     """
 
+    if agent is None: agent = EmptyAgent()
+
     trainer = MujocoTrainer(agent, env, rngseed=self.rngseed, device=self.device,
                             log_level=self.log_level, plot=self.settings["plot"], 
                             render=self.settings["render"], group_name=self.group_name, 
@@ -881,9 +909,13 @@ class TrainingManager():
     trainer.curriculum_dict["metric_name"] = self.settings["curriculum"]["metric_name"]
     trainer.curriculum_dict["metric_thresholds"] = self.settings["curriculum"]["metric_thresholds"]
     trainer.curriculum_dict["param_values"] = self.settings["curriculum"]["param_values"]
-    if trainer.params.use_curriculum and trainer.curriculum_change is not None:
-      trainer.curriculum_change = functools.partial(self.settings["curriculum"]["change_fcn"], trainer)
-      trainer.curriculum_change(trainer.curriculum_dict["stage"]) # apply initial stage settings
+    if trainer.params.use_curriculum:
+      if self.settings["curriculum"]["whole_fcn_override"] is not None and trainer.curriculum_fcn is not None:
+        trainer.curriculum_fcn = functools.partial(self.settings["curriculum"]["whole_fcn_override"], trainer)
+        trainer.curriculum_fcn(0) # apply initial episode settings
+      if self.settings["curriculum"]["change_fcn"] is not None and trainer.curriculum_change is not None:
+        trainer.curriculum_change = functools.partial(self.settings["curriculum"]["change_fcn"], trainer)
+        trainer.curriculum_change(trainer.curriculum_dict["stage"]) # apply initial stage settings
     if self.settings["env_image_collection"]:
       if env is not None:
         env.collect_images = True
@@ -925,6 +957,10 @@ class TrainingManager():
     env.mj.set.state_noise_mu = set["cpp"]["state_noise_mu"]
     env.mj.set.state_noise_std = set["cpp"]["state_noise_std"]
     env.mj.set.base_position_noise = set["cpp"]["base_position_noise"]
+    try:
+      env.mj.set.palm_scale_factor = set["cpp"]["palm_scale_factor"]
+    except AttributeError as e:
+      print(f"TrainingMananger() warning: {e}")
 
     env.mj.set.oob_distance = set["cpp"]["oob_distance"]
     env.mj.set.lift_height = set["cpp"]["lift_height"]
@@ -933,7 +969,10 @@ class TrainingManager():
     env.mj.set.stable_palm_force = set["cpp"]["stable_palm_force"]
     env.mj.set.stable_finger_force_lim = set["cpp"]["stable_finger_force_lim"]
     env.mj.set.stable_palm_force_lim = set["cpp"]["stable_palm_force_lim"]
-    env.mj.set.XY_distance_threshold = set["cpp"]["XY_distance_threshold"]
+    try:
+      env.mj.set.XY_distance_threshold = set["cpp"]["XY_distance_threshold"]
+    except AttributeError as e:
+      print(f"TrainingMananger() warning: {e}")
     env.mj.set.fingertip_min_mm = set["cpp"]["fingertip_min_mm"]
     env.mj.set.continous_actions = set["cpp"]["continous_actions"]
     env.mj.set.use_termination_action = set["cpp"]["use_termination_action"]
@@ -973,6 +1012,7 @@ class TrainingManager():
     env.mj.set.palm_sensor.in_use = set["cpp"]["sensor"]["palm_sensor"]["in_use"]
     env.mj.set.wrist_sensor_XY.in_use = set["cpp"]["sensor"]["wrist_sensor_XY"]["in_use"]
     env.mj.set.wrist_sensor_Z.in_use = set["cpp"]["sensor"]["wrist_sensor_Z"]["in_use"]
+    env.mj.set.cartesian_contacts_XYZ.in_use = set["cpp"]["sensor"]["cartesian_contacts_XYZ"]["in_use"]
 
     env.mj.set.motor_state_sensor.normalise = set["cpp"]["sensor"]["motor_state_sensor"]["normalise"]
     env.mj.set.base_state_sensor_Z.normalise = set["cpp"]["sensor"]["base_state_sensor_Z"]["normalise"]
@@ -982,6 +1022,7 @@ class TrainingManager():
     env.mj.set.palm_sensor.normalise = set["cpp"]["sensor"]["palm_sensor"]["normalise"]
     env.mj.set.wrist_sensor_XY.normalise = set["cpp"]["sensor"]["wrist_sensor_XY"]["normalise"]
     env.mj.set.wrist_sensor_Z.normalise = set["cpp"]["sensor"]["wrist_sensor_Z"]["normalise"]
+    env.mj.set.cartesian_contacts_XYZ.normalise = set["cpp"]["sensor"]["cartesian_contacts_XYZ"]["normalise"]
 
     env.mj.set.motor_state_sensor.read_rate = set["cpp"]["sensor"]["motor_state_sensor"]["read_rate"]
     env.mj.set.base_state_sensor_Z.read_rate = set["cpp"]["sensor"]["base_state_sensor_Z"]["read_rate"]
@@ -991,6 +1032,7 @@ class TrainingManager():
     env.mj.set.palm_sensor.read_rate = set["cpp"]["sensor"]["palm_sensor"]["read_rate"]
     env.mj.set.wrist_sensor_XY.read_rate = set["cpp"]["sensor"]["wrist_sensor_XY"]["read_rate"]
     env.mj.set.wrist_sensor_Z.read_rate = set["cpp"]["sensor"]["wrist_sensor_Z"]["read_rate"]
+    env.mj.set.cartesian_contacts_XYZ.read_rate = set["cpp"]["sensor"]["cartesian_contacts_XYZ"]["read_rate"]
 
     if set["cpp"]["sensor"]["motor_state_sensor"]["noise_override"] is not None:
       env.mj.set.motor_state_sensor.set_gaussian_noise(*set["cpp"]["sensor"]["motor_state_sensor"]["noise_override"])
@@ -1008,6 +1050,8 @@ class TrainingManager():
       env.mj.set.wrist_sensor_XY.set_gaussian_noise(*set["cpp"]["sensor"]["wrist_sensor_XY"]["noise_override"])
     if set["cpp"]["sensor"]["wrist_sensor_Z"]["noise_override"] is not None:
       env.mj.set.wrist_sensor_Z.set_gaussian_noise(*set["cpp"]["sensor"]["wrist_sensor_Z"]["noise_override"])
+    if set["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"] is not None:
+      env.mj.set.cartesian_contacts_XYZ.set_gaussian_noise(*set["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"])
 
     # rewards are the exception, they are not set in this function
 
@@ -1174,6 +1218,15 @@ class TrainingManager():
       if self.settings["reward"]["penalty_termination"]:
         env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"])
 
+    elif self.settings["reward"]["style"] == "sparse":
+      # prepare reward thresholds
+      self.set_sensor_reward_thresholds(env)
+      # end criteria                   reward   done   trigger
+      env.mj.set.stable_height.set     (1.0,    True,    1)
+      env.mj.set.oob.set               (-1.0,   True,    1)
+      if self.settings["reward"]["penalty_termination"]:
+        env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"])
+
     elif self.settings["reward"]["style"] == "termination_action_v1":
       # prepare reward thresholds
       self.set_sensor_reward_thresholds(env)
@@ -1190,7 +1243,17 @@ class TrainingManager():
       env.mj.set.oob.set                    (-1.0,   True,   1)
       if self.settings["reward"]["penalty_termination"]:
         env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"])
-    
+        
+    elif self.settings["reward"]["style"] == "MAT_liftonly":
+      # end criteria                        reward   done   trigger
+      env.mj.set.lifted_termination.set     (1.0,    True,   1)
+      env.mj.set.failed_termination.set     (0.0,    True,   1)
+      if self.settings["reward"]["penalty_termination"]:
+        env.mj.set.oob.set                    (0.0,   True,   1)
+        self.set_sensor_reward_thresholds(env)
+        env = self.set_sensor_terminations(env, trigger=self.settings["reward"]["dangerous_trigger"],
+                                           value=0.0)
+        
     else:
       raise RuntimeError(f"style={self.settings['reward']['style']} is not a valid option in TrainingManager.create_reward_function()")
 
@@ -1203,6 +1266,15 @@ class TrainingManager():
     env.mj.set.object_stable.trigger = self.settings["reward"]["stable_trigger"]
 
     return env
+
+class EmptyAgent:
+  def __init__(self): pass
+  def training_mode(self): pass
+  def testing_mode(self): pass
+  def to_device(self): pass
+  def seed(self, rngseed=None): pass
+  def load_save_state(self, *args, **kwargs):
+    raise NotImplementedError
 
 if __name__ == "__main__":
 

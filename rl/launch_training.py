@@ -10,13 +10,15 @@ from time import sleep
 from random import random
 import torch
 import functools
+import numpy as np
 
 from Trainer import MujocoTrainer
 from TrainingManager import TrainingManager
 from agents.DQN import Agent_DQN
 from agents.ActorCritic import MLPActorCriticAC, Agent_SAC
-from agents.PolicyGradient import MLPActorCriticPG, Agent_PPO, Agent_PPO_Discriminator
+from agents.PolicyGradient import MLPActorCriticPG, Agent_PPO
 from agents.PolicyGradient import CNNActorCriticPG, NetActorCriticPG, MixedNetworkFromEncoder
+from agents.PolicyGradient import Agent_PPO_MAT, MATActorCriticPG
 import networks
 
 def vary_all_inputs(raw_inputarg=None, param_1=None, param_2=None, param_3=None, repeats=None):
@@ -161,7 +163,7 @@ def update_training_summaries(timestamp, jobstr=None, job_numbers=None, run_name
 
 def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefix=None,
                         min_ep=None, max_ep=None, silent=True, min_stage=None, max_stage=None,
-                        print_test=None):
+                        print_test=None, print_reward=False):
   """
   Print a table of results for a training
   """
@@ -191,6 +193,7 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
   found_train_best_ep = False
   found_train_best_sr = False
   found_full_test_sr = False
+  found_best_reward = False
 
   if min_ep is not None or max_ep is not None:
     do_min_max_ep = True
@@ -229,6 +232,7 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
     if tm.train_best_ep is not None: found_train_best_ep = True
     if tm.train_best_sr is not None: found_train_best_sr = True
     if tm.full_test_sr is not None: found_full_test_sr = True
+    if tm.test_performance_matrix is not None: found_best_reward = True
 
   # get the program name
   if len(program_names) == 2:
@@ -247,6 +251,7 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
   if found_param_2: headings.append(tm.param_2_name)
   if found_param_3: headings.append(tm.param_3_name)
   if found_trained_to: headings.append("Trained to")
+  if print_reward and found_best_reward: headings.append("Best reward")
   if do_min_max_ep:
     if min_ep is not None and max_ep is not None:
       headings.append(f"Best SR range {min_ep} - {max_ep}")
@@ -315,6 +320,10 @@ def print_results_table(timestamp, jobstr=None, job_numbers=None, run_name_prefi
     if found_trained_to:
       if tm.trained_to is not None:
         new_elem.append(tm.trained_to)
+      else: new_elem.append("nodata")
+    if print_reward and found_best_reward:
+      if tm.test_performance_matrix is not None:
+        new_elem.append(np.max(tm.test_performance_matrix[3]))
       else: new_elem.append("nodata")
     if do_min_max_ep:
       data = tm.trainer.read_test_performance()
@@ -569,6 +578,53 @@ def curriculum_change_object_noise(self, stage):
   # don't use this, it causes trainings to avoid using fingers
   # self.env.mj.set.oob_distance = (15 + self.curriculum_dict["param_values"][stage]) * 1e-3
 
+def curriculum_fcn_MAT(self, i):
+  """
+  Change the step sizes
+  """
+
+  if not hasattr(self, "MAT_last_step_update_test_length"):
+    self.MAT_last_step_update_test_length = 0
+
+  if i != 1 and self.MAT_last_step_update_test_length == len(self.track.avg_successful_grasp):
+    return
+  
+  self.MAT_last_step_update_test_length = len(self.track.avg_successful_grasp)
+
+  # get the current maximum success rate achieved at test time
+  if len(self.track.avg_successful_grasp) > 0:
+    sr = max(self.track.avg_successful_grasp)
+  else:
+    sr = 0.0
+
+  xmin = self.curriculum_dict["param_values"][0][0]
+  xmax = self.curriculum_dict["param_values"][0][1]
+  ymin = self.curriculum_dict["param_values"][1][0]
+  ymax = self.curriculum_dict["param_values"][1][1]
+  zmin = self.curriculum_dict["param_values"][2][0]
+  zmax = self.curriculum_dict["param_values"][2][1]
+  bmin = self.curriculum_dict["param_values"][3][0]
+  bmax = self.curriculum_dict["param_values"][3][1]
+  tmin = self.curriculum_dict["param_values"][4][0]
+  tmax = self.curriculum_dict["param_values"][4][1]
+
+  # set the action step sizes
+  self.env.mj.set.gripper_prismatic_X.value = xmin + (xmax - xmin) * (1 - sr)
+  self.env.mj.set.gripper_revolute_Y.value = ymin + (ymax - ymin) * (1 - sr)
+  self.env.mj.set.gripper_Z.value = zmin + (zmax - zmin) * (1 - sr)
+  self.env.mj.set.base_Z.value = bmin + (bmax - bmin) * (1 - sr)
+
+  # now adjust the time per action to match the step sizes
+  self.env.mj.set.time_for_action = tmin + (tmax - tmin) * (1 - sr)
+
+  if self.log_level > 0:
+    print(f"Step sizes at episode {i} being updated based on max success rate = {sr:.3f}")
+    print(f"x action size is {self.env.mj.set.gripper_prismatic_X.value * 1000:.1f} mm")
+    print(f"y action size is {self.env.mj.set.gripper_revolute_Y.value:.3f} rad")
+    print(f"z action size is {self.env.mj.set.gripper_Z.value * 1000:.1f} mm")
+    print(f"base z action size is {self.env.mj.set.base_Z.value * 1000:.1f} mm")
+    print(f"time per action is {self.env.mj.set.time_for_action:.3f} s")
+
 if __name__ == "__main__":
 
   """
@@ -617,6 +673,7 @@ if __name__ == "__main__":
   parser.add_argument("--print-from-stage",   default=None, type=int) # print best SR from a specific curriculum stage
   parser.add_argument("--print-up-to-stage",  default=None, type=int) # print best SR up until a specific curriculum stage
   parser.add_argument("--print-test",         default=None)           # print full_test results on a given test set (if available)
+  parser.add_argument("--print-reward",       action="store_true")    # print best reward achieved
   parser.add_argument("--rngseed",            default=None)           # turns on reproducible training with given seed (slower)
   parser.add_argument("--log-level",          type=int, default=1)    # set script log level
   parser.add_argument("--no-delay",           action="store_true")    # prevent a sleep(...) to seperate processes
@@ -635,6 +692,8 @@ if __name__ == "__main__":
 
   args = parser.parse_args()
 
+  # exit()
+
   timestamp = args.timestamp if args.timestamp else datetime.now().strftime(datestr)
 
   # default device
@@ -648,7 +707,7 @@ if __name__ == "__main__":
     args.log_level = 0
 
   # disable delays for in cases where we are not training
-  if args.demo or args.test or args.print_results:
+  if args.demo or args.print_results:
     args.no_delay = True
 
   # echo these inputs
@@ -660,14 +719,15 @@ if __name__ == "__main__":
     print(" -> Device:", args.device)
 
   # seperate process for safety when running a training program
-  if (not args.no_delay and args.job is not None and (args.program is not None
-      or args.resume is not None)):
-    sleep_for = args.job - args.smallest_job_num
-    if sleep_for < 0: sleep_for = args.job # in case of jobstr "4 5 6 1"
-    if args.log_level > 0:
-      print(f"Sleeping for {sleep_for} seconds to seperate process for safety")
-    sleep(sleep_for)
-    sleep(0.25 * random()) # extra safety
+  if (not args.no_delay):
+    if (args.job is not None and not args.plot and
+        (args.program is not None or args.resume is not None or args.test)):
+      sleep_for = args.job - args.smallest_job_num
+      if sleep_for < 0: sleep_for = args.job # in case of jobstr "4 5 6 1"
+      if args.log_level > 0:
+        print(f"Sleeping for {sleep_for} seconds to seperate process for safety")
+      sleep(sleep_for)
+      sleep(0.25 * random()) # extra safety
 
   # ----- special cases ----- #
 
@@ -688,7 +748,7 @@ if __name__ == "__main__":
     print_results_table(args.timestamp, jobstr=args.job_string, run_name_prefix=args.name_prefix,
                         min_ep=args.print_from_ep, max_ep=args.print_up_to_ep, silent=silent,
                         min_stage=args.print_from_stage, max_stage=args.print_up_to_stage,
-                        print_test=args.print_test)
+                        print_test=args.print_test, print_reward=args.print_reward)
     exit()
 
   if args.job is None:
@@ -706,31 +766,13 @@ if __name__ == "__main__":
     if args.log_level > 0: print("launch_training.py will plot a training")
 
     tm.load(job_num=args.job, timestamp=args.timestamp, id=args.load_id)
+    tm.trainer.track.plot_train_avg = True
+    tm.trainer.track.plot_test_raw = True
+    tm.trainer.track.add_test_metrics(metrics_to_add=["Success rate"], 
+                                      values=[tm.trainer.track.avg_successful_grasp])
+    tm.trainer.track.plot_test_metrics = True
     tm.trainer.track.plot(plttitle=tm.group_name + "/" + tm.run_name)
     input("Press enter to quit plotting windows and terminate program")
-    exit()
-
-  if args.test or args.demo:
-
-    if args.timestamp is None:
-      raise RuntimeError(f"launch_training.py: a timestamp [-t, --timestamp] in the following format '{datestr}' is required to load existing trainigs")
-
-    # sort out input arguments
-    if args.demo: args.render = True # always render for demonstration tests
-    best_id = True if args.load_id is None else False
-    if args.test == "saved": args.test = None # don't load a new object set
-
-    if args.log_level > 0: 
-      print("launch_training.py is running a test")
-      if args.test is not None: print(" -> Object set changed to", args.test)
-      print(" -> ID set to", "best_id" if best_id else args.load_id)
-      print(" -> Render set to", args.render)
-      print(" -> Heuristic set to", args.heuristic)
-      if args.demo: print(" -> Demo set, number of trials is", args.demo)
-
-    tm.load(job_num=args.job, timestamp=args.timestamp, best_id=best_id, id=args.load_id)
-    tm.run_test(heuristic=args.heuristic, demo=args.demo, render=args.render, pause=args.pause,
-                different_object_set=args.test)
     exit()
 
   if args.resume:
@@ -751,6 +793,38 @@ if __name__ == "__main__":
     if args.savedir is not None: tm.settings["savedir"] = args.savedir
 
     tm.continue_training(new_endpoint=args.new_endpoint, extra_episodes=args.extra_episodes)
+    
+    # if a test given to complete after training, let that happen, else we are done
+    if not args.test:
+      exit()
+
+  if args.test or args.demo:
+
+    if args.timestamp is None:
+      raise RuntimeError(f"launch_training.py: a timestamp [-t, --timestamp] in the following format '{datestr}' is required to load existing trainigs")
+
+    # sort out input arguments
+    if args.demo: args.render = True # always render for demonstration tests
+    best_id = True if args.load_id is None else False
+    if args.test == "saved": args.test = None # don't load a new object set
+
+    if args.log_level > 0: 
+      print("launch_training.py is running a test")
+      if args.test is not None: print(" -> Object set changed to", args.test)
+      print(" -> ID set to", "best_id" if best_id else args.load_id)
+      print(" -> Render set to", args.render)
+      print(" -> Heuristic set to", args.heuristic)
+      if args.demo: print(" -> Demo set, number of trials is", args.demo)
+
+    if args.heuristic:
+      tm.settings["cpp"]["continous_actions"] = False
+      tm.settings["cpp"]["time_for_action"] = 0.4 # double it, palm issues
+      env = tm.make_env(load=False)
+      tm.trainer = tm.make_trainer(env=env)
+    else:
+      tm.load(job_num=args.job, timestamp=args.timestamp, best_id=best_id, id=args.load_id)
+    tm.run_test(heuristic=args.heuristic, demo=args.demo, render=args.render, pause=args.pause,
+                different_object_set=args.test)
     exit()
 
   if args.save_expert:
@@ -3929,6 +4003,2396 @@ if __name__ == "__main__":
 
     # complete the training
     tm.run_training(agent, env)
+    print_time_taken()
+
+  elif args.program == "mat_without_extra_actions":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [5e-6, 1e-5, 3e-5, 6e-5, 1e-4]
+    vary_2 = [1000, 3000]
+    vary_3 = [False, True]
+    repeats = 2
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "steps per epoch"
+    tm.param_3_name = "use_Z"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply env settings
+    tm.settings["env"]["use_MAT"] = True
+    tm.settings["env"]["MAT_use_reopen"] = False
+    tm.settings["env"]["max_episode_steps"] = 250 # Horizon = 250 in paper
+    # tm.settings["env"]["base_lim_yaw_rad"] = np.pi / 4 # reduce from [-pi, +pi] in paper due to symettry
+    tm.settings["env"]["finger_thickness"] = 1.0e-3 # put same fingers on as TMech eval
+    tm.settings["env"]["finger_width"] = 24e-3
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["XY_base_actions"] = True # enable for xml, but not actions
+    tm.settings["env"]["Z_base_rotation"] = True # enable for xml, but not actions
+
+    # apply state and sensor settings
+    tm.settings["cpp"]["sensor_n_prev_steps"] = 20
+    tm.settings["cpp"]["state_n_prev_steps"] = 20
+    tm.settings["cpp"]["sensor_sample_mode"] = 6 # scaled square of change, saturates at 0.1 change
+    tm.settings["cpp"]["state_sample_mode"] = 4 # binary change information, no threshold, 0.05 in paper
+    # tm.settings["cpp"]["sensor_noise_std"] = 0.01 # reduce based on real life
+
+    # apply action settings
+    tm.settings["cpp"]["use_termination_action"] = True # for final lift
+
+    # turn on or off Z height
+    use_Z = tm.param_3
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["action"]["base_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["sensor"]["wrist_sensor_Z"]["in_use"] = use_Z
+    if not use_Z:
+      tm.settings["env"]["fingertip_clearance"] = 5e-3 # closer to ground given no Z height changes. Original=10e-3
+      tm.settings["cpp"]["base_position_noise"] = 0e-3 # disable base position noise? Original=5e-3
+
+    # apply reward settings
+    tm.settings["reward"]["style"] = "MAT_liftonly"
+    tm.settings["reward"]["penalty_termination"] = True # do we end early for oob and dangerous forces
+    tm.settings["reward"]["stable_trigger"] = 1
+
+    # enable the curriculum of step size adjustments
+    tm.settings["trainer"]["use_curriculum"] = True
+    tm.settings["curriculum"]["whole_fcn_override"] = curriculum_fcn_MAT
+    tm.settings["curriculum"]["param_values"] = [
+      [2e-3, 8e-3], # gripper_X action min/max
+      [0.015, 0.06], # gripper_Y action min/max
+      [4e-3, 16e-3], # gripper_Z action min/max
+      [2e-3, 8e-3], # base_Z action min/max
+      [0.2, 0.8],   # time per action min/max
+    ]
+
+    # apply agent hyperparameters
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1
+    tm.settings["Agent_PPO"]["gamma"] = 0.999 # paper specified
+    tm.settings["Agent_PPO"]["steps_per_epoch"] = tm.param_2
+    tm.settings["Agent_PPO"]["clip_ratio"] = 0.2 # paper specified
+    tm.settings["Agent_PPO"]["train_pi_iters"] = 80
+    tm.settings["Agent_PPO"]["train_vf_iters"] = 80
+    tm.settings["Agent_PPO"]["lam"] = 0.95 # paper specified
+    tm.settings["Agent_PPO"]["target_kl"] = 0.01
+    tm.settings["Agent_PPO"]["max_kl_ratio"] = 1.5
+    tm.settings["Agent_PPO"]["use_random_action_noise"] = True
+    tm.settings["Agent_PPO"]["random_action_noise_size"] = 0.05
+    tm.settings["Agent_PPO"]["optimiser"] = "adam" # paper specified
+    tm.settings["Agent_PPO"]["adam_beta1"] = 0.9 # implied paper specified
+    tm.settings["Agent_PPO"]["adam_beta2"] = 0.999 # implied paper specified
+    tm.settings["Agent_PPO"]["grad_clamp_value"] = 200 # paper specified
+
+    # create the environment
+    env = tm.make_env()
+
+    # enable new sensors
+    env.mj.set.cartesian_contacts_XYZ.in_use = True
+    env._update_n_actions_obs()
+
+    # apply the agent settings
+    layers = [128 for i in range(6)]
+    n = 3 if tm.settings["env"]["MAT_use_reopen"] else 0
+    network = MLPActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes=layers,
+                                continous_actions=True)
+    
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+
+    # add an extra test on the old object set
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    
+    print_time_taken()
+
+  elif args.program == "mat_liftonly":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [5e-6, 1e-5, 3e-5, 6e-5, 1e-4]
+    vary_2 = [300, 1000, 3000]
+    vary_3 = [True, False]
+    repeats = 2
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "steps per epoch"
+    tm.param_3_name = "use extra actions"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply env settings
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["use_MAT"] = True
+    tm.settings["env"]["MAT_use_reopen"] = tm.param_3
+    tm.settings["env"]["max_episode_steps"] = 250 # Horizon = 250 in paper
+    # tm.settings["env"]["base_lim_yaw_rad"] = np.pi / 4 # reduce from [-pi, +pi] in paper due to symettry
+    tm.settings["env"]["finger_thickness"] = 1.0e-3 # put same fingers on as TMech eval
+    tm.settings["env"]["finger_width"] = 24e-3
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["XY_base_actions"] = True # enable for xml, but not actions
+    tm.settings["env"]["Z_base_rotation"] = True # enable for xml, but not actions
+
+    # apply state and sensor settings
+    tm.settings["cpp"]["sensor_n_prev_steps"] = 20
+    tm.settings["cpp"]["state_n_prev_steps"] = 20
+    tm.settings["cpp"]["sensor_sample_mode"] = 6 # scaled square of change, saturates at 0.1 change
+    tm.settings["cpp"]["state_sample_mode"] = 4 # binary change information, no threshold, 0.05 in paper
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"] = [0, 0]
+    
+    # # probably change this back later, but for now makes learning a bit easier
+    # tm.settings["cpp"]["sensor_noise_std"] = 0.01 # reduce based on real life
+
+    # apply action settings
+    tm.settings["cpp"]["use_termination_action"] = True # for final lift
+
+    # turn on or off Z height
+    use_Z = False
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["action"]["base_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["sensor"]["wrist_sensor_Z"]["in_use"] = use_Z
+    if not use_Z:
+      tm.settings["env"]["fingertip_clearance"] = 5e-3 # closer to ground given no Z height changes. Original=10e-3
+      tm.settings["cpp"]["base_position_noise"] = 0e-3 # disable base position noise? Original=5e-3
+
+    # apply reward settings
+    tm.settings["reward"]["style"] = "MAT_liftonly"
+    tm.settings["reward"]["penalty_termination"] = True # do we end early for oob and dangerous forces
+    tm.settings["reward"]["stable_trigger"] = 1
+
+    # enable the curriculum of step size adjustments
+    tm.settings["trainer"]["use_curriculum"] = True
+    tm.settings["curriculum"]["whole_fcn_override"] = curriculum_fcn_MAT
+    tm.settings["curriculum"]["param_values"] = [
+      [2e-3, 8e-3], # gripper_X action min/max
+      [0.015, 0.06], # gripper_Y action min/max
+      [4e-3, 16e-3], # gripper_Z action min/max
+      [2e-3, 8e-3], # base_Z action min/max
+      [0.2, 0.8],   # time per action min/max
+    ]
+
+    # apply agent hyperparameters
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1
+    tm.settings["Agent_PPO"]["gamma"] = 0.999 # paper specified
+    tm.settings["Agent_PPO"]["steps_per_epoch"] = tm.param_2
+    tm.settings["Agent_PPO"]["clip_ratio"] = 0.2 # paper specified
+    tm.settings["Agent_PPO"]["train_pi_iters"] = 80
+    tm.settings["Agent_PPO"]["train_vf_iters"] = 80
+    tm.settings["Agent_PPO"]["lam"] = 0.95 # paper specified
+    tm.settings["Agent_PPO"]["target_kl"] = 0.01
+    tm.settings["Agent_PPO"]["max_kl_ratio"] = 1.5
+    tm.settings["Agent_PPO"]["use_random_action_noise"] = True
+    tm.settings["Agent_PPO"]["random_action_noise_size"] = 0.05
+    tm.settings["Agent_PPO"]["optimiser"] = "adam" # paper specified
+    tm.settings["Agent_PPO"]["adam_beta1"] = 0.9 # implied paper specified
+    tm.settings["Agent_PPO"]["adam_beta2"] = 0.999 # implied paper specified
+    tm.settings["Agent_PPO"]["grad_clamp_value"] = 200 # paper specified
+
+    # create the environment
+    env = tm.make_env()
+
+    # apply the agent settings
+    layers = [128 for i in range(6)]
+    n = 3 if tm.settings["env"]["MAT_use_reopen"] else 0
+    network = MLPActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes=layers,
+                                continous_actions=True)
+    
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+
+    # add an extra test on the old object set
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    
+    print_time_taken()
+
+  elif args.program == "mat_stable":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [5e-6, 1e-5, 3e-5, 6e-5, 1e-4]
+    vary_2 = [300, 1000, 3000]
+    vary_3 = [True, False]
+    repeats = 2
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "steps per epoch"
+    tm.param_3_name = "use extra actions"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply env settings
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["use_MAT"] = True
+    tm.settings["env"]["MAT_use_reopen"] = tm.param_3
+    tm.settings["env"]["max_episode_steps"] = 250 # Horizon = 250 in paper
+    # tm.settings["env"]["base_lim_yaw_rad"] = np.pi / 4 # reduce from [-pi, +pi] in paper due to symettry
+    tm.settings["env"]["finger_thickness"] = 1.0e-3 # put same fingers on as TMech eval
+    tm.settings["env"]["finger_width"] = 24e-3
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["XY_base_actions"] = True # enable for xml, but not actions
+    tm.settings["env"]["Z_base_rotation"] = True # enable for xml, but not actions
+
+    # apply state and sensor settings
+    tm.settings["cpp"]["sensor_n_prev_steps"] = 20
+    tm.settings["cpp"]["state_n_prev_steps"] = 20
+    tm.settings["cpp"]["sensor_sample_mode"] = 6 # scaled square of change, saturates at 0.1 change
+    tm.settings["cpp"]["state_sample_mode"] = 4 # binary change information, no threshold, 0.05 in paper
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"] = [0, 0]
+    
+    # # probably change this back later, but for now makes learning a bit easier
+    # tm.settings["cpp"]["sensor_noise_std"] = 0.01 # reduce based on real life
+
+    # apply action settings
+    tm.settings["cpp"]["use_termination_action"] = True # for final lift
+
+    # turn on or off Z height
+    use_Z = False
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["action"]["base_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["sensor"]["wrist_sensor_Z"]["in_use"] = use_Z
+    if not use_Z:
+      tm.settings["env"]["fingertip_clearance"] = 5e-3 # closer to ground given no Z height changes. Original=10e-3
+      tm.settings["cpp"]["base_position_noise"] = 0e-3 # disable base position noise? Original=5e-3
+
+    # apply reward settings
+    tm.settings["reward"]["style"] = "MAT"
+    tm.settings["reward"]["penalty_termination"] = True # do we end early for oob and dangerous forces
+    tm.settings["reward"]["stable_trigger"] = 1
+
+    # enable the curriculum of step size adjustments
+    tm.settings["trainer"]["use_curriculum"] = True
+    tm.settings["curriculum"]["whole_fcn_override"] = curriculum_fcn_MAT
+    tm.settings["curriculum"]["param_values"] = [
+      [2e-3, 8e-3], # gripper_X action min/max
+      [0.015, 0.06], # gripper_Y action min/max
+      [4e-3, 16e-3], # gripper_Z action min/max
+      [2e-3, 8e-3], # base_Z action min/max
+      [0.2, 0.8],   # time per action min/max
+    ]
+
+    # apply agent hyperparameters
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1
+    tm.settings["Agent_PPO"]["gamma"] = 0.999 # paper specified
+    tm.settings["Agent_PPO"]["steps_per_epoch"] = tm.param_2
+    tm.settings["Agent_PPO"]["clip_ratio"] = 0.2 # paper specified
+    tm.settings["Agent_PPO"]["train_pi_iters"] = 80
+    tm.settings["Agent_PPO"]["train_vf_iters"] = 80
+    tm.settings["Agent_PPO"]["lam"] = 0.95 # paper specified
+    tm.settings["Agent_PPO"]["target_kl"] = 0.01
+    tm.settings["Agent_PPO"]["max_kl_ratio"] = 1.5
+    tm.settings["Agent_PPO"]["use_random_action_noise"] = True
+    tm.settings["Agent_PPO"]["random_action_noise_size"] = 0.05
+    tm.settings["Agent_PPO"]["optimiser"] = "adam" # paper specified
+    tm.settings["Agent_PPO"]["adam_beta1"] = 0.9 # implied paper specified
+    tm.settings["Agent_PPO"]["adam_beta2"] = 0.999 # implied paper specified
+    tm.settings["Agent_PPO"]["grad_clamp_value"] = 200 # paper specified
+
+    # create the environment
+    env = tm.make_env()
+
+    # apply the agent settings
+    layers = [128 for i in range(6)]
+    n = 3 if tm.settings["env"]["MAT_use_reopen"] else 0
+    network = MLPActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes=layers,
+                                continous_actions=True)
+    
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+
+    # add an extra test on the old object set
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    
+    print_time_taken()
+
+  elif args.program == "mat_stable_shaped":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [5e-6, 1e-5, 3e-5, 6e-5, 1e-4]
+    vary_2 = [True, False]
+    vary_3 = None
+    repeats = 3
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "use extra actions"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply env settings
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["use_MAT"] = True
+    tm.settings["env"]["MAT_use_reopen"] = tm.param_2
+    tm.settings["env"]["max_episode_steps"] = 250 # Horizon = 250 in paper
+    # tm.settings["env"]["base_lim_yaw_rad"] = np.pi / 4 # reduce from [-pi, +pi] in paper due to symettry
+    tm.settings["env"]["finger_thickness"] = 1.0e-3 # put same fingers on as TMech eval
+    tm.settings["env"]["finger_width"] = 24e-3
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["XY_base_actions"] = True # enable for xml, but not actions
+    tm.settings["env"]["Z_base_rotation"] = True # enable for xml, but not actions
+
+    # apply state and sensor settings
+    tm.settings["cpp"]["sensor_n_prev_steps"] = 20
+    tm.settings["cpp"]["state_n_prev_steps"] = 20
+    tm.settings["cpp"]["sensor_sample_mode"] = 6 # scaled square of change, saturates at 0.1 change
+    tm.settings["cpp"]["state_sample_mode"] = 4 # binary change information, no threshold, 0.05 in paper
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"] = [0, 0]
+    
+    # # probably change this back later, but for now makes learning a bit easier
+    # tm.settings["cpp"]["sensor_noise_std"] = 0.01 # reduce based on real life
+
+    # apply action settings
+    tm.settings["cpp"]["use_termination_action"] = True # for final lift
+
+    # turn on or off Z height
+    use_Z = False
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["action"]["base_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["sensor"]["wrist_sensor_Z"]["in_use"] = use_Z
+    if not use_Z:
+      tm.settings["env"]["fingertip_clearance"] = 5e-3 # closer to ground given no Z height changes. Original=10e-3
+      tm.settings["cpp"]["base_position_noise"] = 0e-3 # disable base position noise? Original=5e-3
+
+    # apply reward settings
+    tm.settings["reward"]["style"] = "MAT_shaped"
+    tm.settings["reward"]["penalty_termination"] = True # do we end early for oob and dangerous forces
+    tm.settings["reward"]["stable_trigger"] = 1
+
+    # enable the curriculum of step size adjustments
+    tm.settings["trainer"]["use_curriculum"] = True
+    tm.settings["curriculum"]["whole_fcn_override"] = curriculum_fcn_MAT
+    tm.settings["curriculum"]["param_values"] = [
+      [2e-3, 8e-3], # gripper_X action min/max
+      [0.015, 0.06], # gripper_Y action min/max
+      [4e-3, 16e-3], # gripper_Z action min/max
+      [2e-3, 8e-3], # base_Z action min/max
+      [0.2, 0.8],   # time per action min/max
+    ]
+
+    # apply agent hyperparameters
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1
+    tm.settings["Agent_PPO"]["gamma"] = 0.999 # paper specified
+    tm.settings["Agent_PPO"]["steps_per_epoch"] = 300
+    tm.settings["Agent_PPO"]["clip_ratio"] = 0.2 # paper specified
+    tm.settings["Agent_PPO"]["train_pi_iters"] = 80
+    tm.settings["Agent_PPO"]["train_vf_iters"] = 80
+    tm.settings["Agent_PPO"]["lam"] = 0.95 # paper specified
+    tm.settings["Agent_PPO"]["target_kl"] = 0.01
+    tm.settings["Agent_PPO"]["max_kl_ratio"] = 1.5
+    tm.settings["Agent_PPO"]["use_random_action_noise"] = True
+    tm.settings["Agent_PPO"]["random_action_noise_size"] = 0.05
+    tm.settings["Agent_PPO"]["optimiser"] = "adam" # paper specified
+    tm.settings["Agent_PPO"]["adam_beta1"] = 0.9 # implied paper specified
+    tm.settings["Agent_PPO"]["adam_beta2"] = 0.999 # implied paper specified
+    tm.settings["Agent_PPO"]["grad_clamp_value"] = 200 # paper specified
+
+    # create the environment
+    env = tm.make_env()
+
+    # apply the agent settings
+    layers = [128 for i in range(6)]
+    n = 3 if tm.settings["env"]["MAT_use_reopen"] else 0
+    network = MLPActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes=layers,
+                                continous_actions=True)
+    
+    # make the agent
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+
+    # add an extra test on the old object set
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    
+    print_time_taken()
+
+  elif args.program == "mat_ppo_liftonly":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [3e-6, 1e-5, 3e-5, 1e-4, 3e-4]
+    vary_2 = [True, False]
+    vary_3 = None
+    repeats = 3
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "use extra actions"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply env settings
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["use_MAT"] = True
+    tm.settings["env"]["MAT_use_reopen"] = tm.param_2
+    tm.settings["env"]["max_episode_steps"] = 250 # Horizon = 250 in paper, see eq.5
+    # tm.settings["env"]["base_lim_yaw_rad"] = np.pi / 4 # reduce from [-pi, +pi] in paper due to symettry
+    tm.settings["env"]["finger_thickness"] = 1.0e-3 # put same fingers on as TMech eval
+    tm.settings["env"]["finger_width"] = 24e-3
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["XY_base_actions"] = True # enable for xml, but not actions
+    tm.settings["env"]["Z_base_rotation"] = True # enable for xml, but not actions
+
+    # apply state and sensor settings
+    tm.settings["cpp"]["sensor_n_prev_steps"] = 20
+    tm.settings["cpp"]["state_n_prev_steps"] = 20
+    tm.settings["cpp"]["sensor_sample_mode"] = 6 # scaled square of change, saturates at 0.1 change
+    tm.settings["cpp"]["state_sample_mode"] = 4 # binary change information, no threshold, 0.05 in paper
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"] = [0, 0]
+    
+    # # possible to change noise settings to improve learning
+    # tm.settings["cpp"]["sensor_noise_std"] = 0.01 # reduce based on real life
+
+    # apply action settings
+    tm.settings["cpp"]["use_termination_action"] = True # for final lift
+
+    # turn on or off Z height
+    use_Z = False
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["action"]["base_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["sensor"]["wrist_sensor_Z"]["in_use"] = use_Z
+    if not use_Z:
+      tm.settings["env"]["fingertip_clearance"] = 5e-3 # closer to ground given no Z height changes. Original=10e-3
+      tm.settings["cpp"]["base_position_noise"] = 0e-3 # disable base position noise? Original=5e-3
+
+    # apply reward settings
+    tm.settings["reward"]["style"] = "MAT_liftonly"
+    tm.settings["reward"]["penalty_termination"] = True # do we end early for oob and dangerous forces
+    tm.settings["reward"]["stable_trigger"] = 1
+
+    # enable the curriculum of step size adjustments
+    tm.settings["trainer"]["use_curriculum"] = True
+    tm.settings["curriculum"]["whole_fcn_override"] = curriculum_fcn_MAT
+    tm.settings["curriculum"]["param_values"] = [
+      [2e-3, 8e-3], # gripper_X action min/max
+      [0.015, 0.06], # gripper_Y action min/max
+      [4e-3, 16e-3], # gripper_Z action min/max
+      [2e-3, 8e-3], # base_Z action min/max
+      [0.2, 0.8],   # time per action min/max
+    ]
+
+    # apply agent hyperparameters
+    tm.settings["Agent_PPO_MAT"]["use_extra_actions"] = tm.param_2
+    tm.settings["Agent_PPO_MAT"]["learning_rate_pi"] = tm.param_1  # 1e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["learning_rate_vf"] = tm.param_1  # 1e-4 paper specified
+
+    # create the environment
+    env = tm.make_env()
+
+    # apply the agent settings
+    layers = [128 for i in range(6)]
+    n = 3 if tm.settings["env"]["MAT_use_reopen"] else 0
+    network = MLPActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes=layers,
+                                continous_actions=True)
+    
+    # make the agent
+    agent = Agent_PPO_MAT(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+
+    # add an extra test on the old object set
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    
+    print_time_taken()
+
+  elif args.program == "mat_ppo_stable_shaped":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [3e-6, 1e-5, 3e-5, 1e-4, 3e-4]
+    vary_2 = [True, False]
+    vary_3 = None
+    repeats = 3
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "use extra actions"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply env settings
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["use_MAT"] = True
+    tm.settings["env"]["MAT_use_reopen"] = tm.param_2
+    tm.settings["env"]["max_episode_steps"] = 250 # Horizon = 250 in paper, see eq.5
+    # tm.settings["env"]["base_lim_yaw_rad"] = np.pi / 4 # reduce from [-pi, +pi] in paper due to symettry
+    tm.settings["env"]["finger_thickness"] = 1.0e-3 # put same fingers on as TMech eval
+    tm.settings["env"]["finger_width"] = 24e-3
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["XY_base_actions"] = True # enable for xml, but not actions
+    tm.settings["env"]["Z_base_rotation"] = True # enable for xml, but not actions
+
+    # apply state and sensor settings
+    tm.settings["cpp"]["sensor_n_prev_steps"] = 20
+    tm.settings["cpp"]["state_n_prev_steps"] = 20
+    tm.settings["cpp"]["sensor_sample_mode"] = 6 # scaled square of change, saturates at 0.1 change
+    tm.settings["cpp"]["state_sample_mode"] = 4 # binary change information, no threshold, 0.05 in paper
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"] = [0, 0]
+    
+    # # possible to change noise settings to improve learning
+    # tm.settings["cpp"]["sensor_noise_std"] = 0.01 # reduce based on real life
+
+    # apply action settings
+    tm.settings["cpp"]["use_termination_action"] = True # for final lift
+
+    # turn on or off Z height
+    use_Z = False
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["action"]["base_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["sensor"]["wrist_sensor_Z"]["in_use"] = use_Z
+    if not use_Z:
+      tm.settings["env"]["fingertip_clearance"] = 5e-3 # closer to ground given no Z height changes. Original=10e-3
+      tm.settings["cpp"]["base_position_noise"] = 0e-3 # disable base position noise? Original=5e-3
+
+    # apply reward settings
+    tm.settings["reward"]["style"] = "MAT_shaped"
+    tm.settings["reward"]["penalty_termination"] = True # do we end early for oob and dangerous forces
+    tm.settings["reward"]["stable_trigger"] = 1
+
+    # enable the curriculum of step size adjustments
+    tm.settings["trainer"]["use_curriculum"] = True
+    tm.settings["curriculum"]["whole_fcn_override"] = curriculum_fcn_MAT
+    tm.settings["curriculum"]["param_values"] = [
+      [2e-3, 8e-3], # gripper_X action min/max
+      [0.015, 0.06], # gripper_Y action min/max
+      [4e-3, 16e-3], # gripper_Z action min/max
+      [2e-3, 8e-3], # base_Z action min/max
+      [0.2, 0.8],   # time per action min/max
+    ]
+
+    # apply agent hyperparameters
+    tm.settings["Agent_PPO_MAT"]["use_extra_actions"] = tm.param_2
+    tm.settings["Agent_PPO_MAT"]["learning_rate_pi"] = tm.param_1  # 1e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["learning_rate_vf"] = tm.param_1  # 1e-4 paper specified
+
+    # create the environment
+    env = tm.make_env()
+
+    # apply the agent settings
+    layers = [128 for i in range(6)]
+    n = 3 if tm.settings["env"]["MAT_use_reopen"] else 0
+    network = MLPActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes=layers,
+                                continous_actions=True)
+    
+    # make the agent
+    agent = Agent_PPO_MAT(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+
+    # add an extra test on the old object set
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    
+    print_time_taken()
+
+  elif args.program == "mat_ppo_grid":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [
+      (1e-5, 5e-5),
+      (5e-5, 5e-5),
+      (1e-4, 5e-5),
+      (2e-4, 5e-5),
+      (1e-5, 5e-4),
+      (5e-5, 5e-4),
+      (1e-4, 5e-4),
+      (2e-4, 5e-4),
+      (1e-5, 5e-3),
+      (5e-5, 5e-3),
+      (1e-4, 5e-3),
+      (2e-4, 5e-3),
+    ]
+    vary_2 = [150, 300, 600]
+    vary_3 = [False, True]
+    repeats = 3
+    tm.param_1_name = "lr/temperature"
+    tm.param_2_name = "steps per epoch"
+    tm.param_3_name = "extra actions"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply env settings
+    use_extra_actions = False
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["use_MAT"] = True
+    tm.settings["env"]["MAT_use_reopen"] = use_extra_actions
+    tm.settings["env"]["max_episode_steps"] = 250 # Horizon = 250 in paper, see eq.5
+    # tm.settings["env"]["base_lim_yaw_rad"] = np.pi / 4 # reduce from [-pi, +pi] in paper due to symettry
+    tm.settings["env"]["finger_thickness"] = 1.0e-3 # put same fingers on as TMech eval
+    tm.settings["env"]["finger_width"] = 24e-3
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["XY_base_actions"] = True # enable for xml, but not actions
+    tm.settings["env"]["Z_base_rotation"] = True # enable for xml, but not actions
+
+    # apply state and sensor settings
+    tm.settings["cpp"]["sensor_n_prev_steps"] = 20
+    tm.settings["cpp"]["state_n_prev_steps"] = 20
+    tm.settings["cpp"]["sensor_sample_mode"] = 6 # scaled square of change, saturates at 0.1 change
+    tm.settings["cpp"]["state_sample_mode"] = 4 # binary change information, no threshold, 0.05 in paper
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"] = [0, 0]
+    
+    # # possible to change noise settings to improve learning
+    # tm.settings["cpp"]["sensor_noise_std"] = 0.01 # reduce based on real life
+
+    # apply action settings
+    tm.settings["cpp"]["use_termination_action"] = True # for final lift
+
+    # turn on or off Z height
+    use_Z = False
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["action"]["base_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["sensor"]["wrist_sensor_Z"]["in_use"] = use_Z
+    if not use_Z:
+      tm.settings["env"]["fingertip_clearance"] = 5e-3 # closer to ground given no Z height changes. Original=10e-3
+      tm.settings["cpp"]["base_position_noise"] = 0e-3 # disable base position noise? Original=5e-3
+
+    # apply reward settings
+    tm.settings["reward"]["style"] = "MAT_liftonly"
+    tm.settings["reward"]["penalty_termination"] = True # do we end early for oob and dangerous forces
+    tm.settings["reward"]["stable_trigger"] = 1
+
+    # enable the curriculum of step size adjustments
+    tm.settings["trainer"]["use_curriculum"] = True
+    tm.settings["curriculum"]["whole_fcn_override"] = curriculum_fcn_MAT
+    tm.settings["curriculum"]["param_values"] = [
+      [2e-3, 8e-3], # gripper_X action min/max
+      [0.015, 0.06], # gripper_Y action min/max
+      [4e-3, 16e-3], # gripper_Z action min/max
+      [2e-3, 8e-3], # base_Z action min/max
+      [0.2, 0.8],   # time per action min/max
+    ]
+
+    # apply agent hyperparameters
+    tm.settings["Agent_PPO_MAT"]["use_extra_actions"] = use_extra_actions
+    tm.settings["Agent_PPO_MAT"]["learning_rate_pi"] = tm.param_1[0]  # 1e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["learning_rate_vf"] = tm.param_1[0]  # 1e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["steps_per_epoch"] = tm.param_2
+
+    # create the environment
+    env = tm.make_env()
+
+    # apply the agent settings
+    layers = [128 for i in range(6)] # only applies to pi, vf is set to [3*128]
+    n = 2 if use_extra_actions else 0
+    network = MATActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes=layers,
+                                use_extra_actions=use_extra_actions)
+    
+    # make the agent
+    agent = Agent_PPO_MAT(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+
+    # add an extra test on the old object set
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    
+    print_time_taken()
+
+  elif args.program == "mat_ppo_with_kl":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [
+      (5e-5, 1e-4),
+      (1e-4, 1e-4),
+      (5e-5, 5e-4),
+      (1e-4, 5e-4),
+      (5e-5, 1e-3),
+      (1e-4, 1e-3),
+    ]
+    vary_2 = [5, 10, 20]
+    vary_3 = [False, True]
+    repeats = 1
+    tm.param_1_name = "lr/temperature"
+    tm.param_2_name = "optimiser iters"
+    tm.param_3_name = "extra actions"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply env settings
+    use_extra_actions = False
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["use_MAT"] = True
+    tm.settings["env"]["MAT_use_reopen"] = use_extra_actions
+    tm.settings["env"]["max_episode_steps"] = 250 # Horizon = 250 in paper, see eq.5
+    # tm.settings["env"]["base_lim_yaw_rad"] = np.pi / 4 # reduce from [-pi, +pi] in paper due to symettry
+    tm.settings["env"]["finger_thickness"] = 1.0e-3 # put same fingers on as TMech eval
+    tm.settings["env"]["finger_width"] = 24e-3
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["XY_base_actions"] = True # enable for xml, but not actions
+    tm.settings["env"]["Z_base_rotation"] = True # enable for xml, but not actions
+
+    # apply state and sensor settings
+    tm.settings["cpp"]["sensor_n_prev_steps"] = 20
+    tm.settings["cpp"]["state_n_prev_steps"] = 20
+    tm.settings["cpp"]["sensor_sample_mode"] = 6 # scaled square of change, saturates at 0.1 change
+    tm.settings["cpp"]["state_sample_mode"] = 4 # binary change information, no threshold, 0.05 in paper
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"] = [0, 0]
+    
+    # # possible to change noise settings to improve learning
+    # tm.settings["cpp"]["sensor_noise_std"] = 0.01 # reduce based on real life
+
+    # apply action settings
+    tm.settings["cpp"]["use_termination_action"] = True # for final lift
+
+    # turn on or off Z height
+    use_Z = False
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["action"]["base_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["sensor"]["wrist_sensor_Z"]["in_use"] = use_Z
+    if not use_Z:
+      tm.settings["env"]["fingertip_clearance"] = 5e-3 # closer to ground given no Z height changes. Original=10e-3
+      tm.settings["cpp"]["base_position_noise"] = 0e-3 # disable base position noise? Original=5e-3
+
+    # apply reward settings
+    tm.settings["reward"]["style"] = "MAT_liftonly"
+    tm.settings["reward"]["penalty_termination"] = True # do we end early for oob and dangerous forces
+    tm.settings["reward"]["stable_trigger"] = 1
+
+    # enable the curriculum of step size adjustments
+    tm.settings["trainer"]["use_curriculum"] = True
+    tm.settings["curriculum"]["whole_fcn_override"] = curriculum_fcn_MAT
+    tm.settings["curriculum"]["param_values"] = [
+      [2e-3, 8e-3], # gripper_X action min/max
+      [0.015, 0.06], # gripper_Y action min/max
+      [4e-3, 16e-3], # gripper_Z action min/max
+      [2e-3, 8e-3], # base_Z action min/max
+      [0.2, 0.8],   # time per action min/max
+    ]
+
+    # apply agent hyperparameters
+    tm.settings["Agent_PPO_MAT"]["use_extra_actions"] = use_extra_actions
+    tm.settings["Agent_PPO_MAT"]["learning_rate_pi"] = tm.param_1[0]  # 1e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["learning_rate_vf"] = tm.param_1[0]  # 1e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["use_KL_early_stop"] = True
+    tm.settings["Agent_PPO_MAT"]["train_pi_iters"] = tm.param_2
+    tm.settings["Agent_PPO_MAT"]["train_vf_iters"] = tm.param_2
+
+    # create the environment
+    env = tm.make_env()
+
+    # create the agent
+    layers = [128 for i in range(6)] # only applies to pi, vf is set to [3*128]
+    n = 2 if use_extra_actions else 0
+    network = MATActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes=layers,
+                                use_extra_actions=use_extra_actions)
+    agent = Agent_PPO_MAT(device=args.device)
+    agent.init(network)
+
+    # complete the training, also test on old set after
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "mat_ppo_net":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [
+      (5e-5, 1e-4),
+      (1e-4, 1e-4),
+      (5e-5, 5e-4),
+      (1e-4, 5e-4),
+      (5e-5, 1e-3),
+      (1e-4, 1e-3),
+    ]
+    vary_2 = [5, 10, 20]
+    vary_3 = [False, True]
+    repeats = 2
+    tm.param_1_name = "lr/temperature"
+    tm.param_2_name = "optimiser iters"
+    tm.param_3_name = "extra actions"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply env settings
+    use_extra_actions = False
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["use_MAT"] = True
+    tm.settings["env"]["MAT_use_reopen"] = use_extra_actions
+    tm.settings["env"]["max_episode_steps"] = 250 # Horizon = 250 in paper, see eq.5
+    # tm.settings["env"]["base_lim_yaw_rad"] = np.pi / 4 # reduce from [-pi, +pi] in paper due to symettry
+    tm.settings["env"]["finger_thickness"] = 1.0e-3 # put same fingers on as TMech eval
+    tm.settings["env"]["finger_width"] = 24e-3
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["XY_base_actions"] = True # enable for xml, but not actions
+    tm.settings["env"]["Z_base_rotation"] = True # enable for xml, but not actions
+
+    # apply state and sensor settings
+    tm.settings["cpp"]["sensor_n_prev_steps"] = 20
+    tm.settings["cpp"]["state_n_prev_steps"] = 20
+    tm.settings["cpp"]["sensor_sample_mode"] = 6 # scaled square of change, saturates at 0.1 change
+    tm.settings["cpp"]["state_sample_mode"] = 4 # binary change information, no threshold, 0.05 in paper
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"] = [0, 0]
+    
+    # # possible to change noise settings to improve learning
+    # tm.settings["cpp"]["sensor_noise_std"] = 0.01 # reduce based on real life
+
+    # apply action settings
+    tm.settings["cpp"]["use_termination_action"] = True # for final lift
+
+    # turn on or off Z height
+    use_Z = False
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["action"]["base_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["sensor"]["wrist_sensor_Z"]["in_use"] = use_Z
+    if not use_Z:
+      tm.settings["env"]["fingertip_clearance"] = 5e-3 # closer to ground given no Z height changes. Original=10e-3
+      tm.settings["cpp"]["base_position_noise"] = 0e-3 # disable base position noise? Original=5e-3
+
+    # apply reward settings
+    tm.settings["reward"]["style"] = "MAT_liftonly"
+    tm.settings["reward"]["penalty_termination"] = True # do we end early for oob and dangerous forces
+    tm.settings["reward"]["stable_trigger"] = 1
+
+    # enable the curriculum of step size adjustments
+    tm.settings["trainer"]["use_curriculum"] = True
+    tm.settings["curriculum"]["whole_fcn_override"] = curriculum_fcn_MAT
+    tm.settings["curriculum"]["param_values"] = [
+      [2e-3, 8e-3], # gripper_X action min/max
+      [0.015, 0.06], # gripper_Y action min/max
+      [4e-3, 16e-3], # gripper_Z action min/max
+      [2e-3, 8e-3], # base_Z action min/max
+      [0.2, 0.8],   # time per action min/max
+    ]
+
+    # apply agent hyperparameters
+    tm.settings["Agent_PPO_MAT"]["use_extra_actions"] = use_extra_actions
+    tm.settings["Agent_PPO_MAT"]["learning_rate_pi"] = tm.param_1[0]  # 1e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["learning_rate_vf"] = tm.param_1[0]  # 1e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["use_KL_early_stop"] = True
+    tm.settings["Agent_PPO_MAT"]["train_pi_iters"] = tm.param_2
+    tm.settings["Agent_PPO_MAT"]["train_vf_iters"] = tm.param_2
+
+    # first run - use default target_kl=0.01 02-04-24_15-08, best j=65 SR=0.791 set8
+    # second run - smaller KL
+    tm.settings["Agent_PPO_MAT"]["target_kl"] = 0.005 # half default
+
+    # create the environment
+    env = tm.make_env()
+
+    # create the agent
+    n = 2 if use_extra_actions else 0
+    network = MATActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes="paper",
+                                use_extra_actions=use_extra_actions)
+    agent = Agent_PPO_MAT(device=args.device)
+    agent.init(network)
+
+    # complete the training, also test on old set after
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "panic_check":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [
+      (1e-5, 5e-5),
+      (5e-5, 5e-5),
+      (1e-4, 5e-5),
+      (2e-4, 5e-5),
+      (1e-5, 5e-4),
+      (5e-5, 5e-4),
+      (1e-4, 5e-4),
+      (2e-4, 5e-4),
+      (1e-5, 5e-3),
+      (5e-5, 5e-3),
+      (1e-4, 5e-3),
+      (2e-4, 5e-3),
+    ]
+    vary_2 = [False, True]
+    vary_3 = None
+    repeats = 1
+    tm.param_1_name = "lr/temperature"
+    tm.param_2_name = "extra actions"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply env settings
+    use_extra_actions = tm.param_2
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["use_MAT"] = True
+    tm.settings["env"]["MAT_use_reopen"] = use_extra_actions
+    tm.settings["env"]["max_episode_steps"] = 250 # Horizon = 250 in paper, see eq.5
+    # tm.settings["env"]["base_lim_yaw_rad"] = np.pi / 4 # reduce from [-pi, +pi] in paper due to symettry
+    tm.settings["env"]["finger_thickness"] = 1.0e-3 # put same fingers on as TMech eval
+    tm.settings["env"]["finger_width"] = 24e-3
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["XY_base_actions"] = True # enable for xml, but not actions
+    tm.settings["env"]["Z_base_rotation"] = True # enable for xml, but not actions
+
+    # apply state and sensor settings
+    tm.settings["cpp"]["sensor_n_prev_steps"] = 20
+    tm.settings["cpp"]["state_n_prev_steps"] = 20
+    tm.settings["cpp"]["sensor_sample_mode"] = 6 # scaled square of change, saturates at 0.1 change
+    tm.settings["cpp"]["state_sample_mode"] = 4 # binary change information, no threshold, 0.05 in paper
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"] = [0, 0]
+    
+    # # possible to change noise settings to improve learning
+    # tm.settings["cpp"]["sensor_noise_std"] = 0.01 # reduce based on real life
+
+    # apply action settings
+    tm.settings["cpp"]["use_termination_action"] = True # for final lift
+
+    # turn on or off Z height
+    use_Z = False
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["action"]["base_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["sensor"]["wrist_sensor_Z"]["in_use"] = use_Z
+    if not use_Z:
+      tm.settings["env"]["fingertip_clearance"] = 5e-3 # closer to ground given no Z height changes. Original=10e-3
+      tm.settings["cpp"]["base_position_noise"] = 0e-3 # disable base position noise? Original=5e-3
+
+    # apply reward settings
+    tm.settings["reward"]["style"] = "MAT_liftonly"
+    tm.settings["reward"]["penalty_termination"] = True # do we end early for oob and dangerous forces
+    tm.settings["reward"]["stable_trigger"] = 1
+
+    # enable the curriculum of step size adjustments
+    tm.settings["trainer"]["use_curriculum"] = True
+    tm.settings["curriculum"]["whole_fcn_override"] = curriculum_fcn_MAT
+    tm.settings["curriculum"]["param_values"] = [
+      [2e-3, 8e-3], # gripper_X action min/max
+      [0.015, 0.06], # gripper_Y action min/max
+      [4e-3, 16e-3], # gripper_Z action min/max
+      [2e-3, 8e-3], # base_Z action min/max
+      [0.2, 0.8],   # time per action min/max
+    ]
+
+    # apply agent hyperparameters
+    tm.settings["Agent_PPO_MAT"]["use_extra_actions"] = use_extra_actions
+    tm.settings["Agent_PPO_MAT"]["learning_rate_pi"] = tm.param_1[0]  # 1e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["learning_rate_vf"] = tm.param_1[0]  # 1e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["steps_per_epoch"] = 300
+
+    # create the environment
+    env = tm.make_env()
+
+    tm.settings["trainer"]["test_freq"] = 1000
+
+    # apply the agent settings
+    layers = [128 for i in range(6)] # only applies to pi, vf is set to [3*128]
+    n = 2 if use_extra_actions else 0
+    network = MATActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes=layers,
+                                use_extra_actions=use_extra_actions)
+    
+    # make the agent
+    agent = Agent_PPO_MAT(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+
+    # add an extra test on the old object set
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    
+    print_time_taken()
+
+  elif args.program == "mat_ppo_net_shaped":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [
+      (5e-5, 1e-4),
+      (1e-4, 1e-4),
+      (5e-5, 5e-4),
+      (1e-4, 5e-4),
+      (5e-5, 1e-3),
+      (1e-4, 1e-3),
+    ]
+    vary_2 = [10, 20]
+    vary_3 = [False, True]
+    repeats = 3
+    tm.param_1_name = "lr/temperature"
+    tm.param_2_name = "optimiser iters"
+    tm.param_3_name = "use Z instead of termination"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply env settings
+    use_extra_actions = True
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["use_MAT"] = True
+    tm.settings["env"]["MAT_use_reopen"] = use_extra_actions
+    tm.settings["env"]["max_episode_steps"] = 250 # Horizon = 250 in paper, see eq.5
+    # tm.settings["env"]["base_lim_yaw_rad"] = np.pi / 4 # reduce from [-pi, +pi] in paper due to symettry
+    tm.settings["env"]["finger_thickness"] = 1.0e-3 # put same fingers on as TMech eval
+    tm.settings["env"]["finger_width"] = 24e-3
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["XY_base_actions"] = True # enable for xml, but not actions
+    tm.settings["env"]["Z_base_rotation"] = True # enable for xml, but not actions
+
+    # apply state and sensor settings
+    tm.settings["cpp"]["sensor_n_prev_steps"] = 20
+    tm.settings["cpp"]["state_n_prev_steps"] = 20
+    tm.settings["cpp"]["sensor_sample_mode"] = 6 # scaled square of change, saturates at 0.1 change
+    tm.settings["cpp"]["state_sample_mode"] = 4 # binary change information, no threshold, 0.05 in paper
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"] = [0, 0]
+    
+    # # possible to change noise settings to improve learning
+    # tm.settings["cpp"]["sensor_noise_std"] = 0.01 # reduce based on real life
+
+    # use Z height action INSTEAD of termination action
+    use_Z = tm.param_3
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["action"]["base_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["sensor"]["wrist_sensor_Z"]["in_use"] = use_Z
+    if not use_Z:
+      tm.settings["env"]["fingertip_clearance"] = 5e-3 # closer to ground given no Z height changes. Original=10e-3
+      tm.settings["cpp"]["base_position_noise"] = 0e-3 # disable base position noise? Original=5e-3
+      # enable final lift/termination action
+      tm.settings["cpp"]["use_termination_action"] = True # for final lift
+
+    # apply reward settings
+    if use_Z:
+      tm.settings["reward"]["style"] = "MAT_shaped_no_term"
+    else:
+      tm.settings["reward"]["style"] = "MAT_shaped"
+    tm.settings["reward"]["penalty_termination"] = True # do we end early for oob and dangerous forces
+    tm.settings["reward"]["stable_trigger"] = 1
+
+    # enable the curriculum of step size adjustments
+    tm.settings["trainer"]["use_curriculum"] = True
+    tm.settings["curriculum"]["whole_fcn_override"] = curriculum_fcn_MAT
+    tm.settings["curriculum"]["param_values"] = [
+      [2e-3, 8e-3], # gripper_X action min/max
+      [0.015, 0.06], # gripper_Y action min/max
+      [4e-3, 16e-3], # gripper_Z action min/max
+      [2e-3, 8e-3], # base_Z action min/max
+      [0.2, 0.8],   # time per action min/max
+    ]
+
+    # apply agent hyperparameters
+    tm.settings["Agent_PPO_MAT"]["use_extra_actions"] = use_extra_actions # True paper specified
+    tm.settings["Agent_PPO_MAT"]["learning_rate_pi"] = tm.param_1[0]  # 1e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["learning_rate_vf"] = tm.param_1[0]  # 1e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["temperature_alpha"] = tm.param_1[1] # 5e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["use_KL_early_stop"] = True # False paper implied
+    tm.settings["Agent_PPO_MAT"]["train_pi_iters"] = tm.param_2 # 10 paper specified (based on my understanding)
+    tm.settings["Agent_PPO_MAT"]["train_vf_iters"] = tm.param_2 # 10 paper specified (based on my understanding)
+
+    # if not using termination action, change steps per epoch
+    if use_Z:
+      tm.settings["Agent_PPO_MAT"]["steps_per_epoch"] = 3000
+
+    # create the environment
+    env = tm.make_env()
+
+    # create the agent
+    n = 2 if use_extra_actions else 0
+    network = MATActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes="paper",
+                                use_extra_actions=use_extra_actions, use_Z=use_Z)
+    agent = Agent_PPO_MAT(device=args.device)
+    agent.init(network)
+
+    # complete the training, also test on old set after
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "mat_net_shaped":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [5e-5, 1e-4]
+    vary_2 = [False, True]
+    vary_3 = [False, True]
+    repeats = 4
+    tm.param_1_name = "lr/temperature"
+    tm.param_2_name = "disable MAT logprob"
+    tm.param_3_name = "use Z instead of termination"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply env settings
+    use_extra_actions = True
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["use_MAT"] = True
+    tm.settings["env"]["MAT_use_reopen"] = use_extra_actions
+    tm.settings["env"]["max_episode_steps"] = 250 # Horizon = 250 in paper, see eq.5
+    # tm.settings["env"]["base_lim_yaw_rad"] = np.pi / 4 # reduce from [-pi, +pi] in paper due to symettry
+    tm.settings["env"]["finger_thickness"] = 1.0e-3 # put same fingers on as TMech eval
+    tm.settings["env"]["finger_width"] = 24e-3
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["XY_base_actions"] = True # enable for xml, but not actions
+    tm.settings["env"]["Z_base_rotation"] = True # enable for xml, but not actions
+
+    # apply state and sensor settings
+    tm.settings["cpp"]["sensor_n_prev_steps"] = 20
+    tm.settings["cpp"]["state_n_prev_steps"] = 20
+    tm.settings["cpp"]["sensor_sample_mode"] = 6 # scaled square of change, saturates at 0.1 change
+    tm.settings["cpp"]["state_sample_mode"] = 4 # binary change information, no threshold, 0.05 in paper
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"] = [0, 0]
+    
+    # use Z height action INSTEAD of termination action
+    use_Z = tm.param_3
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["action"]["base_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["sensor"]["wrist_sensor_Z"]["in_use"] = use_Z
+    if not use_Z:
+      tm.settings["env"]["fingertip_clearance"] = 5e-3 # closer to ground given no Z height changes. Original=10e-3
+      tm.settings["cpp"]["base_position_noise"] = 0e-3 # disable base position noise? Original=5e-3
+      # enable final lift/termination action
+      tm.settings["cpp"]["use_termination_action"] = True # for final lift
+
+    # apply reward settings
+    if use_Z:
+      tm.settings["reward"]["style"] = "MAT_shaped_no_term"
+    else:
+      tm.settings["reward"]["style"] = "MAT_shaped"
+    tm.settings["reward"]["penalty_termination"] = True # do we end early for oob and dangerous forces
+    tm.settings["reward"]["stable_trigger"] = 1
+
+    # enable the curriculum of step size adjustments
+    tm.settings["trainer"]["use_curriculum"] = True
+    tm.settings["curriculum"]["whole_fcn_override"] = curriculum_fcn_MAT
+    tm.settings["curriculum"]["param_values"] = [
+      [2e-3, 8e-3], # gripper_X action min/max
+      [0.015, 0.06], # gripper_Y action min/max
+      [4e-3, 16e-3], # gripper_Z action min/max
+      [2e-3, 8e-3], # base_Z action min/max
+      [0.2, 0.8],   # time per action min/max
+    ]
+
+    # set up PPO with MAT-like parameters
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1
+    tm.settings["Agent_PPO"]["gamma"] = 0.999
+    tm.settings["Agent_PPO"]["steps_per_epoch"] = 3000 if use_Z else 300
+    tm.settings["Agent_PPO"]["clip_ratio"] = 0.2
+    tm.settings["Agent_PPO"]["train_pi_iters"] = 10 if use_Z else 80
+    tm.settings["Agent_PPO"]["train_vf_iters"] = 10 if use_Z else 80
+    tm.settings["Agent_PPO"]["lam"] = 0.95
+    tm.settings["Agent_PPO"]["target_kl"] = 0.01
+    tm.settings["Agent_PPO"]["max_kl_ratio"] = 1.5
+    tm.settings["Agent_PPO"]["use_random_action_noise"] = False # incompatible with bernoulli
+    tm.settings["Agent_PPO"]["random_action_noise_size"] = 0.05
+    tm.settings["Agent_PPO"]["optimiser"] = "adam"
+    tm.settings["Agent_PPO"]["adam_beta1"] = 0.9
+    tm.settings["Agent_PPO"]["adam_beta2"] = 0.999
+    tm.settings["Agent_PPO"]["grad_clamp_value"] = 200
+
+    # create the environment
+    env = tm.make_env()
+
+    # create the agent
+    n = 2 if use_extra_actions else 0
+    network = MATActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes="paper",
+                                use_extra_actions=use_extra_actions, use_Z=use_Z)
+    agent = Agent_PPO(device=args.device) # use regular PPO, not PPO_MAT
+    agent.init(network)
+
+    # do we specifically disable MAT logprob calculation
+    network.pi.disable_MAT_logprob = tm.param_2
+
+    # complete the training, also test on old set after
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "mat_net_shaped_2":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-5, 5e-5, 1e-4]
+    vary_2 = [False, True]
+    vary_3 = None
+    repeats = 5
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "disable MAT logprob"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply env settings
+    use_extra_actions = False
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["use_MAT"] = True
+    tm.settings["env"]["MAT_use_reopen"] = use_extra_actions
+    tm.settings["env"]["max_episode_steps"] = 250 # Horizon = 250 in paper, see eq.5
+    # tm.settings["env"]["base_lim_yaw_rad"] = np.pi / 4 # reduce from [-pi, +pi] in paper due to symettry
+    tm.settings["env"]["finger_thickness"] = 1.0e-3 # put same fingers on as TMech eval
+    tm.settings["env"]["finger_width"] = 24e-3
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["XY_base_actions"] = True # enable for xml, but not actions
+    tm.settings["env"]["Z_base_rotation"] = True # enable for xml, but not actions
+
+    # apply state and sensor settings
+    tm.settings["cpp"]["sensor_n_prev_steps"] = 20
+    tm.settings["cpp"]["state_n_prev_steps"] = 20
+    tm.settings["cpp"]["sensor_sample_mode"] = 6 # scaled square of change, saturates at 0.1 change
+    tm.settings["cpp"]["state_sample_mode"] = 4 # binary change information, no threshold, 0.05 in paper
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"] = [0, 0]
+    
+    # use Z height action INSTEAD of termination action
+    use_Z = True
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["action"]["base_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["sensor"]["wrist_sensor_Z"]["in_use"] = use_Z
+    if not use_Z:
+      tm.settings["env"]["fingertip_clearance"] = 5e-3 # closer to ground given no Z height changes. Original=10e-3
+      tm.settings["cpp"]["base_position_noise"] = 0e-3 # disable base position noise? Original=5e-3
+      # enable final lift/termination action
+      tm.settings["cpp"]["use_termination_action"] = True # for final lift
+
+    # apply reward settings
+    tm.settings["reward"]["style"] = "sensor_mixed_v1"
+    tm.settings["reward"]["penalty_termination"] = True # do we end early for oob and dangerous forces
+    tm.settings["reward"]["stable_trigger"] = 1
+
+    # # enable the curriculum of step size adjustments
+    # tm.settings["trainer"]["use_curriculum"] = True
+    # tm.settings["curriculum"]["whole_fcn_override"] = curriculum_fcn_MAT
+    # tm.settings["curriculum"]["param_values"] = [
+    #   [2e-3, 8e-3], # gripper_X action min/max
+    #   [0.015, 0.06], # gripper_Y action min/max
+    #   [4e-3, 16e-3], # gripper_Z action min/max
+    #   [2e-3, 8e-3], # base_Z action min/max
+    #   [0.2, 0.8],   # time per action min/max
+    # ]
+
+    # set up PPO with MAT-like parameters
+    tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
+    tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1
+    tm.settings["Agent_PPO"]["gamma"] = 0.999
+    tm.settings["Agent_PPO"]["steps_per_epoch"] = 3000
+    tm.settings["Agent_PPO"]["clip_ratio"] = 0.2
+    tm.settings["Agent_PPO"]["train_pi_iters"] = 80
+    tm.settings["Agent_PPO"]["train_vf_iters"] = 80
+    tm.settings["Agent_PPO"]["lam"] = 0.95
+    tm.settings["Agent_PPO"]["target_kl"] = 0.01
+    tm.settings["Agent_PPO"]["max_kl_ratio"] = 1.5
+    tm.settings["Agent_PPO"]["use_random_action_noise"] = False # incompatible with bernoulli
+    tm.settings["Agent_PPO"]["random_action_noise_size"] = 0.05
+    tm.settings["Agent_PPO"]["optimiser"] = "adam"
+    tm.settings["Agent_PPO"]["adam_beta1"] = 0.9
+    tm.settings["Agent_PPO"]["adam_beta2"] = 0.999
+    tm.settings["Agent_PPO"]["grad_clamp_value"] = 200
+
+    # create the environment
+    env = tm.make_env()
+
+    # create the agent
+    n = 2 if use_extra_actions else 0
+    network = MATActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes="paper",
+                                use_extra_actions=use_extra_actions, use_Z=use_Z)
+    agent = Agent_PPO(device=args.device) # use regular PPO, not PPO_MAT
+    agent.init(network)
+
+    # do we specifically disable MAT logprob calculation
+    network.pi.disable_MAT_logprob = tm.param_2
+
+    # complete the training, also test on old set after
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "full_mat":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [5e-5, 1e-4]
+    vary_2 = [1e-4, 5e-4, 1e-3]
+    vary_3 = None
+    repeats = 5
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "temperature"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply env settings
+    use_extra_actions = True
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["use_MAT"] = True
+    tm.settings["env"]["MAT_use_reopen"] = use_extra_actions
+    tm.settings["env"]["max_episode_steps"] = 250 # Horizon = 250 in paper, see eq.5
+    # tm.settings["env"]["base_lim_yaw_rad"] = np.pi / 4 # reduce from [-pi, +pi] in paper due to symettry
+    tm.settings["env"]["finger_thickness"] = 1.0e-3 # put same fingers on as TMech eval
+    tm.settings["env"]["finger_width"] = 24e-3
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["XY_base_actions"] = True # enable for xml, but not actions
+    tm.settings["env"]["Z_base_rotation"] = True # enable for xml, but not actions
+
+    # apply state and sensor settings
+    tm.settings["cpp"]["sensor_n_prev_steps"] = 20
+    tm.settings["cpp"]["state_n_prev_steps"] = 20
+    tm.settings["cpp"]["sensor_sample_mode"] = 6 # scaled square of change, saturates at 0.1 change
+    tm.settings["cpp"]["state_sample_mode"] = 4 # binary change information, no threshold, 0.05 in paper
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"] = [0, 0]
+
+    # turn on or off Z height instead of termination action
+    use_Z = False
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["action"]["base_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["sensor"]["wrist_sensor_Z"]["in_use"] = use_Z
+    if not use_Z:
+      tm.settings["env"]["fingertip_clearance"] = 5e-3 # closer to ground given no Z height changes. Original=10e-3
+      tm.settings["cpp"]["base_position_noise"] = 0e-3 # disable base position noise? Original=5e-3
+      tm.settings["cpp"]["use_termination_action"] = True # for final lift
+
+    # apply reward settings
+    tm.settings["reward"]["style"] = "MAT_liftonly"
+    tm.settings["reward"]["penalty_termination"] = True # do we end early for oob and dangerous forces
+    tm.settings["reward"]["stable_trigger"] = 1
+
+    # enable the curriculum of step size adjustments
+    tm.settings["trainer"]["use_curriculum"] = True
+    tm.settings["curriculum"]["whole_fcn_override"] = curriculum_fcn_MAT
+    tm.settings["curriculum"]["param_values"] = [
+      [2e-3, 8e-3], # gripper_X action min/max
+      [0.015, 0.06], # gripper_Y action min/max
+      [4e-3, 12e-3], # gripper_Z action min/max
+      [2e-3, 8e-3], # base_Z action min/max
+      [0.2, 0.8],   # time per action min/max
+    ]
+
+    # apply agent hyperparameters
+    tm.settings["Agent_PPO_MAT"]["use_extra_actions"] = use_extra_actions
+    tm.settings["Agent_PPO_MAT"]["learning_rate_pi"] = tm.param_1  # 1e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["learning_rate_vf"] = tm.param_1  # 1e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["temperature_alpha"] = tm.param_2 # 5e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["use_KL_early_stop"] = True
+
+    # create the environment
+    env = tm.make_env()
+
+    # create the agent
+    n = 2 if use_extra_actions else 0
+    network = MATActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes="paper",
+                                use_extra_actions=use_extra_actions)
+    agent = Agent_PPO_MAT(device=args.device)
+    agent.init(network)
+
+    # complete the training, also test on old set after
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "shaped_mat":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-5, 5e-5, 1e-4]
+    vary_2 = [(False, False), (False, True), (True, True)]
+    vary_3 = None
+    repeats = 5
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "use MAT_PPO/use MAT_logprob"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply env settings
+    use_extra_actions = False
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["use_MAT"] = True
+    tm.settings["env"]["MAT_use_reopen"] = use_extra_actions
+    tm.settings["env"]["max_episode_steps"] = 250 # Horizon = 250 in paper, see eq.5
+    # tm.settings["env"]["base_lim_yaw_rad"] = np.pi / 4 # reduce from [-pi, +pi] in paper due to symettry
+    tm.settings["env"]["finger_thickness"] = 1.0e-3 # put same fingers on as TMech eval
+    tm.settings["env"]["finger_width"] = 24e-3
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["XY_base_actions"] = True # enable for xml, but not actions
+    tm.settings["env"]["Z_base_rotation"] = True # enable for xml, but not actions
+
+    # apply state and sensor settings
+    tm.settings["cpp"]["sensor_n_prev_steps"] = 20
+    tm.settings["cpp"]["state_n_prev_steps"] = 20
+    tm.settings["cpp"]["sensor_sample_mode"] = 6 # scaled square of change, saturates at 0.1 change
+    tm.settings["cpp"]["state_sample_mode"] = 4 # binary change information, no threshold, 0.05 in paper
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"] = [0, 0]
+
+    # use Z height and wrist sensor instead of termination action
+    use_Z = True
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["action"]["base_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["sensor"]["wrist_sensor_Z"]["in_use"] = use_Z
+
+    # apply reward settings
+    tm.settings["reward"]["style"] = "sensor_mixed_v1"
+    tm.settings["reward"]["action_pen_sq"]["used"] = False # undesirable with bernoulli actions
+
+    # create the environment
+    env = tm.make_env()
+
+    if tm.param_2[0]:
+
+      # apply agent hyperparameters
+      tm.settings["Agent_PPO_MAT"]["use_extra_actions"] = use_extra_actions
+      tm.settings["Agent_PPO_MAT"]["learning_rate_pi"] = tm.param_1  # 1e-4 paper specified
+      tm.settings["Agent_PPO_MAT"]["learning_rate_vf"] = tm.param_1  # 1e-4 paper specified
+      tm.settings["Agent_PPO_MAT"]["use_KL_early_stop"] = True
+      tm.settings["Agent_PPO_MAT"]["steps_per_epoch"] = 3000
+
+      # create the agent
+      n = 2 if use_extra_actions else 0
+      network = MATActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes="paper",
+                                  use_extra_actions=use_extra_actions, use_Z=use_Z)
+      agent = Agent_PPO_MAT(device=args.device)
+      agent.init(network)
+
+    else:
+
+      # set up PPO with MAT-like parameters
+      tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
+      tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1
+      tm.settings["Agent_PPO"]["gamma"] = 0.999
+      tm.settings["Agent_PPO"]["steps_per_epoch"] = 3000
+      tm.settings["Agent_PPO"]["clip_ratio"] = 0.2
+      tm.settings["Agent_PPO"]["train_pi_iters"] = 80
+      tm.settings["Agent_PPO"]["train_vf_iters"] = 80
+      tm.settings["Agent_PPO"]["lam"] = 0.95
+      tm.settings["Agent_PPO"]["target_kl"] = 0.01
+      tm.settings["Agent_PPO"]["max_kl_ratio"] = 1.5
+      tm.settings["Agent_PPO"]["use_random_action_noise"] = False # incompatible with bernoulli
+      tm.settings["Agent_PPO"]["random_action_noise_size"] = 0.05
+      tm.settings["Agent_PPO"]["optimiser"] = "adam"
+      tm.settings["Agent_PPO"]["adam_beta1"] = 0.9
+      tm.settings["Agent_PPO"]["adam_beta2"] = 0.999
+      tm.settings["Agent_PPO"]["grad_clamp_value"] = 200
+
+      # create the agent
+      n = 2 if use_extra_actions else 0
+      network = MATActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes="paper",
+                                  use_extra_actions=use_extra_actions, use_Z=use_Z)
+      agent = Agent_PPO(device=args.device) # use regular PPO, not PPO_MAT
+      agent.init(network)
+
+      # Note: regular PPO requires the following in 'compute_loss_pi':
+      """
+      if isinstance(pi, tuple):
+        pi = pi[0]
+      """
+
+    # disable MAT logprob calculation, not learning with this
+    network.pi.disable_MAT_logprob = not tm.param_2[1]
+
+    # complete the training, also test on old set after
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "shaped_mat_2":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-5, 5e-5, 1e-4]
+    vary_2 = [False, True]
+    vary_3 = None
+    repeats = 5
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "use_MAT_ppo"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply env settings
+    use_extra_actions = False
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["use_MAT"] = True
+    tm.settings["env"]["MAT_use_reopen"] = use_extra_actions
+    tm.settings["env"]["max_episode_steps"] = 250 # Horizon = 250 in paper, see eq.5
+    # tm.settings["env"]["base_lim_yaw_rad"] = np.pi / 4 # reduce from [-pi, +pi] in paper due to symettry
+    tm.settings["env"]["finger_thickness"] = 1.0e-3 # put same fingers on as TMech eval
+    tm.settings["env"]["finger_width"] = 24e-3
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["XY_base_actions"] = True # enable for xml, but not actions
+    tm.settings["env"]["Z_base_rotation"] = True # enable for xml, but not actions
+
+    # apply state and sensor settings
+    tm.settings["cpp"]["sensor_n_prev_steps"] = 20
+    tm.settings["cpp"]["state_n_prev_steps"] = 20
+    tm.settings["cpp"]["sensor_sample_mode"] = 6 # scaled square of change, saturates at 0.1 change
+    tm.settings["cpp"]["state_sample_mode"] = 4 # binary change information, no threshold, 0.05 in paper
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"] = [0, 0]
+
+    # use Z height and wrist sensor instead of termination action
+    use_Z = True
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["action"]["base_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["sensor"]["wrist_sensor_Z"]["in_use"] = use_Z
+
+    # apply reward settings
+    tm.settings["reward"]["style"] = "sensor_mixed_v1"
+    tm.settings["reward"]["action_pen_sq"]["used"] = False # undesirable with bernoulli actions
+
+    # create the environment
+    env = tm.make_env()
+
+    if tm.param_2:
+
+      # apply agent hyperparameters
+      tm.settings["Agent_PPO_MAT"]["use_extra_actions"] = use_extra_actions
+      tm.settings["Agent_PPO_MAT"]["learning_rate_pi"] = tm.param_1  # 1e-4 paper specified
+      tm.settings["Agent_PPO_MAT"]["learning_rate_vf"] = tm.param_1  # 1e-4 paper specified
+      tm.settings["Agent_PPO_MAT"]["use_KL_early_stop"] = True
+      tm.settings["Agent_PPO_MAT"]["steps_per_epoch"] = 3000
+
+      # create the agent
+      n = 2 if use_extra_actions else 0
+      network = MATActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes="paper",
+                                  use_extra_actions=use_extra_actions, use_Z=use_Z)
+      agent = Agent_PPO_MAT(device=args.device)
+      agent.init(network)
+
+    else:
+
+      # set up PPO with MAT-like parameters
+      tm.settings["Agent_PPO"]["learning_rate_pi"] = tm.param_1
+      tm.settings["Agent_PPO"]["learning_rate_vf"] = tm.param_1
+      tm.settings["Agent_PPO"]["gamma"] = 0.999
+      tm.settings["Agent_PPO"]["steps_per_epoch"] = 3000
+      tm.settings["Agent_PPO"]["clip_ratio"] = 0.2
+      tm.settings["Agent_PPO"]["train_pi_iters"] = 80
+      tm.settings["Agent_PPO"]["train_vf_iters"] = 80
+      tm.settings["Agent_PPO"]["lam"] = 0.95
+      tm.settings["Agent_PPO"]["target_kl"] = 0.01
+      tm.settings["Agent_PPO"]["max_kl_ratio"] = 1.5
+      tm.settings["Agent_PPO"]["use_random_action_noise"] = False # incompatible with bernoulli
+      tm.settings["Agent_PPO"]["random_action_noise_size"] = 0.05
+      tm.settings["Agent_PPO"]["optimiser"] = "adam"
+      tm.settings["Agent_PPO"]["adam_beta1"] = 0.9
+      tm.settings["Agent_PPO"]["adam_beta2"] = 0.999
+      tm.settings["Agent_PPO"]["grad_clamp_value"] = 200
+
+      # create the agent
+      n = 2 if use_extra_actions else 0
+      network = MATActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes="paper",
+                                  use_extra_actions=use_extra_actions, use_Z=use_Z)
+      agent = Agent_PPO(device=args.device) # use regular PPO, not PPO_MAT
+      agent.init(network)
+
+      # Note: regular PPO requires the following in 'compute_loss_pi':
+      """
+      if isinstance(pi, tuple):
+        pi = pi[0]
+      """
+
+    # disable entire MAT action sampling (including MAT logprob)
+    network.pi.disable_MAT_sampling() # turn off MAT action sampling
+
+    # complete the training, also test on old set after
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "full_mat_stable":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [5e-5, 1e-4]
+    vary_2 = [1e-4, 5e-4, 1e-3]
+    vary_3 = [False, True]
+    repeats = 3
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "temperature"
+    tm.param_3_name = "use_extra"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply env settings
+    use_extra_actions = tm.param_3
+    tm.settings["trainer"]["num_episodes"] = 120_000
+    tm.settings["env"]["use_MAT"] = True
+    tm.settings["env"]["MAT_use_reopen"] = use_extra_actions
+    tm.settings["env"]["max_episode_steps"] = 250 # Horizon = 250 in paper, see eq.5
+    # tm.settings["env"]["base_lim_yaw_rad"] = np.pi / 4 # reduce from [-pi, +pi] in paper due to symettry
+    tm.settings["env"]["finger_thickness"] = 1.0e-3 # put same fingers on as TMech eval
+    tm.settings["env"]["finger_width"] = 24e-3
+    tm.settings["env"]["finger_hook_angle_degrees"] = 75
+    tm.settings["env"]["XY_base_actions"] = True # enable for xml, but not actions
+    tm.settings["env"]["Z_base_rotation"] = True # enable for xml, but not actions
+
+    # apply state and sensor settings
+    tm.settings["cpp"]["sensor_n_prev_steps"] = 20
+    tm.settings["cpp"]["state_n_prev_steps"] = 20
+    tm.settings["cpp"]["sensor_sample_mode"] = 6 # scaled square of change, saturates at 0.1 change
+    tm.settings["cpp"]["state_sample_mode"] = 4 # binary change information, no threshold, 0.05 in paper
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["in_use"] = True
+    tm.settings["cpp"]["sensor"]["cartesian_contacts_XYZ"]["noise_override"] = [0, 0]
+
+    # turn on or off Z height instead of termination action
+    use_Z = False
+    tm.settings["cpp"]["sensor"]["base_state_sensor_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["action"]["base_Z"]["in_use"] = use_Z
+    tm.settings["cpp"]["sensor"]["wrist_sensor_Z"]["in_use"] = use_Z
+    if not use_Z:
+      tm.settings["env"]["fingertip_clearance"] = 5e-3 # closer to ground given no Z height changes. Original=10e-3
+      tm.settings["cpp"]["base_position_noise"] = 0e-3 # disable base position noise? Original=5e-3
+      tm.settings["cpp"]["use_termination_action"] = True # for final lift
+
+    # apply reward settings
+    tm.settings["reward"]["style"] = "MAT"
+    tm.settings["reward"]["penalty_termination"] = True # do we end early for oob and dangerous forces
+    tm.settings["reward"]["stable_trigger"] = 1
+
+    # enable the curriculum of step size adjustments
+    tm.settings["trainer"]["use_curriculum"] = True
+    tm.settings["curriculum"]["whole_fcn_override"] = curriculum_fcn_MAT
+    tm.settings["curriculum"]["param_values"] = [
+      [2e-3, 8e-3], # gripper_X action min/max
+      [0.015, 0.06], # gripper_Y action min/max
+      [4e-3, 12e-3], # gripper_Z action min/max
+      [2e-3, 8e-3], # base_Z action min/max
+      [0.2, 0.8],   # time per action min/max
+    ]
+
+    # apply agent hyperparameters
+    tm.settings["Agent_PPO_MAT"]["use_extra_actions"] = use_extra_actions
+    tm.settings["Agent_PPO_MAT"]["learning_rate_pi"] = tm.param_1  # 1e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["learning_rate_vf"] = tm.param_1  # 1e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["temperature_alpha"] = tm.param_2 # 5e-4 paper specified
+    tm.settings["Agent_PPO_MAT"]["use_KL_early_stop"] = True
+
+    # create the environment
+    env = tm.make_env()
+
+    # create the agent
+    n = 2 if use_extra_actions else 0
+    network = MATActorCriticPG(env.n_obs, env.n_actions + n, hidden_sizes="paper",
+                                use_extra_actions=use_extra_actions)
+    agent = Agent_PPO_MAT(device=args.device)
+    agent.init(network)
+
+    # complete the training, also test on old set after
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "inertia_scale_test":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1, 10, 100]
+    vary_2 = None
+    vary_3 = None
+    repeats = 15
+    tm.param_1_name = "inertia scale"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply training specific settings and create the environment
+    tm.settings["env"]["segment_inertia_scaling"] = tm.param_1
+    env = tm.make_env()
+
+    # apply the agent settings and make the agent
+    layers = [128 for i in range(4)]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                               continous_actions=True)
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "extreme_fingertip_angles":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [30, 105]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    tm.param_1_name = "fingertip angle"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply training specific settings and create the environment
+    tm.settings["env"]["finger_hook_angle_degrees"] = tm.param_1
+    env = tm.make_env()
+
+    # apply the agent settings and make the agent
+    layers = [128 for i in range(4)]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                               continous_actions=True)
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "extreme_stiffnesses":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [
+      (0.8e-3,  24e-3), # EI=0.198
+      (0.8e-3,  28e-3), # EI=0.231
+      (1.05e-3, 24e-3), # EI=0.447
+      (1.05e-3, 27e-3), # EI=0.503
+    ]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    tm.param_1_name = "finger dimensions"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply training specific settings and create the environment
+    tm.settings["env"]["finger_thickness"] = tm.param_1[0]
+    tm.settings["env"]["finger_width"] = tm.param_1[1]
+    env = tm.make_env()
+
+    # apply the agent settings and make the agent
+    layers = [128 for i in range(4)]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                               continous_actions=True)
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "thesis_baseline_1":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [
+      (0.86e-3, 28e-3),
+      (0.96e-3, 24e-3),
+      (0.96e-3, 28e-3)
+    ]
+    vary_2 = None
+    vary_3 = None
+    repeats = 20
+    tm.param_1_name = "finger dimension"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # apply training specific settings
+    tm.settings["env"]["finger_thickness"] = tm.param_1[0]
+    tm.settings["env"]["finger_width"] = tm.param_1[1]
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "reward_fcn_compare":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = ["sparse", "soft", "medium", "hard"]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    tm.param_1_name = "reward fcn"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    if tm.param_1 == "sparse":
+      tm.settings["reward"]["style"] = "sparse"
+    elif tm.param_1 == "soft":
+      tm.settings["cpp"]["stable_finger_force"] = 0.5
+      tm.settings["cpp"]["stable_finger_force_lim"] = 2.0
+    elif tm.param_1 == "medium":
+      tm.settings["cpp"]["stable_finger_force"] = 0.5
+      tm.settings["cpp"]["stable_finger_force_lim"] = 3.0
+    elif tm.param_1 == "hard":
+      tm.settings["cpp"]["stable_finger_force"] = 1.0
+      tm.settings["cpp"]["stable_finger_force_lim"] = 3.0
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "try_sac":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-5, 1e-4, 1e-3]
+    vary_2 = [1, 10, 100]
+    vary_3 = [500, 2500]
+    repeats = 1
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "update_every_steps"
+    tm.param_3_name = "random_start_episodes"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    liftonly = True
+    tm.settings["Agent_SAC"]["learning_rate"] = tm.param_1
+    tm.settings["Agent_SAC"]["update_every_steps"] = tm.param_2
+    tm.settings["Agent_SAC"]["random_start_episodes"] = tm.param_3
+
+    # create the environment
+    env = tm.make_env()
+
+    if liftonly:
+      # set successful grasp as lifted to height
+      env.mj.set.lifted_to_height.set(1.0, True, 1)
+      env.mj.set.stable_height.set(0.0, False, 1)
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = MLPActorCriticAC(env.n_obs, env.n_actions, hidden_sizes=layers)
+    agent = Agent_SAC(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "try_dqn":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-5, 5e-5, 1e-4]
+    vary_2 = [0.5, 1.0]
+    vary_3 = [False, True]
+    repeats = 3
+    tm.param_1_name = "learning rate"
+    tm.param_2_name = "action size scale factor"
+    tm.param_3_name = "use step size curriculum"
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    tm.settings["Agent_DQN"]["learning_rate"] = tm.param_1
+
+    # convert to discrete actions, reduce their size slightly
+    size_reduction = tm.param_2
+    tm.settings["cpp"]["continous_actions"] = False
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] *= size_reduction
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] *= size_reduction
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] *= size_reduction
+    tm.settings["cpp"]["action"]["base_Z"]["value"] *= size_reduction
+
+    if tm.param_3:
+      # enable the curriculum of step size adjustments
+      max_size_scaling = 4.0 # how much bigger are the biggest step sizes compared to normal
+      tm.settings["trainer"]["use_curriculum"] = True
+      tm.settings["curriculum"]["whole_fcn_override"] = curriculum_fcn_MAT
+      tm.settings["curriculum"]["param_values"] = [
+        # gripper_X action min/max
+        [tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"],
+         tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] * max_size_scaling],
+        # gripper_Y action min/max
+        [tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"],
+         tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] * max_size_scaling],
+        # gripper_Z action min/max
+        [tm.settings["cpp"]["action"]["gripper_Z"]["value"],
+         tm.settings["cpp"]["action"]["gripper_Z"]["value"] * max_size_scaling],
+        # base_Z action min/max
+        [tm.settings["cpp"]["action"]["base_Z"]["value"],
+         tm.settings["cpp"]["action"]["base_Z"]["value"] * max_size_scaling],
+        # time per action min/max
+        [tm.settings["cpp"]["time_for_action"],
+         tm.settings["cpp"]["time_for_action"] * max_size_scaling],   
+      ]
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = networks.VariableNetwork([env.n_obs, *layers, env.n_actions], 
+                                       device=args.device)
+    agent = Agent_DQN(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "test_heuristics":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = None
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    tm.param_1_name = None
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+    
+    # prepare to test
+    tm.settings["cpp"]["continous_actions"] = False
+    tm.settings["trainer"]["num_episodes"] = 1
+    tm.settings["cpp"]["stable_finger_force"] = 0.5
+    tm.settings["cpp"]["stable_palm_force"] = 0.5
+
+    # set dqn step sizes
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 1e-3
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.01
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 2e-3
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3
+
+    # create the environment
+    env = tm.make_env()
+
+    # # adjust heuristic parameters
+    # env.heuristic_params["final_bend_target_N"] = tm.param_1
+    # env.heuristic_params["final_palm_target_N"] = tm.param_2
+
+    # make a dummy agent, not used
+    layers = [env.n_obs, 64, 64, env.n_actions]
+    network = networks.VariableNetwork(layers, device=args.device)
+    agent = Agent_DQN(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env, test_after=False)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=False, heuristic=True)
+    print_time_taken()
+
+  elif args.program == "palm_scaling":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [2, 4, 6]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    tm.param_1_name = "palm scaling"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # true realism is scale factor = 7, based on experimental data
+    tm.settings["cpp"]["palm_scale_factor"] = tm.param_1
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "dqn_1":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = None
+    vary_2 = None
+    vary_3 = None
+    repeats = 15
+    tm.param_1_name = None
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # convert to discrete actions
+    tm.settings["cpp"]["continous_actions"] = False
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = networks.VariableNetwork([env.n_obs, *layers, env.n_actions], device=args.device)
+    agent = Agent_DQN(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500", load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "dqn_2":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = None
+    vary_2 = None
+    vary_3 = None
+    repeats = 15
+    tm.param_1_name = None
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # convert to discrete actions
+    tm.settings["cpp"]["continous_actions"] = False
+
+    # set original dqn step sizes
+    tm.settings["cpp"]["action"]["gripper_prismatic_X"]["value"] = 1e-3
+    tm.settings["cpp"]["action"]["gripper_revolute_Y"]["value"] = 0.01
+    tm.settings["cpp"]["action"]["gripper_Z"]["value"] = 2e-3
+    tm.settings["cpp"]["action"]["base_Z"]["value"] = 2e-3
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = networks.VariableNetwork([env.n_obs, *layers, env.n_actions], device=args.device)
+    agent = Agent_DQN(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500", load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "double_dqn":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [False, True]
+    vary_2 = None
+    vary_3 = None
+    repeats = 15
+    tm.param_1_name = "soft update"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # convert to discrete actions
+    tm.settings["cpp"]["continous_actions"] = False
+
+    # enable double dqn and soft target update
+    tm.settings["Agent_DQN"]["use_double_dqn"] = True
+    tm.settings["Agent_DQN"]["soft_target_update"] = tm.param_1
+    tm.settings["Agent_DQN"]["soft_target_tau"] = 0.05
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = networks.VariableNetwork([env.n_obs, *layers, env.n_actions], device=args.device)
+    agent = Agent_DQN(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500", load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "PPO_temp":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-4, 5e-4]
+    vary_2 = [False, True]
+    vary_3 = None
+    repeats = 15
+    tm.param_1_name = "temperature"
+    tm.param_2_name = "use KL early stop"
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # create the environment
+    env = tm.make_env()
+
+    # apply agent hyperparameters
+    tm.settings["Agent_PPO_MAT"]["learning_rate_pi"] = 5e-5
+    tm.settings["Agent_PPO_MAT"]["learning_rate_vf"] = 5e-5
+    tm.settings["Agent_PPO_MAT"]["temperature_alpha"] = tm.param_1
+    tm.settings["Agent_PPO_MAT"]["steps_per_epoch"] = 6000
+    tm.settings["Agent_PPO_MAT"]["gamma"] = 0.99
+    tm.settings["Agent_PPO_MAT"]["train_pi_iters"] = 80 if tm.param_2 else 10
+    tm.settings["Agent_PPO_MAT"]["train_vf_iters"] = 80 if tm.param_2 else 10
+    tm.settings["Agent_PPO_MAT"]["lam"] = 0.97
+    tm.settings["Agent_PPO_MAT"]["use_random_action_noise"] = False # temp should search
+    tm.settings["Agent_PPO_MAT"]["use_KL_early_stop"] = tm.param_2
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+    agent = Agent_PPO_MAT(device=args.device)
+    agent.init(network)
+
+    # complete the training, also test on old set after
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "network_comparison":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1, 2, 8]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    tm.param_1_name = "hidden layers"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # use EI2 fingers which seem to have the least variance
+    tm.settings["env"]["finger_thickness"] = 0.96e-3
+    tm.settings["env"]["finger_width"] = 24e-3
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent
+    layers = [128 for i in range(tm.param_1)]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "PPO_penalty":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [0.05, 0.15, 0.45]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    tm.param_1_name = "penalty coefficient"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    tm.settings["Agent_PPO"]["kl_penalty_coefficient"] = tm.param_1
+    tm.settings["Agent_PPO"]["use_kl_penalty"] = True
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "noise_comparison":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [0, 0.5, 1.5, 2.0]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    tm.param_1_name = "noise scaling"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # use EI2 fingers which seem to have the least variance
+    tm.settings["env"]["finger_thickness"] = 0.96e-3
+    tm.settings["env"]["finger_width"] = 24e-3
+
+    # scale the amount of noise
+    tm.settings["cpp"]["sensor_noise_mu"] *= tm.param_1
+    tm.settings["cpp"]["sensor_noise_std"] *= tm.param_1
+    tm.settings["cpp"]["state_noise_mu"] *= tm.param_1
+    tm.settings["cpp"]["state_noise_std"] *= tm.param_1
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "sensing_steps_comparison":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1, 5, 7]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    tm.param_1_name = "n_prev_steps"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # use EI2 fingers which seem to have the least variance
+    tm.settings["env"]["finger_thickness"] = 0.96e-3
+    tm.settings["env"]["finger_width"] = 24e-3
+
+    # scale the amount of noise
+    tm.settings["cpp"]["sensor_n_prev_steps"] = tm.param_1
+    tm.settings["cpp"]["state_n_prev_steps"] = tm.param_1
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
+    print_time_taken()
+
+  elif args.program == "max_palm_force":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [2.0, 3.0, 5.0]
+    vary_2 = None
+    vary_3 = None
+    repeats = 10
+    tm.param_1_name = "max_palm_force"
+    tm.param_2_name = None
+    tm.param_3_name = None
+    tm.param_1, tm.param_2, tm.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    if args.print: print_training_info()
+
+    # use EI2 fingers which seem to have the least variance
+    tm.settings["env"]["finger_thickness"] = 0.96e-3
+    tm.settings["env"]["finger_width"] = 24e-3
+
+    # set the parameter
+    tm.settings["cpp"]["stable_palm_force_lim"] = tm.param_1
+
+    # create the environment
+    env = tm.make_env()
+
+    # make the agent
+    layers = [128 for i in range(4)]
+    network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
+                                continous_actions=True)
+    agent = Agent_PPO(device=args.device)
+    agent.init(network)
+
+    # complete the training
+    tm.run_training(agent, env)
+    tm.run_test(trials_per_obj=20, different_object_set="set8_fullset_1500",
+                load_best_id=True)
     print_time_taken()
 
   elif args.program == "example_template":

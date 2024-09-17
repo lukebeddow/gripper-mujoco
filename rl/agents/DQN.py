@@ -87,6 +87,7 @@ class Agent_DQN:
     target_update: int = 250
     soft_target_update: bool = True
     soft_target_tau: float = 0.05
+    use_double_dqn: bool = False
     grad_clamp_value: bool = 100 # None to disable
     loss_criterion: str = "smoothL1Loss" # smoothL1Loss/MSELoss/Huber
 
@@ -222,7 +223,7 @@ class Agent_DQN:
 
     return to_save
   
-  def load_save_state(self, saved_dict):
+  def load_save_state(self, saved_dict, device=None):
     """
     Load the agent with a given saved state
     """
@@ -235,6 +236,9 @@ class Agent_DQN:
     self.params = saved_dict["parameters"]
     self.init(saved_dict["network"])
     self.memory.memory = saved_dict["memory"]
+
+    if device is not None:
+      self.set_device(device)
     self.memory.all_to(self.device)
     self.optimiser.load_state_dict(saved_dict["optimiser_state_dict"])
 
@@ -287,14 +291,26 @@ class Agent_DQN:
     # for each batch state according to policy_net
     state_action_values = self.policy_net(state_batch).gather(1, action_batch)
 
-    # Compute V(s_{t+1}) for all next states.
-    # Expected values of actions for non_final_next_states are computed based
-    # on the "older" target_net; selecting their best reward with max(1)[0].
-    # This is merged based on the mask, such that we'll have either the expected
-    # state value or 0 in case the state was final.
-    next_state_values = torch.zeros(self.params.batch_size, device=self.device)
-    with torch.no_grad():
-        next_state_values[non_final_mask] = self.target_net(non_final_next_states).max(1)[0]
+    if self.params.use_double_dqn:
+      # Double DQN: Compute V(s_{t+1}) for all next states.
+      # Get actions from the policy network for next states
+      next_state_actions = self.policy_net(non_final_next_states).max(1)[1].unsqueeze(1)
+      
+      # Get the values from the target network for the selected actions
+      next_state_values = torch.zeros(self.params.batch_size, device=self.device)
+      with torch.no_grad():
+        next_state_values[non_final_mask] = self.target_net(non_final_next_states).gather(1, next_state_actions).squeeze(1)
+
+    else:
+      # Compute V(s_{t+1}) for all next states.
+      # Expected values of actions for non_final_next_states are computed based
+      # on the "older" target_net; selecting their best reward with max(1)[0].
+      # This is merged based on the mask, such that we'll have either the expected
+      # state value or 0 in case the state was final.
+      next_state_values = torch.zeros(self.params.batch_size, device=self.device)
+      with torch.no_grad():
+          next_state_values[non_final_mask] = self.target_net(non_final_next_states).max(1)[0]
+
     # Compute the expected Q values
     expected_state_action_values = (next_state_values * self.params.gamma) + reward_batch
 

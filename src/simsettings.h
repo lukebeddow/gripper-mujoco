@@ -34,7 +34,7 @@
   /*
   automatic settings value detection, and parameters for guiding this */\
   XX(  auto_set_timestep,       bool,     true)     /* find the highest stable timestep, overrides mujoco_timestep */\
-  XX(  auto_calibrate_gauges,   bool,     false)     /* normalise gauges between +-5N, overrides bending_gauge.normalise */\
+  XX(  auto_calibrate_gauges,   bool,     true)     /* normalise gauges between +-5N, overrides bending_gauge.normalise */\
   XX(  auto_sim_steps,          bool,     true)     /* automatically find the sim steps per action, overrides sim_steps_per_action */\
   XX(  auto_exceed_lateral_lim, bool,     false)     /* calculate safe finger bending automaticalled based on yield load */\
   XX(  time_for_action,         double,    0.2)      /* time in seconds to give for each action to complete, only used if auto_sim_steps=true */\
@@ -50,7 +50,7 @@
   XX(  binary_goal_vector,      bool,     false)    /* do we use only binary goals */\
   /*
   get_observation() settings    (NB: sample modes: 0=raw, 1=change, 2=average, 3=median, 4=binary marker) */\
-  XX(  sensor_sample_mode,      int,      2)        /* how to sample sensor observations, see MjType::Sample*/\
+  XX(  sensor_sample_mode,      int,      6)        /* how to sample sensor observations, see MjType::Sample*/\
   XX(  state_sample_mode,       int,      4)        /* how to sample motor state, see MjType::Sample*/\
   XX(  sensor_n_prev_steps,     int,      3)        /* how many steps back do we sample with sensors */\
   XX(  state_n_prev_steps,      int,      3)        /* how many steps back do we sample with state sensors */\
@@ -61,6 +61,7 @@
   XX(  state_noise_mu,          double,   0.025)    /* abs range of state sensor mean shift*/\
   XX(  state_noise_std,         double,   0.0)      /* std deviation of noise, <= 0 means uniform*/\
   XX(  base_position_noise,     double,   6e-3)     /* uniform noise on base starting position, is tracked by base sensor */\
+  XX(  palm_scale_factor,       double,   1.0)      /* scale palm force value readings by this factor */\
   /* 
   update_env() settings */\
   XX(  oob_distance,            double,   75e-3)    /* distance to consider object out of bounds */\
@@ -80,8 +81,9 @@
   /* 
   set_action() settings */\
   XX(  continous_actions,       bool,     false)    /* are actions continous or discrete */\
-  XX(  use_termination_action,  bool,     false)    /* include an action for termination signalling to end grasp */\
+  XX(  use_termination_action,  bool,     true)    /* include an action for termination signalling to end grasp */\
   XX(  termination_threshold,   float,    0.9)      /* threshold for termination action to trigger (only relevant for continous actions) */\
+  XX(  lift_on_termination,     bool,     true)     /* lift up to max Z immediately upon termination action triggering */\
   XX(  sim_steps_per_action,    int,      200)      /* number of sim steps performed to complete one action */\
   XX(  fingertip_min_mm,        double,   -12.5)    /* minimum allowable fingertip depth below start position before within_limits=false */\
   /*
@@ -106,7 +108,7 @@
   SS(  palm_sensor,             true,     10.0,     10)  /* palm force sensor */\
   SS(  wrist_sensor_XY,         false,    5.0,      10)  /* force wrist sensor X and Y forces */\
   SS(  wrist_sensor_Z,          true,     10.0,     10)  /* force wrist sensor Z force */\
-  
+  SS(  cartesian_contacts_XYZ,  false,    0,        -1)  /* cartesian fingertip and palm positions, normalise is ignored */\
   
   
 #define LUKE_MJSETTINGS_ACTION \
@@ -142,8 +144,9 @@
   BR(  exceed_limits,           -0.1,     false,    1)      /* gripper motor limits exceeded */\
   BR(  object_contact,          0.005,    false,    1)      /* fingers or palm touches object */\
   BR(  object_stable,           0.01,     false,    1)      /* fingers and palm apply min force */\
-  BR(  stable_height,           1.0,      1,        1)      /* object stable and at height target */\
-  BR(  stable_termination,      1.0,      1,        1000)   /* object stable and termination signal sent */\
+  BR(  stable_height,           1.0,      false,    1000)      /* object stable and at height target */\
+  BR(  stable_termination,      1.0,      1,        1)   /* object stable and termination signal sent */\
+  BR(  lifted_termination,      1.0,      1,        1)      /* object lifted and termination signal sent */\
   BR(  failed_termination,      -1.0,     1,        1)      /* termination signal sent but object not stable */\
   BR(  successful_grasp,        0.01,     1,        1)      /* metric to indicate a grasp is stable, shouldn't have associated reward */\
   BR(  within_XY_distance,      0.1,      false,    1)      /* are we close enough to the target object */\

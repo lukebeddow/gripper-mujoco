@@ -107,6 +107,8 @@ class MjEnv():
 
     # experimental features
     use_expert_in_observation: bool = False
+    use_MAT: bool = False
+    MAT_use_reopen: bool = False
 
     # file and testing parameters
     test_obj_per_file: int = 20
@@ -125,7 +127,7 @@ class MjEnv():
     XY_base_actions: bool = False
     Z_base_rotation: bool = False
     fixed_finger_hook: bool = True
-    finger_hook_angle_degrees: float = 90.0
+    finger_hook_angle_degrees: float = 75.0
     finger_hook_length: float = 35e-3
     segment_inertia_scaling: float = 50.0
     fingertip_clearance: float = 10e-3
@@ -231,8 +233,16 @@ class MjEnv():
     config_file = "gripper.yaml"
     mjcf_folder = "mjcf"
     yaml_path = f"{description_path}/{config_folder}/{config_file}"
-    with open(yaml_path) as file:
-      gripper_details = yaml.safe_load(file)
+
+    # try to open the file, make multiple tries in case clash with other process
+    attempts = 10
+    for i in range(attempts):
+      with open(yaml_path) as file:
+        gripper_details = yaml.safe_load(file)
+      if gripper_details is not None: break
+      time.sleep(0.1 + 0.25 * np.random.random())
+    if gripper_details is None:
+      raise RuntimeError(f"MjEnv._auto_generate_xml_file(): read only 'None' from gripper_details yaml file at path: {yaml_path}")
 
     original_details = deepcopy(gripper_details)
 
@@ -550,6 +560,28 @@ class MjEnv():
 
     return cpp_settings
 
+  def _set_MAT_action(self, action):
+    """
+    New updated version, where action vector is already binary when it is input
+    """
+
+    if self.params.MAT_use_reopen:
+
+      a_wrist = action[-1]
+      a_reopen = action[-2]
+      a_lift = action[-3]
+
+      if a_reopen > 0.5 and a_lift > 0.5:
+        print("action vector is", action)
+        raise RuntimeError("MjEnv._set_MAT_action() error: reopen and lift both set True")
+      
+      # reopen, but trigger no further actions (eg finger motions)
+      if a_reopen: return self.mj.MAT_reopen(a_wrist)
+
+      action = action[:-2] # trim off the reopen and wrist actions, keep lift
+
+    return self._set_action(action)
+
   def _set_action(self, action):
     """
     Set the action, either for simulation or real world. If using simulation
@@ -571,7 +603,10 @@ class MjEnv():
     Take an action in the simulation
     """
 
-    self._set_action(action)
+    if self.params.use_MAT:
+      self._set_MAT_action(action)
+    else:
+      self._set_action(action)
 
     # step the simulation for the given time (mj.set.time_for_action)
     self.mj.action_step()
@@ -1314,7 +1349,9 @@ class MjEnv():
       "final_palm_target_N" : 1.5,
       "final_squeeze" : True,
       "fixed_angle" : True,
+      "random_at_end" : False,
       # "palm_first" : True,
+      "heuristic_method" : "default", # default=paper, PID=full PID, hybrid=paper + PID
     }
 
   # ----- utilities for loading CUT/cycleGAN models ----- #
@@ -1674,7 +1711,7 @@ class MjEnv():
       - 6. Loop squeezing actions to aim for specific grasp force
     """
 
-    def bend_to_force(target_force_N, possible_action=None, limit_force_N=10):
+    def bend_to_force(target_force_N, possible_action=None, limit_force_N=4):
       """
       Try to bend the fingers to a certain force
       """
@@ -1710,14 +1747,16 @@ class MjEnv():
 
       return action
 
-    def palm_push_to_force(target_force_N, limit_force_N=10):
+    def palm_push_to_force(target_force_N, limit_force_N=4):
       """
       Try to push with the palm to a specific force
       """
 
-      time.sleep(0.2)
+      # time.sleep(0.2)
 
       action = None
+
+      # print(palm_reading)
 
       # if we have palm sensing
       if True or palm:
@@ -1789,6 +1828,7 @@ class MjEnv():
     final_palm_target_N = self.heuristic_params["final_palm_target_N"]
     final_squeeze = self.heuristic_params["final_squeeze"]
     fixed_angle = self.heuristic_params["fixed_angle"]
+    random_at_end = self.heuristic_params["random_at_end"]
     # palm_first = self.heuristic_params["palm_first"]
 
     # hardcode action values
@@ -1810,7 +1850,6 @@ class MjEnv():
       # avg_bend = max_bend
     if palm:
       palm_reading = self.mj.get_palm_force(self.heuristic_real_world)
-      print("palm reading is", palm_reading)
     if wrist:
       wrist_reading = self.mj.get_wrist_force(self.heuristic_real_world)
 
@@ -1931,10 +1970,24 @@ class MjEnv():
           action = palm_push_to_force(final_palm_target_N, limit_force_N=limit_palm_target_N)
           action_name = "palm forward"
 
-      # or just try to lift higher
-      if action is None:
+      # # or just try to lift higher
+      # if action is None:
+      #   action = H_up
+      #   action_name = "height up"
+
+      if action is None and random_at_end:
+        choice = random_train.integers(0, 3)
+        options = [
+          (X_close, "finger X close"),
+          (Z_plus, "palm forward"),
+          (Z_minus, "palm backward"),
+          (H_up, "height up")
+        ]
+        action = options[choice][0]
+        action_name = options[choice][1]
+      elif action is None:
         action = H_up
-        action_name = "height up"
+        action_name = "height_up"
 
       # if no sensors, choose random action
       if not bending and not palm and not wrist:
@@ -2244,6 +2297,43 @@ if __name__ == "__main__":
   mj.mj.set.mujoco_timestep = 3.187e-3
   mj.mj.set.auto_set_timestep = False
 
+  # ---- automatically generate new xml files ----- #
+
+  generate_new_xml = True
+  if generate_new_xml:
+
+    # segments = list(range(3, 31))
+    # fingers = [(0.9e-3, 28e-3), (1.0e-3, 24e-3), (1.0e-3, 28e-3)]
+    # inertia = [1, 10, 50, 100]
+    # for t, w in fingers:
+    #   for N in segments:
+    #     for i in inertia:
+    #       mj.load_next.finger_width = w
+    #       mj.load_next.num_segments = N
+    #       mj.load_next.finger_thickness = t
+    #       mj.load_next.segment_inertia_scaling = i
+    #       mj._auto_generate_xml_file("set9_testing", use_hashes=True)
+
+    mj.params.test_objects = 20
+    mj.load_next.finger_hook_angle_degrees = 90
+    mj.load_next.finger_width = 28e-3
+    mj.load_next.finger_thickness = 0.96e-3
+    mj.load_next.fingertip_clearance = 10e-3 #120e-3 / 2 + 6e-3
+    mj.load_next.XY_base_actions = True
+    mj.load_next.Z_base_rotation = True
+    mj.load_next.num_segments = 8
+    mj.load_next.segment_inertia_scaling = 50.0
+    # mj.load_next.finger_length = 200e-3
+    # mj.load_next.finger_thickness = 1.9e-3
+
+    gen_obj_set = "set_object_sizes"
+    name = mj._auto_generate_xml_file(gen_obj_set, use_hashes=True, force=False)
+    runstr = f"bin/mysimulate -p /home/luke/mujoco-devel/mjcf -o {gen_obj_set} -g {name}"
+
+    print(runstr)
+    exit()
+
+  # load for the remaining different options
   mj.load("set8_fullset_1500", num_segments=8, finger_width=28e-3, finger_thickness=0.9e-3)
   
   # ----- try out rgb rendering with CUT models ----- #
@@ -2336,51 +2426,6 @@ if __name__ == "__main__":
     print(f"Time taken for mask was {(t3 - t2) * 1e3:.3f} ms")
 
     mj._plot_scene_mask()
-
-  # ---- automatically generate new xml files ----- #
-
-  generate_new_xml = True
-  if generate_new_xml:
-
-    # widths = [24e-3, 28e-3]
-    # segments = [8]
-    # xy_base = [False, True]
-    # inertia = [1, 50]
-
-    # mj.load_next.num_segments = 8
-    # angles = [90]
-    # for a in angles:
-    #   mj.load_next.finger_hook_angle_degrees = a
-    #   mj.load_next.finger_hook_length = 100e-3
-    #   mj.load_next.XY_base_actions = True
-    #   mj._auto_generate_xml_file("set_test_large", use_hashes=True, silent=True)
-
-    # for w in widths:
-    #   for N in segments:
-    #     for xy in xy_base:
-    #       for i in inertia:
-    #         mj.load_next.finger_width = w
-    #         mj.load_next.num_segments = N
-    #         mj.load_next.XY_base_actions = xy
-    #         mj.load_next.segment_inertia_scaling = i
-    #         mj._auto_generate_xml_file("set8_fullset_1500", use_hashes=True)
-
-    mj.params.test_objects = 20
-    mj.load_next.finger_hook_angle_degrees = 75
-    mj.load_next.finger_width = 28e-3
-    mj.load_next.fingertip_clearance = 0.01
-    mj.load_next.XY_base_actions = False
-    mj.load_next.Z_base_rotation = False
-    mj.load_next.num_segments = 3
-    mj.load_next.segment_inertia_scaling = 1.0
-    # mj.load_next.finger_length = 200e-3
-    # mj.load_next.finger_thickness = 1.9e-3
-
-    gen_obj_set = "set8_demo"
-    name = mj._auto_generate_xml_file(gen_obj_set, use_hashes=True, force=True)
-    runstr = f"bin/mysimulate -p /home/luke/mujoco-devel/mjcf -o {gen_obj_set} -g {name}"
-
-    print(runstr)
 
   # ----- evaluate speed of rgbd function ----- #
 

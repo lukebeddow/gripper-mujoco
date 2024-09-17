@@ -87,6 +87,7 @@ PYBIND11_MODULE(bind, m) {
     .def("set_new_base_XY", &MjClass::set_new_base_XY)
     .def("set_new_base_yaw", &MjClass::set_new_base_yaw)
     .def("random_base_yaw", &MjClass::random_base_yaw)
+    .def("MAT_reopen", &MjClass::MAT_reopen)
 
     // learning functions
     .def("action_step", &MjClass::action_step)
@@ -139,6 +140,7 @@ PYBIND11_MODULE(bind, m) {
     .def("input_real_data", &MjClass::input_real_data)
     .def("get_real_observation", &MjClass::get_real_observation)
     .def("get_simple_state_vector", &MjClass::get_simple_state_vector)
+    .def("get_SI_gauge_forces", &MjClass::get_SI_gauge_forces)
 
     // misc
     .def("tick", &MjClass::tick)
@@ -1154,6 +1156,20 @@ PYBIND11_MODULE(bind, m) {
     .def("read_wrist_X_sensor", &MjType::SensorData::read_wrist_X_sensor)
     .def("read_wrist_Y_sensor", &MjType::SensorData::read_wrist_Y_sensor)
     .def("read_wrist_Z_sensor", &MjType::SensorData::read_wrist_Z_sensor)
+    .def("readN_x_motor_position", &MjType::SensorData::readN_x_motor_position)
+    .def("readN_y_motor_position", &MjType::SensorData::readN_y_motor_position)
+    .def("readN_z_motor_position", &MjType::SensorData::readN_z_motor_position)
+    .def("readN_z_base_position", &MjType::SensorData::readN_z_base_position)
+    .def("readN_finger1_gauge", &MjType::SensorData::readN_finger1_gauge)
+    .def("readN_finger2_gauge", &MjType::SensorData::readN_finger2_gauge)
+    .def("readN_finger3_gauge", &MjType::SensorData::readN_finger3_gauge)
+    .def("readN_palm_sensor", &MjType::SensorData::readN_palm_sensor)
+    .def("readN_finger1_axial_gauge", &MjType::SensorData::readN_finger1_axial_gauge)
+    .def("readN_finger2_axial_gauge", &MjType::SensorData::readN_finger2_axial_gauge)
+    .def("readN_finger3_axial_gauge", &MjType::SensorData::readN_finger3_axial_gauge)
+    .def("readN_wrist_X_sensor", &MjType::SensorData::readN_wrist_X_sensor)
+    .def("readN_wrist_Y_sensor", &MjType::SensorData::readN_wrist_Y_sensor)
+    .def("readN_wrist_Z_sensor", &MjType::SensorData::readN_wrist_Z_sensor)
     ;
   }
 

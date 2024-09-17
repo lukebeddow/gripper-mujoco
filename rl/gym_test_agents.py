@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import gym
+import gymnasium as gym
 import torch
 import random
 from Trainer import Trainer
@@ -14,13 +14,14 @@ class GymHandler():
   def __init__(self, gymenv, rngseed=None):
     self.env = gymenv
     obs, info = self.env.reset()
-    self.n_actions = self.env.action_space.n
+    self.n_actions = self.env.action_space.shape[0]
     self.n_obs = len(obs)
     self.rngseed = rngseed
     self.seed()
     self.continous_actions = False
+    self.device = "cpu"
   def step(self, action):
-    return self.env.step(action)
+    return self.env.step(action.to(self.device))
   def reset(self, rngseed=None):
     obs, info = self.env.reset(seed=rngseed)
     return obs
@@ -41,8 +42,6 @@ class GymHandler():
       "n_observations" : self.n_obs,
       "env_type" : "gym env"
     }
-  def using_continous_actions(self):
-    return self.continous_actions
   
 # agent hyperparameters
 hypers = {
@@ -66,35 +65,38 @@ hypers = {
   },
 
   "Agent_SAC" : {
-    "learning_rate" : 5e-5,
+    "learning_rate" : 1e-3,
     "gamma" : 0.999,
     "alpha" : 0.2,
     "batch_size" : 128,
     "update_after_steps" : 1000,
-    "update_every_steps" : 50,
-    "random_start_episodes" : 1000,
+    "update_every_steps" : 1,
+    "random_start_episodes" : 10,
     "optimiser" : "adam",
     "adam_beta1" : 0.9,
     "adam_beta2" : 0.999,
     "min_memory_replay" : 5000,
-    "memory_replay" : 75_000,
+    "memory_replay" : 25_000,
     "soft_target_tau" : 0.05,
   },
 
   "Agent_PPO" : {
-    "learning_rate_pi" : 3e-4,
-    "learning_rate_vf" : 1e-3,
+    "learning_rate_pi" : 5e-4,
+    "learning_rate_vf" : 5e-4,
     "gamma" : 0.99,
-    "steps_per_epoch" : 1000,
+    "steps_per_epoch" : 6000,
     "clip_ratio" : 0.2,
     "train_pi_iters" : 80,
     "train_vf_iters" : 80,
     "lam" : 0.97,
     "target_kl" : 0.01,
     "max_kl_ratio" : 1.5,
-    "optimiser": "adam",
+    "use_random_action_noise" : True,
+    "random_action_noise_size" : 0.05,
+    "optimiser" : "adam",
     "adam_beta1" : 0.9,
     "adam_beta2" : 0.999,
+    "grad_clamp_value" : None,
   },
 }
 
@@ -109,26 +111,32 @@ if __name__ == "__main__":
 
   # training device
   device = "cuda"
+  continous = True
+  log_level = 2
 
   # make the environment
   # env = gym.make("LunarLander-v2") #, render_mode="human")
-  env = gym.make("CartPole-v1")
+  env = gym.make("Pendulum-v1")
+  # if continous:
+  #   env = gym.make('MountainCarContinuous-v0')
+  # else:
+  #   env = gym.make('MountainCar-v0')
   env = GymHandler(env)
-  env.continous_actions = False
 
   # make the agent
-  agent = Agent_PPO
-  layers = [128, 128]
+  agent = Agent_DQN
+  layers = [128 for i in range(2)]
   if agent.name == "Agent_DQN":
-    if env.continous_actions: raise RuntimeError("DQN is for discrete")
+    if continous: raise RuntimeError("DQN is for discrete")
     network = networks.VariableNetwork([env.n_obs, *layers, env.n_actions], device=device)
   elif agent.name == "Agent_SAC":
-    if not env.continous_actions: raise RuntimeError("SAC is for continous")
+    if not continous: raise RuntimeError("SAC is for continous")
     network = MLPActorCriticAC(env.n_obs, env.n_actions, hidden_sizes=layers)
   elif agent.name == "Agent_PPO":
     network = MLPActorCriticPG(env.n_obs, env.n_actions, hidden_sizes=layers,
-                               continous_actions=env.continous_actions)
-  agent = agent(device=device)
+                               continous_actions=continous)
+
+  agent = agent(device=device, debug=True if log_level>1 else False)
   agent.params.update(hypers[agent.name])
   agent.init(network)
 
@@ -138,7 +146,8 @@ if __name__ == "__main__":
   
   # prepare settings and proceed with training
   trainer.params.num_episodes = 10000
-  trainer.log_rate_for_episodes = 50
-  trainer.track.avg_num = 10
+  trainer.log_level = log_level
+  trainer.log_rate_for_episodes = 1
+  trainer.track.avg_num = 5
   # trainer.load("run_16-28", group_name="19-09-23")
   trainer.train()

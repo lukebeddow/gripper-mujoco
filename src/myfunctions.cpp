@@ -207,7 +207,7 @@ struct JointSettings {
   struct Dim {
     
     double finger_length = 235e-3;                    // set by mjcf file
-    double finger_thickness = 0.9e-3;                 // set by mjcf file
+    double finger_thickness = 0.96e-3;                 // set by mjcf file
     double finger_width = 28e-3;                      // set by mjcf file
     double hook_length = 35e-3;                       // set by mjcf file
     double hook_angle_degrees = 90.0;                 // set by mjcf file
@@ -274,7 +274,7 @@ struct JointSettings {
     bool stepper = true;
     int num_steps = 10;                         // number of stepper motors steps in one chunk
     double pulses_per_s = 2000;                 // stepper motor pulses per second, this sets speed (2000pps = 300rpm)
-    Gain gripper_kp {100, 40, 1000};            // proportional gains for gripper xyz motors {x, y, z}
+    Gain gripper_kp {250, 15, 1000};            // proportional gains for gripper xyz motors {x, y, z}
     Gain gripper_kd {1, 1, 1};                  // derivative gains for gripper xyz motors {x, y, z}
     Gain base_xyz_kp {500, 500, 2000};          // proportional gains for base xyz motions {x, y, z}
     Gain base_xyz_kd {80, 80, 100};             // derivative gains for base xyz motions {x, y, z}
@@ -282,6 +282,17 @@ struct JointSettings {
     Gain base_rot_kd {80, 80, 6};
 
     double time_per_step = 0.0;                 // runtime depends
+
+    void update_gains(double EI) {
+      // x motor gain based on line of best fit (experimental analysis)
+      gripper_kp.x = EI * 541.3 + 49.65;
+      gripper_kp.y = EI * 44.92 - 0.846;
+
+      // std::cout << "Gripper EI=" << EI << " gives kp.x = "
+      //   << gripper_kp.x << " and kp.y = "
+      //   << gripper_kp.y << "\n";
+    }
+
   } ctrl;
 
   /* ----- automatically generated settings ----- */
@@ -352,7 +363,10 @@ struct JointSettings {
 
     // special case, reset joint stiffness vector
     dim.reset();
-
+    
+    // get new gains based on updated EI
+    ctrl.update_gains(dim.EI);
+    
     // reset the VectorStructs
     idx.reset();
     qposadr.reset();
@@ -460,6 +474,9 @@ static double last_step_time_ = 0.0;
 
 // turn on/off debug mode for this file only
 constexpr static bool debug_ = false; 
+
+// disable revolute joint equality constraint
+constexpr static bool disable_rev_constraint = true;
 
 /* ----- initialising, setup, and utilities ----- */
 
@@ -1007,6 +1024,7 @@ void set_finger_stiffness_using_model(mjModel* model)
       float c;
       if (n == 1) {
         c = ((2 * j_.dim.EI) / j_.dim.finger_length) * ((N*N) / (double)(N - (1.0/3.0)));
+        // c = ((2 * N * j_.dim.EI) / j_.dim.finger_length);
       }
       else {
         c = (N * j_.dim.EI) / j_.dim.finger_length;
@@ -1950,7 +1968,7 @@ void control_gripper(const mjModel* model, mjData* data, Gripper& target)
 
   double u = 0;
 
-  double force_lim = 100;
+  // double force_lim = 100;
 
   int n = j_.num.panda + j_.num.base;
 
@@ -2216,13 +2234,13 @@ void update_constraints(mjModel* model, mjData* data)
 
   if (new_x != old_x) {
     if (new_x) {
-      // constraint enable is true
+      // constraint enable is false
       for (int i : j_.con_idx.prismatic) {
         set_constraint(model, data, i, false);
       }
     }
     else {
-      // constraint enable is false
+      // constraint enable is true
       for (int i : j_.con_idx.prismatic) {
         set_constraint(model, data, i, true);
       }
@@ -2232,15 +2250,17 @@ void update_constraints(mjModel* model, mjData* data)
   
   if (new_y != old_y) {
     if (new_y) {
-      // constraint enable is true
+      // constraint enable is false
       for (int i : j_.con_idx.revolute) {
         set_constraint(model, data, i, false);
       }
     }
     else {
-      // constraint enable is false
+      // constraint enable is true
       for (int i : j_.con_idx.revolute) {
-        set_constraint(model, data, i, true);
+        if (not disable_rev_constraint) {
+          set_constraint(model, data, i, true);
+        }
       }
     }
     old_y = new_y;
@@ -2248,13 +2268,13 @@ void update_constraints(mjModel* model, mjData* data)
 
   if (new_z != old_z) {
     if (new_z) {
-      // constraint enable is true
+      // constraint enable is false
       for (int i : j_.con_idx.palm) {
         set_constraint(model, data, i, false);
       }
     }
     else {
-      // constraint enable is false
+      // constraint enable is true
       for (int i : j_.con_idx.palm) {
         set_constraint(model, data, i, true);
       }
@@ -2526,6 +2546,25 @@ void update_target()
   target_.end.update();
 }
 
+void set_gripper_and_base_to_reset_position(mjModel* model, mjData* data)
+{
+  /* reset the gripper and base to their start position, and update the target
+  as well, rather than a regular reset. This is for MAT reopen behaviour */
+
+  // unlock any joint constraints
+  set_all_constraints(model, data, false);
+
+  // set the gripper and base joints to the reset position
+  calibrate_reset(model, data);
+
+  // update the targets
+  target_.next.set_xyz_m(target_.end.xy_home, target_.end.xy_home, target_.end.z_home);
+  target_.end.set_xyz_m(target_.end.xy_home, target_.end.xy_home, target_.end.z_home);
+  target_.base.x = 0.0;
+  target_.base.y = 0.0;
+  target_.base.z = 0.0;
+}
+
 bool set_base_to_XY_position(mjData* data, float x_pos, float y_pos)
 {
   /* set the gripper base to a given XY position immediately */
@@ -2641,6 +2680,18 @@ void set_base_to_max_height(mjData* data)
   float max_height = target_.base_min.z;
 
   set_base_to_Z_position(data, max_height);
+}
+
+Vec3 get_gripper_target_actual()
+{
+  /* return the actual current positions of the xyz motors */
+
+  Vec3 out;
+  out.x = 1e-6 * double(target_.actual_stepperx.read_element());
+  out.y = 1e-6 * double(target_.actual_steppery.read_element());
+  out.z = 1e-6 * double(target_.actual_stepperz.read_element());
+
+  return out;
 }
 
 /* ----- sensing ------ */
@@ -2973,6 +3024,19 @@ gfloat verify_small_angle_model(const mjData* data, int finger,
       theory_x[i + 1 + ffs] = x;
       theory_y[i + 1 + ffs] = theory_factor * std::pow(x, 2);
     }
+    else if (force_style == 3) {
+      double tf = (force / j_.dim.EI);
+      double x = (i + 1) * j_.dim.segment_length;
+      double L = j_.dim.finger_length;
+      theory_x[i + 1 + ffs] = x;
+      if (x <= 0.5*L) {
+        theory_y[i + 1 + ffs] = (tf/8) * (std::pow(x, 2)) * (2*L - x); 
+      }
+      else {
+        theory_y[i + 1 + ffs] = (tf/12) * (std::pow(x, 2)) * (3*L - x)
+          - (tf/96) * std::pow(L, 3) + (tf/16) * L * L * x; 
+      }
+    }
     else {
       std::cout << "force_style = " << force_style << '\n';
       throw std::runtime_error("force style was not valid in verify_small_angle_model(...)");
@@ -3080,6 +3144,52 @@ void fill_theory_curve(std::vector<float>& theory_X, std::vector<float>& theory_
       double x = L * ((i / (float) (num - 1)));
       theory_X[i] = x;
       theory_Y[i] = theory_factor * (std::pow(x, 2)); 
+    }
+  }
+  else if (force_style == 3) {
+
+    // create two point load theory curve
+    for (int i = 0; i < num; i++) {
+      double tf = ((force) / j_.dim.EI);
+      double x = L * ((i / (float) (num - 1)));
+      theory_X[i] = x;
+      // theory_Y[i] = (tf/2) * (-std::pow(x, 3) + 3 * L * std::pow(x, 2))
+      //               + (tf/2) * (-(1.0/6.0)*std::pow(x,3) + (L/4.0)*std::pow(x,2));
+      if (x <= 0.5*L) {
+        // theory_Y[i] = (tf/8) * (std::pow(x, 2)) * (2*L - x); 
+        // theory_Y[i] = -(tf/6) * (std::pow(x, 3)) + (tf/8) * L * (std::pow(x, 2));
+        // double adjust = 0.25;
+        // theory_Y[i] = adjust * (tf/6) * (-2 * std::pow(x, 3) + (9.0/2.0) * L * std::pow(x, 2)); 
+        // theory_Y[i] = (force / (12 * j_.dim.EI)) * (-(4.0 / 3.0) * std::pow(x, 3) + 4 * L * std::pow(x, 2));
+        // theory_Y[i] = (force / (24 * j_.dim.EI)) * (-(8.0 / 3.0) * std::pow(x, 3) + 7 * L * std::pow(x, 2));
+        // // monday - gpt
+        // theory_Y[i] = (force / (8 * j_.dim.EI)) * (2 * L * pow(x, 2) - pow(x, 3));
+        // monday - me
+        theory_Y[i] = (force / (12 * j_.dim.EI)) * (4.5 * L * pow(x, 2) - 2 * pow(x, 3));
+      }
+      else {
+        // theory_Y[i] = -(tf/12) * (std::pow(x, 3)) * (3*L - x)
+        //               - (tf/16) * std::pow(L, 2) * x
+        //               + (tf/96) * std::pow(L, 3);
+        // theory_Y[i] = -(tf/12) * (std::pow(x, 3))
+        //               + (tf/16) * std::pow(L, 2) * x
+        //               + (tf/48) * std::pow(L, 3);
+        // theory_Y[i] = (tf/6) * (-std::pow(x, 3) + 3 * L * std::pow(x, 2))
+        //               + (tf/24) * std::pow(L, 3)
+        //               + (tf/8) * std::pow(L, 2) * (0.5 * L - x);
+        // theory_Y[i] = (force / (12 * j_.dim.EI)) * (-std::pow(x, 3) + 3 * L * std::pow(x, 2));
+                      // + ((force * std::pow(L, 3)) / (192 * j_.dim.EI));
+        // theory_Y[i] = (force / (12 * j_.dim.EI)) * (-std::pow(x, 3) + 3 * L * std::pow(x, 2))
+        //               + ((5 * force * std::pow(L, 3)) / (48 * j_.dim.EI))
+        //               - ((force * std::pow(L, 2) * x) / (24 * j_.dim.EI));
+        // // monday - gpt
+        // theory_Y[i] = (force / (12 * j_.dim.EI)) * (-pow(x, 3) + 3 * L * pow(x, 2))
+        //               + (force / (48 * j_.dim.EI)) * pow(L, 2) * (3 * x - 0.5 * L);
+        // monday - me
+        theory_Y[i] = (force / (12 * j_.dim.EI)) * (-pow(x, 3) + 3 * L * pow(x, 2))
+                      + (force / (96 * j_.dim.EI)) * pow(L, 2) * (6 * x - L);
+      }
+      
     }
   }
   else {
@@ -3357,7 +3467,10 @@ bool change_finger_thickness(float thickness)
 
   j_.dim.finger_thickness = thickness;
   j_.dim.I = (j_.dim.finger_width * std::pow(j_.dim.finger_thickness, 3)) / 12.0;
-  j_.dim.EI = j_.dim.E * j_.dim.I;
+  j_.dim.update_EI();
+
+  // also update controller gains based on the new EI
+  j_.ctrl.update_gains(j_.dim.EI);
 
   if (local_debug) {
     std::cout << "Finger thickness changed, now is " << j_.dim.finger_thickness
@@ -3394,7 +3507,10 @@ bool change_finger_width(float width)
 
   j_.dim.finger_width = width;
   j_.dim.I = (j_.dim.finger_width * std::pow(j_.dim.finger_thickness, 3)) / 12.0;
-  j_.dim.EI = j_.dim.E * j_.dim.I;
+  j_.dim.update_EI();
+
+  // also update controller gains based on the new EI
+  j_.ctrl.update_gains(j_.dim.EI);
 
   if (local_debug) {
     std::cout << "Finger width changed, now is " << j_.dim.finger_width
@@ -3429,7 +3545,10 @@ bool change_youngs_modulus(float E)
   }
 
   j_.dim.E = E;
-  j_.dim.EI = j_.dim.E * j_.dim.I;
+  j_.dim.update_EI();
+
+  // also update controller gains based on the new EI
+  j_.ctrl.update_gains(j_.dim.EI);
 
   if (local_debug) {
     std::cout << "Youngs modulus changed, now is " << j_.dim.E
@@ -3498,6 +3617,74 @@ float get_fingertip_z_height()
   float height_above_min = straight_finger_distance + tip_lift;
 
   return height_above_min + target_.base_min.z;
+}
+
+std::vector<luke::Vec3> get_fingerend_and_palm_xyz(std::vector<double> finger_forces_SI)
+{
+  /* get the xyz position of the fingerend and palm for MAT cartesian contact points.
+  Applies an offset using the given finger forces to account for bending. Does not use
+  mujoco, instead an analytical approach to mirror that used with the real gripper. */
+
+  std::vector<luke::Vec3> pos(4);
+
+  // get gripper base positions
+  double base_x = target_.base.x;
+  double base_y = target_.base.y;
+  double base_z = target_.base.z;
+  double base_z_rot = target_.base.yaw;
+
+  // get gripper joint positions
+  double fing_x = target_.end.get_x_m();
+  double fing_th = target_.end.get_th_rad();
+  double palm_z = target_.end.get_z_m();
+
+  // hardcoded geometric information about the gripper
+  constexpr double fingerend_to_palm_Z = 165e-3;
+  constexpr double PI_23 = M_PI * (2.0 / 3.0);
+  constexpr double angles[3] = { 0.0, PI_23, 2 * PI_23 };
+
+  // deterine how high the three fingerends are above the ground
+  // double straight_finger_distance = -target_.base_min.z - target_.base.z;
+  // double tip_lift = j_.dim.finger_length * (1 - std::cos(fing_th));
+  // double height_above_min = straight_finger_distance + tip_lift;
+  double untilted_fingerend_height = j_.dim.gripper_distance_above_ground - target_.base.z;
+  double tip_lift = j_.dim.finger_length * (1 - std::cos(fing_th));
+  double tilted_fingerend_height = untilted_fingerend_height + tip_lift;
+
+  // loop over the three fingers
+  for (int i = 0; i < 3; i++) {
+
+    // apply tilt to x position
+    double tilt_fing_x = fing_x - j_.dim.finger_length * std::sin(fing_th);
+
+    // apply bending to x and z position
+    double deflection = finger_forces_SI[i] * std::pow(j_.dim.finger_length, 3) / (3 * j_.dim.EI);
+    double deflection_x = deflection * std::cos(fing_th);
+    double deflection_z = deflection * std::sin(fing_th);
+    double final_fing_x = tilt_fing_x + deflection_x;
+
+    // get (x, y) position of the fingerend without tilt (in mujoco co-ord)
+    double x = -final_fing_x * sin(angles[i] + base_z_rot) + base_x;
+    double y = -final_fing_x * cos(angles[i] + base_z_rot) + base_y;
+
+    // save the finger hook centre position
+    luke::Vec3 tippos;
+    tippos.x = x;
+    tippos.y = y;
+    tippos.z = tilted_fingerend_height - deflection_z;
+
+    // save in output vector
+    pos[i] = tippos;
+  }
+
+  // now input the palm position
+  luke::Vec3 palmpos;
+  palmpos.x = base_x;
+  palmpos.y = base_y;
+  palmpos.z = untilted_fingerend_height + fingerend_to_palm_Z - palm_z;
+  pos[3] = palmpos;
+
+  return pos;
 }
 
 float get_fingerend_z_height(mjModel* model, mjData* data)

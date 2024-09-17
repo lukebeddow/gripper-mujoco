@@ -16,50 +16,67 @@ LOGGING_TO=data_gather_logs
 THICK_1=0.86e-3
 THICK_2=0.96e-3
 
+SAVE_SUFFIX="paper"
+
 # direct all logging to /dev/null except last (to keep an eye on progress)
-: > $LOGGING_TO/log_0p87_28_1.txt
-exec > $LOGGING_TO/log_0p87_28_1.txt
-python3 plot_finger_models.py -t $THICK_1 -w 28e-3 -E $MODULUS -f 0 &
+# : > $LOGGING_TO/log_0p87_28_1.txt
+# exec > $LOGGING_TO/log_0p87_28_1.txt
+# python3 plot_finger_models.py -t $THICK_1 -w 28e-3 -E $MODULUS -f 0 --save-suffix $SAVE_SUFFIX &
 
-sleep $SLEEP
-: > $LOGGING_TO/log_0p97_24_1.txt
-exec > $LOGGING_TO/log_0p97_24_1.txt
-python3 plot_finger_models.py -t $THICK_2 -w 24e-3 -E $MODULUS -f 0 &
+# sleep $SLEEP
+# : > $LOGGING_TO/log_0p97_24_1.txt
+# exec > $LOGGING_TO/log_0p97_24_1.txt
+# python3 plot_finger_models.py -t $THICK_2 -w 24e-3 -E $MODULUS -f 0 --save-suffix $SAVE_SUFFIX &
 
-sleep $SLEEP
-: > $LOGGING_TO/log_0p97_28_1.txt
-exec > $LOGGING_TO/log_0p97_28_1.txt
-python3 plot_finger_models.py -t $THICK_2 -w 28e-3 -E $MODULUS -f 0 &
+# sleep $SLEEP
+# : > $LOGGING_TO/log_0p97_28_1.txt
+# exec > $LOGGING_TO/log_0p97_28_1.txt
+# python3 plot_finger_models.py -t $THICK_2 -w 28e-3 -E $MODULUS -f 0 --save-suffix $SAVE_SUFFIX &
 
-sleep $SLEEP
-: > $LOGGING_TO/log_0p87_28_2.txt
-exec > $LOGGING_TO/log_0p87_28_2.txt
-python3 plot_finger_models.py -t $THICK_1 -w 28e-3 -E $MODULUS -f 1 &
+# sleep $SLEEP
+# : > $LOGGING_TO/log_0p87_28_2.txt
+# exec > $LOGGING_TO/log_0p87_28_2.txt
+# python3 plot_finger_models.py -t $THICK_1 -w 28e-3 -E $MODULUS -f 1 --save-suffix $SAVE_SUFFIX &
 
-sleep $SLEEP
-: > $LOGGING_TO/log_0p97_24_2.txt
-exec > $LOGGING_TO/log_0p97_24_2.txt
-python3 plot_finger_models.py -t $THICK_2 -w 24e-3 -E $MODULUS -f 1 &
+# sleep $SLEEP
+# : > $LOGGING_TO/log_0p97_24_2.txt
+# exec > $LOGGING_TO/log_0p97_24_2.txt
+# python3 plot_finger_models.py -t $THICK_2 -w 24e-3 -E $MODULUS -f 1 --save-suffix $SAVE_SUFFIX &
 
-sleep $SLEEP
-: > $LOGGING_TO/log_0p97_28_2.txt
-exec > $LOGGING_TO/log_0p97_28_2.txt
-python3 plot_finger_models.py -t $THICK_2 -w 28e-3 -E $MODULUS -f 1 &
+# sleep $SLEEP
+# : > $LOGGING_TO/log_0p97_28_2.txt
+# exec > $LOGGING_TO/log_0p97_28_2.txt
+# python3 plot_finger_models.py -t $THICK_2 -w 28e-3 -E $MODULUS -f 1 --save-suffix $SAVE_SUFFIX &
+
+# sleep $SLEEP
+# : > $LOGGING_TO/log_0p87_28_3.txt
+# exec > $LOGGING_TO/log_0p87_28_3.txt
+# python3 plot_finger_models.py -t $THICK_1 -w 28e-3 -E $MODULUS -f 2 --save-suffix $SAVE_SUFFIX &
+
+# sleep $SLEEP
+# : > $LOGGING_TO/log_0p97_24_3.txt
+# exec > $LOGGING_TO/log_0p97_24_3.txt
+# python3 plot_finger_models.py -t $THICK_2 -w 24e-3 -E $MODULUS -f 2 --save-suffix $SAVE_SUFFIX &
+
+# sleep $SLEEP
+# : > $LOGGING_TO/log_0p97_28_3.txt
+# exec > $LOGGING_TO/log_0p97_28_3.txt
+# python3 plot_finger_models.py -t $THICK_2 -w 28e-3 -E $MODULUS -f 2 --save-suffix $SAVE_SUFFIX &
 
 sleep $SLEEP
 : > $LOGGING_TO/log_0p87_28_3.txt
 exec > $LOGGING_TO/log_0p87_28_3.txt
-python3 plot_finger_models.py -t $THICK_1 -w 28e-3 -E $MODULUS -f 2 &
+python3 plot_finger_models.py -t $THICK_1 -w 28e-3 -E $MODULUS -f 3 --save-suffix $SAVE_SUFFIX &
 
 sleep $SLEEP
 : > $LOGGING_TO/log_0p97_24_3.txt
 exec > $LOGGING_TO/log_0p97_24_3.txt
-python3 plot_finger_models.py -t $THICK_2 -w 24e-3 -E $MODULUS -f 2 &
+python3 plot_finger_models.py -t $THICK_2 -w 24e-3 -E $MODULUS -f 3 --save-suffix $SAVE_SUFFIX &
 
 sleep $SLEEP
 : > $LOGGING_TO/log_0p97_28_3.txt
 exec > $LOGGING_TO/log_0p97_28_3.txt
-python3 plot_finger_models.py -t $THICK_2 -w 28e-3 -E $MODULUS -f 2 &
+python3 plot_finger_models.py -t $THICK_2 -w 28e-3 -E $MODULUS -f 3 --save-suffix $SAVE_SUFFIX &
 
 echo All jobs submitted
 

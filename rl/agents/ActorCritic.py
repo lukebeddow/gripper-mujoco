@@ -47,6 +47,19 @@ class ReplayMemory(object):
     # detailed explanation). This converts batch-array of Transitions
     # to Transition of batch-arrays.
     transitions = self.sample(batch_size)
+
+    # chatgpt recommended, but doesn't work - however device management is not working
+    # batch = self.transition(*zip(*transitions))
+
+    # # Convert the batched data to tensors and move to the appropriate device
+    # state = self.to_torch(batch.state)
+    # action = self.to_torch(batch.action)
+    # next_state = self.to_torch(batch.next_state)
+    # reward = self.to_torch(batch.reward)
+    # terminal = self.to_torch(batch.terminal)
+
+    # return self.transition(state, action, next_state, reward, terminal)
+
     return self.transition(*zip(*transitions))
 
   def __len__(self):
@@ -153,6 +166,7 @@ class MLPActorCriticAC(nn.Module):
     with torch.no_grad():
       actions, _ = self.pi(obs, deterministic, False)
       return actions.squeeze(0)
+      # return actions
       
   def set_device(self, device):
     self.pi.to(device)
@@ -213,7 +227,7 @@ class Agent_SAC:
   Transition = namedtuple('Transition',
                           ('state', 'action', 'next_state', 'reward', 'terminal'))
 
-  def __init__(self, device="cpu", rngseed=None, mode="train"):
+  def __init__(self, device="cpu", rngseed=None, mode="train", debug=False):
     """
     Soft actor-critic agent for a given environment
     """
@@ -223,6 +237,7 @@ class Agent_SAC:
     self.rngseed = rngseed
     self.mode = mode
     self.steps_done = 0
+    self.debug = debug
 
   def init(self, network):
     """
@@ -243,7 +258,7 @@ class Agent_SAC:
     self.set_device(self.device)
 
     self.q_network_parameters = itertools.chain(self.mlp_ac.q1.parameters(),
-                                           self.mlp_ac.q2.parameters())
+                                                self.mlp_ac.q2.parameters())
 
     if self.params.optimiser.lower() == "rmsprop":
       self.q_optimiser = torch.optim.RMSprop(self.q_network_parameters, 
@@ -331,7 +346,7 @@ class Agent_SAC:
     if decay_num < self.params.random_start_episodes:
       return torch.tensor([2*self.rng.random() - 1 for x in range(self.n_actions)], dtype=torch.float32)
 
-    return self.mlp_ac.act(state, test) # test=True means determinstic=True
+    return self.mlp_ac.act(state, deterministic=test) # test=True means determinstic=True
       
   def get_save_state(self):
     """
@@ -443,6 +458,8 @@ class Agent_SAC:
     # only begin to optimise when enough memory is built up
     if (len(self.memory)) < self.params.min_memory_replay:
       return
+    
+    # print("Optimse model, steps done", self.steps_done)
 
     # sample and transpose a batch
     batch = self.memory.batch(self.params.batch_size)
